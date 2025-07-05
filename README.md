@@ -48,6 +48,7 @@ Create a file named `config.ini` to define your tournament's structure. The conf
 -   `rounds_per_team`: How many times each team must participate in this type of round.
 -   `teams_per_round`: The number of teams involved in a single instance of this round (e.g., `1` for judging, `2` for a match).
 -   `start_time`: The time of the very first slot for this round type (`HH:MM` 24-hour format).
+-   `stop_time`: The time of the latest stop time for the last slot (`HH:MM` 24-hour format).
 -   `duration_minutes`: The duration of a single round in minutes.
 -   `num_locations`: Number of parallel locations for this round (e.g., 3 judging rooms or 4 competition tables).
 
@@ -59,17 +60,18 @@ num_teams = 42
 
 [round.judging]
 round_type = Judging
-rounds_per_team= 1
-teams_per_round= 1
-start_time= 08:00
-duration_minutes= 45
-num_locations= 7 ; i.e., 7 judging rooms
+rounds_per_team = 1
+teams_per_round = 1
+start_time = 08:00
+duration_minutes = 45
+num_locations = 7 ; i.e., 7 judging rooms
 
 [round.practice]
 round_type = Practice
 rounds_per_team = 2
 teams_per_round = 2
 start_time = 09:00
+stop_time = 12:00 ; Add optional stop time to control buffer slots
 duration_minutes = 15
 num_locations = 4  ; Same tables as the official matches
 

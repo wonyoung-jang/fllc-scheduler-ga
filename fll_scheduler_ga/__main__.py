@@ -45,10 +45,10 @@ def create_parser() -> argparse.ArgumentParser:
         "file_log_level": "DEBUG",
         "console_log_level": "INFO",
         "save_all_schedules": False,
-        "population_size": 128,
-        "generations": 256,
-        "elite_size": 4,
-        "selection_size": 16,
+        "population_size": 16,
+        "generations": 128,
+        "elite_size": 2,
+        "selection_size": 4,
         "crossover_chance": 0.5,
     }
     parser = argparse.ArgumentParser(
@@ -256,7 +256,7 @@ def main() -> None:
     initialize_logging(args)
 
     try:
-        config = load_tournament_config(args.config_file)
+        config = load_tournament_config(Path(args.config_file))
         logger.info("Loaded tournament configuration: %s", config)
     except (FileNotFoundError, KeyError):
         logger.exception("Error loading configuration")

@@ -5,7 +5,6 @@ import logging
 from collections import defaultdict
 from collections.abc import Generator
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 
 from ..config.config import Round, RoundType, TournamentConfig
 from .location import Room, Table, get_location_type
@@ -58,7 +57,7 @@ class EventFactory:
             Event: An event for the round with a time slot and a location.
 
         """
-        start = datetime.strptime(r.start_time, HHMM_FMT).replace(tzinfo=UTC)
+        start = r.start_time
         location_type = get_location_type(r.teams_per_round)
 
         for _ in range(r.num_slots):

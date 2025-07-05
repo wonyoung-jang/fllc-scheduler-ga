@@ -2,7 +2,6 @@
 
 import logging
 from collections import defaultdict
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from ..config.config import TournamentConfig
@@ -99,10 +98,19 @@ def _check_per_team_feasibility(config: TournamentConfig) -> None:
 
     all_slots = []
     for r_config in config.rounds:
-        start_dt = datetime.strptime(r_config.start_time, "%H:%M").replace(tzinfo=UTC)
+        start_dt = r_config.start_time
         for i in range(r_config.num_slots):
             slot_start = start_dt + (i * r_config.duration_minutes)
             all_slots.append(slot_start)
+
+        if r_config.stop_time:
+            stop_dt = r_config.stop_time
+            if all_slots[-1] + r_config.duration_minutes > stop_dt:
+                msg = (
+                    f"Round '{r_config.round_type}' exceeds configured stop time.\n"
+                    f"  - Last slot starts at {all_slots[-1]} but should not exceed {stop_dt}."
+                )
+                raise ValueError(msg)
 
     total_time_slots_available = len(set(all_slots))
     total_rounds_per_team = sum(config.round_requirements.values())

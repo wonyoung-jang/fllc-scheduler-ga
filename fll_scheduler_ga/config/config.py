@@ -4,8 +4,10 @@ import logging
 import math
 from configparser import ConfigParser
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
+from ..data_model.time import HHMM_FMT
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +21,8 @@ class Round:
     round_type: RoundType
     rounds_per_team: int
     teams_per_round: int
-    start_time: str
+    start_time: datetime
+    stop_time: datetime
     duration_minutes: timedelta
     num_locations: int
     num_teams: int
@@ -33,7 +36,15 @@ class Round:
         if slots_per_timeslot == 0:
             return 0
 
-        return math.ceil(total_num_teams / slots_per_timeslot)
+        minimum_slots = math.ceil(total_num_teams / slots_per_timeslot)
+
+        if self.stop_time:
+            min_slot_duration = minimum_slots * self.duration_minutes
+            while self.start_time + min_slot_duration < self.stop_time:
+                min_slot_duration += self.duration_minutes
+                minimum_slots += 1
+
+        return minimum_slots
 
 
 @dataclass(slots=True, frozen=True)
@@ -56,11 +67,11 @@ class TournamentConfig:
         )
 
 
-def load_tournament_config(config_path: str) -> TournamentConfig:
+def load_tournament_config(config_path: Path) -> TournamentConfig:
     """Load, parse, and return the tournament configuration.
 
     Args:
-        config_path (str): Path to the configuration file.
+        config_path (Path): Path to the configuration file.
 
     Returns:
         TournamentConfig: The parsed tournament configuration.
@@ -87,12 +98,16 @@ def load_tournament_config(config_path: str) -> TournamentConfig:
             r_type = parser[section].get("round_type")
             r_per_team = parser[section].getint("rounds_per_team")
             round_reqs[r_type] = r_per_team
+            start_time = datetime.strptime(parser[section]["start_time"], HHMM_FMT).replace(tzinfo=UTC)
+            if stop_time := parser[section].get("stop_time", ""):
+                stop_time = datetime.strptime(stop_time, HHMM_FMT).replace(tzinfo=UTC)
             parsed_rounds.add(
                 Round(
                     round_type=r_type,
                     rounds_per_team=r_per_team,
                     teams_per_round=parser[section].getint("teams_per_round"),
-                    start_time=parser[section]["start_time"],
+                    start_time=start_time,
+                    stop_time=stop_time,
                     duration_minutes=timedelta(minutes=parser[section].getint("duration_minutes")),
                     num_locations=parser[section].getint("num_locations"),
                     num_teams=num_teams,

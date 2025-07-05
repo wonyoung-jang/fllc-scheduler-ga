@@ -119,6 +119,14 @@ class GA:
             return
 
         non_dominated_sort(self.population)
+        num_objectives = len(self.pareto_front[0].fitness)
+        avg_fitness_front1 = [0.0] * num_objectives
+        for p in self.pareto_front:
+            for i in range(num_objectives):
+                avg_fitness_front1[i] += p.fitness[i]
+        this_gen_fitness = tuple(s / len(self.pareto_front) for s in avg_fitness_front1)
+        self.fitness_history.append(this_gen_fitness)
+
         self.logger.info("Created %d valid schedules.", len(self.population))
 
     def generation(self) -> None:
@@ -146,6 +154,7 @@ class GA:
                 avg_fitness_front1[i] += p.fitness[i]
         this_gen_fitness = tuple(s / len(self.pareto_front) for s in avg_fitness_front1)
         self.fitness_history.append(this_gen_fitness)
+
         self._notify_gen_end(generation, this_gen_fitness)
 
     def evolve(self, num_offspring: int) -> Population:
@@ -163,7 +172,7 @@ class GA:
     def _evolve_step(self) -> Schedule | None:
         """Evolve the population by one individual and return the best of the parents and child."""
         parents = list(self.selection.select(self.population, 2))
-        child = None
+        child: Schedule | None = None
 
         if self.rng.random() < self.ga_parameters.crossover_chance:
             c = self.rng.choice(self.crossovers)
@@ -174,15 +183,27 @@ class GA:
         if child is None:
             child = deepcopy(self.rng.choice(parents))
 
-        if self.rng.random() < 0.2:
+        roll = self.rng.random()
+        total_last_avg = sum(self.fitness_history[-1]) if self.fitness_history else 0
+
+        if not child.fitness:
+            if score := self.fitness.evaluate(child):
+                total_score = sum(score)
+                if (total_score >= total_last_avg and roll < 0.1) or (total_score < total_last_avg and roll < 0.8):
+                    m = self.rng.choice(self.mutations)
+                    m.mutate(child)
+                    self._notify_mutation(m.__class__.__name__)
+                child.fitness = score
+                return child
+            return None
+
+        total_score = sum(child.fitness)
+        if (total_score >= total_last_avg and roll < 0.1) or (total_score < total_last_avg and roll < 0.8):
             m = self.rng.choice(self.mutations)
             m.mutate(child)
             self._notify_mutation(m.__class__.__name__)
-
-        if score := self.fitness.evaluate(child):
-            child.fitness = score
-            return child
-        return None
+        child.fitness = self.fitness.evaluate(child)
+        return child
 
     def log_final_summary(self) -> None:
         """Log the final summary of the genetic algorithm."""
