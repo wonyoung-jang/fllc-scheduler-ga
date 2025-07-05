@@ -106,9 +106,4 @@ class EventMap:
             }
 
         for k, v in sorted(self.conflicts.items(), key=lambda item: item[0]):
-            logger.info(
-                "Event %d conflicts with %d other events: %s",
-                k,
-                len(v),
-                v,
-            )
+            logger.debug("Event %d conflicts with %d other events: %s", k, len(v), v)
