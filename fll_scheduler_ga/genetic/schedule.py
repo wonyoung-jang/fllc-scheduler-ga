@@ -50,13 +50,13 @@ class Schedule:
             return memo[id(self)]
 
         new_teams = {identity: deepcopy(team) for identity, team in self._teams.items()}
-        new_schedule = {}
+        new_individual = {}
         for event, booked_item in self.items():
-            new_schedule[event] = new_teams[booked_item.identity]
+            new_individual[event] = new_teams[booked_item.identity]
 
         new_schedule = Schedule(
             new_teams,
-            new_schedule,
+            new_individual,
             fitness=self.fitness,
             rank=self.rank,
             crowding_distance=self.crowding_distance,

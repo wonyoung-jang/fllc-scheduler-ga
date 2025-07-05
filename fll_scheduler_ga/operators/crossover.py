@@ -187,9 +187,10 @@ class KPoint(Crossover):
             genes.append(self.events[start:i])
             start = i
         genes.append(self.events[start:])
-        for i, gene in enumerate(genes):
-            parent = p1 if i % 2 == 0 else p2
-            self._populate_from_parent(child, parent, gene, conflicted)
+        p1_genes = (genes[i][x] for i in range(len(genes)) if i % 2 == 0 for x in range(len(genes[i])))
+        p2_genes = (genes[i][x] for i in range(len(genes)) if i % 2 == 1 for x in range(len(genes[i])))
+        self._populate_from_parent(child, p1, p1_genes, conflicted)
+        self._populate_from_parent(child, p2, p2_genes, conflicted)
         return child if child and self._repair_crossover(child, conflicted) else None
 
 

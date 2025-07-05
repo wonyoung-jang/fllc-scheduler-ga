@@ -20,12 +20,12 @@ def _get_scheduled_match_events(child: Schedule) -> list[TableEventAndTeams]:
     Each tuple is (primary_event, opponent_event, team1, team2).
     """
     matches = []
-    for event, team1 in child.items():
-        if not event.paired_event or event.location.side != 1:
+    for event1, team1 in child.items():
+        if not (event2 := event1.paired_event) or event1.location.side != 1:
             continue
 
-        if team2 := child[event.paired_event]:
-            matches.append((event, event.paired_event, team1, team2))
+        if team2 := child[event2]:
+            matches.append((event1, event2, team1, team2))
 
     return matches
 
@@ -40,12 +40,27 @@ class Mutation(ABC):
     def mutate(self, child: Schedule) -> None:
         """Mutate a child schedule to introduce genetic diversity."""
 
+    def _validate_swap(self, event1: Event, event2: Event, *, same_timeslot: bool, same_location: bool) -> bool:
+        """Check if the swap between two events is valid based on timeslot and location."""
+        is_same_timeslot = event1.time_slot == event2.time_slot
+        is_same_location = event1.location == event2.location
+        if same_timeslot:
+            return is_same_timeslot and not is_same_location
+        if same_location:
+            return is_same_location and not is_same_timeslot
+        if not (same_timeslot or same_location):
+            return not (is_same_timeslot or is_same_location)
+        logger.warning("Invalid swap.")
+        return False
+
 
 @dataclass(slots=True, frozen=True)
 class SwapTeamMutation(Mutation):
     """Mutation operator for swapping single team between two matches."""
 
-    def _get_swap_candidates(self, child: Schedule, *, same_timeslot: bool, same_location: bool) -> tuple:
+    def _get_swap_candidates(
+        self, child: Schedule, *, same_timeslot: bool, same_location: bool
+    ) -> tuple[tuple[Event, Team, Team], tuple[Event, Team, Team]] | tuple[None, None]:
         """Get two matches to swap in the child schedule."""
         matches = _get_scheduled_match_events(child)
         if len(matches) < 2:
@@ -59,25 +74,7 @@ class SwapTeamMutation(Mutation):
             if event2_a.round_type != target_rtype:
                 continue
 
-            if (
-                (
-                    same_timeslot
-                    and event1_a.time_slot == event2_a.time_slot
-                    and event1_a.location.identity != event2_a.location.identity
-                )
-                or (
-                    same_location
-                    and event1_a.location.identity == event2_a.location.identity
-                    and event1_a.location.side == event2_a.location.side
-                    and event1_a.time_slot != event2_a.time_slot
-                )
-                or (
-                    not same_timeslot
-                    and not same_location
-                    and event1_a.time_slot != event2_a.time_slot
-                    and event1_a.location.identity != event2_a.location.identity
-                )
-            ):
+            if self._validate_swap(event1_a, event2_a, same_timeslot=same_timeslot, same_location=same_location):
                 if (
                     team1_a.identity in (team2_a.identity, team2_b.identity)
                     or team2_a.identity == team1_b.identity
@@ -93,9 +90,7 @@ class SwapTeamMutation(Mutation):
     def mutate(self, child: Schedule, *, same_timeslot: bool = False, same_location: bool = False) -> None:
         """Swap one team from two different matches."""
         match1_data, match2_data = self._get_swap_candidates(
-            child,
-            same_timeslot=same_timeslot,
-            same_location=same_location,
+            child, same_timeslot=same_timeslot, same_location=same_location
         )
 
         if not match1_data:
@@ -155,7 +150,9 @@ class SwapTeamAcrossLocation(SwapTeamMutation):
 class SwapMatchMutation(Mutation):
     """Base class for mutations that swap the locations of two entire matches."""
 
-    def _get_swap_candidates(self, child: Schedule, *, same_timeslot: bool, same_location: bool) -> tuple:
+    def _get_swap_candidates(
+        self, child: Schedule, *, same_timeslot: bool, same_location: bool
+    ) -> tuple[tuple[Event, Event, Team, Team], tuple[Event, Event, Team, Team]] | tuple[None, None]:
         """Get two matches to swap in the child schedule."""
         matches = _get_scheduled_match_events(child)
         if len(matches) < 2:
@@ -169,28 +166,7 @@ class SwapMatchMutation(Mutation):
             if event2_a.round_type != target_rtype:
                 continue
 
-            if (
-                (
-                    same_timeslot
-                    and team1_a.identity != team2_a.identity
-                    and event1_a.time_slot == event2_a.time_slot
-                    and event1_a.location.identity != event2_a.location.identity
-                )
-                or (
-                    same_location
-                    and team1_a.identity != team2_a.identity
-                    and event1_a.location.identity == event2_a.location.identity
-                    and event1_a.location.side == event2_a.location.side
-                    and event1_a.time_slot != event2_a.time_slot
-                )
-                or (
-                    not same_timeslot
-                    and not same_location
-                    and team1_a.identity != team2_a.identity
-                    and event1_a.time_slot != event2_a.time_slot
-                    and event1_a.location.identity != event2_a.location.identity
-                )
-            ):
+            if self._validate_swap(event1_a, event2_a, same_timeslot=same_timeslot, same_location=same_location):
                 if (
                     team1_a.conflicts(event2_a)
                     or team1_b.conflicts(event2_b)
@@ -206,9 +182,7 @@ class SwapMatchMutation(Mutation):
     def mutate(self, child: Schedule, *, same_timeslot: bool = False, same_location: bool = False) -> None:
         """Swap two entire matches."""
         match1_data, match2_data = self._get_swap_candidates(
-            child,
-            same_timeslot=same_timeslot,
-            same_location=same_location,
+            child, same_timeslot=same_timeslot, same_location=same_location
         )
 
         if not match1_data:
