@@ -5,20 +5,11 @@ import math
 from configparser import ConfigParser
 from dataclasses import dataclass
 from datetime import timedelta
-from enum import StrEnum
 from pathlib import Path
-
-from ..data_model.location import Room, Table
 
 logger = logging.getLogger(__name__)
 
-
-class RoundType(StrEnum):
-    """Enumeration for different types of rounds in the FLL Scheduler GA."""
-
-    JUDGING = "Judging"
-    PRACTICE = "Practice"
-    TABLE = "Table"
+type RoundType = str
 
 
 @dataclass(slots=True, frozen=True)
@@ -93,7 +84,7 @@ def load_tournament_config(config_path: str) -> TournamentConfig:
 
     for section in parser.sections():
         if section.startswith("round"):
-            r_type = RoundType(parser[section]["round_type"])
+            r_type = parser[section].get("round_type")
             r_per_team = parser[section].getint("rounds_per_team")
             round_reqs[r_type] = r_per_team
             parsed_rounds.add(
@@ -117,20 +108,3 @@ def load_tournament_config(config_path: str) -> TournamentConfig:
         rounds=frozenset(parsed_rounds),
         round_requirements=round_reqs,
     )
-
-
-def get_location_type(round_type: RoundType) -> Room | Table:
-    """Get the location type based on the round type.
-
-    Args:
-        round_type (RoundType): The type of the round.
-
-    Returns:
-        Room | Table: The corresponding location type for the round.
-
-    """
-    return {
-        RoundType.JUDGING: Room,
-        RoundType.PRACTICE: Table,
-        RoundType.TABLE: Table,
-    }.get(round_type)

@@ -32,3 +32,16 @@ class Table(Location):
     def __str__(self) -> str:
         """Represent the Table as a string."""
         return f"{self.__class__.__name__} {chr(_ASCII_OFFSET + self.identity)}{self.side}"
+
+
+def get_location_type(teams_per_round: int) -> Room | Table:
+    """Get the location type based on the teams per round.
+
+    Args:
+        teams_per_round (int): The number of teams per round.
+
+    Returns:
+        Room | Table: The corresponding location type for the round.
+
+    """
+    return {1: Room, 2: Table}.get(teams_per_round)

@@ -5,16 +5,16 @@ FLL Scheduler GA uses a multi-objective genetic algorithm (NSGA-II) to generate 
 ## Features
 
 -   **Multi-Objective Optimization:** Creates schedules that balance break time distribution, opponent variety, and table consistency.
--   **Highly Configurable:** Tournament parameters (teams, rounds, locations, times) are defined in a `.ini` configuration file.
+-   **Configurable:** Tournament parameters (teams, rounds, locations, times) are defined in a `.ini` configuration file.
 -   **Preflight Validation:** Checks configuration for probably-impossible-to-solve scenarios before starting.
 -   **Export:** Outputs schedules in **CSV** and **HTML** formats.
--   **Result Visualization:** Automatically generates plots showing fitness evolution and the final Pareto front of optimal solutions.
+-   **Visualization:** Automatically generates plots showing fitness evolution and the final Pareto front of optimal solutions.
 
 ## Getting Started
 
 ### Prerequisites
 
-This project requires Python 3.11+ and the following packages:
+This project requires Python 3.13+ and the following packages:
 
 -   `matplotlib`
 -   `pandas`
@@ -65,14 +65,13 @@ Create a file named `config.ini` to define your tournament's structure. The conf
 [DEFAULT]
 num_teams = 42
 
-
-[round.judgin]
+[round.judging]
 round_type = Judging
-rounds_per_team = 1
-teams_per_round = 1
-start_time = 08:00
-duration_minutes = 45
-num_locations = 7  ; i.e., 7 judging rooms
+rounds_per_team= 1
+teams_per_round= 1
+start_time= 08:00
+duration_minutes= 45
+num_locations= 7 ; i.e., 7 judging rooms
 
 [round.practice]
 round_type = Practice

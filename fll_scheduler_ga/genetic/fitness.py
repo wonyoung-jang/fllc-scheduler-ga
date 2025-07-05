@@ -16,14 +16,16 @@ class FitnessEvaluator:
     """Calculates the fitness of a schedule."""
 
     config: TournamentConfig
-    soft_constraints: tuple[str, ...] = field(default_factory=tuple, init=False)
+    soft_constraints: list[str] = field(default_factory=list, init=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the configuration."""
-        self.soft_constraints = (
-            "BreakTime",
-            "OpponentVariety",
-            "TableConsistency",
+        self.soft_constraints.extend(
+            [
+                "BreakTime",
+                "OpponentVariety",
+                "TableConsistency",
+            ]
         )
 
     def evaluate(self, schedule: Schedule) -> tuple[float, ...] | None:

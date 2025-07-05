@@ -7,8 +7,8 @@ from collections.abc import Generator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from ..config.config import Round, RoundType, TournamentConfig, get_location_type
-from .location import Room, Table
+from ..config.config import Round, RoundType, TournamentConfig
+from .location import Room, Table, get_location_type
 from .time import HHMM_FMT, TimeSlot
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ class EventFactory:
 
     config: TournamentConfig
     _id_counter: itertools.count = field(default_factory=itertools.count, init=False)
-    _cached_build: dict[RoundType, set[Event]] = field(default_factory=dict, init=False, repr=False)
+    _cached_events: dict[RoundType, set[Event]] = field(default_factory=dict, init=False, repr=False)
 
     def build(self) -> dict[RoundType, set[Event]]:
         """Create and return all Events for the tournament.
@@ -44,9 +44,9 @@ class EventFactory:
             dict[RoundType, set[Event]]: A dictionary of all Events for the tournament.
 
         """
-        if not self._cached_build:
-            self._cached_build = {r.round_type: set(self.create_events(r)) for r in self.config.rounds}
-        return self._cached_build
+        if not self._cached_events:
+            self._cached_events = {r.round_type: set(self.create_events(r)) for r in self.config.rounds}
+        return self._cached_events
 
     def create_events(self, r: Round) -> Generator[Event]:
         """Generate all possible Events for a given Round configuration.
@@ -59,7 +59,7 @@ class EventFactory:
 
         """
         start = datetime.strptime(r.start_time, HHMM_FMT).replace(tzinfo=UTC)
-        location_type = get_location_type(r.round_type)
+        location_type = get_location_type(r.teams_per_round)
 
         for _ in range(r.num_slots):
             stop = start + r.duration_minutes
