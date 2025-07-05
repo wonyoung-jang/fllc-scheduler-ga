@@ -126,7 +126,7 @@ class Team:
         """Unbook a team from an event."""
         self.round_types[event.round_type] += 1
         self.events.remove(event)
-        self.timeslots.remove(event.time_slot)
+        self.timeslots.remove(event.timeslot)
         if isinstance(event.location, Table):
             self.locations.remove(event.location)
         if self._cached_break_time_score is not None:
@@ -140,11 +140,11 @@ class Team:
             logger.debug(
                 "\n\tTeam %d already has %s",
                 self.identity,
-                [event.round_type, event.time_slot.start_str],
+                [event.round_type, event.timeslot.start_str],
             )
         self.round_types[event.round_type] -= 1
         self.events.append(event)
-        bisect.insort(self.timeslots, event.time_slot)
+        bisect.insort(self.timeslots, event.timeslot)
         if isinstance(event.location, Table):
             self.locations.append(event.location)
         if self._cached_break_time_score is not None:

@@ -31,7 +31,7 @@ class GridBasedExporter(Exporter):
         self, schedule: Individual
     ) -> tuple[list[TimeSlot], list[Location], dict[tuple[TimeSlot, Location], Team]]:
         """Build the common grid data structure from a schedule."""
-        grid_lookup = {(e.time_slot, e.location): team for e, team in schedule.items()}
+        grid_lookup = {(e.timeslot, e.location): team for e, team in schedule.items()}
         timeslots = sorted({i[0] for i in grid_lookup}, key=lambda ts: ts.start)
         locations = sorted(
             {i[1] for i in grid_lookup}, key=lambda loc: (loc.identity, loc.side if hasattr(loc, "side") else 0)

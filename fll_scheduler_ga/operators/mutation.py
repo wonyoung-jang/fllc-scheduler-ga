@@ -42,7 +42,7 @@ class Mutation(ABC):
 
     def _validate_swap(self, event1: Event, event2: Event, *, same_timeslot: bool, same_location: bool) -> bool:
         """Check if the swap between two events is valid based on timeslot and location."""
-        is_same_timeslot = event1.time_slot == event2.time_slot
+        is_same_timeslot = event1.timeslot == event2.timeslot
         is_same_location = event1.location == event2.location
         if same_timeslot:
             return is_same_timeslot and not is_same_location

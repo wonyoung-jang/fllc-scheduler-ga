@@ -22,7 +22,7 @@ class GaParameters:
             self.generations = 10
             logger.warning("Generations must be greater than 0, defaulting to 10.")
 
-        if not (0.0 <= self.crossover_chance <= 1.0):
+        if not (0.0 < self.crossover_chance <= 1.0):
             self.crossover_chance = 0.5
             logger.warning("Crossover chance must be between 0.0 and 1.0, defaulting to 0.5.")
 

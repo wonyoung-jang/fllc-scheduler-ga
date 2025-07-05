@@ -39,7 +39,7 @@ Using the scheduler is a two-step process: creating a configuration file and run
 
 ### 1. Create a Configuration File
 
-Create a file named `config.ini` to define your tournament's structure. The configuration is split into a `[DEFAULT]` section for global settings and one `[round-N]` section for each type of activity (e.g., judging, practice matches, official matches).
+Create a file named `config.ini` to define your tournament's structure. The configuration is split into a `[DEFAULT]` section for global settings and one `[round.*]` section for each type of activity (e.g., judging, practice, official/table).
 
 **Parameters:**
 

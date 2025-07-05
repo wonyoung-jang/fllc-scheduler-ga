@@ -68,7 +68,7 @@ class Plot:
 
     def _plot_parallel(self, front: Population, objectives: list[str], title: str) -> None:
         """Create the parallel coordinates plot."""
-        data = [[p.fitness[i] for i, _ in enumerate(objectives)] + [p.crowding_distance] for p in front]
+        data = [[p.fitness[i] for i, _ in enumerate(objectives)] + [p.crowding] for p in front]
         objectives = [*objectives, "Crowding Distance"]
         dataframe = pd.DataFrame(data=data, columns=objectives)
         fig, ax = plt.subplots(figsize=(12, 7))
@@ -86,7 +86,7 @@ class Plot:
     ) -> plt.Figure | None:
         """Create a 2D or 3D scatter plot of the Pareto front."""
         dataframe = pd.DataFrame(data=[p.fitness for p in front], columns=objectives)
-        distances = [p.crowding_distance for p in front]
+        distances = [p.crowding for p in front]
 
         if len(objectives) == 2:
             fig, ax = plt.subplots(figsize=(10, 8))

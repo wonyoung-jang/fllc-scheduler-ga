@@ -29,7 +29,7 @@ class TournamentSelectionNSGA2(Selection):
         """Select individuals using NSGA-II tournament selection."""
         for _ in range(num_parents):
             participants = self.rng.sample(population, k=self.ga_parameters.selection_size)
-            yield min(participants, key=lambda p: (p.rank, -p.crowding_distance))
+            yield min(participants, key=lambda p: (p.rank, -p.crowding))
 
 
 @dataclass(slots=True)
@@ -51,7 +51,7 @@ class ElitismSelectionNSGA2(Selection):
             if len(new_pop) + len(front) <= population_size:
                 new_pop.extend(front)
             else:
-                front.sort(key=lambda p: p.crowding_distance, reverse=True)
+                front.sort(key=lambda p: p.crowding, reverse=True)
                 new_pop.extend(front[: population_size - len(new_pop)])
                 break
         yield from new_pop

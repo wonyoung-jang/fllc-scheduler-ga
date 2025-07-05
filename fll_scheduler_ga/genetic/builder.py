@@ -90,9 +90,12 @@ class ScheduleBuilder:
                 available_for_side2 = teams_with_location_side2
 
             team2 = self._rng.choice(available_for_side2)
+
             team1.add_event(side1)
             team2.add_event(side2)
+
             team1.add_opponent(team2)
             team2.add_opponent(team1)
+
             self._schedule[side1] = team1
             self._schedule[side2] = team2

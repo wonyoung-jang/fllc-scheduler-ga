@@ -44,4 +44,8 @@ def get_location_type(teams_per_round: int) -> Room | Table:
         Room | Table: The corresponding location type for the round.
 
     """
-    return {1: Room, 2: Table}.get(teams_per_round)
+    location_map = {1: Room, 2: Table}
+    if teams_per_round not in location_map:
+        msg = f"Unsupported number of teams per round: {teams_per_round}. Only 1 or 2 are supported."
+        raise ValueError(msg)
+    return location_map[teams_per_round]

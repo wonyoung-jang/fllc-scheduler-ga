@@ -18,7 +18,7 @@ class Schedule:
     _schedule: Individual = field(default_factory=dict, compare=False)
     fitness: tuple[float, ...] = field(default=None, compare=False)
     rank: int = field(default=9999, compare=True)
-    crowding_distance: float = field(default=0.0, compare=False)
+    crowding: float = field(default=0.0, compare=False)
 
     def __len__(self) -> int:
         """Return the number of scheduled events."""
@@ -59,7 +59,7 @@ class Schedule:
             new_individual,
             fitness=self.fitness,
             rank=self.rank,
-            crowding_distance=self.crowding_distance,
+            crowding=self.crowding,
         )
         memo[id(self)] = new_schedule
 

@@ -13,14 +13,14 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def run_preflight_checks(config: TournamentConfig) -> None:
+def run_preflight_checks(config: TournamentConfig, event_factory: EventFactory) -> None:
     """Run preflight checks on the tournament configuration."""
     logger.info("Running preflight checks on the tournament configuration")
     _check_round_definitions(config)
     _check_total_capacity(config)
-    _check_peak_capacity_bottlenecks(config)
+    _check_peak_capacity_bottlenecks(config, event_factory)
     _check_per_team_feasibility(config)
-    _check_location_time_overlaps(config)
+    _check_location_time_overlaps(config, event_factory)
     logger.info("All preflight checks passed successfully.")
 
 
@@ -58,16 +58,13 @@ def _check_total_capacity(config: TournamentConfig) -> None:
     logger.info("Check passed: Overall capacity is sufficient.")
 
 
-def _check_peak_capacity_bottlenecks(config: TournamentConfig) -> None:
+def _check_peak_capacity_bottlenecks(config: TournamentConfig, event_factory: EventFactory) -> None:
     """Identify if any single hour is impossibly over-scheduled."""
-    event_factory = EventFactory(config)
-    all_events: list[Event] = []
-    for r_config in config.rounds:
-        all_events.extend(event_factory.create_events(r_config))
+    all_events: list[Event] = [e for el in event_factory.build().values() for e in el]
 
     slots_by_hour_and_type = defaultdict(lambda: defaultdict(int))
     for event in all_events:
-        hour_key = event.time_slot.start.strftime("%H:00")
+        hour_key = event.timeslot.start.strftime("%H:00")
         round_config = next(r for r in config.rounds if r.round_type == event.round_type)
         slots_by_hour_and_type[event.round_type][hour_key] += round_config.teams_per_round
 
@@ -128,22 +125,21 @@ def _check_per_team_feasibility(config: TournamentConfig) -> None:
     logger.info("Check passed: Per-team event load seems feasible.")
 
 
-def _check_location_time_overlaps(config: TournamentConfig) -> None:
+def _check_location_time_overlaps(config: TournamentConfig, event_factory: EventFactory) -> None:
     """Check if different round types are scheduled in the same locations at the same time."""
     booked_slots = defaultdict(list)
-    event_factory = EventFactory(config)
 
     for r_config in config.rounds:
         for event in event_factory.create_events(r_config):
             location_key = (type(event.location), event.location)
             for existing_ts, existing_r_type in booked_slots.get(location_key, []):
-                if event.time_slot.overlaps(existing_ts):
+                if event.timeslot.overlaps(existing_ts):
                     msg = (
                         f"Configuration conflict: Round '{r_config.round_type}' and '{existing_r_type}' "
                         f"are scheduled in the same location ({location_key[0].__name__} {location_key[1]}) "
-                        f"at overlapping times ({event.time_slot.start_str}-{event.time_slot.stop_str} and "
+                        f"at overlapping times ({event.timeslot.start_str}-{event.timeslot.stop_str} and "
                         f"{existing_ts.start_str}-{existing_ts.stop_str})."
                     )
                     raise ValueError(msg)
-            booked_slots[location_key].append((event.time_slot, r_config.round_type))
+            booked_slots[location_key].append((event.timeslot, r_config.round_type))
     logger.info("Check passed: No location/time overlaps found.")

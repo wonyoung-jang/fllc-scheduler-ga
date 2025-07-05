@@ -186,10 +186,10 @@ def generate_pareto_summary(pareto_front: list[Schedule], evaluator: FitnessEval
     """Generate a summary of the Pareto front."""
     schedule_enum_digits = len(str(len(pareto_front)))
     obj_names = evaluator.soft_constraints
-    pareto_front.sort(key=lambda s: (s.crowding_distance, s.fitness[0], s.fitness[1], s.fitness[2]), reverse=True)
+    pareto_front.sort(key=lambda s: (s.crowding, s.fitness[0], s.fitness[1], s.fitness[2]), reverse=True)
     with path.open("w", encoding="utf-8") as f:
         for i, schedule in enumerate(pareto_front, start=1):
-            crowding = schedule.crowding_distance
+            crowding = schedule.crowding
             if crowding == float("inf"):
                 crowding = 1.000
             f.write(f"Schedule {i:0{schedule_enum_digits}}: ({id(schedule)}) - Crowding Distance: {crowding:.4f} ")
@@ -221,8 +221,8 @@ def summary(args: argparse.Namespace, ga: GA, evaluator: FitnessEvaluator, front
         "best_ov_and_bt": max(front, key=lambda s: (s.fitness[1], s.fitness[0])),
         "best_tc_and_bt": max(front, key=lambda s: (s.fitness[2], s.fitness[0])),
         "best_tc_and_ov": max(front, key=lambda s: (s.fitness[2], s.fitness[1])),
-        "balanced_most": max(front, key=lambda s: (s.crowding_distance, sum(s.fitness))),
-        "balanced_least": min(front, key=lambda s: (s.crowding_distance, sum(s.fitness))),
+        "balanced_most": max(front, key=lambda s: (s.crowding, sum(s.fitness))),
+        "balanced_least": min(front, key=lambda s: (s.crowding, sum(s.fitness))),
     }
     if args.save_all_schedules:
         schedules_to_export.update({f"sched_{id(s)}_{s.fitness}": s for s in front})
@@ -262,17 +262,17 @@ def main() -> None:
         logger.exception("Error loading configuration")
         return
 
+    event_factory = EventFactory(config)
+    event_conflicts = EventMap(event_factory)
+
     try:
-        run_preflight_checks(config)
+        run_preflight_checks(config, event_factory)
     except ValueError:
         logger.exception("Preflight checks failed")
         return
 
     rng_seed = 123456789
     rng = Random(rng_seed)
-
-    event_factory = EventFactory(config)
-    event_conflicts = EventMap(event_factory)
     team_factory = TeamFactory(config, event_conflicts.conflicts)
 
     ga_parameters = build_ga_parameters_from_args(args)

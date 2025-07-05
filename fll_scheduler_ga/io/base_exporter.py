@@ -20,7 +20,7 @@ class Exporter(ABC):
     def _group_by_type(self, schedule: Individual) -> dict[RoundType, Individual]:
         """Group the schedule by round type."""
         grouped = {}
-        for event, team in sorted(schedule.items(), key=lambda item: (item[0].time_slot.start)):
+        for event, team in sorted(schedule.items(), key=lambda item: (item[0].timeslot.start)):
             grouped.setdefault(event.round_type, {})
             grouped[event.round_type][event] = team
         return grouped

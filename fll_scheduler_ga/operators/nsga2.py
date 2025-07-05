@@ -49,12 +49,12 @@ def _compute_crowding_dist(front: Population) -> None:
 
     num_objectives = len(front[0].fitness)
     for p in front:
-        p.crowding_distance = 0.0
+        p.crowding = 0.0
 
     for m in range(num_objectives):
         front.sort(key=lambda p: p.fitness[m])
 
-        front[0].crowding_distance = front[-1].crowding_distance = float("inf")
+        front[0].crowding = front[-1].crowding = float("inf")
 
         f_max = front[-1].fitness[m]
         f_min = front[0].fitness[m]
@@ -63,7 +63,7 @@ def _compute_crowding_dist(front: Population) -> None:
 
         for i in range(1, len(front) - 1):
             distance = front[i + 1].fitness[m] - front[i - 1].fitness[m]
-            front[i].crowding_distance += distance / (f_max - f_min)
+            front[i].crowding += distance / (f_max - f_min)
 
 
 def _dominates(p: Schedule, q: Schedule) -> bool:
