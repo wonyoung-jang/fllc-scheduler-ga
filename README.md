@@ -22,21 +22,13 @@ This project requires Python 3.13+ and the following packages:
 
 ### Installation
 
-1.  Clone the repository:
+1.  Clone repository:
     ```bash
-    git clone https://github.com/your-username/fll-scheduler-ga.git
+    git clone https://github.com/wonyoung-jang/fllc-scheduler-ga.git
     cd fll-scheduler-ga
     ```
 
-2.  Create a `requirements.txt` file with the prerequisites:
-    ```text
-    # requirements.txt
-    matplotlib
-    pandas
-    tqdm
-    ```
-
-3.  Install the required packages:
+2.  Install required packages:
     ```bash
     pip install -r requirements.txt
     ```
