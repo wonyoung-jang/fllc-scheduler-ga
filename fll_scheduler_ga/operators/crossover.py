@@ -207,7 +207,7 @@ class Scattered(Crossover):
         child = Schedule(self.team_factory.build())
         conflicted = []
         indices = self.rng.sample(range(len(self.events)), len(self.events))
-        mid = len(self.events) // 2 + 1 if len(self.events) % 2 else len(self.events) // 2
+        mid = len(self.events) // 2
         p1_genes = (self.events[i] for i in indices[:mid])
         p2_genes = (self.events[i] for i in indices[mid:])
         self._populate_from_parent(child, p1, p1_genes, conflicted)
