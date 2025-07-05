@@ -1,6 +1,6 @@
-# FLL Scheduler GA (Genetic Algorithm)
+# FLL-C Scheduler GA (Genetic Algorithm)
 
-FLL Scheduler GA uses a multi-objective genetic algorithm (NSGA-II) to generate schedules for FIRST LEGO League Challenge.
+FLL-C Scheduler GA uses a multi-objective genetic algorithm (NSGA-II) to generate schedules for FIRST LEGO League Challenge.
 
 ## Features
 
@@ -87,7 +87,7 @@ num_locations = 4  ; i.e., 4 competition tables (A, B, C, D)
 Execute the main script from your terminal, providing the path to your configuration and specifying an output file name. The file extension of the output (`.csv` or `.html`) will determine the export format.
 
 ```bash
-python fll_scheduler_ga --config path/to/config.ini --output schedule_results
+python fll_scheduler_ga --config_file path/to/config.ini --output_file schedule_results
 ```
 
 The program will run the genetic algorithm, showing a progress bar for the generations.
