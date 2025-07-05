@@ -78,11 +78,11 @@ class CsvExporter(GridBasedExporter):
 
         timeslots, locations, grid_lookup = self._build_grid_data(schedule)
 
-        header = ["Time Slot"] + [str(loc) for loc in locations]
+        header = ["Time"] + [str(loc) for loc in locations]
         rows.append(header)
 
         for time_slot in timeslots:
-            r = [f"{time_slot.start_str}-{time_slot.stop_str}"]
+            r = [time_slot.start_str]
             for location in locations:
                 team_or_match = grid_lookup.get((time_slot, location))
                 if isinstance(team_or_match, Team):
@@ -151,13 +151,13 @@ class HtmlExporter(GridBasedExporter):
 
         timeslots, locations, grid_lookup = self._build_grid_data(schedule)
 
-        html = [f"<h2>{title}</h2>", "<table>", "<thead>", "<tr><th>Time Slot</th>"]
+        html = [f"<h2>{title}</h2>", "<table>", "<thead>", "<tr><th>Time</th>"]
         for location in locations:
             html.extend(f"<th>{location!s}</th>")
         html.extend(["</tr>", "</thead>", "<tbody>"])
 
         for time_slot in timeslots:
-            html.append(f"<tr><td>{time_slot.start_str}-{time_slot.stop_str}</td>")
+            html.append(f"<tr><td>{time_slot.start_str}</td>")
             for location in locations:
                 team_or_match = grid_lookup.get((time_slot, location))
                 if isinstance(team_or_match, Team):
