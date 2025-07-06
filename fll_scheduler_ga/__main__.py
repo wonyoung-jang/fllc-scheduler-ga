@@ -89,6 +89,12 @@ def create_parser() -> argparse.ArgumentParser:
         help="Whether to save all schedules.",
     )
     parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="(OPTIONAL) Random seed for reproducibility.",
+    )
+    parser.add_argument(
         "--population_size",
         type=int,
         help="(OPTIONAL) Population size for the GA.",
@@ -293,7 +299,8 @@ def main() -> None:
         logger.exception("Preflight checks failed")
         return
 
-    rng_seed = 123456789
+    rng_seed = args.seed if args.seed is not None else Random().randint(0, 2**32 - 1)
+    logger.info("Using master RNG seed: %d", rng_seed)
     rng = Random(rng_seed)
     team_factory = TeamFactory(config, event_conflicts.conflicts)
 

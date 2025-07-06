@@ -91,15 +91,17 @@ class GA:
     def initialize_population(self) -> None:
         """Initialize the population with random organisms using multiprocessing."""
         num_to_create = self.ga_parameters.population_size
+        seeder = Random(self.rng.randint(0, 2**32 - 1))
+        worker_seeds = [seeder.randint(0, 2**32 - 1) for _ in range(num_to_create)]
         worker_args = [
             (
                 self.team_factory,
                 self.event_factory,
                 self.config,
-                self.rng.randint(0, 2**32 - 1),
+                seed,
                 self.fitness,
             )
-            for _ in range(num_to_create)
+            for seed in worker_seeds
         ]
 
         self.logger.info("Initializing population with %d individuals using multiprocessing.", num_to_create)
