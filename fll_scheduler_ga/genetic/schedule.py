@@ -26,16 +26,16 @@ class Schedule:
         return len(self._schedule)
 
     def __getitem__(self, event: Event) -> Team:
-        """Get the team or teams assigned to a specific event."""
+        """Get the team assigned to a specific event."""
         try:
             return self._schedule[event]
         except KeyError:
             msg = f"The event {event} is not scheduled."
             raise KeyError(msg) from None
 
-    def __setitem__(self, event: Event, teams: Team) -> None:
-        """Assign a team or teams to a specific event."""
-        self._schedule[event] = teams
+    def __setitem__(self, event: Event, team: Team) -> None:
+        """Assign a team to a specific event."""
+        self._schedule[event] = team
         self._cached_matches = None
 
     def __contains__(self, event: Event) -> bool:
@@ -61,14 +61,8 @@ class Schedule:
     def clone(self) -> "Schedule":
         """Create a deep copy of the Schedule instance."""
         new_teams = {identity: team.clone() for identity, team in self._teams.items()}
-        new_individual = {event: new_teams[team.identity] for event, team in self.items()}
-        return Schedule(
-            new_teams,
-            new_individual,
-            fitness=self.fitness,
-            rank=self.rank,
-            crowding=self.crowding,
-        )
+        new_individual = {event: new_teams[team.identity] for event, team in self._schedule.items()}
+        return Schedule(new_teams, new_individual, self.fitness, self.rank, self.crowding)
 
     def all_teams(self) -> list[Team]:
         """Return a list of all teams in the schedule."""
