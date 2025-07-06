@@ -28,9 +28,18 @@ class Crossover(ABC):
         """Post-initialization to set up the initial state."""
         self.events = [e for el in self.event_factory.build().values() for e in el]
 
-    @abstractmethod
     def crossover(self, parents: list[Schedule]) -> Schedule | None:
         """Crossover two parents to produce a child."""
+        p1, p2 = parents
+        child = Schedule(self.team_factory.build())
+        p1_genes, p2_genes = self.get_genes()
+        self._populate_from_parent(child, p1, p1_genes)
+        self._populate_from_parent(child, p2, p2_genes)
+        return child if child and self._repair_crossover(child) else None
+
+    @abstractmethod
+    def get_genes(self) -> tuple[Iterable[Event], Iterable[Event]]:
+        """Get the genes for the crossover."""
 
     def _populate_from_parent(self, child: Schedule, parent: Schedule, events: Iterable[Event]) -> None:
         """Populate the child individual from parent genes."""
@@ -159,10 +168,8 @@ class KPoint(Crossover):
             msg = "k must be between 1 and the number of events."
             raise ValueError(msg)
 
-    def crossover(self, parents: list[Schedule]) -> Schedule | None:
-        """Perform k-point crossover."""
-        p1, p2 = parents
-        child = Schedule(self.team_factory.build())
+    def get_genes(self) -> tuple[Iterable[Event], Iterable[Event]]:
+        """Get the genes for the crossover."""
         indices = sorted(self.rng.sample(range(1, len(self.events)), self.k))
         genes = []
         start = 0
@@ -172,9 +179,7 @@ class KPoint(Crossover):
         genes.append(self.events[start:])
         p1_genes = (genes[i][x] for i in range(len(genes)) if i % 2 == 0 for x in range(len(genes[i])))
         p2_genes = (genes[i][x] for i in range(len(genes)) if i % 2 == 1 for x in range(len(genes[i])))
-        self._populate_from_parent(child, p1, p1_genes)
-        self._populate_from_parent(child, p2, p2_genes)
-        return child if child and self._repair_crossover(child) else None
+        return p1_genes, p2_genes
 
 
 @dataclass(slots=True)
@@ -184,17 +189,13 @@ class Scattered(Crossover):
     Shuffled indices split parent 50/50.
     """
 
-    def crossover(self, parents: list[Schedule]) -> Schedule | None:
-        """Perform scattered crossover."""
-        p1, p2 = parents
-        child = Schedule(self.team_factory.build())
+    def get_genes(self) -> tuple[Iterable[Event], Iterable[Event]]:
+        """Get the genes for the crossover."""
         indices = self.rng.sample(range(len(self.events)), len(self.events))
         mid = len(self.events) // 2
         p1_genes = (self.events[i] for i in indices[:mid])
         p2_genes = (self.events[i] for i in indices[mid:])
-        self._populate_from_parent(child, p1, p1_genes)
-        self._populate_from_parent(child, p2, p2_genes)
-        return child if child and self._repair_crossover(child) else None
+        return p1_genes, p2_genes
 
 
 @dataclass(slots=True)
@@ -204,13 +205,9 @@ class Uniform(Crossover):
     Each gene is chosen from either parent by flipping a coin for each gene.
     """
 
-    def crossover(self, parents: list[Schedule]) -> Schedule | None:
-        """Perform uniform crossover."""
-        p1, p2 = parents
-        child = Schedule(self.team_factory.build())
+    def get_genes(self) -> tuple[Iterable[Event], Iterable[Event]]:
+        """Get the genes for the crossover."""
         indices = [1 if self.rng.uniform(0, 1) < 0.5 else 2 for _ in range(len(self.events))]
         p1_genes = (self.events[i] for i in range(len(self.events)) if indices[i] == 1)
         p2_genes = (self.events[i] for i in range(len(self.events)) if indices[i] == 2)
-        self._populate_from_parent(child, p1, p1_genes)
-        self._populate_from_parent(child, p2, p2_genes)
-        return child if child and self._repair_crossover(child) else None
+        return p1_genes, p2_genes
