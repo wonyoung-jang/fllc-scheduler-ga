@@ -36,8 +36,8 @@ class FitnessEvaluator:
 
         score_map = defaultdict(list)
         for team in schedule.all_teams:
-            if team.rounds_needed > 0:
-                logger.debug("%s: %s", "AllEventsScheduled", f"Team {team.identity} needs {team.rounds_needed} rounds")
+            if rounds_needed := team.rounds_needed():
+                logger.debug("%s: %s", "AllEventsScheduled", f"Team {team.identity} needs {rounds_needed} rounds")
                 return None
 
             score_map["BreakTime"].append(team.score_break_time())

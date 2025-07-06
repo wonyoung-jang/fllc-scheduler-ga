@@ -32,18 +32,15 @@ class Crossover(ABC):
     def crossover(self, parents: list[Schedule]) -> Schedule | None:
         """Crossover two parents to produce a child."""
 
-    def _populate_from_parent(
-        self, child: Schedule, parent: Schedule, events: Iterable[Event], conflicted: list[Team]
-    ) -> None:
+    def _populate_from_parent(self, child: Schedule, parent: Schedule, events: Iterable[Event]) -> None:
         """Populate the child individual from parent genes."""
         for event in (e for e in events if e in parent):
             if event.paired_event is None:
                 team = child.get_team(parent[event])
-                if team.conflicts(event) or not team.needs_round(event):
-                    conflicted.append(team)
-                else:
-                    team.add_event(event)
-                    child[event] = team
+                if team.conflicts(event) or not team.needs_round(event.round_type):
+                    continue
+                team.add_event(event)
+                child[event] = team
                 continue
 
             if event.paired_event is not None and event.location.side != 1:
@@ -54,20 +51,20 @@ class Crossover(ABC):
             if (
                 team1.conflicts(event)
                 or team2.conflicts(event.paired_event)
-                or not team1.needs_round(event)
-                or not team2.needs_round(event.paired_event)
+                or not team1.needs_round(event.round_type)
+                or not team2.needs_round(event.paired_event.round_type)
             ):
-                conflicted.extend([team1, team2])
-            else:
-                team1.add_event(event)
-                team2.add_event(event.paired_event)
-                team1.add_opponent(team2)
-                team2.add_opponent(team1)
-                child[event] = team1
-                child[event.paired_event] = team2
+                continue
+            team1.add_event(event)
+            team2.add_event(event.paired_event)
+            team1.add_opponent(team2)
+            team2.add_opponent(team1)
+            child[event] = team1
+            child[event.paired_event] = team2
 
-    def _repair_crossover(self, child: Schedule, conflicted: list[Team]) -> bool:
+    def _repair_crossover(self, child: Schedule) -> bool:
         """Repair conflicts in the child individual by finding new slots for conflicted teams."""
+        conflicted = [t for t in child.all_teams if any(rt for rt in t.round_types if t.needs_round(rt))]
         if not conflicted:
             return True
 
@@ -81,12 +78,11 @@ class Crossover(ABC):
             else:
                 open_single_events[e.round_type].append(e)
 
-        conflicted_teams = list(set(conflicted))
-        self.rng.shuffle(conflicted_teams)
+        self.rng.shuffle(conflicted)
 
         repair_results = []
-        for team in conflicted_teams:
-            result = self._find_and_book_slot(child, team, open_single_events, open_match_events, conflicted_teams)
+        for team in conflicted:
+            result = self._find_and_book_slot(child, team, open_single_events, open_match_events, conflicted)
             repair_results.append(result)
 
         return all(repair_results)
@@ -97,24 +93,13 @@ class Crossover(ABC):
         team1: Team,
         open_singles: dict[RoundType, list[Event]],
         open_matches: dict[RoundType, list[Event]],
-        conflicted_teams: list[Team],
+        conflicted: list[Team],
     ) -> bool:
         """Find and book a new slot for a team in the child individual."""
-        while team1.rounds_needed > 0:
-            rt = next((rt for rt in team1.round_types if team1.needs_round(rt)), None)
-            if rt is None:
-                return True
-
-            if self._add_single(
-                child,
-                team1,
-                open_singles.get(rt, []),
-            ) or self._add_match(
-                child,
-                team1,
-                open_matches.get(rt, []),
-                conflicted_teams,
-            ):
+        while (rt := next((rt for rt in team1.round_types if team1.needs_round(rt)), None)) is not None:
+            add_single = self._add_single(child, team1, open_singles.get(rt, []))
+            add_match = self._add_match(child, team1, open_matches.get(rt, []), conflicted)
+            if add_single or add_match:
                 continue
             return False
         return True
@@ -129,13 +114,12 @@ class Crossover(ABC):
                 return True
         return False
 
-    def _add_match(self, child: Schedule, team1: Team, open_slots: list[Event], conflicted_teams: list[Team]) -> bool:
-        rt = next(rt for rt in team1.round_types if team1.needs_round(rt))
-        partner_pool = [t for t in conflicted_teams if t != team1 and t.needs_round(rt)]
-        if not partner_pool:
-            partner_pool = [t for t in child.all_teams if t != team1 and t.needs_round(rt)]
-        if not partner_pool:
+    def _add_match(self, child: Schedule, team1: Team, open_slots: list[Event], conflicted: list[Team]) -> bool:
+        if (rt := next((rt for rt in team1.round_types if team1.needs_round(rt)), None)) is None:
             return False
+        if not (partner_pool := [t for t in conflicted if t != team1 and t.needs_round(rt)]):
+            return False
+
         team2 = self.rng.choice(partner_pool)
 
         for i, e1 in enumerate(open_slots):
@@ -179,7 +163,6 @@ class KPoint(Crossover):
         """Perform k-point crossover."""
         p1, p2 = parents
         child = Schedule(self.team_factory.build())
-        conflicted = []
         indices = sorted(self.rng.sample(range(1, len(self.events)), self.k))
         genes = []
         start = 0
@@ -189,9 +172,9 @@ class KPoint(Crossover):
         genes.append(self.events[start:])
         p1_genes = (genes[i][x] for i in range(len(genes)) if i % 2 == 0 for x in range(len(genes[i])))
         p2_genes = (genes[i][x] for i in range(len(genes)) if i % 2 == 1 for x in range(len(genes[i])))
-        self._populate_from_parent(child, p1, p1_genes, conflicted)
-        self._populate_from_parent(child, p2, p2_genes, conflicted)
-        return child if child and self._repair_crossover(child, conflicted) else None
+        self._populate_from_parent(child, p1, p1_genes)
+        self._populate_from_parent(child, p2, p2_genes)
+        return child if child and self._repair_crossover(child) else None
 
 
 @dataclass(slots=True)
@@ -205,14 +188,13 @@ class Scattered(Crossover):
         """Perform scattered crossover."""
         p1, p2 = parents
         child = Schedule(self.team_factory.build())
-        conflicted = []
         indices = self.rng.sample(range(len(self.events)), len(self.events))
         mid = len(self.events) // 2
         p1_genes = (self.events[i] for i in indices[:mid])
         p2_genes = (self.events[i] for i in indices[mid:])
-        self._populate_from_parent(child, p1, p1_genes, conflicted)
-        self._populate_from_parent(child, p2, p2_genes, conflicted)
-        return child if child and self._repair_crossover(child, conflicted) else None
+        self._populate_from_parent(child, p1, p1_genes)
+        self._populate_from_parent(child, p2, p2_genes)
+        return child if child and self._repair_crossover(child) else None
 
 
 @dataclass(slots=True)
@@ -226,10 +208,9 @@ class Uniform(Crossover):
         """Perform uniform crossover."""
         p1, p2 = parents
         child = Schedule(self.team_factory.build())
-        conflicted = []
         indices = [1 if self.rng.uniform(0, 1) < 0.5 else 2 for _ in range(len(self.events))]
         p1_genes = (self.events[i] for i in range(len(self.events)) if indices[i] == 1)
         p2_genes = (self.events[i] for i in range(len(self.events)) if indices[i] == 2)
-        self._populate_from_parent(child, p1, p1_genes, conflicted)
-        self._populate_from_parent(child, p2, p2_genes, conflicted)
-        return child if child and self._repair_crossover(child, conflicted) else None
+        self._populate_from_parent(child, p1, p1_genes)
+        self._populate_from_parent(child, p2, p2_genes)
+        return child if child and self._repair_crossover(child) else None

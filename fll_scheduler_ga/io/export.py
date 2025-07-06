@@ -110,23 +110,42 @@ class HtmlExporter(GridBasedExporter):
             <!DOCTYPE html>
             <html lang="en">
             <head>
-            <meta charset="UTF-8">
-            <title>Tournament Schedule</title>
-            <style>
-                body {
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-                line-height: 1.6; color: #333;
-                }
-                table { border-collapse: collapse; margin-bottom: 2em; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-                th, td { border: 1px solid #ccc; padding: 8px 12px; text-align: center; }
-                th { background-color: #f2f2f2; font-weight: 600; }
-                h1, h2 { color: #1a1a1a; border-bottom: 2px solid #eee; padding-bottom: 0.3em; }
-                .container { max-width: 95%; margin: auto; padding: 2em; }
-            </style>
+                <meta charset="UTF-8">
+                <title>Tournament Schedule</title>
+                <style>
+                    body {
+                        font-family: Roboto, Helvetica, Arial, sans-serif;
+                        line-height: 1.6; color: #333;
+                    }
+                    table {
+                        border-collapse: collapse;
+                        margin-bottom: 2em;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                    }
+                    th, td {
+                        border: 1px solid #ccc;
+                        padding: 8px 12px;
+                        text-align: center;
+                    }
+                    th {
+                        background-color: #f2f2f2;
+                        font-weight: 600;
+                    }
+                    h1, h2 {
+                        color: #1a1a1a;
+                        border-bottom: 2px solid #eee;
+                        padding-bottom: 0.3em;
+                    }
+                    .container {
+                        max-width: 95%;
+                        margin: auto;
+                        padding: 2em;
+                    }
+                </style>
             </head>
             <body>
-            <div class="container">
-            <h1>Tournament Schedule</h1>
+                <div class="container">
+                <h1>Tournament Schedule</h1>
             """
         ]
 

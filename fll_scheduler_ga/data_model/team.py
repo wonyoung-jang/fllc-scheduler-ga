@@ -1,6 +1,5 @@
 """Team data model for FLL Scheduler GA."""
 
-import bisect
 import math
 from collections.abc import Generator
 from dataclasses import dataclass, field
@@ -8,8 +7,7 @@ from logging import getLogger
 
 from ..config.config import RoundType, TournamentConfig
 from ..data_model.event import Event
-from .location import Location, Table
-from .time import TimeSlot
+from .location import Location
 
 logger = getLogger(__name__)
 
@@ -65,7 +63,6 @@ class Team:
     event_conflict_map: dict[int, set[int]]
     identity: int = field(init=False, repr=False)
     events: list[Event] = field(default_factory=list)
-    timeslots: list[TimeSlot] = field(default_factory=list, repr=False)
     opponents: list[int] = field(default_factory=list, repr=False)
     locations: list[Location] = field(default_factory=list, repr=False)
 
@@ -95,23 +92,19 @@ class Team:
             round_types=self.round_types.copy(),
             event_conflict_map=self.event_conflict_map.copy(),
             events=self.events.copy(),
-            timeslots=self.timeslots.copy(),
             opponents=self.opponents.copy(),
             locations=self.locations.copy(),
         )
         memo[id(self)] = new_team
         return new_team
 
-    @property
     def rounds_needed(self) -> int:
         """Get the total number of rounds still needed for the team."""
         return sum(self.round_types.values())
 
-    def needs_round(self, round_type: Event | RoundType) -> bool:
+    def needs_round(self, round_type: RoundType) -> int:
         """Check if the team still needs to participate in a given round type."""
-        if isinstance(round_type, Event):
-            round_type = round_type.round_type
-        return self.round_types.get(round_type, 0) > 0
+        return self.round_types[round_type]
 
     def has_location(self, event: Event) -> bool:
         """Check if the team has a location for its events."""
@@ -126,9 +119,9 @@ class Team:
         """Unbook a team from an event."""
         self.round_types[event.round_type] += 1
         self.events.remove(event)
-        self.timeslots.remove(event.timeslot)
-        if isinstance(event.location, Table):
+        if event.location.teams_per_round == 2:
             self.locations.remove(event.location)
+
         if self._cached_break_time_score is not None:
             self._cached_break_time_score = None
         if self._cached_table_score is not None:
@@ -137,16 +130,12 @@ class Team:
     def add_event(self, event: Event) -> None:
         """Book a team for an event."""
         if self.round_types[event.round_type] <= 0:
-            logger.debug(
-                "\n\tTeam %d already has %s",
-                self.identity,
-                [event.round_type, event.timeslot.start_str],
-            )
+            logger.debug("Team %d already has %s", self.identity, event)
         self.round_types[event.round_type] -= 1
         self.events.append(event)
-        bisect.insort(self.timeslots, event.timeslot)
-        if isinstance(event.location, Table):
+        if event.location.teams_per_round == 2:
             self.locations.append(event.location)
+
         if self._cached_break_time_score is not None:
             self._cached_break_time_score = None
         if self._cached_table_score is not None:
@@ -194,11 +183,12 @@ class Team:
             Generator[int]: The break time in minutes between consecutive events.
 
         """
-        if len(self.timeslots) < 2:
+        if len(self.events) < 2:
             return
 
-        for i in range(1, len(self.timeslots)):
-            yield (self.timeslots[i].start - self.timeslots[i - 1].stop).total_seconds() // 60
+        self.events.sort(key=lambda e: e.timeslot.start)
+        for i in range(1, len(self.events)):
+            yield (self.events[i].timeslot.start - self.events[i - 1].timeslot.stop).total_seconds() // 60
 
     def score_break_time(self) -> float:
         """Calculate a score based on the break times between events."""
