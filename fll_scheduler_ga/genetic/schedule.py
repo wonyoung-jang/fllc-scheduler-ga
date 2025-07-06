@@ -1,7 +1,6 @@
 """Represents a schedule (individual) with its associated fitness score."""
 
 from collections.abc import Generator, ItemsView, KeysView, ValuesView
-from copy import deepcopy
 from dataclasses import dataclass, field
 
 from ..data_model.event import Event
@@ -19,7 +18,8 @@ class Schedule:
     fitness: tuple[float, ...] = field(default=None, compare=False)
     rank: int = field(default=9999, compare=True)
     crowding: float = field(default=0.0, compare=False)
-    _cached_all_teams: list[Team] = field(default=None, init=False, compare=False)
+    _cached_all_teams: list[Team] = field(default=None, init=False, repr=False, compare=False)
+    _cached_matches: list[tuple[Event, Event, Team, Team]] = field(default=None, init=False, repr=False, compare=False)
 
     def __len__(self) -> int:
         """Return the number of scheduled events."""
@@ -36,6 +36,7 @@ class Schedule:
     def __setitem__(self, event: Event, teams: Team) -> None:
         """Assign a team or teams to a specific event."""
         self._schedule[event] = teams
+        self._cached_matches = None
 
     def __contains__(self, event: Event) -> bool:
         """Check if a specific event is scheduled."""
@@ -45,24 +46,29 @@ class Schedule:
         """Iterate over the Events in the schedule."""
         return iter(self._schedule)
 
-    def __deepcopy__(self, memo: dict[int, object]) -> "Schedule":
-        """Create a deep copy of the Schedule instance."""
-        if id(self) in memo:
-            return memo[id(self)]
+    def get_matches(self) -> list[tuple[Event, Event, Team, Team]]:
+        """Get all matches in the schedule."""
+        if self._cached_matches is None:
+            self._cached_matches = []
+            for event1, team1 in self._schedule.items():
+                if not (event2 := event1.paired_event) or event1.location.side != 1:
+                    continue
 
-        new_teams = {identity: deepcopy(team) for identity, team in self._teams.items()}
+                if team2 := self._schedule[event2]:
+                    self._cached_matches.append((event1, event2, team1, team2))
+        return self._cached_matches
+
+    def clone(self) -> "Schedule":
+        """Create a deep copy of the Schedule instance."""
+        new_teams = {identity: team.__deepcopy__({}) for identity, team in self._teams.items()}
         new_individual = {event: new_teams[team.identity] for event, team in self.items()}
-        new_schedule = Schedule(
+        return Schedule(
             new_teams,
             new_individual,
             fitness=self.fitness,
             rank=self.rank,
             crowding=self.crowding,
         )
-
-        memo[id(self)] = new_schedule
-
-        return new_schedule
 
     def all_teams(self) -> list[Team]:
         """Return a list of all teams in the schedule."""

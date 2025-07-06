@@ -149,7 +149,7 @@ class Crossover(ABC):
 class KPoint(Crossover):
     """K-point crossover operator for genetic algorithms."""
 
-    k: int = 1
+    k: int = field(default=1)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""

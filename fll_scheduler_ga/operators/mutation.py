@@ -11,24 +11,6 @@ from ..genetic.schedule import Schedule
 
 logger = logging.getLogger(__name__)
 
-type TableEventAndTeams = tuple[Event, Event, Team, Team]
-
-
-def _get_scheduled_match_events(child: Schedule) -> list[TableEventAndTeams]:
-    """Get a list of tuples representing all scheduled matches.
-
-    Each tuple is (primary_event, opponent_event, team1, team2).
-    """
-    matches = []
-    for event1, team1 in child.items():
-        if not (event2 := event1.paired_event) or event1.location.side != 1:
-            continue
-
-        if team2 := child[event2]:
-            matches.append((event1, event2, team1, team2))
-
-    return matches
-
 
 @dataclass(slots=True, frozen=True)
 class Mutation(ABC):
@@ -62,7 +44,7 @@ class SwapTeamMutation(Mutation):
         self, child: Schedule, *, same_timeslot: bool, same_location: bool
     ) -> tuple[tuple[Event, Team, Team], tuple[Event, Team, Team]] | tuple[None, None]:
         """Get two matches to swap in the child schedule."""
-        matches = _get_scheduled_match_events(child)
+        matches = child.get_matches()
         if len(matches) < 2:
             return None, None
 
@@ -154,7 +136,7 @@ class SwapMatchMutation(Mutation):
         self, child: Schedule, *, same_timeslot: bool, same_location: bool
     ) -> tuple[tuple[Event, Event, Team, Team], tuple[Event, Event, Team, Team]] | tuple[None, None]:
         """Get two matches to swap in the child schedule."""
-        matches = _get_scheduled_match_events(child)
+        matches = child.get_matches()
         if len(matches) < 2:
             return None, None
 

@@ -1,5 +1,6 @@
 """Team data model for FLL Scheduler GA."""
 
+import bisect
 import math
 from collections.abc import Generator
 from dataclasses import dataclass, field
@@ -30,7 +31,7 @@ class TeamFactory:
     """Factory class to create Team instances."""
 
     config: TournamentConfig
-    event_conflict_map: dict[int, set[int]]
+    conflicts: dict[int, set[int]]
     base_teams_info: frozenset[TeamInfo] = field(init=False)
 
     def __post_init__(self) -> None:
@@ -48,7 +49,7 @@ class TeamFactory:
             i.identity: Team(
                 info=i,
                 round_types=self.config.round_requirements.copy(),
-                event_conflict_map=self.event_conflict_map,
+                event_conflict_map=self.conflicts,
             )
             for i in self.base_teams_info
         }
@@ -61,14 +62,16 @@ class Team:
     info: TeamInfo
     round_types: dict[RoundType, int]
     event_conflict_map: dict[int, set[int]]
+
     identity: int = field(init=False, repr=False)
     events: list[Event] = field(default_factory=list)
     opponents: list[int] = field(default_factory=list, repr=False)
     locations: list[Location] = field(default_factory=list, repr=False)
 
-    _cached_break_time_score: float | None = field(default=None, init=False, repr=False)
-    _cached_opponent_score: float | None = field(default=None, init=False, repr=False)
-    _cached_table_score: float | None = field(default=None, init=False, repr=False)
+    _event_ids: set[int] = field(default_factory=set, repr=False)
+    _cached_break_time_score: float | None = field(default=None, repr=False)
+    _cached_opponent_score: float | None = field(default=None, repr=False)
+    _cached_table_score: float | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to sort events and time slots."""
@@ -90,10 +93,14 @@ class Team:
         new_team = Team(
             info=self.info,
             round_types=self.round_types.copy(),
-            event_conflict_map=self.event_conflict_map.copy(),
             events=self.events.copy(),
             opponents=self.opponents.copy(),
             locations=self.locations.copy(),
+            event_conflict_map=self.event_conflict_map.copy(),
+            _event_ids=self._event_ids.copy(),
+            _cached_break_time_score=self._cached_break_time_score,
+            _cached_opponent_score=self._cached_opponent_score,
+            _cached_table_score=self._cached_table_score,
         )
         memo[id(self)] = new_team
         return new_team
@@ -119,6 +126,7 @@ class Team:
         """Unbook a team from an event."""
         self.round_types[event.round_type] += 1
         self.events.remove(event)
+        self._event_ids.remove(event.identity)
         if event.location.teams_per_round == 2:
             self.locations.remove(event.location)
 
@@ -132,7 +140,8 @@ class Team:
         if self.round_types[event.round_type] <= 0:
             logger.debug("Team %d already has %s", self.identity, event)
         self.round_types[event.round_type] -= 1
-        self.events.append(event)
+        bisect.insort(self.events, event, key=lambda e: e.timeslot.start)
+        self._event_ids.add(event.identity)
         if event.location.teams_per_round == 2:
             self.locations.append(event.location)
 
@@ -171,10 +180,10 @@ class Team:
         if not (potential_conflicts := self.event_conflict_map.get(new_event.identity, set())):
             return False
 
-        if any(e.identity in potential_conflicts for e in self.events):
+        if self._event_ids.intersection(potential_conflicts):
             return True
 
-        return new_event in self.events
+        return new_event.identity in self._event_ids
 
     def _get_break_times(self) -> Generator[int]:
         """Calculate break times between events.
@@ -186,7 +195,6 @@ class Team:
         if len(self.events) < 2:
             return
 
-        self.events.sort(key=lambda e: e.timeslot.start)
         for i in range(1, len(self.events)):
             yield (self.events[i].timeslot.start - self.events[i - 1].timeslot.stop).total_seconds() // 60
 

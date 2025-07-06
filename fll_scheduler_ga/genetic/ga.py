@@ -2,7 +2,6 @@
 
 import logging
 import multiprocessing
-from copy import deepcopy
 from dataclasses import dataclass, field
 from random import Random
 
@@ -18,7 +17,6 @@ from .builder import ScheduleBuilder
 from .fitness import FitnessEvaluator
 from .ga_parameters import GaParameters
 from .schedule import Population, Schedule
-from .states import GaState, InitializingState, TerminatedState
 
 logger = logging.getLogger(__name__)
 
@@ -54,14 +52,12 @@ class GA:
     fitness_history: list[tuple] = field(default_factory=list, init=False, repr=False)
     population: Population = field(default_factory=list, init=False, repr=False)
 
-    _state: GaState = field(init=False, repr=False)
     _last_reported_fitness: tuple[float, ...] = field(default=None, init=False)
 
     def __post_init__(self) -> None:
         """Initialize the genetic algorithm with base schedule and teams."""
         for obs in self.observers:
             obs.on_start(self.ga_parameters.generations)
-        self.setstate(InitializingState(self))
 
     def pareto_front(self) -> Population:
         """Get the current Pareto front from the population."""
@@ -71,9 +67,14 @@ class GA:
 
     def run(self) -> Population | None:
         """Run the genetic algorithm and return the best schedule found."""
-        while not isinstance(self._state, TerminatedState):
-            self._state.run()
-        self._state.run()
+        self.logger.info("GA is in Initializing state.")
+        self.initialize_population()
+
+        self.logger.info("GA is in Evolving state.")
+        self.generation()
+
+        self.logger.info("GA has terminated.")
+        self.log_final_summary()
 
         for obs in self.observers:
             obs.on_finish()
@@ -181,7 +182,7 @@ class GA:
                 self._notify_crossover(c.__class__.__name__)
 
         if child is None:
-            child = deepcopy(self.rng.choice(parents))
+            child = self.rng.choice(parents).clone()
 
         roll = self.rng.random()
         total_last_avg = sum(self.fitness_history[-1]) if self.fitness_history else 0
@@ -222,10 +223,6 @@ class GA:
                 [f"{name}: {score:.4f}" for name, score in zip(obj_names, schedule.fitness, strict=False)]
             )
             self.logger.info("  - Solution %d: %s", i + 1, scores_str)
-
-    def setstate(self, state: GaState) -> None:
-        """Set the current state of the genetic algorithm."""
-        self._state = state
 
     def _notify_gen_end(self, generation: int, best_fitness: tuple[float, ...]) -> None:
         """Notify observers at the end of a generation."""

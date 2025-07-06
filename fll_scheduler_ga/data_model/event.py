@@ -13,11 +13,11 @@ from .time import HHMM_FMT, TimeSlot
 logger = logging.getLogger(__name__)
 
 
-@dataclass(slots=True, unsafe_hash=True)
+@dataclass(slots=True, unsafe_hash=True, order=True)
 class Event:
     """Data model for an event in a schedule."""
 
-    identity: int = field(hash=True)
+    identity: int = field(hash=True, compare=True)
     round_type: RoundType = field(compare=False)
     timeslot: TimeSlot = field(compare=False)
     location: Room | Table = field(compare=False)
@@ -46,7 +46,9 @@ class EventFactory:
 
         """
         if not self._cached_events:
-            self._cached_events = {r.round_type: set(self.create_events(r)) for r in self.config.rounds}
+            self._cached_events = {
+                r.round_type: set(self.create_events(r)) for r in sorted(self.config.rounds, key=lambda x: x.start_time)
+            }
         return self._cached_events
 
     def create_events(self, r: Round) -> Generator[Event]:
@@ -107,18 +109,17 @@ class EventMap:
 
     event_factory: EventFactory
     events: list[Event] = field(default=None, init=False, repr=False)
-    conflicts: dict[int, set[int]] = field(default=None, init=False, repr=False)
+    conflicts: dict[int, set[int]] = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to create the event availability map."""
-        self.events = [event for el in self.event_factory.build().values() for event in el]
-        self.conflicts = {
-            event.identity: {
+        self.events = sorted(event for el in self.event_factory.build().values() for event in el)
+        for event in self.events:
+            logger.debug("Event %d: %s", event.identity, event)
+            self.conflicts[event.identity] = {
                 other.identity
                 for other in self.events
                 if other.identity != event.identity and event.timeslot.overlaps(other.timeslot)
             }
-            for event in self.events
-        }
-        for k, v in sorted(self.conflicts.items(), key=lambda item: item[0]):
+        for k, v in self.conflicts.items():
             logger.debug("Event %d conflicts with %d other events: %s", k, len(v), v)

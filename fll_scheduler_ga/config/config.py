@@ -56,7 +56,7 @@ class TournamentConfig:
 
     def __str__(self) -> str:
         """Represent the TournamentConfig."""
-        rounds_str = ", ".join(f"{r.round_type}" for r in sorted(self.rounds, key=lambda x: x.round_type))
+        rounds_str = ", ".join(f"{r.round_type}" for r in sorted(self.rounds, key=lambda x: x.start_time))
         round_reqs_str = ", ".join(f"{k}: {v}" for k, v in self.round_requirements.items())
         return (
             f"\nTournamentConfig:\n"
