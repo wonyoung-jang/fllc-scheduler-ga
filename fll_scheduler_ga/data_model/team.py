@@ -2,7 +2,6 @@
 
 import bisect
 import math
-from collections.abc import Generator
 from dataclasses import dataclass, field
 from logging import getLogger
 
@@ -87,18 +86,19 @@ class Team:
 
     def clone(self) -> "Team":
         """Create a deep copy of the Team instance."""
-        return Team(
+        new_team = Team(
             info=self.info,
             round_types=self.round_types.copy(),
-            events=self.events.copy(),
-            opponents=self.opponents.copy(),
-            locations=self.locations.copy(),
-            event_conflict_map=self.event_conflict_map.copy(),
-            _event_ids=self._event_ids.copy(),
-            _cached_break_time_score=self._cached_break_time_score,
-            _cached_opponent_score=self._cached_opponent_score,
-            _cached_table_score=self._cached_table_score,
+            event_conflict_map=self.event_conflict_map,
         )
+        new_team.events = self.events[:]
+        new_team.opponents = self.opponents[:]
+        new_team.locations = self.locations[:]
+        new_team._event_ids = self._event_ids.copy()
+        new_team._cached_break_time_score = self._cached_break_time_score
+        new_team._cached_opponent_score = self._cached_opponent_score
+        new_team._cached_table_score = self._cached_table_score
+        return new_team
 
     def rounds_needed(self) -> int:
         """Get the total number of rounds still needed for the team."""
@@ -180,25 +180,18 @@ class Team:
 
         return new_event.identity in self._event_ids
 
-    def _get_break_times(self) -> Generator[int]:
-        """Calculate break times between events.
-
-        Returns:
-            Generator[int]: The break time in minutes between consecutive events.
-
-        """
-        if len(self.events) < 2:
-            return
-
-        for i in range(1, len(self.events)):
-            yield (self.events[i].timeslot.start - self.events[i - 1].timeslot.stop).total_seconds() // 60
-
     def score_break_time(self) -> float:
         """Calculate a score based on the break times between events."""
         if self._cached_break_time_score is not None:
             return self._cached_break_time_score
 
-        break_times = list(self._get_break_times())
+        if len(self.events) < 2:
+            return 1.0
+
+        break_times = [
+            (self.events[i].timeslot.start - self.events[i - 1].timeslot.stop).total_seconds() // 60
+            for i in range(1, len(self.events))
+        ]
         n = len(break_times)
         if n == 0:
             return 1.0
