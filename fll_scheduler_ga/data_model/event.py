@@ -35,8 +35,14 @@ class EventFactory:
     config: TournamentConfig
     _id_counter: itertools.count = field(default_factory=itertools.count, init=False, repr=False)
     _cached_events: dict[RoundType, set[Event]] = field(default=None, init=False, repr=False)
+    _cached_flat_list: dict[RoundType, set[Event]] = field(default=None, init=False, repr=False)
     _cached_locations: dict[tuple[int, int, int], Room | Table] = field(default_factory=dict, init=False, repr=False)
     _cached_timeslots: dict[tuple[datetime, datetime], TimeSlot] = field(default_factory=dict, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        """Post-initialization to set up the initial state."""
+        self.build()
+        self.flat_list()
 
     def build(self) -> dict[RoundType, set[Event]]:
         """Create and return all Events for the tournament.
@@ -50,6 +56,12 @@ class EventFactory:
                 r.round_type: set(self.create_events(r)) for r in sorted(self.config.rounds, key=lambda x: x.start_time)
             }
         return self._cached_events
+
+    def flat_list(self) -> list[Event]:
+        """Get a flat list of all Events across all RoundTypes."""
+        if not self._cached_flat_list:
+            self._cached_flat_list = [e for el in self._cached_events.values() for e in el]
+        return self._cached_flat_list
 
     def create_events(self, r: Round) -> Generator[Event]:
         """Generate all possible Events for a given Round configuration.
@@ -113,7 +125,7 @@ class EventMap:
 
     def __post_init__(self) -> None:
         """Post-initialization to create the event availability map."""
-        self.events = sorted(event for el in self.event_factory.build().values() for event in el)
+        self.events = sorted(self.event_factory.flat_list())
         for event in self.events:
             logger.debug("Event %d: %s", event.identity, event)
             self.conflicts[event.identity] = {

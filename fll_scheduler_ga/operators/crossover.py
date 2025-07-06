@@ -26,7 +26,7 @@ class Crossover(ABC):
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
-        self.events = [e for el in self.event_factory.build().values() for e in el]
+        self.events = self.event_factory.flat_list()
 
     def crossover(self, parents: list[Schedule]) -> Schedule | None:
         """Crossover two parents to produce a child."""

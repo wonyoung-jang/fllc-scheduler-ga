@@ -2,13 +2,9 @@
 
 import logging
 from collections import defaultdict
-from typing import TYPE_CHECKING
 
 from ..config.config import TournamentConfig
 from ..data_model.event import EventFactory
-
-if TYPE_CHECKING:
-    from ..data_model.event import Event
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +14,6 @@ def run_preflight_checks(config: TournamentConfig, event_factory: EventFactory) 
     logger.info("Running preflight checks on the tournament configuration")
     _check_round_definitions(config)
     _check_total_capacity(config)
-    _check_peak_capacity_bottlenecks(config, event_factory)
     _check_per_team_feasibility(config)
     _check_location_time_overlaps(config, event_factory)
     logger.info("All preflight checks passed successfully.")
@@ -56,35 +51,6 @@ def _check_total_capacity(config: TournamentConfig) -> None:
             raise ValueError(msg)
         logger.info("Check passed: Capacity sufficient for Round '%s' - %d/%d.", r_type, req_count, available[r_type])
     logger.info("Check passed: Overall capacity is sufficient.")
-
-
-def _check_peak_capacity_bottlenecks(config: TournamentConfig, event_factory: EventFactory) -> None:
-    """Identify if any single hour is impossibly over-scheduled."""
-    all_events: list[Event] = [e for el in event_factory.build().values() for e in el]
-
-    slots_by_hour_and_type = defaultdict(lambda: defaultdict(int))
-    for event in all_events:
-        hour_key = event.timeslot.start.strftime("%H:00")
-        round_config = next(r for r in config.rounds if r.round_type == event.round_type)
-        slots_by_hour_and_type[event.round_type][hour_key] += round_config.teams_per_round
-
-    for r_type, hourly_slots in slots_by_hour_and_type.items():
-        required_rounds_per_team = config.round_requirements.get(r_type, 0)
-        total_hours = len(hourly_slots)
-        if total_hours == 0:
-            continue
-        avg_teams_per_hour_needed = (config.num_teams * required_rounds_per_team) / total_hours
-
-        for hour, capacity in hourly_slots.items():
-            if capacity < avg_teams_per_hour_needed:
-                msg = (
-                    f"Potential Bottleneck Detected in Round '{r_type}' at {hour}:\n"
-                    f"  - This hour only has capacity for {capacity} teams.\n"
-                    f"  - The average demand is ~{avg_teams_per_hour_needed:.1f} teams per hour.\n"
-                    f"  - This may create scheduling pressure or result in less optimal schedules."
-                )
-                logger.warning(msg)
-    logger.info("Check passed: No obvious hourly bottlenecks found.")
 
 
 def _check_per_team_feasibility(config: TournamentConfig) -> None:
