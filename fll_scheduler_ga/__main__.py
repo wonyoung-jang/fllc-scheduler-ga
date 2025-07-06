@@ -222,21 +222,32 @@ def summary(args: argparse.Namespace, ga: GA, evaluator: FitnessEvaluator, front
     plot.plot_pareto_front(save_dir=output_dir / "pareto_front_tradeoffs.png")
 
     # break_time = bt; opponent_variety = ov; table_consistency = tc
-    schedules_to_export = {
-        "best_bt": max(front, key=lambda s: s.fitness[0]),
-        "best_ov": max(front, key=lambda s: s.fitness[1]),
-        "best_tc": max(front, key=lambda s: s.fitness[2]),
-        "best_bt_and_ov": max(front, key=lambda s: (s.fitness[0], s.fitness[1])),
-        "best_bt_and_tc": max(front, key=lambda s: (s.fitness[0], s.fitness[2])),
-        "best_ov_and_tc": max(front, key=lambda s: (s.fitness[1], s.fitness[2])),
-        "best_ov_and_bt": max(front, key=lambda s: (s.fitness[1], s.fitness[0])),
-        "best_tc_and_bt": max(front, key=lambda s: (s.fitness[2], s.fitness[0])),
-        "best_tc_and_ov": max(front, key=lambda s: (s.fitness[2], s.fitness[1])),
-        "balanced_most": max(front, key=lambda s: (s.crowding, sum(s.fitness))),
-        "balanced_least": min(front, key=lambda s: (s.crowding, sum(s.fitness))),
-    }
+    try:
+        idx_bt = evaluator.soft_constraints.index("BreakTime")
+        idx_ov = evaluator.soft_constraints.index("OpponentVariety")
+        idx_tc = evaluator.soft_constraints.index("TableConsistency")
+    except ValueError:
+        logger.exception("Could not find a required soft constraint")
+        return
+
+    export_criteria = [
+        ("best_break_time", lambda s: s.fitness[idx_bt]),
+        ("best_opponent_variety", lambda s: s.fitness[idx_ov]),
+        ("best_table_consistency", lambda s: s.fitness[idx_tc]),
+        ("best_overall_score", lambda s: sum(s.fitness)),
+        ("most_crowded", lambda s: s.crowding if s.crowding != float("inf") else -1),
+        ("best_bt_and_ov", lambda s: (s.fitness[idx_bt], s.fitness[idx_ov])),
+        ("best_bt_and_tc", lambda s: (s.fitness[idx_bt], s.fitness[idx_tc])),
+    ]
+
+    schedules_to_export = {}
+    for name, key_func in export_criteria:
+        best_schedule = max(front, key=key_func)
+        schedules_to_export[name] = best_schedule
+
     if args.save_all_schedules:
-        schedules_to_export.update({f"sched_{id(s)}_{s.fitness}": s for s in front})
+        for i, schedule in enumerate(front):
+            schedules_to_export[f"front_schedule_{i + 1}_{id(schedule)}"] = schedule
 
     for name, schedule in schedules_to_export.items():
         suffixes = (

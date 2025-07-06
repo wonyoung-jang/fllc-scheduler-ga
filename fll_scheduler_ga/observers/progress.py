@@ -20,10 +20,16 @@ class TqdmObserver(GaObserver):
         self._progress_bar = tqdm(total=num_generations, unit="gen")
 
     def on_generation_end(
-        self, generation: int, num_generations: int, population_size: int, best_fitness: tuple[float, ...]
+        self,
+        generation: int,
+        num_generations: int,
+        population_size: int,
+        best_fitness: tuple[float, ...],
+        front_size: int,
     ) -> None:
         """Update progress bar with no new best."""
-        self._progress_bar.set_description(f"Best Fitness: {best_fitness}")
+        fitness_str = ", ".join([f"{s:.3f}" for s in best_fitness])
+        self._progress_bar.set_description(f"Front size: {front_size:<3} | Avg Fitness: ({fitness_str})")
         self._progress_bar.update(1)
 
     def on_finish(self) -> None:

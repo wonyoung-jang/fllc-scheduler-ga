@@ -60,7 +60,7 @@ class Schedule:
 
     def clone(self) -> "Schedule":
         """Create a deep copy of the Schedule instance."""
-        new_teams = {identity: team.__deepcopy__({}) for identity, team in self._teams.items()}
+        new_teams = {identity: team.clone() for identity, team in self._teams.items()}
         new_individual = {event: new_teams[team.identity] for event, team in self.items()}
         return Schedule(
             new_teams,

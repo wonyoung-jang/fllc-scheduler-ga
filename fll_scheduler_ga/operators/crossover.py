@@ -32,18 +32,18 @@ class Crossover(ABC):
         """Crossover two parents to produce a child."""
         p1, p2 = parents
         child = Schedule(self.team_factory.build())
-        p1_genes, p2_genes = self.get_genes()
+        p1_genes, p2_genes = self.get_genes(p1, p2)
         self._populate_from_parent(child, p1, p1_genes)
         self._populate_from_parent(child, p2, p2_genes)
         return child if child and self._repair_crossover(child) else None
 
     @abstractmethod
-    def get_genes(self) -> tuple[Iterable[Event], Iterable[Event]]:
+    def get_genes(self, p1: Schedule, p2: Schedule) -> tuple[Iterable[Event], Iterable[Event]]:
         """Get the genes for the crossover."""
 
     def _populate_from_parent(self, child: Schedule, parent: Schedule, events: Iterable[Event]) -> None:
         """Populate the child individual from parent genes."""
-        for event in (e for e in events if e in parent):
+        for event in events:
             if event.paired_event is None:
                 team = child.get_team(parent[event])
                 if team.conflicts(event) or not team.needs_round(event.round_type):
@@ -89,12 +89,9 @@ class Crossover(ABC):
 
         self.rng.shuffle(conflicted)
 
-        repair_results = []
-        for team in conflicted:
-            result = self._find_and_book_slot(child, team, open_single_events, open_match_events, conflicted)
-            repair_results.append(result)
-
-        return all(repair_results)
+        return all(
+            self._find_and_book_slot(child, t, open_single_events, open_match_events, conflicted) for t in conflicted
+        )
 
     def _find_and_book_slot(
         self,
@@ -168,7 +165,7 @@ class KPoint(Crossover):
             msg = "k must be between 1 and the number of events."
             raise ValueError(msg)
 
-    def get_genes(self) -> tuple[Iterable[Event], Iterable[Event]]:
+    def get_genes(self, p1: Schedule, p2: Schedule) -> tuple[Iterable[Event], Iterable[Event]]:
         """Get the genes for the crossover."""
         indices = sorted(self.rng.sample(range(1, len(self.events)), self.k))
         genes = []
@@ -177,8 +174,12 @@ class KPoint(Crossover):
             genes.append(self.events[start:i])
             start = i
         genes.append(self.events[start:])
-        p1_genes = (genes[i][x] for i in range(len(genes)) if i % 2 == 0 for x in range(len(genes[i])))
-        p2_genes = (genes[i][x] for i in range(len(genes)) if i % 2 == 1 for x in range(len(genes[i])))
+        p1_genes = (
+            genes[i][x] for i in range(len(genes)) if i % 2 == 0 for x in range(len(genes[i])) if genes[i][x] in p1
+        )
+        p2_genes = (
+            genes[i][x] for i in range(len(genes)) if i % 2 == 1 for x in range(len(genes[i])) if genes[i][x] in p2
+        )
         return p1_genes, p2_genes
 
 
@@ -189,12 +190,12 @@ class Scattered(Crossover):
     Shuffled indices split parent 50/50.
     """
 
-    def get_genes(self) -> tuple[Iterable[Event], Iterable[Event]]:
+    def get_genes(self, p1: Schedule, p2: Schedule) -> tuple[Iterable[Event], Iterable[Event]]:
         """Get the genes for the crossover."""
         indices = self.rng.sample(range(len(self.events)), len(self.events))
         mid = len(self.events) // 2
-        p1_genes = (self.events[i] for i in indices[:mid])
-        p2_genes = (self.events[i] for i in indices[mid:])
+        p1_genes = (self.events[i] for i in indices[:mid] if self.events[i] in p1)
+        p2_genes = (self.events[i] for i in indices[mid:] if self.events[i] in p2)
         return p1_genes, p2_genes
 
 
@@ -205,9 +206,9 @@ class Uniform(Crossover):
     Each gene is chosen from either parent by flipping a coin for each gene.
     """
 
-    def get_genes(self) -> tuple[Iterable[Event], Iterable[Event]]:
+    def get_genes(self, p1: Schedule, p2: Schedule) -> tuple[Iterable[Event], Iterable[Event]]:
         """Get the genes for the crossover."""
         indices = [1 if self.rng.uniform(0, 1) < 0.5 else 2 for _ in range(len(self.events))]
-        p1_genes = (self.events[i] for i in range(len(self.events)) if indices[i] == 1)
-        p2_genes = (self.events[i] for i in range(len(self.events)) if indices[i] == 2)
+        p1_genes = (self.events[i] for i in range(len(self.events)) if indices[i] == 1 and self.events[i] in p1)
+        p2_genes = (self.events[i] for i in range(len(self.events)) if indices[i] == 2 and self.events[i] in p2)
         return p1_genes, p2_genes

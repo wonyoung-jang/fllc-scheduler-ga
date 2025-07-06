@@ -85,12 +85,9 @@ class Team:
         """Get the count a team is counted as."""
         return 1
 
-    def __deepcopy__(self, memo: dict[int, object]) -> "Team":
+    def clone(self) -> "Team":
         """Create a deep copy of the Team instance."""
-        if id(self) in memo:
-            return memo[id(self)]
-
-        new_team = Team(
+        return Team(
             info=self.info,
             round_types=self.round_types.copy(),
             events=self.events.copy(),
@@ -102,8 +99,6 @@ class Team:
             _cached_opponent_score=self._cached_opponent_score,
             _cached_table_score=self._cached_table_score,
         )
-        memo[id(self)] = new_team
-        return new_team
 
     def rounds_needed(self) -> int:
         """Get the total number of rounds still needed for the team."""

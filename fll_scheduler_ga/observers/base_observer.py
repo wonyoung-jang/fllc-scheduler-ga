@@ -14,7 +14,12 @@ class GaObserver(ABC):
 
     @abstractmethod
     def on_generation_end(
-        self, generation: int, num_generations: int, population_size: int, best_fitness: float
+        self,
+        generation: int,
+        num_generations: int,
+        population_size: int,
+        best_fitness: tuple[float, ...],
+        front_size: int,
     ) -> None:
         """Call at the end of each generation to report status."""
 

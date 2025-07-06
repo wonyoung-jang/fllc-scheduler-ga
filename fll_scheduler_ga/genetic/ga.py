@@ -226,10 +226,13 @@ class GA:
 
     def _notify_gen_end(self, generation: int, best_fitness: tuple[float, ...]) -> None:
         """Notify observers at the end of a generation."""
-        fitness_str = ", ".join(f"{f:.8f}" for f in best_fitness)
         for obs in self.observers:
             obs.on_generation_end(
-                generation + 1, self.ga_parameters.generations, self.ga_parameters.population_size, fitness_str
+                generation + 1,
+                self.ga_parameters.generations,
+                self.ga_parameters.population_size,
+                best_fitness,
+                len(self.pareto_front()),
             )
 
     def _notify_mutation(self, mutation_name: str) -> None:
