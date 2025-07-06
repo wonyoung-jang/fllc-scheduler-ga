@@ -275,33 +275,29 @@ def summary(args: argparse.Namespace, ga: GA, evaluator: FitnessEvaluator, front
     generate_pareto_summary(front, evaluator, output_dir / "pareto_summary.txt")
 
 
-def main() -> None:
-    """Run the fll-scheduler-ga application."""
-    parser = create_parser()
-    args = parser.parse_args()
-
+def setup_environment(args: argparse.Namespace) -> tuple[dict, ConfigParser]:
+    """Set up the environment for the application."""
     initialize_logging(args)
-
     try:
         config_parser = get_config_parser(Path(args.config_file))
         config = load_tournament_config(config_parser)
         logger.info("Loaded tournament configuration: %s", config)
     except (FileNotFoundError, KeyError):
         logger.exception("Error loading configuration")
-        return
+        return None, None
+    else:
+        return config, config_parser
 
-    event_factory = EventFactory(config)
-    event_conflicts = EventMap(event_factory)
 
-    try:
-        run_preflight_checks(config, event_factory)
-    except ValueError:
-        logger.exception("Preflight checks failed")
-        return
-
+def create_ga_instance(
+    args: argparse.Namespace, config: dict, config_parser: ConfigParser, event_factory: EventFactory
+) -> GA:
+    """Create and return a GA instance with the provided configuration."""
     rng_seed = args.seed if args.seed is not None else Random().randint(0, 2**32 - 1)
     logger.info("Using master RNG seed: %d", rng_seed)
     rng = Random(rng_seed)
+
+    event_conflicts = EventMap(event_factory)
     team_factory = TeamFactory(config, event_conflicts.conflicts)
 
     ga_parameters = build_ga_parameters_from_args(args, config_parser)
@@ -332,7 +328,7 @@ def main() -> None:
         TqdmObserver(logger),
     ]
 
-    ga = GA(
+    return GA(
         ga_parameters=ga_parameters,
         config=config,
         rng=rng,
@@ -347,8 +343,28 @@ def main() -> None:
         fitness=evaluator,
     )
 
+
+def main() -> None:
+    """Run the fll-scheduler-ga application."""
+    args = create_parser().parse_args()
+    config, config_parser = setup_environment(args)
+
+    if config is None or config_parser is None:
+        logger.error("Failed to set up environment")
+        return
+
+    event_factory = EventFactory(config)
+
+    try:
+        run_preflight_checks(config, event_factory)
+    except ValueError:
+        logger.exception("Preflight checks failed")
+        return
+
+    ga = create_ga_instance(args, config, config_parser, event_factory)
+
     if front := ga.run():
-        summary(args, ga, evaluator, front)
+        summary(args, ga, ga.fitness, front)
     else:
         logger.warning("Genetic algorithm did not produce a valid final schedule.")
 
