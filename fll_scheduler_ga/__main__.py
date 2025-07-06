@@ -247,7 +247,7 @@ def summary(args: argparse.Namespace, ga: GA, evaluator: FitnessEvaluator, front
 
     if args.save_all_schedules:
         for i, schedule in enumerate(front):
-            schedules_to_export[f"front_schedule_{i + 1}_{id(schedule)}"] = schedule
+            schedules_to_export[f"front_schedule_{i + 1}"] = schedule
 
     for name, schedule in schedules_to_export.items():
         suffixes = (
