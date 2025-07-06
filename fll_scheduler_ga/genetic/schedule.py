@@ -19,6 +19,7 @@ class Schedule:
     fitness: tuple[float, ...] = field(default=None, compare=False)
     rank: int = field(default=9999, compare=True)
     crowding: float = field(default=0.0, compare=False)
+    _cached_all_teams: list[Team] = field(default=None, init=False, compare=False)
 
     def __len__(self) -> int:
         """Return the number of scheduled events."""
@@ -50,10 +51,7 @@ class Schedule:
             return memo[id(self)]
 
         new_teams = {identity: deepcopy(team) for identity, team in self._teams.items()}
-        new_individual = {}
-        for event, booked_item in self.items():
-            new_individual[event] = new_teams[booked_item.identity]
-
+        new_individual = {event: new_teams[team.identity] for event, team in self.items()}
         new_schedule = Schedule(
             new_teams,
             new_individual,
@@ -61,14 +59,16 @@ class Schedule:
             rank=self.rank,
             crowding=self.crowding,
         )
+
         memo[id(self)] = new_schedule
 
         return new_schedule
 
-    @property
     def all_teams(self) -> list[Team]:
         """Return a list of all teams in the schedule."""
-        return list(self._teams.values())
+        if self._cached_all_teams is None:
+            self._cached_all_teams = list(self._teams.values())
+        return self._cached_all_teams
 
     def keys(self) -> KeysView[Event]:
         """Return an iterator over the events (keys)."""

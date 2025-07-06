@@ -15,6 +15,8 @@ class GaParameters:
     elite_size: int = 8
     selection_size: int = 16
     crossover_chance: float = 0.5
+    mutation_chance_low: float = 0.2
+    mutation_chance_high: float = 0.8
 
     def __post_init__(self) -> None:
         """Post-initialization to ensure valid parameters."""
@@ -45,3 +47,17 @@ class GaParameters:
         if self.selection_size > self.population_size:
             self.selection_size = self.population_size // 5
             logger.warning("Selection size is greater than population size, defaulting to 20%%")
+
+        if not (0.0 <= self.mutation_chance_low <= 1.0):
+            self.mutation_chance_low = 0.2
+            logger.warning("Mutation chance low must be between 0.0 and 1.0, defaulting to 0.2.")
+
+        if not (0.0 <= self.mutation_chance_high <= 1.0):
+            self.mutation_chance_high = 0.8
+            logger.warning("Mutation chance high must be between 0.0 and 1.0, defaulting to 0.8.")
+
+        if self.mutation_chance_low > self.mutation_chance_high:
+            self.mutation_chance_low = self.mutation_chance_high - 0.1
+            logger.warning(
+                "Mutation chance low cannot be greater than mutation chance high, defaulting to 0.2 and 0.8."
+            )

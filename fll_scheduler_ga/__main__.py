@@ -2,10 +2,11 @@
 
 import argparse
 import logging
+from configparser import ConfigParser
 from pathlib import Path
 from random import Random
 
-from fll_scheduler_ga.config.config import load_tournament_config
+from fll_scheduler_ga.config.config import get_config_parser, load_tournament_config
 from fll_scheduler_ga.data_model.event import EventFactory, EventMap
 from fll_scheduler_ga.data_model.team import Team, TeamFactory
 from fll_scheduler_ga.genetic.fitness import FitnessEvaluator
@@ -39,17 +40,12 @@ def create_parser() -> argparse.ArgumentParser:
 
     """
     _default_values = {
-        "config_file": "fll_scheduler_ga/config/config.ini",
-        "output_file": "outputs/schedule",
+        "config_file": "fll_scheduler_ga/config.ini",
+        "output_dir": "fllc_schedule_outputs",
         "log_file": "fll_scheduler_ga.log",
-        "file_log_level": "DEBUG",
-        "console_log_level": "INFO",
+        "loglevel_file": "DEBUG",
+        "loglevel_console": "INFO",
         "save_all_schedules": False,
-        "population_size": 16,
-        "generations": 128,
-        "elite_size": 2,
-        "selection_size": 4,
-        "crossover_chance": 0.5,
     }
     parser = argparse.ArgumentParser(
         description="Generate a tournament schedule using a Genetic Algorithm.",
@@ -61,10 +57,10 @@ def create_parser() -> argparse.ArgumentParser:
         help="Path to config .ini file.",
     )
     parser.add_argument(
-        "--output_file",
+        "--output_dir",
         type=str,
-        default=_default_values["output_file"],
-        help="Path to the output CSV file.",
+        default=_default_values["output_dir"],
+        help="Directory to save output files.",
     )
     parser.add_argument(
         "--log_file",
@@ -73,17 +69,17 @@ def create_parser() -> argparse.ArgumentParser:
         help="Path to the log file.",
     )
     parser.add_argument(
-        "--file_log_level",
+        "--loglevel_file",
         type=str,
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        default=_default_values["file_log_level"],
-        help="Logging level.",
+        default=_default_values["loglevel_file"],
+        help="Logging level for the file output.",
     )
     parser.add_argument(
-        "--console_log_level",
+        "--loglevel_console",
         type=str,
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        default=_default_values["console_log_level"],
+        default=_default_values["loglevel_console"],
         help="Logging level for the console output.",
     )
     parser.add_argument(
@@ -95,65 +91,83 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--population_size",
         type=int,
-        default=_default_values["population_size"],
-        help="Population size for the GA.",
+        help="(OPTIONAL) Population size for the GA.",
     )
     parser.add_argument(
         "--generations",
         type=int,
-        default=_default_values["generations"],
-        help="Number of generations to run.",
+        help="(OPTIONAL) Number of generations to run.",
     )
     parser.add_argument(
         "--elite_size",
         type=int,
-        default=_default_values["elite_size"],
-        help="Number of elite individuals.",
+        help="(OPTIONAL) Number of elite individuals.",
     )
     parser.add_argument(
         "--selection_size",
         type=int,
-        default=_default_values["selection_size"],
-        help="Size of parent selection.",
+        help="(OPTIONAL) Size of parent selection.",
     )
     parser.add_argument(
         "--crossover_chance",
         type=float,
-        default=_default_values["crossover_chance"],
-        help="Chance of crossover (0.0 to 1.0).",
+        help="(OPTIONAL) Chance of crossover (0.0 to 1.0).",
+    )
+    parser.add_argument(
+        "--mutation_chance_low",
+        type=float,
+        help="(OPTIONAL) Lower bound of mutation chance (0.0 to 1.0).",
+    )
+    parser.add_argument(
+        "--mutation_chance_high",
+        type=float,
+        help="(OPTIONAL) Upper bound of mutation chance (0.0 to 1.0).",
     )
     return parser
 
 
-def build_ga_parameters_from_args(args: argparse.Namespace) -> GaParameters:
+def build_ga_parameters_from_args(args: argparse.Namespace, config_parser: ConfigParser) -> GaParameters:
     """Build a GaParameters, overriding defaults with any provided CLI args.
 
     Args:
         args (argparse.Namespace): Parsed command-line arguments.
+        config_parser (ConfigParser): Configuration parser with default values.
 
     Returns:
         GaParameters: Parameters for the genetic algorithm.
 
     """
+    config_genetic = config_parser["genetic"]
+    config_args = {
+        "population_size": config_genetic.getint("population_size", 16),
+        "generations": config_genetic.getint("generations", 128),
+        "elite_size": config_genetic.getint("elite_size", 2),
+        "selection_size": config_genetic.getint("selection_size", 4),
+        "crossover_chance": config_genetic.getfloat("crossover_chance", 0.5),
+        "mutation_chance_low": config_genetic.getfloat("mutation_chance_low", 0.2),
+        "mutation_chance_high": config_genetic.getfloat("mutation_chance_high", 0.8),
+    }
     cli_args = {
         "population_size": args.population_size,
         "generations": args.generations,
         "elite_size": args.elite_size,
         "selection_size": args.selection_size,
         "crossover_chance": args.crossover_chance,
+        "mutation_chance_low": args.mutation_chance_low,
+        "mutation_chance_high": args.mutation_chance_high,
     }
-    provided_args = {k: v for k, v in cli_args.items() if v is not None}
+    provided_args = {k: v if v is not None else config_args[k] for k, v in cli_args.items()}
     return GaParameters(**provided_args)
 
 
 def initialize_logging(args: argparse.Namespace) -> None:
     """Initialize logging for the application."""
     file_handler = logging.FileHandler(args.log_file, mode="w", encoding="utf-8")
-    file_handler.setLevel(args.file_log_level)
+    file_handler.setLevel(args.loglevel_file)
     file_handler.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s[%(name)s] %(message)s"))
 
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(args.console_log_level)
+    console_handler.setLevel(args.loglevel_console)
     console_handler.setFormatter(logging.Formatter("%(levelname)s[%(name)s] %(message)s"))
 
     root_logger = logging.getLogger()
@@ -176,10 +190,9 @@ def generate_summary_report(schedule: Schedule, evaluator: FitnessEvaluator, pat
             f.write(f"  - {name}: {score:.4f}\n")
 
         f.write("\nNotes:\n")
-        all_teams: list[Team] = list(schedule.all_teams)
+        all_teams: list[Team] = schedule.all_teams()
         worst_team = min(all_teams, key=lambda t: t.score_break_time())
         f.write(f"  - Team with worst break time distribution: Team {worst_team.identity}\n")
-        worst_team = min(all_teams, key=lambda t: t.score_break_time())
 
 
 def generate_pareto_summary(pareto_front: list[Schedule], evaluator: FitnessEvaluator, path: Path) -> None:
@@ -200,9 +213,7 @@ def generate_pareto_summary(pareto_front: list[Schedule], evaluator: FitnessEval
 
 def summary(args: argparse.Namespace, ga: GA, evaluator: FitnessEvaluator, front: list[Schedule]) -> None:
     """Run the fll-scheduler-ga application and generate summary reports."""
-    primary_path = Path(args.output_file)
-
-    output_dir = primary_path.parent
+    output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     logger.info("Output directory: %s", output_dir)
 
@@ -228,18 +239,17 @@ def summary(args: argparse.Namespace, ga: GA, evaluator: FitnessEvaluator, front
         schedules_to_export.update({f"sched_{id(s)}_{s.fitness}": s for s in front})
 
     for name, schedule in schedules_to_export.items():
-        output_path = primary_path.with_name(f"{name}{primary_path.suffix}")
         suffixes = (
-            ".csv",
-            ".html",
+            "csv",
+            "html",
         )
         for suffix in suffixes:
-            suffix_subdir = output_dir / suffix.strip(".")
+            suffix_subdir = output_dir / suffix
             suffix_subdir.mkdir(parents=True, exist_ok=True)
-            output_path = suffix_subdir / output_path.name
-            path = output_path.with_suffix(suffix)
-            exporter = get_exporter(path)
-            exporter.export(schedule, path)
+            output_path = suffix_subdir / name
+            output_path = output_path.with_suffix(f".{suffix}")
+            exporter = get_exporter(output_path)
+            exporter.export(schedule, output_path)
 
         txt_subdir = output_dir / "txt"
         txt_subdir.mkdir(parents=True, exist_ok=True)
@@ -256,7 +266,8 @@ def main() -> None:
     initialize_logging(args)
 
     try:
-        config = load_tournament_config(Path(args.config_file))
+        config_parser = get_config_parser(Path(args.config_file))
+        config = load_tournament_config(config_parser)
         logger.info("Loaded tournament configuration: %s", config)
     except (FileNotFoundError, KeyError):
         logger.exception("Error loading configuration")
@@ -275,7 +286,7 @@ def main() -> None:
     rng = Random(rng_seed)
     team_factory = TeamFactory(config, event_conflicts.conflicts)
 
-    ga_parameters = build_ga_parameters_from_args(args)
+    ga_parameters = build_ga_parameters_from_args(args, config_parser)
     selection = TournamentSelectionNSGA2(ga_parameters, rng)
     elitism = ElitismSelectionNSGA2(ga_parameters, rng)
 

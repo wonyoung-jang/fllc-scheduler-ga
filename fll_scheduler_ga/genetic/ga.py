@@ -51,20 +51,18 @@ class GA:
     logger: logging.Logger
     observers: list[GaObserver]
     fitness: FitnessEvaluator
-    fitness_history: list[tuple] = field(default_factory=list, init=False)
-    population: Population = field(default=None, repr=False)
+    fitness_history: list[tuple] = field(default_factory=list, init=False, repr=False)
+    population: Population = field(default_factory=list, init=False, repr=False)
 
     _state: GaState = field(init=False, repr=False)
     _last_reported_fitness: tuple[float, ...] = field(default=None, init=False)
 
     def __post_init__(self) -> None:
         """Initialize the genetic algorithm with base schedule and teams."""
-        self.population = []
         for obs in self.observers:
             obs.on_start(self.ga_parameters.generations)
         self.setstate(InitializingState(self))
 
-    @property
     def pareto_front(self) -> Population:
         """Get the current Pareto front from the population."""
         if not self.population:
@@ -82,8 +80,9 @@ class GA:
 
         if self.population:
             non_dominated_sort(self.population)
-            self.logger.info("Pareto front size: %d", len(self.pareto_front))
-            return self.pareto_front
+            front = self.pareto_front()
+            self.logger.info("Pareto front size: %d", len(front))
+            return front
 
         self.logger.warning("No valid schedule meeting all hard constraints was found.")
         return None
@@ -119,12 +118,13 @@ class GA:
             return
 
         non_dominated_sort(self.population)
-        num_objectives = len(self.pareto_front[0].fitness)
+        front = self.pareto_front()
+        num_objectives = len(front[0].fitness)
         avg_fitness_front1 = [0.0] * num_objectives
-        for p in self.pareto_front:
+        for p in front:
             for i in range(num_objectives):
                 avg_fitness_front1[i] += p.fitness[i]
-        this_gen_fitness = tuple(s / len(self.pareto_front) for s in avg_fitness_front1)
+        this_gen_fitness = tuple(s / len(front) for s in avg_fitness_front1)
         self.fitness_history.append(this_gen_fitness)
 
         self.logger.info("Created %d valid schedules.", len(self.population))
@@ -143,16 +143,16 @@ class GA:
         combined_population = self.population + self.evolve(self.ga_parameters.population_size)
         non_dominated_sort(combined_population)
         self.population = list(self.elitism.select(combined_population, self.ga_parameters.population_size))
-        if not self.pareto_front:
+        if not (front := self.pareto_front()):
             self.logger.warning("No valid individuals in the current population.")
             return
 
-        num_objectives = len(self.pareto_front[0].fitness)
+        num_objectives = len(front[0].fitness)
         avg_fitness_front1 = [0.0] * num_objectives
-        for p in self.pareto_front:
+        for p in front:
             for i in range(num_objectives):
                 avg_fitness_front1[i] += p.fitness[i]
-        this_gen_fitness = tuple(s / len(self.pareto_front) for s in avg_fitness_front1)
+        this_gen_fitness = tuple(s / len(front) for s in avg_fitness_front1)
         self.fitness_history.append(this_gen_fitness)
 
         self._notify_gen_end(generation, this_gen_fitness)
@@ -185,11 +185,13 @@ class GA:
 
         roll = self.rng.random()
         total_last_avg = sum(self.fitness_history[-1]) if self.fitness_history else 0
+        _low = self.ga_parameters.mutation_chance_low
+        _high = self.ga_parameters.mutation_chance_high
 
         if not child.fitness:
             if score := self.fitness.evaluate(child):
                 total_score = sum(score)
-                if (total_score >= total_last_avg and roll < 0.1) or (total_score < total_last_avg and roll < 0.8):
+                if (total_score >= total_last_avg and roll < _low) or (total_score < total_last_avg and roll < _high):
                     m = self.rng.choice(self.mutations)
                     m.mutate(child)
                     self._notify_mutation(m.__class__.__name__)
@@ -198,7 +200,7 @@ class GA:
             return None
 
         total_score = sum(child.fitness)
-        if (total_score >= total_last_avg and roll < 0.1) or (total_score < total_last_avg and roll < 0.8):
+        if (total_score >= total_last_avg and roll < _low) or (total_score < total_last_avg and roll < _high):
             m = self.rng.choice(self.mutations)
             m.mutate(child)
             self._notify_mutation(m.__class__.__name__)
@@ -211,9 +213,10 @@ class GA:
             self.logger.warning("No valid schedule was found after all generations.")
             return
 
-        self.logger.info("Final Pareto Front Size: %d", len(self.pareto_front))
+        front = self.pareto_front()
+        self.logger.info("Final Pareto Front Size: %d", len(front))
         self.logger.info("Objective scores for a sample of the Pareto front solutions:")
-        for i, schedule in enumerate(self.pareto_front[:5]):
+        for i, schedule in enumerate(front[:5]):
             obj_names = list(self.fitness.soft_constraints)
             scores_str = ", ".join(
                 [f"{name}: {score:.4f}" for name, score in zip(obj_names, schedule.fitness, strict=False)]

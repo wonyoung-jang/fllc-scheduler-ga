@@ -64,7 +64,7 @@ class Crossover(ABC):
 
     def _repair_crossover(self, child: Schedule) -> bool:
         """Repair conflicts in the child individual by finding new slots for conflicted teams."""
-        conflicted = [t for t in child.all_teams if any(rt for rt in t.round_types if t.needs_round(rt))]
+        conflicted = [t for t in child.all_teams() if any(rt for rt in t.round_types if t.needs_round(rt))]
         if not conflicted:
             return True
 

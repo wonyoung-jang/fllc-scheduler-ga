@@ -27,7 +27,6 @@ class Round:
     num_locations: int
     num_teams: int
 
-    @property
     def num_slots(self) -> int:
         """Calculate the number of slots needed for a given Round configuration."""
         total_num_teams = self.num_teams * self.rounds_per_team
@@ -67,27 +66,38 @@ class TournamentConfig:
         )
 
 
-def load_tournament_config(config_path: Path) -> TournamentConfig:
+def get_config_parser(path: Path | None = None) -> ConfigParser:
+    """Get a ConfigParser instance for the given config file path.
+
+    Args:
+        path (Path | None): Path to the configuration file.
+
+    Returns:
+        ConfigParser: The configured ConfigParser instance.
+
+    """
+    if path is None:
+        try:
+            path = Path("fll_scheduler_ga/config.ini")
+            path = path.resolve()
+        except FileNotFoundError:
+            logger.exception("Configuration file not found. Please provide a valid path.")
+
+    parser = ConfigParser()
+    parser.read(path)
+    return parser
+
+
+def load_tournament_config(parser: ConfigParser) -> TournamentConfig:
     """Load, parse, and return the tournament configuration.
 
     Args:
-        config_path (Path): Path to the configuration file.
+        parser (ConfigParser): The configuration parser.
 
     Returns:
         TournamentConfig: The parsed tournament configuration.
 
     """
-    parser = ConfigParser()
-
-    if isinstance(config_path, str):
-        config_path = Path(config_path)
-
-    if not config_path.is_file():
-        msg = f"Config file not found at {config_path}"
-        raise FileNotFoundError(msg)
-
-    parser.read(config_path)
-
     num_teams = parser["DEFAULT"].getint("num_teams")
 
     parsed_rounds = set()

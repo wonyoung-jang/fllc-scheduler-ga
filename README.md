@@ -39,9 +39,19 @@ Using the scheduler is a two-step process: creating a configuration file and run
 
 ### 1. Create a Configuration File
 
-Create a file named `config.ini` to define your tournament's structure. The configuration is split into a `[DEFAULT]` section for global settings and one `[round.*]` section for each type of activity (e.g., judging, practice, official/table).
+Create a file named `config.ini` to define your tournament's structure. The configuration is split into a `[DEFAULT]` section for global settings, a `[genetic]` section for the genetic algorithm's parameters, and one `[round.*]` section for each type of activity (e.g., judging, practice, official/table).
 
-**Parameters:**
+**Genetic Parameters:**
+
+-   `population_size`: The population size (number of schedules) for each generation.
+-   `generations`: The number of generations to run.
+-   `elite_size`: The number of the best schedules to include in the next generation.
+-   `selection_size`: The number of schedules that compete to be selected to evolve into the next generation.
+-   `crossover_chance`: The chance of two parent schedules crossover breeding to create an offspring.
+-   `mutation_chance_low`: The lower limit chance for an offspring schedule to mutate (adaptive). If they are better than the average of the population, they mutate based on this value.
+-   `mutation_chance_high`: The higher limit chance for an offspring schedule to mutate (adaptive). If they are worse than the average of the population, they mutate based on this value.
+
+**Round Parameters:**
 
 -   `num_teams`: (Default) Total number of teams in the tournament.
 -   `round_type`: Type of round. Must be `Judging`, `Practice`, or `Table`.
@@ -57,6 +67,15 @@ Create a file named `config.ini` to define your tournament's structure. The conf
 ```ini
 [DEFAULT]
 num_teams = 42
+
+[genetic]
+population_size = 16
+generations = 128
+elite_size = 2
+selection_size = 4
+crossover_chance = 0.5
+mutation_chance_low = 0.2
+mutation_chance_high = 0.8
 
 [round.judging]
 round_type = Judging
@@ -89,10 +108,16 @@ num_locations = 4  ; i.e., 4 competition tables (A, B, C, D)
 Execute the main script from your terminal, providing the path to your configuration and specifying an output file name. The file extension of the output (`.csv` or `.html`) will determine the export format.
 
 ```bash
-python fll_scheduler_ga --config_file path/to/config.ini --output_file schedule_results
+python fll_scheduler_ga --config_file path/to/config.ini --output_dir schedule_results
 ```
 
 The program will run the genetic algorithm, showing a progress bar for the generations.
+
+The genetic parameters will come from the config.ini by default. We can overwrite the default parameters directly in the file or in a CLI:
+
+```bash
+python fll_scheduler_ga --population_size 500 --crossover_chance 0.9
+```
 
 ### 3. Review the Output
 

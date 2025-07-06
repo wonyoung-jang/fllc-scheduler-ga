@@ -35,7 +35,7 @@ class FitnessEvaluator:
             return None
 
         score_map = defaultdict(list)
-        for team in schedule.all_teams:
+        for team in schedule.all_teams():
             if rounds_needed := team.rounds_needed():
                 logger.debug("%s: %s", "AllEventsScheduled", f"Team {team.identity} needs {rounds_needed} rounds")
                 return None
@@ -44,14 +44,5 @@ class FitnessEvaluator:
             score_map["OpponentVariety"].append(team.score_opponent_variety())
             score_map["TableConsistency"].append(team.score_table_consistency())
 
-        final_scores = []
-        for scores in score_map.values():
-            mean = sum(scores) / len(scores)
-            # sum_sq_diff = sum((x - mean) ** 2 for x in scores)
-            # variance = sum_sq_diff / len(scores)
-            # stdev = math.sqrt(variance)
-            # coeff = stdev / mean if mean > 0 else 0
-            # final_scores.append(1.0 / (1.0 + coeff))
-            final_scores.append(mean)
-
+        final_scores = [sum(scores) / len(scores) for scores in score_map.values() if scores]
         return tuple(final_scores)

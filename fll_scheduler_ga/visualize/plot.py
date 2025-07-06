@@ -3,8 +3,8 @@
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
-import matplotlib.pyplot as plt
 import pandas as pd
 
 from ..genetic.ga import GA
@@ -12,7 +12,13 @@ from ..genetic.schedule import Population
 
 logger = logging.getLogger(__name__)
 
-plt.style.use("seaborn-v0_8-whitegrid")
+
+def get_matplotlib() -> Any:
+    """Get the matplotlib module for plotting."""
+    import matplotlib.pyplot as plt
+
+    plt.style.use("seaborn-v0_8-whitegrid")
+    return plt
 
 
 @dataclass(slots=True)
@@ -27,7 +33,7 @@ class Plot:
         xlabel: str = "Generation",
         ylabel: str = "Average Fitnesses",
         save_dir: str | Path | None = None,
-    ) -> plt.Figure | None:
+    ) -> Any | None:
         """Create figure that summarizes how the average fitness of the first Pareto front evolved by generation.
 
         Args:
@@ -41,6 +47,7 @@ class Plot:
             logger.error("Cannot plot fitness. No generation history was recorded.")
             return None
         history_df = pd.DataFrame(data=history, columns=self.ga_instance.fitness.soft_constraints)
+        plt = get_matplotlib()
         fig, ax = plt.subplots(figsize=(12, 7))
         history_df.plot(kind="line", ax=ax, linewidth=2.5, alpha=0.8)
         ax.set(title=title, xlabel=xlabel, ylabel=ylabel)
@@ -49,9 +56,9 @@ class Plot:
 
     def plot_pareto_front(
         self, title: str = "Pareto Front: Trade-offs", save_dir: str | Path | None = None
-    ) -> plt.Figure | None:
+    ) -> Any | None:
         """Generate and saves a parallel coordinates plot of the final Pareto front."""
-        if not (front := self.ga_instance.pareto_front):
+        if not (front := self.ga_instance.pareto_front()):
             logger.warning("Cannot plot an empty Pareto front.")
             return None
 
@@ -71,6 +78,7 @@ class Plot:
         data = [[p.fitness[i] for i, _ in enumerate(objectives)] + [p.crowding] for p in front]
         objectives = [*objectives, "Crowding Distance"]
         dataframe = pd.DataFrame(data=data, columns=objectives)
+        plt = get_matplotlib()
         fig, ax = plt.subplots(figsize=(12, 7))
         pd.plotting.parallel_coordinates(
             frame=dataframe, class_column=objectives[-1], ax=ax, linewidth=1.5, alpha=0.7, colormap="viridis"
@@ -83,10 +91,11 @@ class Plot:
 
     def _plot_pareto_scatter(
         self, front: Population, objectives: list[str], title: str, save_dir: str | None
-    ) -> plt.Figure | None:
+    ) -> Any | None:
         """Create a 2D or 3D scatter plot of the Pareto front."""
         dataframe = pd.DataFrame(data=[p.fitness for p in front], columns=objectives)
         distances = [p.crowding for p in front]
+        plt = get_matplotlib()
 
         if len(objectives) == 2:
             fig, ax = plt.subplots(figsize=(10, 8))
@@ -107,8 +116,9 @@ class Plot:
 
         return self._finalize(fig, save_dir, "pareto_scatter.png")
 
-    def _attach_colorbar(self, ax: plt.Axes, values: list[float], label: str | None = None) -> None:
+    def _attach_colorbar(self, ax: Any, values: list[float], label: str | None = None) -> None:
         """Attach a colorbar to the given axes."""
+        plt = get_matplotlib()
         norm = plt.Normalize(min(values), max(values))
         sm = plt.cm.ScalarMappable(norm=norm, cmap="viridis")
         sm.set_array([])
@@ -116,8 +126,9 @@ class Plot:
         if label:
             cbar.set_label(label, fontsize=12)
 
-    def _finalize(self, fig: plt.Figure, save_dir: str | Path | None, default_name: str) -> plt.Figure:
+    def _finalize(self, fig: Any, save_dir: str | Path | None, default_name: str) -> Any:
         """Finalize the plot by saving or showing it."""
+        plt = get_matplotlib()
         if save_dir:
             path = Path(save_dir)
             if path.is_dir():
