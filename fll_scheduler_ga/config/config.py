@@ -3,7 +3,7 @@
 import logging
 import math
 from configparser import ConfigParser
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 type RoundType = str
 
 
-@dataclass(slots=True, frozen=True)
+@dataclass(slots=True)
 class Round:
     """Representation of a round in the FLL tournament."""
 
@@ -26,14 +26,15 @@ class Round:
     duration_minutes: timedelta
     num_locations: int
     num_teams: int
+    num_slots: int = field(init=False)
 
-    def num_slots(self) -> int:
-        """Calculate the number of slots needed for a given Round configuration."""
+    def __post_init__(self) -> None:
+        """Post-initialization to calculate the number of slots."""
         total_num_teams = self.num_teams * self.rounds_per_team
         slots_per_timeslot = self.num_locations * self.teams_per_round
 
         if slots_per_timeslot == 0:
-            return 0
+            self.num_slots = 0
 
         minimum_slots = math.ceil(total_num_teams / slots_per_timeslot)
 
@@ -43,7 +44,7 @@ class Round:
                 min_slot_duration += self.duration_minutes
                 minimum_slots += 1
 
-        return minimum_slots
+        self.num_slots = minimum_slots
 
 
 @dataclass(slots=True, frozen=True)
@@ -51,7 +52,7 @@ class TournamentConfig:
     """Configuration for the tournament."""
 
     num_teams: int
-    rounds: frozenset[Round]
+    rounds: list[Round]
     round_requirements: dict[RoundType, int]
 
     def __str__(self) -> str:
@@ -100,7 +101,7 @@ def load_tournament_config(parser: ConfigParser) -> TournamentConfig:
     """
     num_teams = parser["DEFAULT"].getint("num_teams")
 
-    parsed_rounds = set()
+    parsed_rounds = []
     round_reqs = {}
 
     for section in parser.sections():
@@ -111,7 +112,7 @@ def load_tournament_config(parser: ConfigParser) -> TournamentConfig:
             start_time = datetime.strptime(parser[section]["start_time"], HHMM_FMT).replace(tzinfo=UTC)
             if stop_time := parser[section].get("stop_time", ""):
                 stop_time = datetime.strptime(stop_time, HHMM_FMT).replace(tzinfo=UTC)
-            parsed_rounds.add(
+            parsed_rounds.append(
                 Round(
                     round_type=r_type,
                     rounds_per_team=r_per_team,
@@ -130,6 +131,6 @@ def load_tournament_config(parser: ConfigParser) -> TournamentConfig:
 
     return TournamentConfig(
         num_teams=num_teams,
-        rounds=frozenset(parsed_rounds),
+        rounds=parsed_rounds,
         round_requirements=round_reqs,
     )

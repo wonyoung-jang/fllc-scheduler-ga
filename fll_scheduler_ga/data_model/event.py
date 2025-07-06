@@ -64,7 +64,7 @@ class EventFactory:
         start = r.start_time
         location_type = get_location_type(r.teams_per_round)
 
-        for _ in range(r.num_slots()):
+        for _ in range(r.num_slots):
             stop = start + r.duration_minutes
             time_cache_key = (start, stop)
             if time_cache_key in self._cached_timeslots:
