@@ -7,7 +7,6 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from random import Random
 
-from ..config.config import RoundType
 from ..data_model.event import Event, EventFactory
 from ..data_model.team import Team, TeamFactory
 from ..genetic.schedule import Schedule
@@ -73,83 +72,83 @@ class Crossover(ABC):
 
     def _repair_crossover(self, child: Schedule) -> bool:
         """Repair conflicts in the child individual by finding new slots for conflicted teams."""
-        needs = {t.identity: t.rounds_needed() for t in child.all_teams()}
-        conflicted = [t for t in child.all_teams() if needs[t.identity] > 0]
-        if not conflicted:
-            return True
+        rt_teams_needed = {}
+        for rc in self.event_factory.config.rounds:
+            rt_teams_needed[rc.round_type] = rc.teams_per_round
 
         open_events = set(self.events) - child.keys()
-        open_single_events = defaultdict(list)
-        open_match_events = defaultdict(list)
+        open_events_by_rt = defaultdict(list)
         for e in open_events:
-            if e.paired_event is not None:
-                if e.location.side == 1:
-                    open_match_events[e.round_type].append(e)
+            if (e.paired_event is not None and e.location.side == 1) or e.paired_event is None:
+                open_events_by_rt[(e.round_type, rt_teams_needed[e.round_type])].append(e)
+
+        needs_by_rt = defaultdict(list)
+        for team in child.all_teams():
+            for rt, n in team.round_types.items():
+                if n > 0:
+                    for _ in range(n):
+                        needs_by_rt[(rt, rt_teams_needed[rt])].append(team)
+
+        for (rt, n), teams in needs_by_rt.items():
+            if n == 1:
+                self._assign_singles(teams, open_events_by_rt[(rt, n)], child)
+            elif n == 2:
+                self._assign_matches(teams, open_events_by_rt[(rt, n)], child)
+
+        return all(t.rounds_needed() == 0 for t in child.all_teams())
+
+    def _assign_singles(self, teams: list[Team], open_events: list[Event], child: Schedule) -> None:
+        """Assign single-team events to teams that need them."""
+        self.rng.shuffle(teams)
+        self.rng.shuffle(open_events)
+        for team in teams:
+            for i, event in enumerate(open_events):
+                if not team.conflicts(event):
+                    team.add_event(event)
+                    child[event] = team
+                    open_events.pop(i)
+                    break
+
+    def _assign_matches(self, teams: list[Team], open_events: list[Event], child: Schedule) -> None:
+        """Assign match events to teams that need them."""
+        self.rng.shuffle(teams)
+        self.rng.shuffle(open_events)
+        matchups = []
+        while len(teams) >= 2:
+            team1 = teams.pop()
+            team2 = next((t for t in teams if team1.identity != t.identity), None)
+            if team2 is not None:
+                teams.remove(team2)
+                matchups.append((team1, team2))
             else:
-                open_single_events[e.round_type].append(e)
+                logger.debug("No partner found for team %s.", team1.identity)
+                return
 
-        self.rng.shuffle(conflicted)
+        if teams:
+            logger.debug("Odd number of teams, team %d will not be assigned a match.", teams[0].identity)
+            return
 
-        return all(
-            self._find_and_book_slot(child, t, open_single_events, open_match_events, conflicted) for t in conflicted
-        )
-
-    def _find_and_book_slot(
-        self,
-        child: Schedule,
-        team1: Team,
-        open_singles: dict[RoundType, list[Event]],
-        open_matches: dict[RoundType, list[Event]],
-        conflicted: list[Team],
-    ) -> bool:
-        """Find and book a new slot for a team in the child individual."""
-        while (rt := next((rt for rt in team1.round_types if team1.needs_round(rt)), None)) is not None:
-            add_single = self._add_single(child, team1, open_singles.get(rt, []))
-            add_match = self._add_match(child, team1, open_matches.get(rt, []), conflicted)
-            if add_single or add_match:
-                continue
-            return False
-        return True
-
-    def _add_single(self, child: Schedule, team: Team, open_slots: list[Event]) -> bool:
-        """Add a single-team event to the child schedule."""
-        for i, event in enumerate(open_slots):
-            if not team.conflicts(event):
-                team.add_event(event)
-                child[event] = team
-                open_slots.pop(i)
-                return True
-        return False
-
-    def _add_match(self, child: Schedule, team1: Team, open_slots: list[Event], conflicted: list[Team]) -> bool:
-        if (rt := next((rt for rt in team1.round_types if team1.needs_round(rt)), None)) is None:
-            return False
-        if not (partner_pool := [t for t in conflicted if t != team1 and t.needs_round(rt)]):
-            return False
-
-        team2 = self.rng.choice(partner_pool)
-
-        for i, e1 in enumerate(open_slots):
-            e2 = e1.paired_event
-            if not team1.conflicts(e1) and not team2.conflicts(e2):
-                team1.add_event(e1)
-                team2.add_event(e2)
-                team1.add_opponent(team2)
-                team2.add_opponent(team1)
-                child[e1] = team1
-                child[e2] = team2
-                open_slots.pop(i)
-                return True
-            if not team1.conflicts(e2) and not team2.conflicts(e1):
-                team1.add_event(e2)
-                team2.add_event(e1)
-                team1.add_opponent(team2)
-                team2.add_opponent(team1)
-                child[e2] = team1
-                child[e1] = team2
-                open_slots.pop(i)
-                return True
-        return False
+        for team1, team2 in matchups:
+            for i, e1 in enumerate(open_events):
+                e2 = e1.paired_event
+                if not team1.conflicts(e1) and not team2.conflicts(e2):
+                    team1.add_event(e1)
+                    team2.add_event(e2)
+                    team1.add_opponent(team2)
+                    team2.add_opponent(team1)
+                    child[e1] = team1
+                    child[e2] = team2
+                    open_events.pop(i)
+                    break
+                if not team1.conflicts(e2) and not team2.conflicts(e1):
+                    team1.add_event(e2)
+                    team2.add_event(e1)
+                    team1.add_opponent(team2)
+                    team2.add_opponent(team1)
+                    child[e2] = team1
+                    child[e1] = team2
+                    open_events.pop(i)
+                    break
 
 
 @dataclass(slots=True)
