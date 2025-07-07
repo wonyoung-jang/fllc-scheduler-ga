@@ -1,44 +1,49 @@
 """Tools for Non-dominated Sorting Genetic Algorithm II (NSGA-II)."""
 
-from collections import defaultdict
-
 from ..genetic.schedule import Population, Schedule
 
 
 def non_dominated_sort(population: Population) -> None:
     """Perform non-dominated sorting on a population."""
-    dominates: dict[int, Population] = defaultdict(list)
-    dominated_by_count: dict[int, int] = defaultdict(int)
+    n = len(population)
+    dominates_ = [[] for _ in range(n)]
+    dominated_count = [0] * n
     fronts = [[]]
-    population_map = {id(p): p for p in population}
 
-    for p_id, p in population_map.items():
-        for q_id, q in population_map.items():
-            if p_id == q_id:
-                continue
-            if _dominates(p, q):
-                dominates[p_id].append(q)
-            elif _dominates(q, p):
-                dominated_by_count[p_id] += 1
+    for i in range(n):
+        for j in range(i + 1, n):
+            pi, pj = population[i], population[j]
+            if _dominates(pi, pj):
+                dominates_[i].append(j)
+                dominated_count[j] += 1
+            elif _dominates(pj, pi):
+                dominates_[j].append(i)
+                dominated_count[i] += 1
 
-        if dominated_by_count[p_id] == 0:
-            p.rank = 0
-            fronts[0].append(p)
+    for i in range(n):
+        if dominated_count[i] == 0:
+            population[i].rank = 0
+            fronts[0].append(i)
 
-    _compute_crowding_dist(fronts[0])
+    _compute_crowding_dist([population[i] for i in fronts[0]])
 
-    i = 0
-    while i < len(fronts) and fronts[i]:
+    current_front = 0
+
+    while current_front < len(fronts):
         next_front = []
-        for p in fronts[i]:
-            for q in dominates[id(p)]:
-                dominated_by_count[id(q)] -= 1
-                if dominated_by_count[id(q)] == 0:
-                    q.rank = i + 1
-                    next_front.append(q)
-        i += 1
+
+        for i in fronts[current_front]:
+            for j in dominates_[i]:
+                dominated_count[j] -= 1
+
+                if dominated_count[j] == 0:
+                    population[j].rank = current_front + 1
+                    next_front.append(j)
+
+        current_front += 1
+
         if next_front:
-            _compute_crowding_dist(next_front)
+            _compute_crowding_dist([population[i] for i in next_front])
             fronts.append(next_front)
 
 
@@ -48,35 +53,37 @@ def _compute_crowding_dist(front: Population) -> None:
         return
 
     num_objectives = len(front[0].fitness)
+
     for p in front:
         p.crowding = 0.0
 
     for m in range(num_objectives):
         front.sort(key=lambda p: p.fitness[m])
-
+        f_min = front[0].fitness[m]
+        f_max = front[-1].fitness[m]
         front[0].crowding = front[-1].crowding = float("inf")
 
-        f_max = front[-1].fitness[m]
-        f_min = front[0].fitness[m]
         if f_max == f_min:
             continue
 
+        inv_range = 1.0 / (f_max - f_min)
+
         for i in range(1, len(front) - 1):
-            distance = front[i + 1].fitness[m] - front[i - 1].fitness[m]
-            front[i].crowding += distance / (f_max - f_min)
+            front[i].crowding += (front[i + 1].fitness[m] - front[i - 1].fitness[m]) * inv_range
 
 
 def _dominates(p: Schedule, q: Schedule) -> bool:
     """Return True if individual p dominates q."""
-    p_scores = p.fitness
-    q_scores = q.fitness
-    if p_scores is None or q_scores is None:
+    if p.fitness is None or q.fitness is None:
         return False
 
-    dominates = False
-    for ps, qs in zip(p_scores, q_scores, strict=True):
+    better_in_any = False
+
+    for ps, qs in zip(p.fitness, q.fitness, strict=True):
         if ps < qs:
             return False
+
         if ps > qs:
-            dominates = True
-    return dominates
+            better_in_any = True
+
+    return better_in_any
