@@ -44,40 +44,41 @@ class Crossover(ABC):
         self, child: Schedule, parent: Schedule, events: Iterable[Event], *, first: bool = False
     ) -> None:
         """Populate the child individual from parent genes."""
-        for event in events:
-            if event.paired_event is None:
-                team = child.get_team(parent[event])
-                if first or (not team.conflicts(event) and team.needs_round(event.round_type)):
-                    self._populate_single(child, event, team)
+        get_team_from_child = child.get_team
+        for event1 in events:
+            if (event2 := event1.paired_event) is None:
+                team = get_team_from_child(parent[event1])
+                if first or (not team.conflicts(event1) and team.needs_round(event1.round_type)):
+                    self._populate_single(child, event1, team)
                 continue
 
-            if event.paired_event is not None and event.location.side != 1:
+            if event2 is not None and event1.location.side != 1:
                 continue
 
-            team1 = child.get_team(parent[event])
-            team2 = child.get_team(parent[event.paired_event])
+            team1 = get_team_from_child(parent[event1])
+            team2 = get_team_from_child(parent[event2])
 
             if first or (
-                not team1.conflicts(event)
-                and not team2.conflicts(event.paired_event)
-                and team1.needs_round(event.round_type)
-                and team2.needs_round(event.paired_event.round_type)
+                not team1.conflicts(event1)
+                and not team2.conflicts(event2)
+                and team1.needs_round(event1.round_type)
+                and team2.needs_round(event2.round_type)
             ):
-                self._populate_match(child, event, team1, team2)
+                self._populate_match(child, event1, event2, team1, team2)
 
     def _populate_single(self, child: Schedule, event: Event, team: Team) -> None:
         """Populate a single event in the child schedule."""
         team.add_event(event)
         child[event] = team
 
-    def _populate_match(self, child: Schedule, event: Event, team1: Team, team2: Team) -> None:
+    def _populate_match(self, child: Schedule, event1: Event, event2: Event, team1: Team, team2: Team) -> None:
         """Populate a match event in the child schedule."""
-        team1.add_event(event)
-        team2.add_event(event.paired_event)
+        team1.add_event(event1)
+        team2.add_event(event2)
         team1.add_opponent(team2)
         team2.add_opponent(team1)
-        child[event] = team1
-        child[event.paired_event] = team2
+        child[event1] = team1
+        child[event2] = team2
 
     def _repair_crossover(self, child: Schedule) -> bool:
         """Repair conflicts in the child individual by finding new slots for conflicted teams."""
@@ -113,8 +114,7 @@ class Crossover(ABC):
         for team in teams:
             for i, event in enumerate(open_events):
                 if not team.conflicts(event):
-                    team.add_event(event)
-                    child[event] = team
+                    self._populate_single(child, event, team)
                     open_events.pop(i)
                     break
 
@@ -140,22 +140,12 @@ class Crossover(ABC):
         for team1, team2 in matchups:
             for i, e1 in enumerate(open_events):
                 e2 = e1.paired_event
-                if not team1.conflicts(e1) and not team2.conflicts(e2):
-                    team1.add_event(e1)
-                    team2.add_event(e2)
-                    team1.add_opponent(team2)
-                    team2.add_opponent(team1)
-                    child[e1] = team1
-                    child[e2] = team2
+                if not (team1.conflicts(e1) or team2.conflicts(e2)):
+                    self._populate_match(child, e1, e2, team1, team2)
                     open_events.pop(i)
                     break
-                if not team1.conflicts(e2) and not team2.conflicts(e1):
-                    team1.add_event(e2)
-                    team2.add_event(e1)
-                    team1.add_opponent(team2)
-                    team2.add_opponent(team1)
-                    child[e2] = team1
-                    child[e1] = team2
+                if not (team1.conflicts(e2) or team2.conflicts(e1)):
+                    self._populate_match(child, e2, e1, team2, team1)
                     open_events.pop(i)
                     break
 

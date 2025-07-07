@@ -74,9 +74,9 @@ def _dominates(p: Schedule, q: Schedule) -> bool:
         return False
 
     dominates = False
-    for i in range(len(p_scores)):
-        if p_scores[i] < q_scores[i]:
+    for ps, qs in zip(p_scores, q_scores, strict=True):
+        if ps < qs:
             return False
-        if p_scores[i] > q_scores[i]:
+        if ps > qs:
             dominates = True
     return dominates

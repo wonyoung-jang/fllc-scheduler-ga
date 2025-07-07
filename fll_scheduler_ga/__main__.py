@@ -187,7 +187,7 @@ def initialize_logging(args: argparse.Namespace) -> None:
 
 def generate_summary_report(schedule: Schedule, evaluator: FitnessEvaluator, path: Path) -> None:
     """Generate a text summary report for a single schedule."""
-    obj_names = evaluator.soft_constraints
+    obj_names = evaluator.objectives
     scores = schedule.fitness
     with path.open("w", encoding="utf-8") as f:
         f.write(f"--- FLL Scheduler GA Summary Report ({id(schedule)}) ---\n\n")
@@ -204,7 +204,7 @@ def generate_summary_report(schedule: Schedule, evaluator: FitnessEvaluator, pat
 def generate_pareto_summary(pareto_front: list[Schedule], evaluator: FitnessEvaluator, path: Path) -> None:
     """Generate a summary of the Pareto front."""
     schedule_enum_digits = len(str(len(pareto_front)))
-    obj_names = evaluator.soft_constraints
+    obj_names = evaluator.objectives
     pareto_front.sort(key=lambda s: (s.crowding, s.fitness[0], s.fitness[1], s.fitness[2]), reverse=True)
     with path.open("w", encoding="utf-8") as f:
         for i, schedule in enumerate(pareto_front, start=1):
@@ -229,9 +229,9 @@ def summary(args: argparse.Namespace, ga: GA, evaluator: FitnessEvaluator, front
 
     # break_time = bt; opponent_variety = ov; table_consistency = tc
     try:
-        idx_bt = evaluator.soft_constraints.index("BreakTime")
-        idx_ov = evaluator.soft_constraints.index("OpponentVariety")
-        idx_tc = evaluator.soft_constraints.index("TableConsistency")
+        idx_bt = evaluator.objectives.index("BreakTime")
+        idx_ov = evaluator.objectives.index("OpponentVariety")
+        idx_tc = evaluator.objectives.index("TableConsistency")
     except ValueError:
         logger.exception("Could not find a required soft constraint")
         return

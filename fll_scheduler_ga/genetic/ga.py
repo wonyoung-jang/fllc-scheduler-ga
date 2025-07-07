@@ -217,7 +217,7 @@ class GA:
         self.logger.info("Final Pareto Front Size: %d", len(front))
         self.logger.info("Objective scores for a sample of the Pareto front solutions:")
         for i, schedule in enumerate(front[:5]):
-            obj_names = list(self.fitness.soft_constraints)
+            obj_names = list(self.fitness.objectives)
             scores_str = ", ".join(
                 [f"{name}: {score:.4f}" for name, score in zip(obj_names, schedule.fitness, strict=False)]
             )
