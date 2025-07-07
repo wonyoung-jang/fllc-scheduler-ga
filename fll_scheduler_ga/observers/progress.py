@@ -39,5 +39,5 @@ class TqdmObserver(GaObserver):
     def on_mutation(self, mutation_name: str) -> None:
         """Handle mutation events, currently a no-op."""
 
-    def on_crossover(self, crossover_name: str) -> None:
+    def on_crossover(self, crossover_name: str, *, successful: bool) -> None:
         """Handle crossover events, currently a no-op."""

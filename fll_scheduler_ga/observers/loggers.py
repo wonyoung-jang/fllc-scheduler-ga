@@ -39,6 +39,9 @@ class LoggingObserver(GaObserver):
         """Log mutation details."""
         self.logger.debug("Mutation applied: %s", mutation_name)
 
-    def on_crossover(self, crossover_name: str) -> None:
+    def on_crossover(self, crossover_name: str, *, successful: bool) -> None:
         """Log crossover details."""
-        self.logger.debug("Crossover applied: %s", crossover_name)
+        if not successful:
+            self.logger.debug("Crossover failed: %s", crossover_name)
+        else:
+            self.logger.debug("Crossover applied: %s", crossover_name)

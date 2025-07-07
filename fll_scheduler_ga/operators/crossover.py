@@ -32,7 +32,7 @@ class Crossover(ABC):
         p1, p2 = parents
         child = Schedule(self.team_factory.build())
         p1_genes, p2_genes = self.get_genes(p1, p2)
-        self._populate_from_parent(child, p1, p1_genes)
+        self._populate_from_parent(child, p1, p1_genes, first=True)
         self._populate_from_parent(child, p2, p2_genes)
         return child if child and self._repair_crossover(child) else None
 
@@ -40,15 +40,15 @@ class Crossover(ABC):
     def get_genes(self, p1: Schedule, p2: Schedule) -> tuple[Iterable[Event], Iterable[Event]]:
         """Get the genes for the crossover."""
 
-    def _populate_from_parent(self, child: Schedule, parent: Schedule, events: Iterable[Event]) -> None:
+    def _populate_from_parent(
+        self, child: Schedule, parent: Schedule, events: Iterable[Event], *, first: bool = False
+    ) -> None:
         """Populate the child individual from parent genes."""
         for event in events:
             if event.paired_event is None:
                 team = child.get_team(parent[event])
-                if team.conflicts(event) or not team.needs_round(event.round_type):
-                    continue
-                team.add_event(event)
-                child[event] = team
+                if first or (not team.conflicts(event) and team.needs_round(event.round_type)):
+                    self._populate_single(child, event, team)
                 continue
 
             if event.paired_event is not None and event.location.side != 1:
@@ -56,19 +56,28 @@ class Crossover(ABC):
 
             team1 = child.get_team(parent[event])
             team2 = child.get_team(parent[event.paired_event])
-            if (
-                team1.conflicts(event)
-                or team2.conflicts(event.paired_event)
-                or not team1.needs_round(event.round_type)
-                or not team2.needs_round(event.paired_event.round_type)
+
+            if first or (
+                not team1.conflicts(event)
+                and not team2.conflicts(event.paired_event)
+                and team1.needs_round(event.round_type)
+                and team2.needs_round(event.paired_event.round_type)
             ):
-                continue
-            team1.add_event(event)
-            team2.add_event(event.paired_event)
-            team1.add_opponent(team2)
-            team2.add_opponent(team1)
-            child[event] = team1
-            child[event.paired_event] = team2
+                self._populate_match(child, event, team1, team2)
+
+    def _populate_single(self, child: Schedule, event: Event, team: Team) -> None:
+        """Populate a single event in the child schedule."""
+        team.add_event(event)
+        child[event] = team
+
+    def _populate_match(self, child: Schedule, event: Event, team1: Team, team2: Team) -> None:
+        """Populate a match event in the child schedule."""
+        team1.add_event(event)
+        team2.add_event(event.paired_event)
+        team1.add_opponent(team2)
+        team2.add_opponent(team1)
+        child[event] = team1
+        child[event.paired_event] = team2
 
     def _repair_crossover(self, child: Schedule) -> bool:
         """Repair conflicts in the child individual by finding new slots for conflicted teams."""

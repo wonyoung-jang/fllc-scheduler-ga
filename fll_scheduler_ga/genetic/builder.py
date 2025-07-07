@@ -67,8 +67,9 @@ class ScheduleBuilder:
 
             side2 = side1.paired_event
 
-            available_for_side1 = [t for t in all_teams if t.needs_round(r.round_type) and not t.conflicts(side1)]
-            if not available_for_side1:
+            available_for_event = [t for t in all_teams if t.needs_round(r.round_type) and not t.conflicts(side1)]
+
+            if not (available_for_side1 := available_for_event):
                 continue
 
             teams_with_location_side1 = [t for t in available_for_side1 if t.has_location(side1)]
@@ -77,12 +78,7 @@ class ScheduleBuilder:
 
             team1 = self._rng.choice(available_for_side1)
 
-            available_for_side2 = [
-                t
-                for t in all_teams
-                if t.identity != team1.identity and t.needs_round(r.round_type) and not t.conflicts(side2)
-            ]
-            if not available_for_side2:
+            if not (available_for_side2 := [t for t in available_for_event if t.identity != team1.identity]):
                 continue
 
             teams_with_location_side2 = [t for t in available_for_side2 if t.has_location(side2)]

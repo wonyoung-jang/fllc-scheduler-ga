@@ -139,40 +139,39 @@ class GA:
             return
 
         for generation in range(self.ga_parameters.generations):
-            self._generation_step(generation)
+            combined_population = self.population + self.evolve(self.ga_parameters.population_size)
+            non_dominated_sort(combined_population)
+            self.population = list(self.elitism.select(combined_population, self.ga_parameters.population_size))
+            if not (front := self.pareto_front()):
+                self.logger.warning("No valid individuals in the current population.")
+                return
 
-    def _generation_step(self, generation: int) -> None:
-        """Perform a single generation step of the genetic algorithm."""
-        combined_population = self.population + self.evolve(self.ga_parameters.population_size)
-        non_dominated_sort(combined_population)
-        self.population = list(self.elitism.select(combined_population, self.ga_parameters.population_size))
-        if not (front := self.pareto_front()):
-            self.logger.warning("No valid individuals in the current population.")
-            return
+            num_objectives = len(front[0].fitness)
+            avg_fitness_front1 = [0.0] * num_objectives
+            for p in front:
+                for i in range(num_objectives):
+                    avg_fitness_front1[i] += p.fitness[i]
+            this_gen_fitness = tuple(s / len(front) for s in avg_fitness_front1)
+            self.fitness_history.append(this_gen_fitness)
 
-        num_objectives = len(front[0].fitness)
-        avg_fitness_front1 = [0.0] * num_objectives
-        for p in front:
-            for i in range(num_objectives):
-                avg_fitness_front1[i] += p.fitness[i]
-        this_gen_fitness = tuple(s / len(front) for s in avg_fitness_front1)
-        self.fitness_history.append(this_gen_fitness)
-
-        self._notify_gen_end(generation, this_gen_fitness)
+            self._notify_gen_end(generation, this_gen_fitness)
 
     def evolve(self, num_offspring: int) -> Population:
         """Evolve the population to create a new generation."""
         new_population: Population = []
         attempts, max_attempts = 0, num_offspring * 4
+
         while len(new_population) < num_offspring and attempts < max_attempts:
-            if child := self._evolve_step():
+            if child := self.produce_offspring():
                 new_population.append(child)
             attempts += 1
+
         if len(new_population) < num_offspring:
             logger.warning("Only created %d/%d offspring.", len(new_population), num_offspring)
+
         return new_population
 
-    def _evolve_step(self) -> Schedule | None:
+    def produce_offspring(self) -> Schedule | None:
         """Evolve the population by one individual and return the best of the parents and child."""
         parents = list(self.selection.select(self.population, 2))
         child: Schedule | None = None
@@ -180,33 +179,31 @@ class GA:
         if self.rng.random() < self.ga_parameters.crossover_chance:
             c = self.rng.choice(self.crossovers)
             child = c.crossover(parents)
-            if child is not None:
-                self._notify_crossover(c.__class__.__name__)
+            self._notify_crossover(c.__class__.__name__, successful=bool(child))
 
         if child is None:
             child = self.rng.choice(parents).clone()
-
-        roll = self.rng.random()
-        total_last_avg = sum(self.fitness_history[-1]) if self.fitness_history else 0
-        _low = self.ga_parameters.mutation_chance_low
-        _high = self.ga_parameters.mutation_chance_high
-
-        if not child.fitness:
-            if score := self.fitness.evaluate(child):
-                total_score = sum(score)
-                if (total_score >= total_last_avg and roll < _low) or (total_score < total_last_avg and roll < _high):
-                    m = self.rng.choice(self.mutations)
-                    m.mutate(child)
-                    self._notify_mutation(m.__class__.__name__)
-                child.fitness = score
-                return child
+        elif (score := self.fitness.evaluate(child)) is None:
             return None
+        elif score:
+            child.fitness = score
 
         total_score = sum(child.fitness)
-        if (total_score >= total_last_avg and roll < _low) or (total_score < total_last_avg and roll < _high):
+        total_last_avg = sum(self.fitness_history[-1]) if self.fitness_history else 0
+        low_roll = self.rng.random() < self.ga_parameters.mutation_chance_low
+        high_roll = self.rng.random() < self.ga_parameters.mutation_chance_high
+
+        if not (low_roll or high_roll):
+            return child
+
+        to_low_roll = total_score >= total_last_avg and low_roll
+        to_high_roll = total_score < total_last_avg and high_roll
+
+        if to_low_roll or to_high_roll:
             m = self.rng.choice(self.mutations)
             m.mutate(child)
             self._notify_mutation(m.__class__.__name__)
+
         child.fitness = self.fitness.evaluate(child)
         return child
 
@@ -242,7 +239,7 @@ class GA:
         for obs in self.observers:
             obs.on_mutation(mutation_name)
 
-    def _notify_crossover(self, crossover_name: str) -> None:
+    def _notify_crossover(self, crossover_name: str, *, successful: bool) -> None:
         """Notify observers when a crossover is applied."""
         for obs in self.observers:
-            obs.on_crossover(crossover_name)
+            obs.on_crossover(crossover_name, successful=successful)

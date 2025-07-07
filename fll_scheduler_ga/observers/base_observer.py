@@ -32,5 +32,5 @@ class GaObserver(ABC):
         """Call when a mutation is applied."""
 
     @abstractmethod
-    def on_crossover(self, crossover_name: str) -> None:
+    def on_crossover(self, crossover_name: str, *, successful: bool) -> None:
         """Call when a crossover is applied."""
