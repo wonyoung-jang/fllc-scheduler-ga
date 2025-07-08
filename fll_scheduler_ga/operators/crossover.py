@@ -88,17 +88,22 @@ class EventCrossover(Crossover):
 
     def _repair_crossover(self, child: Schedule) -> bool:
         """Repair conflicts in the child individual by finding new slots for conflicted teams."""
-        rt_teams_needed = {}
-        for rc in self.event_factory.config.rounds:
-            rt_teams_needed[rc.round_type] = rc.teams_per_round
+        rt_teams_needed = {rc.round_type: rc.teams_per_round for rc in self.event_factory.config.rounds}
 
-        open_events = set(self.events) - child.keys()
-        open_events_by_rt = defaultdict(list)
-        for e in open_events:
+        open_events = defaultdict(list)
+
+        for e in set(self.events) - child.keys():
             if (e.paired_event is not None and e.location.side == 1) or e.paired_event is None:
-                open_events_by_rt[(e.round_type, rt_teams_needed[e.round_type])].append(e)
+                open_events[(e.round_type, rt_teams_needed[e.round_type])].append(e)
+
+        for k, v in open_events.items():
+            if not v:
+                del open_events[k]
+            else:
+                self.rng.shuffle(v)
 
         needs_by_rt = defaultdict(list)
+
         for team in child.all_teams():
             for rt, n in team.round_types.items():
                 if n > 0:
@@ -107,16 +112,16 @@ class EventCrossover(Crossover):
 
         for (rt, n), teams in needs_by_rt.items():
             if n == 1:
-                self._assign_singles(teams, open_events_by_rt[(rt, n)], child)
+                self._assign_singles(teams, open_events[(rt, n)], child)
             elif n == 2:
-                self._assign_matches(teams, open_events_by_rt[(rt, n)], child)
+                self._assign_matches(teams, open_events[(rt, n)], child)
 
         return all(t.rounds_needed() == 0 for t in child.all_teams())
 
     def _assign_singles(self, teams: list[Team], open_events: list[Event], child: Schedule) -> None:
         """Assign single-team events to teams that need them."""
         self.rng.shuffle(teams)
-        self.rng.shuffle(open_events)
+
         for team in teams:
             for i, event in enumerate(open_events):
                 if not team.conflicts(event):
@@ -126,8 +131,12 @@ class EventCrossover(Crossover):
 
     def _assign_matches(self, teams: list[Team], open_events: list[Event], child: Schedule) -> None:
         """Assign match events to teams that need them."""
+        if len(teams) % 2 != 0:
+            logger.debug("Odd number of teams for match assignment, skipping.")
+            return
+
         self.rng.shuffle(teams)
-        self.rng.shuffle(open_events)
+
         for team1, team2 in zip(teams[::2], teams[1::2], strict=True):
             if team1.identity == team2.identity:
                 return
@@ -167,9 +176,11 @@ class KPoint(EventCrossover):
         indices = sorted(self.rng.sample(range(1, ne), self.k))
         genes = []
         start = 0
+
         for i in indices:
             genes.append(evts[start:i])
             start = i
+
         genes.append(evts[start:])
         ng = len(genes)
         p1_genes = (genes[i][x] for i in range(ng) if i % 2 == 0 for x in range(len(genes[i])) if genes[i][x] in p1)

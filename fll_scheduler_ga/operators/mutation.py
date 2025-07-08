@@ -48,14 +48,10 @@ class SwapTeamMutation(Mutation):
         if len(matches) < 2:
             return None, None
 
-        self.rng.shuffle(matches)
-        event1_a, _, team1_a, team1_b = matches.pop()
-        target_rtype = event1_a.round_type
+        target_rtype = self.rng.choice(list(matches.keys()))
+        event1_a, _, team1_a, team1_b = matches[target_rtype].pop()
 
-        for event2_a, _, team2_a, team2_b in matches:
-            if event2_a.round_type != target_rtype:
-                continue
-
+        for event2_a, _, team2_a, team2_b in matches[target_rtype]:
             if self._validate_swap(event1_a, event2_a, same_timeslot=same_timeslot, same_location=same_location):
                 if (
                     team1_a.identity in (team2_a.identity, team2_b.identity)
@@ -140,14 +136,10 @@ class SwapMatchMutation(Mutation):
         if len(matches) < 2:
             return None, None
 
-        self.rng.shuffle(matches)
-        event1_a, event1_b, team1_a, team1_b = matches.pop()
-        target_rtype = event1_a.round_type
+        target_rtype = self.rng.choice(list(matches.keys()))
+        event1_a, event1_b, team1_a, team1_b = matches[target_rtype].pop()
 
-        for event2_a, event2_b, team2_a, team2_b in matches:
-            if event2_a.round_type != target_rtype:
-                continue
-
+        for event2_a, event2_b, team2_a, team2_b in matches[target_rtype]:
             if self._validate_swap(event1_a, event2_a, same_timeslot=same_timeslot, same_location=same_location):
                 if (
                     team1_a.conflicts(event2_a)

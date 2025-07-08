@@ -35,16 +35,16 @@ class Round:
 
         if slots_per_timeslot == 0:
             self.num_slots = 0
+            return
 
         minimum_slots = math.ceil(total_num_teams / slots_per_timeslot)
 
         if self.stop_time:
-            min_slot_duration = minimum_slots * self.duration_minutes
-            while self.start_time + min_slot_duration < self.stop_time:
-                min_slot_duration += self.duration_minutes
-                minimum_slots += 1
-
-        self.num_slots = minimum_slots
+            total_available = self.stop_time - self.start_time
+            slots_in_window = int(total_available / self.duration_minutes)
+            self.num_slots = max(minimum_slots, slots_in_window)
+        else:
+            self.num_slots = minimum_slots
 
 
 @dataclass(slots=True, frozen=True)
@@ -101,7 +101,6 @@ def load_tournament_config(parser: ConfigParser) -> TournamentConfig:
 
     """
     num_teams = parser["DEFAULT"].getint("num_teams")
-
     parsed_rounds = []
     round_reqs = {}
 
@@ -111,8 +110,10 @@ def load_tournament_config(parser: ConfigParser) -> TournamentConfig:
             r_per_team = parser[section].getint("rounds_per_team")
             round_reqs[r_type] = r_per_team
             start_time = datetime.strptime(parser[section]["start_time"], HHMM_FMT).replace(tzinfo=UTC)
+
             if stop_time := parser[section].get("stop_time", ""):
                 stop_time = datetime.strptime(stop_time, HHMM_FMT).replace(tzinfo=UTC)
+
             parsed_rounds.append(
                 Round(
                     round_type=r_type,

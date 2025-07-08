@@ -1,7 +1,6 @@
 """Selection operators for genetic algorithms in FLL scheduling."""
 
 from abc import ABC
-from collections import defaultdict
 from collections.abc import Iterator
 from dataclasses import dataclass
 from random import Random
@@ -41,17 +40,28 @@ class ElitismSelectionNSGA2(Selection):
 
     def select(self, population: Population, population_size: int) -> Iterator[Schedule]:
         """Select the new generation based on non-dominated sorting and crowding distance."""
-        fronts = defaultdict(list)
-        for p in population:
-            fronts[p.rank].append(p)
+        population.sort(key=lambda p: p.rank)
 
         new_pop = []
-        for i in sorted(fronts.keys()):
-            front: Population = fronts[i]
-            if len(new_pop) + len(front) <= population_size:
-                new_pop.extend(front)
-            else:
-                front.sort(key=lambda p: p.crowding, reverse=True)
-                new_pop.extend(front[: population_size - len(new_pop)])
-                break
+        last_rank_start_index = 0
+        for i, p in enumerate(population):
+            if p.rank != population[last_rank_start_index].rank:
+                current_front = population[last_rank_start_index:i]
+                if len(new_pop) + len(current_front) > population_size:
+                    current_front.sort(key=lambda ind: ind.crowding, reverse=True)
+                    remaining_size = population_size - len(new_pop)
+                    new_pop.extend(current_front[:remaining_size])
+                    yield from new_pop
+                    return
+                new_pop.extend(current_front)
+                last_rank_start_index = i
+
+        last_front = population[last_rank_start_index:]
+        if len(new_pop) + len(last_front) > population_size:
+            last_front.sort(key=lambda ind: ind.crowding, reverse=True)
+            remaining_size = population_size - len(new_pop)
+            new_pop.extend(last_front[:remaining_size])
+        else:
+            new_pop.extend(last_front)
+
         yield from new_pop

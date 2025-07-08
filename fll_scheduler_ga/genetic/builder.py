@@ -61,12 +61,9 @@ class ScheduleBuilder:
         self._rng.shuffle(events_for_round)
         all_teams = self._schedule.all_teams()
 
-        for side1 in events_for_round:
-            if side1.location.side != 1:
-                continue
+        events = ((e, e.paired_event) for e in events_for_round if e.location.side == 1)
 
-            side2 = side1.paired_event
-
+        for side1, side2 in events:
             available_for_event = [t for t in all_teams if t.needs_round(r.round_type) and not t.conflicts(side1)]
 
             if not (available_for_side1 := available_for_event):

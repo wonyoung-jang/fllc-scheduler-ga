@@ -55,6 +55,7 @@ class GA:
     population: Population = field(default_factory=list, init=False, repr=False)
 
     _last_reported_fitness: tuple[float, ...] = field(default=None, init=False)
+    _crossover_ratio: dict[str, int] = field(default_factory=dict, init=False, repr=False)
 
     def pareto_front(self) -> Population:
         """Get the current Pareto front from the population."""
@@ -86,6 +87,7 @@ class GA:
         non_dominated_sort(self.population)
         front = self.pareto_front()
         self._notify_on_finish(self.population, front)
+        self.logger.info("Crossovers success ratio: %s", self._crossover_ratio)
         return True
 
     def initialize_population(self) -> None:
@@ -168,22 +170,29 @@ class GA:
     def produce_offspring(self) -> Schedule:
         """Evolve the population by one individual and return the best of the parents and child."""
         parents: list[Schedule] = list(self.selection.select(self.population, 2))
-        max_parent = max(parents, key=lambda p: sum(p.fitness)).clone()
+        max_parent = max(parents, key=lambda p: sum(p.fitness))
         child: Schedule | None = None
+        total_last_avg = sum(self.fitness_history[-1]) if self.fitness_history else 0
+
         if self.rng.random() < self.ga_parameters.crossover_chance:
             c = self.rng.choice(self.crossovers)
             child = c.crossover(parents)
-            self._notify_crossover(c.__class__.__name__, successful=bool(child))
+            successful = bool(child)
+            self._notify_crossover(c.__class__.__name__, successful=successful)
+            if successful:
+                self._crossover_ratio["success"] = self._crossover_ratio.get("success", 0) + 1
+            else:
+                self._crossover_ratio["failure"] = self._crossover_ratio.get("failure", 0) + 1
 
         if child is None:
-            child = max_parent
-        elif (score := self.fitness.evaluate(child)) is None:
-            return max_parent
-        elif score:
+            child = max_parent.clone()
+
+        if child.fitness is None:
+            if (score := self.fitness.evaluate(child)) is None:
+                return max_parent.clone()
             child.fitness = score
 
         total_score = sum(child.fitness)
-        total_last_avg = sum(self.fitness_history[-1]) if self.fitness_history else 0
         mutation_chance = (
             self.ga_parameters.mutation_chance_low
             if total_score >= total_last_avg
@@ -196,9 +205,8 @@ class GA:
             if (new_fitness := self.fitness.evaluate(child)) is not None:
                 child.fitness = new_fitness
                 self._notify_mutation(m.__class__.__name__, successful=True)
-                return child
-            self._notify_mutation(m.__class__.__name__)
-            return max_parent
+            else:
+                self._notify_mutation(m.__class__.__name__, successful=False)
 
         return child
 

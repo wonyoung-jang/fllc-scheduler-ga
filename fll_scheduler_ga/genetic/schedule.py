@@ -1,5 +1,6 @@
 """Represents a schedule (individual) with its associated fitness score."""
 
+from collections import defaultdict
 from collections.abc import Generator, ItemsView, KeysView, ValuesView
 from dataclasses import dataclass, field
 
@@ -19,7 +20,9 @@ class Schedule:
     rank: int = field(default=9999, compare=True)
     crowding: float = field(default=0.0, compare=False)
     _cached_all_teams: list[Team] = field(default=None, init=False, repr=False, compare=False)
-    _cached_matches: list[tuple[Event, Event, Team, Team]] = field(default=None, init=False, repr=False, compare=False)
+    _cached_matches: dict[str, list[tuple[Event, Event, Team, Team]]] = field(
+        default=None, init=False, repr=False, compare=False
+    )
 
     def __len__(self) -> int:
         """Return the number of scheduled events."""
@@ -46,16 +49,19 @@ class Schedule:
         """Iterate over the Events in the schedule."""
         return iter(self._schedule)
 
-    def get_matches(self) -> list[tuple[Event, Event, Team, Team]]:
+    def get_matches(self) -> dict[str, list[tuple[Event, Event, Team, Team]]]:
         """Get all matches in the schedule."""
         if self._cached_matches is None:
-            self._cached_matches = []
+            self._cached_matches = defaultdict(list)
             for event1, team1 in self._schedule.items():
                 if not (event2 := event1.paired_event) or event1.location.side != 1:
                     continue
 
+                rt = event1.round_type
+
                 if team2 := self._schedule[event2]:
-                    self._cached_matches.append((event1, event2, team1, team2))
+                    self._cached_matches[rt].append((event1, event2, team1, team2))
+
         return self._cached_matches
 
     def clone(self) -> "Schedule":
