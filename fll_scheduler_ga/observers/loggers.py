@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from logging import Logger
 
+from ..genetic.schedule import Population
 from .base_observer import GaObserver
 
 
@@ -31,13 +32,21 @@ class LoggingObserver(GaObserver):
             num_generations,
         )
 
-    def on_finish(self) -> None:
+    def on_finish(self, pop: Population, front: Population) -> None:
         """Log the completion of the genetic algorithm run."""
         self.logger.debug("Genetic algorithm run completed.")
+        if not pop:
+            self.logger.warning("No valid schedule was found after all generations.")
+            return
 
-    def on_mutation(self, mutation_name: str) -> None:
+        self.logger.info("Final pareto front size: %d", len(front))
+
+    def on_mutation(self, mutation_name: str, *, successful: bool = False) -> None:
         """Log mutation details."""
-        self.logger.debug("Mutation applied: %s", mutation_name)
+        if not successful:
+            self.logger.debug("Mutation failed: %s", mutation_name)
+        else:
+            self.logger.debug("Mutation applied: %s", mutation_name)
 
     def on_crossover(self, crossover_name: str, *, successful: bool) -> None:
         """Log crossover details."""

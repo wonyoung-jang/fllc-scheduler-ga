@@ -10,7 +10,7 @@ from fll_scheduler_ga.config.config import get_config_parser, load_tournament_co
 from fll_scheduler_ga.data_model.event import EventFactory, EventMap
 from fll_scheduler_ga.data_model.team import Team, TeamFactory
 from fll_scheduler_ga.genetic.fitness import FitnessEvaluator
-from fll_scheduler_ga.genetic.ga import GA
+from fll_scheduler_ga.genetic.ga import GA, RANDOM_SEED
 from fll_scheduler_ga.genetic.ga_parameters import GaParameters
 from fll_scheduler_ga.genetic.schedule import Schedule
 from fll_scheduler_ga.io.export import get_exporter
@@ -163,7 +163,9 @@ def build_ga_parameters_from_args(args: argparse.Namespace, config_parser: Confi
         "mutation_chance_high": args.mutation_chance_high,
     }
     provided_args = {k: v if v is not None else config_args[k] for k, v in cli_args.items()}
-    return GaParameters(**provided_args)
+    ga_params = GaParameters(**provided_args)
+    logger.info("Using GA parameters: %s", ga_params)
+    return ga_params
 
 
 def initialize_logging(args: argparse.Namespace) -> None:
@@ -217,8 +219,9 @@ def generate_pareto_summary(pareto_front: list[Schedule], evaluator: FitnessEval
             f.write(f"| Sum: {sum(schedule.fitness):.4f}|\n")
 
 
-def summary(args: argparse.Namespace, ga: GA, evaluator: FitnessEvaluator, front: list[Schedule]) -> None:
+def summary(args: argparse.Namespace, ga: GA) -> None:
     """Run the fll-scheduler-ga application and generate summary reports."""
+    front = ga.pareto_front()
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     logger.info("Output directory: %s", output_dir)
@@ -227,11 +230,13 @@ def summary(args: argparse.Namespace, ga: GA, evaluator: FitnessEvaluator, front
     plot.plot_fitness(save_dir=output_dir / "fitness_vs_generation.png")
     plot.plot_pareto_front(save_dir=output_dir / "pareto_front_tradeoffs.png")
 
-    # break_time = bt; opponent_variety = ov; table_consistency = tc
+    # break_time = bt
+    # opponent_variety = ov
+    # table_consistency = tc
     try:
-        idx_bt = evaluator.objectives.index("BreakTime")
-        idx_ov = evaluator.objectives.index("OpponentVariety")
-        idx_tc = evaluator.objectives.index("TableConsistency")
+        idx_bt = ga.fitness.objectives.index("BreakTime")
+        idx_ov = ga.fitness.objectives.index("OpponentVariety")
+        idx_tc = ga.fitness.objectives.index("TableConsistency")
     except ValueError:
         logger.exception("Could not find a required soft constraint")
         return
@@ -270,37 +275,38 @@ def summary(args: argparse.Namespace, ga: GA, evaluator: FitnessEvaluator, front
 
         txt_subdir = output_dir / "txt"
         txt_subdir.mkdir(parents=True, exist_ok=True)
-        generate_summary_report(schedule, evaluator, txt_subdir / f"{name}_summary.txt")
+        generate_summary_report(schedule, ga.fitness, txt_subdir / f"{name}_summary.txt")
 
-    generate_pareto_summary(front, evaluator, output_dir / "pareto_summary.txt")
+    generate_pareto_summary(front, ga.fitness, output_dir / "pareto_summary.txt")
 
 
-def setup_environment(args: argparse.Namespace) -> tuple[dict, ConfigParser]:
+def setup_environment(args: argparse.Namespace) -> tuple[dict, ConfigParser, EventFactory]:
     """Set up the environment for the application."""
-    initialize_logging(args)
     try:
         config_parser = get_config_parser(Path(args.config_file))
         config = load_tournament_config(config_parser)
-        logger.info("Loaded tournament configuration: %s", config)
+        event_factory = EventFactory(config)
     except (FileNotFoundError, KeyError):
         logger.exception("Error loading configuration")
-        return None, None
     else:
-        return config, config_parser
+        return config, config_parser, event_factory
 
 
-def create_ga_instance(
-    args: argparse.Namespace, config: dict, config_parser: ConfigParser, event_factory: EventFactory
-) -> GA:
+def setup_rng(args: argparse.Namespace) -> Random:
+    """Set up the random number generator."""
+    if args.seed is not None:
+        rng_seed = args.seed
+        logger.info("Using provided RNG seed: %d", args.seed)
+    else:
+        rng_seed = Random().randint(*RANDOM_SEED)
+        logger.info("Using master RNG seed: %d", rng_seed)
+    return Random(rng_seed)
+
+
+def create_ga_instance(config: dict, event_factory: EventFactory, ga_parameters: GaParameters, rng: Random) -> GA:
     """Create and return a GA instance with the provided configuration."""
-    rng_seed = args.seed if args.seed is not None else Random().randint(0, 2**32 - 1)
-    logger.info("Using master RNG seed: %d", rng_seed)
-    rng = Random(rng_seed)
-
     event_conflicts = EventMap(event_factory)
     team_factory = TeamFactory(config, event_conflicts.conflicts)
-
-    ga_parameters = build_ga_parameters_from_args(args, config_parser)
     selection = TournamentSelectionNSGA2(ga_parameters, rng)
     elitism = ElitismSelectionNSGA2(ga_parameters, rng)
 
@@ -347,24 +353,15 @@ def create_ga_instance(
 def main() -> None:
     """Run the fll-scheduler-ga application."""
     args = create_parser().parse_args()
-    config, config_parser = setup_environment(args)
+    initialize_logging(args)
+    config, config_parser, event_factory = setup_environment(args)
+    run_preflight_checks(config, event_factory)
+    ga_parameters = build_ga_parameters_from_args(args, config_parser)
+    rng = setup_rng(args)
+    ga = create_ga_instance(config, event_factory, ga_parameters, rng)
 
-    if config is None or config_parser is None:
-        logger.error("Failed to set up environment")
-        return
-
-    event_factory = EventFactory(config)
-
-    try:
-        run_preflight_checks(config, event_factory)
-    except ValueError:
-        logger.exception("Preflight checks failed")
-        return
-
-    ga = create_ga_instance(args, config, config_parser, event_factory)
-
-    if front := ga.run():
-        summary(args, ga, ga.fitness, front)
+    if ga.run():
+        summary(args, ga)
     else:
         logger.warning("Genetic algorithm did not produce a valid final schedule.")
 

@@ -21,11 +21,21 @@ class Crossover(ABC):
     team_factory: TeamFactory
     event_factory: EventFactory
     rng: Random
+
+
+@dataclass(slots=True)
+class EventCrossover(Crossover):
+    """Abstract base class for crossover operators in the FLL Scheduler GA."""
+
     events: list[Event] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
         self.events = self.event_factory.flat_list()
+
+    @abstractmethod
+    def get_genes(self, p1: Schedule, p2: Schedule) -> tuple[Iterable[Event], Iterable[Event]]:
+        """Get the genes for the crossover."""
 
     def crossover(self, parents: list[Schedule]) -> Schedule | None:
         """Crossover two parents to produce a child."""
@@ -35,10 +45,6 @@ class Crossover(ABC):
         self._populate_from_parent(child, p1, p1_genes, first=True)
         self._populate_from_parent(child, p2, p2_genes)
         return child if child and self._repair_crossover(child) else None
-
-    @abstractmethod
-    def get_genes(self, p1: Schedule, p2: Schedule) -> tuple[Iterable[Event], Iterable[Event]]:
-        """Get the genes for the crossover."""
 
     def _populate_from_parent(
         self, child: Schedule, parent: Schedule, events: Iterable[Event], *, first: bool = False
@@ -122,36 +128,26 @@ class Crossover(ABC):
         """Assign match events to teams that need them."""
         self.rng.shuffle(teams)
         self.rng.shuffle(open_events)
-        matchups = []
-        while len(teams) >= 2:
-            team1 = teams.pop()
-            team2 = next((t for t in teams if team1.identity != t.identity), None)
-            if team2 is not None:
-                teams.remove(team2)
-                matchups.append((team1, team2))
-            else:
-                logger.debug("No partner found for team %s.", team1.identity)
+        for team1, team2 in zip(teams[::2], teams[1::2], strict=True):
+            if team1.identity == team2.identity:
                 return
 
-        if teams:
-            logger.debug("Odd number of teams, team %d will not be assigned a match.", teams[0].identity)
-            return
-
-        for team1, team2 in matchups:
-            for i, e1 in enumerate(open_events):
+            for j, e1 in enumerate(open_events):
                 e2 = e1.paired_event
-                if not (team1.conflicts(e1) or team2.conflicts(e2)):
+
+                if not team1.conflicts(e1) and not team2.conflicts(e2):
                     self._populate_match(child, e1, e2, team1, team2)
-                    open_events.pop(i)
+                    open_events.pop(j)
                     break
-                if not (team1.conflicts(e2) or team2.conflicts(e1)):
+
+                if not team1.conflicts(e2) and not team2.conflicts(e1):
                     self._populate_match(child, e2, e1, team2, team1)
-                    open_events.pop(i)
+                    open_events.pop(j)
                     break
 
 
 @dataclass(slots=True)
-class KPoint(Crossover):
+class KPoint(EventCrossover):
     """K-point crossover operator for genetic algorithms."""
 
     k: int = field(default=1)
@@ -166,24 +162,23 @@ class KPoint(Crossover):
 
     def get_genes(self, p1: Schedule, p2: Schedule) -> tuple[Iterable[Event], Iterable[Event]]:
         """Get the genes for the crossover."""
-        indices = sorted(self.rng.sample(range(1, len(self.events)), self.k))
+        evts = self.events
+        ne = len(evts)
+        indices = sorted(self.rng.sample(range(1, ne), self.k))
         genes = []
         start = 0
         for i in indices:
-            genes.append(self.events[start:i])
+            genes.append(evts[start:i])
             start = i
-        genes.append(self.events[start:])
-        p1_genes = (
-            genes[i][x] for i in range(len(genes)) if i % 2 == 0 for x in range(len(genes[i])) if genes[i][x] in p1
-        )
-        p2_genes = (
-            genes[i][x] for i in range(len(genes)) if i % 2 == 1 for x in range(len(genes[i])) if genes[i][x] in p2
-        )
+        genes.append(evts[start:])
+        ng = len(genes)
+        p1_genes = (genes[i][x] for i in range(ng) if i % 2 == 0 for x in range(len(genes[i])) if genes[i][x] in p1)
+        p2_genes = (genes[i][x] for i in range(ng) if i % 2 == 1 for x in range(len(genes[i])) if genes[i][x] in p2)
         return p1_genes, p2_genes
 
 
 @dataclass(slots=True)
-class Scattered(Crossover):
+class Scattered(EventCrossover):
     """Scattered crossover operator for genetic algorithms.
 
     Shuffled indices split parent 50/50.
@@ -191,15 +186,17 @@ class Scattered(Crossover):
 
     def get_genes(self, p1: Schedule, p2: Schedule) -> tuple[Iterable[Event], Iterable[Event]]:
         """Get the genes for the crossover."""
-        indices = self.rng.sample(range(len(self.events)), len(self.events))
-        mid = len(self.events) // 2
-        p1_genes = (self.events[i] for i in indices[:mid] if self.events[i] in p1)
-        p2_genes = (self.events[i] for i in indices[mid:] if self.events[i] in p2)
+        evts = self.events
+        ne = len(evts)
+        indices = self.rng.sample(range(ne), ne)
+        mid = ne // 2
+        p1_genes = (evts[i] for i in indices[:mid] if evts[i] in p1)
+        p2_genes = (evts[i] for i in indices[mid:] if evts[i] in p2)
         return p1_genes, p2_genes
 
 
 @dataclass(slots=True)
-class Uniform(Crossover):
+class Uniform(EventCrossover):
     """Uniform crossover operator for genetic algorithms.
 
     Each gene is chosen from either parent by flipping a coin for each gene.
@@ -207,7 +204,9 @@ class Uniform(Crossover):
 
     def get_genes(self, p1: Schedule, p2: Schedule) -> tuple[Iterable[Event], Iterable[Event]]:
         """Get the genes for the crossover."""
-        indices = [1 if self.rng.uniform(0, 1) < 0.5 else 2 for _ in range(len(self.events))]
-        p1_genes = (self.events[i] for i in range(len(self.events)) if indices[i] == 1 and self.events[i] in p1)
-        p2_genes = (self.events[i] for i in range(len(self.events)) if indices[i] == 2 and self.events[i] in p2)
+        evts = self.events
+        ne = len(evts)
+        indices = [1 if self.rng.uniform(0, 1) < 0.5 else 2 for _ in range(ne)]
+        p1_genes = (evts[i] for i in range(ne) if indices[i] == 1 and evts[i] in p1)
+        p2_genes = (evts[i] for i in range(ne) if indices[i] == 2 and evts[i] in p2)
         return p1_genes, p2_genes

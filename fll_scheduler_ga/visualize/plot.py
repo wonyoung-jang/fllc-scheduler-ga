@@ -1,6 +1,7 @@
 """Methods to create plots."""
 
 import logging
+from ast import Module
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -10,10 +11,12 @@ import pandas as pd
 from ..genetic.ga import GA
 from ..genetic.schedule import Population
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("visualize.plot")
+logging.getLogger("matplotlib").setLevel(logging.WARNING)
+logging.getLogger("PIL").setLevel(logging.WARNING)
 
 
-def get_matplotlib() -> Any:
+def get_matplotlib() -> Module:
     """Get the matplotlib module for plotting."""
     import matplotlib.pyplot as plt
 

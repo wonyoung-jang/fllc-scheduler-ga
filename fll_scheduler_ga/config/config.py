@@ -60,7 +60,7 @@ class TournamentConfig:
         rounds_str = ", ".join(f"{r.round_type}" for r in sorted(self.rounds, key=lambda x: x.start_time))
         round_reqs_str = ", ".join(f"{k}: {v}" for k, v in self.round_requirements.items())
         return (
-            f"\nTournamentConfig:\n"
+            f"TournamentConfig:\n"
             f"\tnum_teams: {self.num_teams}\n"
             f"\trounds: {rounds_str}\n"
             f"\tround_requirements: {round_reqs_str}"
@@ -86,6 +86,7 @@ def get_config_parser(path: Path | None = None) -> ConfigParser:
 
     parser = ConfigParser()
     parser.read(path)
+    logger.info("Configuration file loaded from %s", path)
     return parser
 
 
@@ -129,8 +130,10 @@ def load_tournament_config(parser: ConfigParser) -> TournamentConfig:
         msg = "No rounds defined in the configuration file."
         raise ValueError(msg)
 
-    return TournamentConfig(
+    config = TournamentConfig(
         num_teams=num_teams,
         rounds=parsed_rounds,
         round_requirements=round_reqs,
     )
+    logger.info("Loaded tournament configuration: %s", config)
+    return config

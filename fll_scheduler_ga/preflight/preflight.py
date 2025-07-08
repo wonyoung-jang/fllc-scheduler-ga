@@ -11,11 +11,13 @@ logger = logging.getLogger(__name__)
 
 def run_preflight_checks(config: TournamentConfig, event_factory: EventFactory) -> None:
     """Run preflight checks on the tournament configuration."""
-    logger.info("Running preflight checks on the tournament configuration")
-    _check_round_definitions(config)
-    _check_total_capacity(config)
-    _check_per_team_feasibility(config)
-    _check_location_time_overlaps(config, event_factory)
+    try:
+        _check_round_definitions(config)
+        _check_total_capacity(config)
+        _check_per_team_feasibility(config)
+        _check_location_time_overlaps(config, event_factory)
+    except ValueError:
+        logger.exception("Preflight checks failed. Please review the configuration.")
     logger.info("All preflight checks passed successfully.")
 
 
@@ -26,7 +28,7 @@ def _check_round_definitions(config: TournamentConfig) -> None:
         if req_type not in defined_round_types:
             msg = f"Required round type '{req_type}' is not defined in the configuration."
             raise ValueError(msg)
-    logger.info("Check passed: All required round types are defined.")
+    logger.debug("Check passed: All required round types are defined.")
 
 
 def _check_total_capacity(config: TournamentConfig) -> None:
@@ -49,8 +51,8 @@ def _check_total_capacity(config: TournamentConfig) -> None:
                 f"  - Suggestion: Increase duration, locations, or start/end times for this round."
             )
             raise ValueError(msg)
-        logger.info("Check passed: Capacity sufficient for Round '%s' - %d/%d.", r_type, req_count, available[r_type])
-    logger.info("Check passed: Overall capacity is sufficient.")
+        logger.debug("Check passed: Capacity sufficient for Round '%s' - %d/%d.", r_type, req_count, available[r_type])
+    logger.debug("Check passed: Overall capacity is sufficient.")
 
 
 def _check_per_team_feasibility(config: TournamentConfig) -> None:
@@ -88,7 +90,7 @@ def _check_per_team_feasibility(config: TournamentConfig) -> None:
             "reduce the number of rounds required per team."
         )
         raise ValueError(msg)
-    logger.info("Check passed: Per-team event load seems feasible.")
+    logger.debug("Check passed: Per-team event load seems feasible.")
 
 
 def _check_location_time_overlaps(config: TournamentConfig, event_factory: EventFactory) -> None:
@@ -108,4 +110,4 @@ def _check_location_time_overlaps(config: TournamentConfig, event_factory: Event
                     )
                     raise ValueError(msg)
             booked_slots[location_key].append((event.timeslot, r_config.round_type))
-    logger.info("Check passed: No location/time overlaps found.")
+    logger.debug("Check passed: No location/time overlaps found.")

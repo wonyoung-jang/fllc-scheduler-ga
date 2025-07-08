@@ -5,6 +5,7 @@ from logging import Logger
 
 from tqdm import tqdm
 
+from ..genetic.schedule import Population
 from .base_observer import GaObserver
 
 
@@ -32,11 +33,11 @@ class TqdmObserver(GaObserver):
         self._progress_bar.set_description(f"Front size: {front_size:<3} | Avg Fitness: ({fitness_str})")
         self._progress_bar.update(1)
 
-    def on_finish(self) -> None:
+    def on_finish(self, pop: Population, front: Population) -> None:
         """Close the progress bar."""
         self._progress_bar.close()
 
-    def on_mutation(self, mutation_name: str) -> None:
+    def on_mutation(self, mutation_name: str, *, successful: bool) -> None:
         """Handle mutation events, currently a no-op."""
 
     def on_crossover(self, crossover_name: str, *, successful: bool) -> None:

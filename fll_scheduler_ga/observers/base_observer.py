@@ -3,6 +3,8 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
+from ..genetic.schedule import Population
+
 
 @dataclass(slots=True)
 class GaObserver(ABC):
@@ -24,11 +26,11 @@ class GaObserver(ABC):
         """Call at the end of each generation to report status."""
 
     @abstractmethod
-    def on_finish(self) -> None:
+    def on_finish(self, pop: Population, front: Population) -> None:
         """Call when the genetic algorithm run is finished."""
 
     @abstractmethod
-    def on_mutation(self, mutation_name: str) -> None:
+    def on_mutation(self, mutation_name: str, *, successful: bool) -> None:
         """Call when a mutation is applied."""
 
     @abstractmethod

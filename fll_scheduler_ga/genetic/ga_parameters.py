@@ -61,3 +61,16 @@ class GaParameters:
             logger.warning(
                 "Mutation chance low cannot be greater than mutation chance high, defaulting to 0.2 and 0.8."
             )
+
+    def __str__(self) -> str:
+        """Representation of GA parameters."""
+        return (
+            f"GaParameters:\n"
+            f"\tPopulation Size: {self.population_size}\n"
+            f"\tGenerations: {self.generations}\n"
+            f"\tElite Size: {self.elite_size}\n"
+            f"\tSelection Size: {self.selection_size}\n"
+            f"\tCrossover Chance: {self.crossover_chance:.2f}\n"
+            f"\tMutation Chance Low: {self.mutation_chance_low:.2f}\n"
+            f"\tMutation Chance High: {self.mutation_chance_high:.2f}"
+        )
