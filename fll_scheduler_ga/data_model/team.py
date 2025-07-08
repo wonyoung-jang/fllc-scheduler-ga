@@ -222,7 +222,10 @@ class Team:
         if self._cached_opponent_score is not None:
             return self._cached_opponent_score
 
-        self._cached_opponent_score = len(set(self.opponents)) / len(self.opponents) if self.opponents else 1.0
+        num_unique_opponents = len(set(self.opponents))
+        num_total_opponents = len(self.opponents)
+        opponent_ratio = num_unique_opponents / num_total_opponents if num_total_opponents > 0 else 1.0
+        self._cached_opponent_score = opponent_ratio
         return self._cached_opponent_score
 
     def score_table_consistency(self) -> float:
@@ -230,5 +233,8 @@ class Team:
         if self._cached_table_score is not None:
             return self._cached_table_score
 
-        self._cached_table_score = 1.0 / len(set(self.locations)) if self.locations else 1.0
+        num_unique_locations = len(set(self.locations))
+        num_total_locations = len(self.locations)
+        table_ratio = 1 / num_unique_locations if num_total_locations > 0 else 1.0
+        self._cached_table_score = table_ratio
         return self._cached_table_score

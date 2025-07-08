@@ -38,8 +38,8 @@ class FitnessEvaluator:
         n = 0
 
         for team in schedule.all_teams():
-            if rounds_needed := team.rounds_needed():
-                logger.debug("%s: %s", "AllEventsScheduled", f"Team {team.identity} needs {rounds_needed} rounds")
+            if team.rounds_needed():
+                logger.debug("%s: %s", "AllEventsScheduled", f"Team {team.identity} needs {team.round_types} rounds")
                 return None
 
             bt_s += team.score_break_time()

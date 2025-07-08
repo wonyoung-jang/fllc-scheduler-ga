@@ -54,11 +54,6 @@ class GA:
 
     _last_reported_fitness: tuple[float, ...] = field(default=None, init=False)
 
-    def __post_init__(self) -> None:
-        """Initialize the genetic algorithm with base schedule and teams."""
-        for obs in self.observers:
-            obs.on_start(self.ga_parameters.generations)
-
     def pareto_front(self) -> Population:
         """Get the current Pareto front from the population."""
         if not self.population:
@@ -67,6 +62,8 @@ class GA:
 
     def run(self) -> Population | None:
         """Run the genetic algorithm and return the best schedule found."""
+        self._notify_on_start(self.ga_parameters.generations)
+
         self.logger.info("GA is in Initializing state.")
         self.initialize_population()
 
@@ -76,8 +73,7 @@ class GA:
         self.logger.info("GA has terminated.")
         self.log_final_summary()
 
-        for obs in self.observers:
-            obs.on_finish()
+        self._notify_on_finish()
 
         if self.population:
             non_dominated_sort(self.population)
@@ -85,7 +81,7 @@ class GA:
             self.logger.info("Pareto front size: %d", len(front))
             return front
 
-        self.logger.warning("No valid schedule meeting all hard constraints was found.")
+        self.logger.critical("No valid schedule meeting all hard constraints was found.")
         return None
 
     def initialize_population(self) -> None:
@@ -106,13 +102,17 @@ class GA:
 
         self.logger.info("Initializing population with %d individuals using multiprocessing.", num_to_create)
         attempts, max_attempts = 0, 10
+
         while len(self.population) < num_to_create and attempts < max_attempts:
             with multiprocessing.Pool() as pool:
                 population = pool.map(create_and_evaluate_schedule, worker_args)
+
             for p in filter(None, population):
                 self.population.append(p)
+
                 if len(self.population) >= num_to_create:
                     break
+
             attempts += 1
             self.logger.info("Attempt %d: Created %d valid schedules so far.", attempts, len(self.population))
 
@@ -124,12 +124,13 @@ class GA:
         front = self.pareto_front()
         num_objectives = len(front[0].fitness)
         avg_fitness_front1 = [0.0] * num_objectives
+
         for p in front:
             for i in range(num_objectives):
                 avg_fitness_front1[i] += p.fitness[i]
+
         this_gen_fitness = tuple(s / len(front) for s in avg_fitness_front1)
         self.fitness_history.append(this_gen_fitness)
-
         self.logger.info("Created %d valid schedules.", len(self.population))
 
     def generation(self) -> None:
@@ -142,16 +143,20 @@ class GA:
             combined_population = self.population + self.evolve(self.ga_parameters.population_size)
             non_dominated_sort(combined_population)
             self.population = list(self.elitism.select(combined_population, self.ga_parameters.population_size))
+
             if not (front := self.pareto_front()):
                 self.logger.warning("No valid individuals in the current population.")
                 return
 
             num_objectives = len(front[0].fitness)
             avg_fitness_front1 = [0.0] * num_objectives
+
             for p in front:
                 for i in range(num_objectives):
                     avg_fitness_front1[i] += p.fitness[i]
+
             this_gen_fitness = tuple(s / len(front) for s in avg_fitness_front1)
+
             self.fitness_history.append(this_gen_fitness)
 
             self._notify_gen_end(generation, this_gen_fitness)
@@ -162,8 +167,7 @@ class GA:
         attempts, max_attempts = 0, num_offspring * 4
 
         while len(new_population) < num_offspring and attempts < max_attempts:
-            if child := self.produce_offspring():
-                new_population.append(child)
+            new_population.append(self.produce_offspring())
             attempts += 1
 
         if len(new_population) < num_offspring:
@@ -171,9 +175,10 @@ class GA:
 
         return new_population
 
-    def produce_offspring(self) -> Schedule | None:
+    def produce_offspring(self) -> Schedule:
         """Evolve the population by one individual and return the best of the parents and child."""
-        parents = list(self.selection.select(self.population, 2))
+        parents: list[Schedule] = list(self.selection.select(self.population, 2))
+        max_parent = max(parents, key=lambda p: sum(p.fitness)).clone()
         child: Schedule | None = None
 
         if self.rng.random() < self.ga_parameters.crossover_chance:
@@ -182,9 +187,9 @@ class GA:
             self._notify_crossover(c.__class__.__name__, successful=bool(child))
 
         if child is None:
-            child = self.rng.choice(parents).clone()
+            child = max_parent
         elif (score := self.fitness.evaluate(child)) is None:
-            return None
+            return max_parent
         elif score:
             child.fitness = score
 
@@ -194,7 +199,7 @@ class GA:
         high_roll = self.rng.random() < self.ga_parameters.mutation_chance_high
 
         if not (low_roll or high_roll):
-            return child
+            return max(max_parent, child, key=lambda p: sum(p.fitness))
 
         to_low_roll = total_score >= total_last_avg and low_roll
         to_high_roll = total_score < total_last_avg and high_roll
@@ -203,9 +208,9 @@ class GA:
             m = self.rng.choice(self.mutations)
             m.mutate(child)
             self._notify_mutation(m.__class__.__name__)
+            child.fitness = self.fitness.evaluate(child)
 
-        child.fitness = self.fitness.evaluate(child)
-        return child
+        return max(max_parent, child, key=lambda p: sum(p.fitness))
 
     def log_final_summary(self) -> None:
         """Log the final summary of the genetic algorithm."""
@@ -243,3 +248,13 @@ class GA:
         """Notify observers when a crossover is applied."""
         for obs in self.observers:
             obs.on_crossover(crossover_name, successful=successful)
+
+    def _notify_on_start(self, num_generations: int) -> None:
+        """Notify observers when the genetic algorithm run starts."""
+        for obs in self.observers:
+            obs.on_start(num_generations)
+
+    def _notify_on_finish(self) -> None:
+        """Notify observers when the genetic algorithm run is finished."""
+        for obs in self.observers:
+            obs.on_finish()

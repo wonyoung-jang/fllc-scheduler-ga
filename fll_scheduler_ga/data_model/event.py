@@ -34,8 +34,8 @@ class EventFactory:
 
     config: TournamentConfig
     _id_counter: itertools.count = field(default_factory=itertools.count, init=False, repr=False)
-    _cached_events: dict[RoundType, set[Event]] = field(default=None, init=False, repr=False)
-    _cached_flat_list: dict[RoundType, set[Event]] = field(default=None, init=False, repr=False)
+    _cached_events: dict[RoundType, list[Event]] = field(default=None, init=False, repr=False)
+    _cached_flat_list: dict[RoundType, list[Event]] = field(default=None, init=False, repr=False)
     _cached_locations: dict[tuple[int, int, int], Room | Table] = field(default_factory=dict, init=False, repr=False)
     _cached_timeslots: dict[tuple[datetime, datetime], TimeSlot] = field(default_factory=dict, init=False, repr=False)
 
@@ -44,16 +44,17 @@ class EventFactory:
         self.build()
         self.flat_list()
 
-    def build(self) -> dict[RoundType, set[Event]]:
+    def build(self) -> dict[RoundType, list[Event]]:
         """Create and return all Events for the tournament.
 
         Returns:
-            dict[RoundType, set[Event]]: A dictionary of all Events for the tournament.
+            dict[RoundType, list[Event]]: A dictionary of all Events for the tournament.
 
         """
         if not self._cached_events:
             self._cached_events = {
-                r.round_type: set(self.create_events(r)) for r in sorted(self.config.rounds, key=lambda x: x.start_time)
+                r.round_type: list(self.create_events(r))
+                for r in sorted(self.config.rounds, key=lambda x: x.start_time)
             }
         return self._cached_events
 
@@ -79,11 +80,9 @@ class EventFactory:
         for _ in range(r.num_slots):
             stop = start + r.duration_minutes
             time_cache_key = (start, stop)
-            if time_cache_key in self._cached_timeslots:
-                time_slot = self._cached_timeslots[time_cache_key]
-            else:
-                time_slot = TimeSlot(start, stop, start.strftime(HHMM_FMT), stop.strftime(HHMM_FMT))
-                self._cached_timeslots[time_cache_key] = time_slot
+            timeslot = self._cached_timeslots.setdefault(
+                time_cache_key, TimeSlot(start, stop, start.strftime(HHMM_FMT), stop.strftime(HHMM_FMT))
+            )
             start = stop
 
             for i in range(1, r.num_locations + 1):
@@ -91,28 +90,18 @@ class EventFactory:
                 if hasattr(location_type, "side"):
                     cache_key1 = (i, r.teams_per_round, 1)
                     cache_key2 = (i, r.teams_per_round, 2)
-                    if cache_key1 in self._cached_locations and cache_key2 in self._cached_locations:
-                        side1_loc = self._cached_locations[cache_key1]
-                        side2_loc = self._cached_locations[cache_key2]
-                    else:
-                        side1_loc = location_type(**params, side=1)
-                        side2_loc = location_type(**params, side=2)
-                        self._cached_locations[cache_key1] = side1_loc
-                        self._cached_locations[cache_key2] = side2_loc
-                    event1 = Event(next(self._id_counter), r.round_type, time_slot, side1_loc)
-                    event2 = Event(next(self._id_counter), r.round_type, time_slot, side2_loc)
+                    side1_loc = self._cached_locations.setdefault(cache_key1, location_type(**params, side=1))
+                    side2_loc = self._cached_locations.setdefault(cache_key2, location_type(**params, side=2))
+                    event1 = Event(next(self._id_counter), r.round_type, timeslot, side1_loc)
+                    event2 = Event(next(self._id_counter), r.round_type, timeslot, side2_loc)
                     event1.paired_event = event2
                     event2.paired_event = event1
                     yield event1
                     yield event2
                 else:
                     cache_key = (i, r.teams_per_round)
-                    if cache_key in self._cached_locations:
-                        location = self._cached_locations[cache_key]
-                    else:
-                        location = location_type(**params)
-                        self._cached_locations[cache_key] = location
-                    yield Event(next(self._id_counter), r.round_type, time_slot, location)
+                    location = self._cached_locations.setdefault(cache_key, location_type(**params))
+                    yield Event(next(self._id_counter), r.round_type, timeslot, location)
 
 
 @dataclass(slots=True)
