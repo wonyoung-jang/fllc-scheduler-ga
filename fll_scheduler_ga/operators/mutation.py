@@ -19,20 +19,25 @@ class Mutation(ABC):
     rng: Random
 
     @abstractmethod
-    def mutate(self, child: Schedule) -> None:
+    def mutate(self, child: Schedule) -> bool:
         """Mutate a child schedule to introduce genetic diversity."""
 
     def _validate_swap(self, event1: Event, event2: Event, *, same_timeslot: bool, same_location: bool) -> bool:
         """Check if the swap between two events is valid based on timeslot and location."""
         is_same_timeslot = event1.timeslot == event2.timeslot
         is_same_location = event1.location == event2.location
+
         if same_timeslot:
             return is_same_timeslot and not is_same_location
+
         if same_location:
             return is_same_location and not is_same_timeslot
+
         if not (same_timeslot or same_location):
             return not (is_same_timeslot or is_same_location)
+
         logger.warning("Invalid swap.")
+
         return False
 
 
@@ -65,14 +70,14 @@ class SwapTeamMutation(Mutation):
 
         return None, None
 
-    def mutate(self, child: Schedule, *, same_timeslot: bool = False, same_location: bool = False) -> None:
+    def mutate(self, child: Schedule, *, same_timeslot: bool = False, same_location: bool = False) -> bool:
         """Swap one team from two different matches."""
         match1_data, match2_data = self._get_swap_candidates(
             child, same_timeslot=same_timeslot, same_location=same_location
         )
 
         if not match1_data:
-            return
+            return False
 
         event1_a, team1_a, team1_b = match1_data
         event2_a, team2_a, team2_b = match2_data
@@ -86,6 +91,8 @@ class SwapTeamMutation(Mutation):
         team2_b.switch_opponent(team2_a, team1_a)
 
         child[event1_a], child[event2_a] = team2_a, team1_a
+
+        return True
 
 
 @dataclass(slots=True, frozen=True)
@@ -153,14 +160,14 @@ class SwapMatchMutation(Mutation):
 
         return None, None
 
-    def mutate(self, child: Schedule, *, same_timeslot: bool = False, same_location: bool = False) -> None:
+    def mutate(self, child: Schedule, *, same_timeslot: bool = False, same_location: bool = False) -> bool:
         """Swap two entire matches."""
         match1_data, match2_data = self._get_swap_candidates(
             child, same_timeslot=same_timeslot, same_location=same_location
         )
 
         if not match1_data:
-            return
+            return False
 
         event1_a, event1_b, team1_a, team1_b = match1_data
         event2_a, event2_b, team2_a, team2_b = match2_data
@@ -172,6 +179,8 @@ class SwapMatchMutation(Mutation):
 
         child[event1_a], child[event1_b] = team2_a, team2_b
         child[event2_a], child[event2_b] = team1_a, team1_b
+
+        return True
 
 
 @dataclass(slots=True, frozen=True)
