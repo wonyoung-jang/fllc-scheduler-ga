@@ -1,7 +1,7 @@
 """Represents a schedule (individual) with its associated fitness score."""
 
 from collections import defaultdict
-from collections.abc import Generator, ItemsView, KeysView, ValuesView
+from collections.abc import Generator, ItemsView, Iterator, ValuesView
 from dataclasses import dataclass, field
 
 from ..data_model.event import Event
@@ -16,12 +16,25 @@ class Schedule:
 
     _teams: TeamMap = field(default_factory=dict, compare=False)
     _schedule: Individual = field(default_factory=dict, compare=False)
-    fitness: tuple[float, ...] = field(default=None, compare=False)
+    fitness: tuple[float, ...] | None = field(default=None, compare=False)
     rank: int = field(default=9999, compare=True)
     crowding: float = field(default=0.0, compare=False)
-    _cached_all_teams: list[Team] = field(default=None, init=False, repr=False, compare=False)
+    _cached_all_teams: list[Team] = field(
+        default=None,
+        init=False,
+        repr=False,
+        compare=False,
+    )
     _cached_matches: dict[str, list[tuple[Event, Event, Team, Team]]] = field(
-        default=None, init=False, repr=False, compare=False
+        default=None,
+        init=False,
+        repr=False,
+        compare=False,
+    )
+    _hash: int = field(
+        default=None,
+        init=False,
+        repr=False,
     )
 
     def __len__(self) -> int:
@@ -40,6 +53,8 @@ class Schedule:
         """Assign a team to a specific event."""
         self._schedule[event] = team
         self._cached_matches = None
+        self._cached_all_teams = None
+        self._hash = None
 
     def __contains__(self, event: Event) -> bool:
         """Check if a specific event is scheduled."""
@@ -49,10 +64,25 @@ class Schedule:
         """Iterate over the Events in the schedule."""
         return iter(self._schedule)
 
+    def __hash__(self) -> int:
+        """Return a hash of the schedule based on its teams."""
+        if self._hash is not None:
+            return self._hash
+
+        sched_hash = []
+        sorted_schedule = sorted(self._schedule.items(), key=lambda x: x[0].identity)
+
+        for e, t in sorted_schedule:
+            sched_hash.extend([e.identity, t.identity])
+
+        self._hash = hash(tuple(sched_hash))
+        return self._hash
+
     def get_matches(self) -> dict[str, list[tuple[Event, Event, Team, Team]]]:
         """Get all matches in the schedule."""
         if self._cached_matches is None:
             self._cached_matches = defaultdict(list)
+
             for event1, team1 in self._schedule.items():
                 if not (event2 := event1.paired_event) or event1.location.side != 1:
                     continue
@@ -76,9 +106,9 @@ class Schedule:
             self._cached_all_teams = list(self._teams.values())
         return self._cached_all_teams
 
-    def keys(self) -> KeysView[Event]:
+    def keys(self) -> Iterator[Event]:
         """Return an iterator over the events (keys)."""
-        return self._schedule.keys()
+        yield from self._schedule.keys()
 
     def values(self) -> ValuesView[Team]:
         """Return an iterator over the assigned teams/matches (values)."""
