@@ -18,16 +18,14 @@ from .fitness import FitnessEvaluator
 from .ga_parameters import GaParameters
 from .schedule import Population, Schedule
 
-logger = logging.getLogger(__name__)
-
 RANDOM_SEED = (1, 2**32 - 1)
 
 
 def create_and_evaluate_schedule(
-    args: tuple[TeamFactory, EventFactory, TournamentConfig, int, FitnessEvaluator],
+    args: tuple[TeamFactory, EventFactory, TournamentConfig, FitnessEvaluator, int],
 ) -> Schedule | None:
     """Create and evaluate a schedule in a separate process."""
-    team_factory, event_factory, config, seed, evaluator = args
+    team_factory, event_factory, config, evaluator, seed = args
     schedule = ScheduleBuilder(team_factory, event_factory, config, Random(seed)).build()
     if fitness_scores := evaluator.evaluate(schedule):
         schedule.fitness = fitness_scores
@@ -44,7 +42,7 @@ class GA:
     rng: Random
     event_factory: EventFactory
     team_factory: TeamFactory
-    selection: Selection
+    selections: tuple[Selection]
     elitism: Selection
     crossovers: tuple[Crossover]
     mutations: tuple[Mutation]
@@ -56,6 +54,7 @@ class GA:
 
     _last_reported_fitness: tuple[float, ...] = field(default=None, init=False)
     _crossover_ratio: dict[str, int] = field(default_factory=dict, init=False, repr=False)
+    _mutation_ratio: dict[str, int] = field(default_factory=dict, init=False, repr=False)
 
     def pareto_front(self) -> Population:
         """Get the current Pareto front from the population."""
@@ -63,8 +62,9 @@ class GA:
             return []
         return [p for p in self.population if p.rank == 0]
 
-    def _calculate_this_gen_fitness(self, front: Population) -> tuple[float, ...]:
+    def _calculate_this_gen_fitness(self) -> tuple[float, ...]:
         """Calculate the average fitness of the current generation."""
+        front = self.pareto_front()
         num_objectives = len(front[0].fitness)
         avg_fitness_front1 = [0.0] * num_objectives
 
@@ -74,9 +74,16 @@ class GA:
 
         return tuple(s / len(front) for s in avg_fitness_front1)
 
+    def _update_fitness_history(self) -> tuple[float, ...]:
+        """Update the fitness history with the current generation's fitness."""
+        this_gen_fitness = self._calculate_this_gen_fitness()
+        self.fitness_history.append(this_gen_fitness)
+        return this_gen_fitness
+
     def run(self) -> bool:
         """Run the genetic algorithm and return the best schedule found."""
         self._notify_on_start(self.ga_parameters.generations)
+
         self.initialize_population()
         self.generation()
 
@@ -85,14 +92,32 @@ class GA:
             return False
 
         non_dominated_sort(self.population)
-        front = self.pareto_front()
-        self._notify_on_finish(self.population, front)
-        self.logger.info("Crossovers success ratio: %s", self._crossover_ratio)
+
+        self._notify_on_finish(self.population, self.pareto_front())
+        crossover_total = self._crossover_ratio.get("success", 0) + self._crossover_ratio.get("failure", 0)
+        crossover_success_percentage = (
+            self._crossover_ratio.get("success", 0) / crossover_total if crossover_total > 0 else 0.0
+        )
+        mutation_total = self._mutation_ratio.get("success", 0) + self._mutation_ratio.get("failure", 0)
+        mutation_success_percentage = (
+            self._mutation_ratio.get("success", 0) / mutation_total if mutation_total > 0 else 0.0
+        )
+        self.logger.info(
+            "Crossovers success ratio: %s/%s = %s",
+            self._crossover_ratio.get("success", 0),
+            crossover_total,
+            f"{crossover_success_percentage:.2%}",
+        )
+        self.logger.info(
+            "Mutations success ratio: %s/%s = %s",
+            self._mutation_ratio.get("success", 0),
+            mutation_total,
+            f"{mutation_success_percentage:.2%}",
+        )
         return True
 
     def initialize_population(self) -> None:
         """Initialize the population with random organisms using multiprocessing."""
-        self.logger.info("GA is in Initializing state.")
         num_to_create = self.ga_parameters.population_size
         seeder = Random(self.rng.randint(*RANDOM_SEED))
         worker_seeds = [seeder.randint(*RANDOM_SEED) for _ in range(num_to_create)]
@@ -101,114 +126,117 @@ class GA:
                 self.team_factory,
                 self.event_factory,
                 self.config,
-                seed,
                 self.fitness,
+                seed,
             )
             for seed in worker_seeds
         ]
 
-        self.logger.info("Initializing population with %d individuals using multiprocessing.", num_to_create)
+        self.logger.info("Initializing population with %d individuals.", num_to_create)
         attempts, max_attempts = 0, 10
+        init_pop: Population = []
+        add_to_init_pop = init_pop.append
 
-        while len(self.population) < num_to_create and attempts < max_attempts:
+        while len(init_pop) < num_to_create and attempts < max_attempts:
             with multiprocessing.Pool() as pool:
                 population = pool.map(create_and_evaluate_schedule, worker_args)
 
             for p in filter(None, population):
-                self.population.append(p)
+                add_to_init_pop(p)
 
-                if len(self.population) >= num_to_create:
+                if len(init_pop) >= num_to_create:
                     break
 
             attempts += 1
-            self.logger.info("Attempt %d: Created %d valid schedules so far.", attempts, len(self.population))
+            self.logger.info("Attempt %d: Created %d valid schedules so far.", attempts, len(init_pop))
 
-        if not self.population:
+        if not init_pop or not init_pop[0].fitness:
             self.logger.critical("No valid initial schedules could be built.")
             return
 
-        non_dominated_sort(self.population)
-        front = self.pareto_front()
-        this_gen_fitness = self._calculate_this_gen_fitness(front)
-        self.fitness_history.append(this_gen_fitness)
-        self.logger.info("Created %d valid schedules.", len(self.population))
+        self.population = init_pop
 
     def generation(self) -> None:
         """Perform a single generation step of the genetic algorithm."""
-        self.logger.info("GA is in Evolving state.")
-        if not self.population or not self.population[0].fitness:
-            self.logger.warning("Initial population has no valid individuals. Stopping evolution.")
-            return
+        non_dominated_sort(self.population)
+        self.population.sort(key=lambda p: (p.rank, -p.crowding))
+        this_gen_fitness = self._update_fitness_history()
+        num_offspring = self.ga_parameters.population_size - self.ga_parameters.elite_size
 
         for generation in range(self.ga_parameters.generations):
-            combined_population = self.population + self.evolve(self.ga_parameters.population_size)
-            non_dominated_sort(combined_population)
-            self.population = list(self.elitism.select(combined_population, self.ga_parameters.population_size))
+            elites = list(self.elitism.select(self.population, self.ga_parameters.elite_size))
+            offspring = self.evolve(num_offspring)
+            self.population = elites + offspring
 
-            if not (front := self.pareto_front()):
+            if not self.population:
                 self.logger.warning("No valid individuals in the current population.")
                 return
 
-            this_gen_fitness = self._calculate_this_gen_fitness(front)
-            self.fitness_history.append(this_gen_fitness)
+            non_dominated_sort(self.population)
+            self.population.sort(key=lambda p: (p.rank, -p.crowding))
+            this_gen_fitness = self._update_fitness_history()
+
             self._notify_gen_end(generation, this_gen_fitness)
+
+    def mutate_population(self, population: Population) -> None:
+        """Mutate the population by applying mutations to each individual."""
+        low = self.ga_parameters.mutation_chance_low
+        high = self.ga_parameters.mutation_chance_high
+
+        for individual in population:
+            mutation_chance = low if individual.rank == 0 else high
+            if mutation_chance > self.rng.random():
+                m = self.rng.choice(self.mutations)
+                mutation_success = m.mutate(individual)
+                if mutation_success:
+                    self._notify_mutation(m.__class__.__name__, successful=True)
+                    self._mutation_ratio["success"] = self._mutation_ratio.get("success", 0) + 1
+                    if (new_fitness := self.fitness.evaluate(individual)) is not None:
+                        individual.fitness = new_fitness
+                else:
+                    self._notify_mutation(m.__class__.__name__, successful=False)
+                    self._mutation_ratio["failure"] = self._mutation_ratio.get("failure", 0) + 1
 
     def evolve(self, num_offspring: int) -> Population:
         """Evolve the population to create a new generation."""
         new_population: Population = []
-        attempts, max_attempts = 0, num_offspring * 4
 
-        while len(new_population) < num_offspring and attempts < max_attempts:
-            new_population.append(self.produce_offspring())
-            attempts += 1
+        while len(new_population) < num_offspring:
+            if child := self.crossover_population():
+                new_population.append(child)
 
-        if len(new_population) < num_offspring:
-            logger.warning("Only created %d/%d offspring.", len(new_population), num_offspring)
+                if len(new_population) >= num_offspring:
+                    break
+
+        non_dominated_sort(new_population)
+        self.mutate_population(new_population)
 
         return new_population
 
-    def produce_offspring(self) -> Schedule:
+    def crossover_population(self) -> Schedule | None:
         """Evolve the population by one individual and return the best of the parents and child."""
-        parents: list[Schedule] = list(self.selection.select(self.population, 2))
-        max_parent = max(parents, key=lambda p: sum(p.fitness))
-        child: Schedule | None = None
-        total_last_avg = sum(self.fitness_history[-1]) if self.fitness_history else 0
+        selector = self.rng.choice(self.selections)
+        parents: list[Schedule] = list(selector.select(self.population, 2))
+        child: Schedule = None
 
-        if self.rng.random() < self.ga_parameters.crossover_chance:
+        if self.ga_parameters.crossover_chance > self.rng.random():
             c = self.rng.choice(self.crossovers)
             child = c.crossover(parents)
-            successful = bool(child)
-            self._notify_crossover(c.__class__.__name__, successful=successful)
-            if successful:
+            if child is not None:
+                self._notify_crossover(f"{c.__class__.__name__} 0", successful=True)
                 self._crossover_ratio["success"] = self._crossover_ratio.get("success", 0) + 1
+                if (score := self.fitness.evaluate(child)) is not None:
+                    child.fitness = score
             else:
+                self._notify_crossover(f"{c.__class__.__name__} 0", successful=False)
                 self._crossover_ratio["failure"] = self._crossover_ratio.get("failure", 0) + 1
 
-        if child is None:
-            child = max_parent.clone()
+        return child if child else min(parents, key=lambda p: (p.rank, -p.crowding)).clone()
 
-        if child.fitness is None:
-            if (score := self.fitness.evaluate(child)) is None:
-                return max_parent.clone()
-            child.fitness = score
-
-        total_score = sum(child.fitness)
-        mutation_chance = (
-            self.ga_parameters.mutation_chance_low
-            if total_score >= total_last_avg
-            else self.ga_parameters.mutation_chance_high
-        )
-
-        if self.rng.random() < mutation_chance:
-            m = self.rng.choice(self.mutations)
-            m.mutate(child)
-            if (new_fitness := self.fitness.evaluate(child)) is not None:
-                child.fitness = new_fitness
-                self._notify_mutation(m.__class__.__name__, successful=True)
-            else:
-                self._notify_mutation(m.__class__.__name__, successful=False)
-
-        return child
+    def _notify_on_start(self, num_generations: int) -> None:
+        """Notify observers when the genetic algorithm run starts."""
+        for obs in self.observers:
+            obs.on_start(num_generations)
 
     def _notify_gen_end(self, generation: int, best_fitness: tuple[float, ...]) -> None:
         """Notify observers at the end of a generation."""
@@ -230,11 +258,6 @@ class GA:
         """Notify observers when a crossover is applied."""
         for obs in self.observers:
             obs.on_crossover(crossover_name, successful=successful)
-
-    def _notify_on_start(self, num_generations: int) -> None:
-        """Notify observers when the genetic algorithm run starts."""
-        for obs in self.observers:
-            obs.on_start(num_generations)
 
     def _notify_on_finish(self, pop: Population, front: Population) -> None:
         """Notify observers when the genetic algorithm run is finished."""

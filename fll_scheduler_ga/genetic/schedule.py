@@ -80,17 +80,19 @@ class Schedule:
 
     def get_matches(self) -> dict[str, list[tuple[Event, Event, Team, Team]]]:
         """Get all matches in the schedule."""
-        if self._cached_matches is None:
-            self._cached_matches = defaultdict(list)
+        if self._cached_matches is not None:
+            return self._cached_matches
 
-            for event1, team1 in self._schedule.items():
-                if not (event2 := event1.paired_event) or event1.location.side != 1:
-                    continue
+        self._cached_matches = defaultdict(list)
 
-                rt = event1.round_type
+        for event1, team1 in self._schedule.items():
+            if not (event2 := event1.paired_event) or event1.location.side != 1:
+                continue
 
-                if team2 := self._schedule[event2]:
-                    self._cached_matches[rt].append((event1, event2, team1, team2))
+            rt = event1.round_type
+
+            if team2 := self._schedule[event2]:
+                self._cached_matches[rt].append((event1, event2, team1, team2))
 
         return self._cached_matches
 

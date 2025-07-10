@@ -7,7 +7,7 @@ from pathlib import Path
 from random import Random
 
 from fll_scheduler_ga.config.config import get_config_parser, load_tournament_config
-from fll_scheduler_ga.data_model.event import EventFactory, EventMap
+from fll_scheduler_ga.data_model.event import EventConflicts, EventFactory
 from fll_scheduler_ga.data_model.team import Team, TeamFactory
 from fll_scheduler_ga.genetic.fitness import FitnessEvaluator
 from fll_scheduler_ga.genetic.ga import GA, RANDOM_SEED
@@ -203,25 +203,30 @@ def generate_summary_report(schedule: Schedule, evaluator: FitnessEvaluator, pat
         f.write(f"  - Team with worst break time distribution: Team {worst_team.identity}\n")
 
 
-def generate_pareto_summary(pareto_front: list[Schedule], evaluator: FitnessEvaluator, path: Path) -> None:
+def generate_pareto_summary(front: list[Schedule], evaluator: FitnessEvaluator, path: Path) -> None:
     """Generate a summary of the Pareto front."""
-    schedule_enum_digits = len(str(len(pareto_front)))
+    schedule_enum_digits = len(str(len(front)))
     obj_names = evaluator.objectives
-    pareto_front.sort(key=lambda s: (s.crowding, s.fitness[0], s.fitness[1], s.fitness[2]), reverse=True)
+    front.sort(key=lambda s: (s.rank, -s.crowding))
     with path.open("w", encoding="utf-8") as f:
-        for i, schedule in enumerate(pareto_front, start=1):
+        f.write("Schedule, ID, Hash, Rank, Crowding, ")
+        for name in obj_names:
+            f.write(f"{name}, ")
+        f.write("Sum\n")
+        for i, schedule in enumerate(front, start=1):
+            rank = schedule.rank
             crowding = schedule.crowding
             if crowding == float("inf"):
-                crowding = 1.000
-            f.write(f"Schedule {i:0{schedule_enum_digits}}: ({id(schedule)}) - Crowding Distance: {crowding:.4f} ")
-            for name, score in zip(obj_names, schedule.fitness, strict=False):
-                f.write(f"| {name}: {score:.4f} |")
-            f.write(f"| Sum: {sum(schedule.fitness):.4f}|\n")
+                crowding = 9.9999
+
+            f.write(f"{i:0{schedule_enum_digits}}, {id(schedule)}, {hash(schedule)}, {rank}, {crowding:.4f}, ")
+            for score in schedule.fitness:
+                f.write(f"{score:.4f}, ")
+            f.write(f"{sum(schedule.fitness):.4f}\n")
 
 
 def summary(args: argparse.Namespace, ga: GA) -> None:
     """Run the fll-scheduler-ga application and generate summary reports."""
-    front = ga.pareto_front()
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     logger.info("Output directory: %s", output_dir)
@@ -230,35 +235,11 @@ def summary(args: argparse.Namespace, ga: GA) -> None:
     plot.plot_fitness(save_dir=output_dir / "fitness_vs_generation.png")
     plot.plot_pareto_front(save_dir=output_dir / "pareto_front_tradeoffs.png")
 
-    # break_time = bt
-    # opponent_variety = ov
-    # table_consistency = tc
-    try:
-        idx_bt = ga.fitness.objectives.index("BreakTime")
-        idx_ov = ga.fitness.objectives.index("OpponentVariety")
-        idx_tc = ga.fitness.objectives.index("TableConsistency")
-    except ValueError:
-        logger.exception("Could not find a required soft constraint")
-        return
-
-    export_criteria = [
-        ("best_break_time", lambda s: s.fitness[idx_bt]),
-        ("best_opponent_variety", lambda s: s.fitness[idx_ov]),
-        ("best_table_consistency", lambda s: s.fitness[idx_tc]),
-        ("best_overall_score", lambda s: sum(s.fitness)),
-        ("most_crowded", lambda s: s.crowding if s.crowding != float("inf") else -1),
-        ("best_bt_and_ov", lambda s: (s.fitness[idx_bt], s.fitness[idx_ov])),
-        ("best_bt_and_tc", lambda s: (s.fitness[idx_bt], s.fitness[idx_tc])),
-    ]
-
     schedules_to_export = {}
-    for name, key_func in export_criteria:
-        best_schedule = max(front, key=key_func)
-        schedules_to_export[name] = best_schedule
-
+    ga.population.sort(key=lambda s: (s.rank, -s.crowding))
     if args.save_all_schedules:
-        for i, schedule in enumerate(front):
-            schedules_to_export[f"front_schedule_{i + 1}"] = schedule
+        for i, schedule in enumerate(ga.population):
+            schedules_to_export[f"front_{schedule.rank}_schedule_{i + 1}"] = schedule
 
     for name, schedule in schedules_to_export.items():
         suffixes = (
@@ -277,7 +258,7 @@ def summary(args: argparse.Namespace, ga: GA) -> None:
         txt_subdir.mkdir(parents=True, exist_ok=True)
         generate_summary_report(schedule, ga.fitness, txt_subdir / f"{name}_summary.txt")
 
-    generate_pareto_summary(front, ga.fitness, output_dir / "pareto_summary.txt")
+    generate_pareto_summary(ga.population, ga.fitness, output_dir / "pareto_summary.csv")
 
 
 def setup_environment(args: argparse.Namespace) -> tuple[dict, ConfigParser, EventFactory]:
@@ -305,9 +286,9 @@ def setup_rng(args: argparse.Namespace) -> Random:
 
 def create_ga_instance(config: dict, event_factory: EventFactory, ga_parameters: GaParameters, rng: Random) -> GA:
     """Create and return a GA instance with the provided configuration."""
-    event_conflicts = EventMap(event_factory)
+    event_conflicts = EventConflicts(event_factory)
     team_factory = TeamFactory(config, event_conflicts.conflicts)
-    selection = TournamentSelectionNSGA2(ga_parameters, rng)
+    selections = (TournamentSelectionNSGA2(ga_parameters, rng),)
     elitism = ElitismSelectionNSGA2(ga_parameters, rng)
 
     crossovers = (
@@ -340,7 +321,7 @@ def create_ga_instance(config: dict, event_factory: EventFactory, ga_parameters:
         rng=rng,
         event_factory=event_factory,
         team_factory=team_factory,
-        selection=selection,
+        selections=selections,
         elitism=elitism,
         crossovers=crossovers,
         mutations=mutations,

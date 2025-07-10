@@ -54,16 +54,24 @@ class SwapTeamMutation(Mutation):
             return None, None
 
         target_rtype = self.rng.choice(list(matches.keys()))
-        event1_a, _, team1_a, team1_b = matches[target_rtype].pop()
+        match_pool = matches[target_rtype]
+        self.rng.shuffle(match_pool)
 
-        for event2_a, _, team2_a, team2_b in matches[target_rtype]:
-            if self._validate_swap(event1_a, event2_a, same_timeslot=same_timeslot, same_location=same_location):
-                if (
-                    team1_a.identity in (team2_a.identity, team2_b.identity)
-                    or team2_a.identity == team1_b.identity
-                    or team1_a.conflicts(event2_a)
-                    or team2_a.conflicts(event1_a)
+        for i, match1_data in enumerate(match_pool):
+            event1_a, _, team1_a, team1_b = match1_data
+
+            for match2_data in match_pool[i + 1 :]:
+                event2_a, _, team2_a, team2_b = match2_data
+
+                if not self._validate_swap(
+                    event1_a, event2_a, same_timeslot=same_timeslot, same_location=same_location
                 ):
+                    continue
+
+                if team1_a.identity in (team2_a.identity, team2_b.identity) or team2_a.identity == team1_b.identity:
+                    continue
+
+                if team1_a.conflicts(event2_a) or team2_a.conflicts(event1_a):
                     continue
 
                 return (event1_a, team1_a, team1_b), (event2_a, team2_a, team2_b)
@@ -99,36 +107,36 @@ class SwapTeamMutation(Mutation):
 class SwapTeamWithinTimeSlot(SwapTeamMutation):
     """Mutation operator for swapping teams within the same time slot in the FLL Scheduler GA."""
 
-    def mutate(self, child: Schedule) -> None:
+    def mutate(self, child: Schedule) -> bool:
         """Perform a swap-team-within-time-slot mutation on a child schedule.
 
         Affects: OpponentVariety, TableConsistency
         """
-        super(SwapTeamWithinTimeSlot, self).mutate(child, same_timeslot=True)
+        return super(SwapTeamWithinTimeSlot, self).mutate(child, same_timeslot=True)
 
 
 @dataclass(slots=True, frozen=True)
 class SwapTeamWithinLocation(SwapTeamMutation):
     """Mutation operator for teams in the FLL Scheduler GA."""
 
-    def mutate(self, child: Schedule) -> None:
+    def mutate(self, child: Schedule) -> bool:
         """Perform a swap-team-within-time-slot mutation on a child schedule.
 
         Affects: OpponentVariety, TableConsistency
         """
-        super(SwapTeamWithinLocation, self).mutate(child, same_location=True)
+        return super(SwapTeamWithinLocation, self).mutate(child, same_location=True)
 
 
 @dataclass(slots=True, frozen=True)
 class SwapTeamAcrossLocation(SwapTeamMutation):
     """Mutation operator for teams in the FLL Scheduler GA."""
 
-    def mutate(self, child: Schedule) -> None:
+    def mutate(self, child: Schedule) -> bool:
         """Perform a swap-team-within-time-slot mutation on a child schedule.
 
         Affects: OpponentVariety, TableConsistency
         """
-        super(SwapTeamAcrossLocation, self).mutate(child)
+        return super(SwapTeamAcrossLocation, self).mutate(child)
 
 
 @dataclass(slots=True, frozen=True)
@@ -137,17 +145,27 @@ class SwapMatchMutation(Mutation):
 
     def _get_swap_candidates(
         self, child: Schedule, *, same_timeslot: bool, same_location: bool
-    ) -> tuple[tuple[Event, Event, Team, Team], tuple[Event, Event, Team, Team]] | tuple[None, None]:
+    ) -> tuple[tuple[Event, Event, Team, Team] | None]:
         """Get two matches to swap in the child schedule."""
         matches = child.get_matches()
         if len(matches) < 2:
             return None, None
 
         target_rtype = self.rng.choice(list(matches.keys()))
-        event1_a, event1_b, team1_a, team1_b = matches[target_rtype].pop()
+        match_pool = matches[target_rtype]
+        self.rng.shuffle(match_pool)
 
-        for event2_a, event2_b, team2_a, team2_b in matches[target_rtype]:
-            if self._validate_swap(event1_a, event2_a, same_timeslot=same_timeslot, same_location=same_location):
+        for i, match1_data in enumerate(match_pool):
+            event1_a, event1_b, team1_a, team1_b = match1_data
+
+            for match2_data in match_pool[i + 1 :]:
+                event2_a, event2_b, team2_a, team2_b = match2_data
+
+                if not self._validate_swap(
+                    event1_a, event2_a, same_timeslot=same_timeslot, same_location=same_location
+                ):
+                    continue
+
                 if (
                     team1_a.conflicts(event2_a)
                     or team1_b.conflicts(event2_b)
@@ -187,33 +205,33 @@ class SwapMatchMutation(Mutation):
 class SwapMatchWithinTimeSlot(SwapMatchMutation):
     """Mutation operator for swapping matches within the same time slot in the FLL Scheduler GA."""
 
-    def mutate(self, child: Schedule) -> None:
+    def mutate(self, child: Schedule) -> bool:
         """Perform a swap-team-within-time-slot mutation on a child schedule.
 
         Affects: OpponentVariety, TableConsistency
         """
-        super(SwapMatchWithinTimeSlot, self).mutate(child, same_timeslot=True)
+        return super(SwapMatchWithinTimeSlot, self).mutate(child, same_timeslot=True)
 
 
 @dataclass(slots=True, frozen=True)
 class SwapMatchWithinLocation(SwapMatchMutation):
     """Mutation operator for team matches in the FLL Scheduler GA."""
 
-    def mutate(self, child: Schedule) -> None:
+    def mutate(self, child: Schedule) -> bool:
         """Perform a swap-team-within-time-slot mutation on a child schedule.
 
         Affects: OpponentVariety, TableConsistency
         """
-        super(SwapMatchWithinLocation, self).mutate(child, same_location=True)
+        return super(SwapMatchWithinLocation, self).mutate(child, same_location=True)
 
 
 @dataclass(slots=True, frozen=True)
 class SwapMatchAcrossLocation(SwapMatchMutation):
     """Mutation operator for team matches in the FLL Scheduler GA."""
 
-    def mutate(self, child: Schedule) -> None:
+    def mutate(self, child: Schedule) -> bool:
         """Perform a swap-team-within-time-slot mutation on a child schedule.
 
         Affects: OpponentVariety, TableConsistency
         """
-        super(SwapMatchAcrossLocation, self).mutate(child)
+        return super(SwapMatchAcrossLocation, self).mutate(child)
