@@ -131,10 +131,6 @@ def load_tournament_config(parser: ConfigParser) -> TournamentConfig:
         msg = "No rounds defined in the configuration file."
         raise ValueError(msg)
 
-    config = TournamentConfig(
-        num_teams=num_teams,
-        rounds=parsed_rounds,
-        round_requirements=round_reqs,
-    )
+    config = TournamentConfig(num_teams, parsed_rounds, round_reqs)
     logger.info("Loaded tournament configuration: %s", config)
     return config
