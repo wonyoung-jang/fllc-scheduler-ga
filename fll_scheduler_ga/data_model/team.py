@@ -108,10 +108,6 @@ class Team:
         """Check if the team still needs to participate in a given round type."""
         return self.round_types[round_type]
 
-    def has_location(self, event: Event) -> bool:
-        """Check if the team has a location for its events."""
-        return any(event.location == e.location for e in self.events)
-
     def switch_event(self, event_to_unbook: Event, new_event: Event) -> None:
         """Switch booking for a team, unbooking the current event and booking the new one."""
         self.remove_event(event_to_unbook)
@@ -172,7 +168,7 @@ class Team:
             bool: True if there is a conflict, False otherwise.
 
         """
-        if not (potential_conflicts := self.event_conflict_map.get(new_event.identity, set())):
+        if not (potential_conflicts := self.event_conflict_map.get(new_event.identity)):
             return False
 
         if self._event_ids.intersection(potential_conflicts):
@@ -192,7 +188,9 @@ class Team:
             (self.events[i].timeslot.start - self.events[i - 1].timeslot.stop).total_seconds() // 60
             for i in range(1, len(self.events))
         ]
+
         n = len(break_times)
+
         if n == 0:
             return 1.0
 
@@ -202,6 +200,7 @@ class Team:
         for b in break_times:
             if b == 0:
                 zero_breaks += 1
+
             sum_x += b
 
         if sum_x <= 0:
@@ -224,7 +223,8 @@ class Team:
 
         num_unique_opponents = len(set(self.opponents))
         num_total_opponents = len(self.opponents)
-        opponent_ratio = num_unique_opponents / num_total_opponents if num_total_opponents > 0 else 1.0
+        opponent_ratio = num_unique_opponents / num_total_opponents if num_total_opponents else 1.0
+
         self._cached_opponent_score = opponent_ratio
         return self._cached_opponent_score
 
@@ -235,6 +235,7 @@ class Team:
 
         num_unique_locations = len(set(self.locations))
         num_total_locations = len(self.locations)
-        table_ratio = 1 / num_unique_locations if num_total_locations > 0 else 1.0
+        table_ratio = 1 / num_unique_locations if num_total_locations else 1.0
+
         self._cached_table_score = table_ratio
         return self._cached_table_score
