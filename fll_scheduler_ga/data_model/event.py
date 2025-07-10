@@ -80,9 +80,17 @@ class EventFactory:
         for _ in range(r.num_slots):
             stop = start + r.duration_minutes
             time_cache_key = (start, stop)
+
             timeslot = self._cached_timeslots.setdefault(
-                time_cache_key, TimeSlot(start, stop, start.strftime(HHMM_FMT), stop.strftime(HHMM_FMT))
+                time_cache_key,
+                TimeSlot(
+                    start,
+                    stop,
+                    start.strftime(HHMM_FMT),
+                    stop.strftime(HHMM_FMT),
+                ),
             )
+
             start = stop
 
             for i in range(1, r.num_locations + 1):
@@ -105,22 +113,23 @@ class EventFactory:
 
 
 @dataclass(slots=True)
-class EventMap:
-    """Mapping of event identities to Event instances."""
+class EventConflicts:
+    """Mapping of event identities to their conflicting events."""
 
     event_factory: EventFactory
-    events: list[Event] = field(default=None, init=False, repr=False)
     conflicts: dict[int, set[int]] = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to create the event availability map."""
-        self.events = sorted(self.event_factory.flat_list())
-        for event in self.events:
+        events = sorted(self.event_factory.flat_list())
+
+        for event in events:
             logger.debug("Event %d: %s", event.identity, event)
             self.conflicts[event.identity] = {
                 other.identity
-                for other in self.events
+                for other in events
                 if other.identity != event.identity and event.timeslot.overlaps(other.timeslot)
             }
+
         for k, v in self.conflicts.items():
             logger.debug("Event %d conflicts with %d other events: %s", k, len(v), v)
