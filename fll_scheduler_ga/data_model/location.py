@@ -3,10 +3,10 @@
 from abc import ABC
 from dataclasses import dataclass, field
 
-_ASCII_OFFSET = 64
+ASCII_OFFSET = 64
 
 
-@dataclass(slots=True, unsafe_hash=True)
+@dataclass(slots=True, frozen=True)
 class Location(ABC):
     """Data model for a location in the FLL Scheduler GA."""
 
@@ -14,7 +14,7 @@ class Location(ABC):
     teams_per_round: int
 
 
-@dataclass(slots=True, unsafe_hash=True)
+@dataclass(slots=True, frozen=True)
 class Room(Location):
     """Data model for a room in the FLL Scheduler GA."""
 
@@ -23,7 +23,7 @@ class Room(Location):
         return f"{self.__class__.__name__} {self.identity}"
 
 
-@dataclass(slots=True, unsafe_hash=True)
+@dataclass(slots=True, frozen=True)
 class Table(Location):
     """Data model for a table in the FLL Scheduler GA."""
 
@@ -31,7 +31,7 @@ class Table(Location):
 
     def __str__(self) -> str:
         """Represent the Table as a string."""
-        return f"{self.__class__.__name__} {chr(_ASCII_OFFSET + self.identity)}{self.side}"
+        return f"{self.__class__.__name__} {chr(ASCII_OFFSET + self.identity)}{self.side}"
 
 
 def get_location_type(teams_per_round: int) -> Room | Table:
