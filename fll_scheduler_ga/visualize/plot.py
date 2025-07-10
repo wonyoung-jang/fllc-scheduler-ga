@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from ..genetic.ga import GA
@@ -53,6 +54,12 @@ class Plot:
         plt = get_matplotlib()
         fig, ax = plt.subplots(figsize=(12, 7))
         history_df.plot(kind="line", ax=ax, linewidth=2.5, alpha=0.8)
+        x = np.arange(len(history_df))
+        for col in history_df.columns:
+            y = history_df[col].to_numpy()
+            z = np.polyfit(x, y, 2)
+            p = np.poly1d(z)
+            ax.plot(x, p(x), linestyle="--", linewidth=2, label=f"{col} Trend")
         ax.set(title=title, xlabel=xlabel, ylabel=ylabel)
         ax.legend(title="Objectives", fontsize=10)
         return self._finalize(fig, save_dir, "fitness_plot.png")
