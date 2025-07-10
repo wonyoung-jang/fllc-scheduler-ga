@@ -114,6 +114,11 @@ class GA:
             mutation_total,
             f"{mutation_success_percentage:.2%}",
         )
+        self.logger.info(
+            "Unique/Total individuals: %s/%s",
+            len({hash(s) for s in self.population}),
+            len(self.population),
+        )
         return True
 
     def initialize_population(self) -> None:
@@ -159,13 +164,13 @@ class GA:
     def generation(self) -> None:
         """Perform a single generation step of the genetic algorithm."""
         non_dominated_sort(self.population)
-        self.population.sort(key=lambda p: (p.rank, -p.crowding))
         this_gen_fitness = self._update_fitness_history()
         num_offspring = self.ga_parameters.population_size - self.ga_parameters.elite_size
 
         for generation in range(self.ga_parameters.generations):
             elites = list(self.elitism.select(self.population, self.ga_parameters.elite_size))
-            offspring = self.evolve(num_offspring)
+            elite_hashes = {hash(e) for e in elites}
+            offspring = self.evolve(num_offspring, elite_hashes)
             self.population = elites + offspring
 
             if not self.population:
@@ -173,7 +178,6 @@ class GA:
                 return
 
             non_dominated_sort(self.population)
-            self.population.sort(key=lambda p: (p.rank, -p.crowding))
             this_gen_fitness = self._update_fitness_history()
 
             self._notify_gen_end(generation, this_gen_fitness)
@@ -197,16 +201,27 @@ class GA:
                     self._notify_mutation(m.__class__.__name__, successful=False)
                     self._mutation_ratio["failure"] = self._mutation_ratio.get("failure", 0) + 1
 
-    def evolve(self, num_offspring: int) -> Population:
+    def evolve(self, num_offspring: int, existing_hashes: set[int]) -> Population:
         """Evolve the population to create a new generation."""
         new_population: Population = []
+        child_hashes = existing_hashes.copy()
+        attempts, max_attempts = 0, num_offspring * 9999
 
-        while len(new_population) < num_offspring:
+        while len(new_population) < num_offspring and attempts < max_attempts:
             if child := self.crossover_population():
-                new_population.append(child)
+                child_hash = hash(child)
+                if child_hash not in child_hashes:
+                    child_hashes.add(child_hash)
+                    new_population.append(child)
+            attempts += 1
 
-                if len(new_population) >= num_offspring:
-                    break
+        if len(new_population) < num_offspring:
+            self.logger.debug(
+                "Only %d offspring created after %d attempts, expected %d.",
+                len(new_population),
+                attempts,
+                num_offspring,
+            )
 
         non_dominated_sort(new_population)
         self.mutate_population(new_population)
@@ -218,20 +233,18 @@ class GA:
         selector = self.rng.choice(self.selections)
         parents: list[Schedule] = list(selector.select(self.population, 2))
         child: Schedule = None
-
         if self.ga_parameters.crossover_chance > self.rng.random():
             c = self.rng.choice(self.crossovers)
             child = c.crossover(parents)
             if child is not None:
                 self._notify_crossover(f"{c.__class__.__name__} 0", successful=True)
                 self._crossover_ratio["success"] = self._crossover_ratio.get("success", 0) + 1
-                if (score := self.fitness.evaluate(child)) is not None:
-                    child.fitness = score
+                child.fitness = self.fitness.evaluate(child)
             else:
                 self._notify_crossover(f"{c.__class__.__name__} 0", successful=False)
                 self._crossover_ratio["failure"] = self._crossover_ratio.get("failure", 0) + 1
 
-        return child if child else min(parents, key=lambda p: (p.rank, -p.crowding)).clone()
+        return child
 
     def _notify_on_start(self, num_generations: int) -> None:
         """Notify observers when the genetic algorithm run starts."""

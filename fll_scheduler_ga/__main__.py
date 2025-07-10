@@ -45,7 +45,6 @@ def create_parser() -> argparse.ArgumentParser:
         "log_file": "fll_scheduler_ga.log",
         "loglevel_file": "DEBUG",
         "loglevel_console": "INFO",
-        "save_all_schedules": False,
     }
     parser = argparse.ArgumentParser(
         description="Generate a tournament schedule using a Genetic Algorithm.",
@@ -81,12 +80,6 @@ def create_parser() -> argparse.ArgumentParser:
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         default=_default_values["loglevel_console"],
         help="Logging level for the console output.",
-    )
-    parser.add_argument(
-        "--save_all_schedules",
-        type=bool,
-        default=_default_values["save_all_schedules"],
-        help="Whether to save all schedules.",
     )
     parser.add_argument(
         "--seed",
@@ -235,13 +228,10 @@ def summary(args: argparse.Namespace, ga: GA) -> None:
     plot.plot_fitness(save_dir=output_dir / "fitness_vs_generation.png")
     plot.plot_pareto_front(save_dir=output_dir / "pareto_front_tradeoffs.png")
 
-    schedules_to_export = {}
     ga.population.sort(key=lambda s: (s.rank, -s.crowding))
-    if args.save_all_schedules:
-        for i, schedule in enumerate(ga.population):
-            schedules_to_export[f"front_{schedule.rank}_schedule_{i + 1}"] = schedule
 
-    for name, schedule in schedules_to_export.items():
+    for i, schedule in enumerate(ga.pareto_front(), start=1):
+        name = f"front_{schedule.rank}_schedule_{i}"
         suffixes = (
             "csv",
             "html",

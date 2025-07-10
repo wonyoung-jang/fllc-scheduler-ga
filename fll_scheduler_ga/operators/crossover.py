@@ -42,7 +42,7 @@ class EventCrossover(Crossover):
     def crossover(self, parents: list[Schedule]) -> Schedule | None:
         """Crossover two parents to produce a child."""
         child = None
-        p1, p2 = parents
+        p1, p2 = self.rng.sample(parents, k=2)
 
         if child1 := self._produce_child(p1, p2):
             child = child1

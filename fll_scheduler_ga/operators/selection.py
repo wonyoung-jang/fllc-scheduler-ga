@@ -28,7 +28,7 @@ class TournamentSelectionNSGA2(Selection):
         """Select individuals using NSGA-II tournament selection."""
         for _ in range(num_parents):
             tournament = self.rng.sample(population, self.ga_parameters.selection_size)
-            yield min(tournament, key=lambda p: (p.rank, -p.crowding))
+            yield min(tournament, key=lambda p: (p.rank, -p.crowding, -sum(p.fitness)))
 
 
 @dataclass(slots=True)
@@ -40,4 +40,5 @@ class ElitismSelectionNSGA2(Selection):
 
     def select(self, population: Population, population_size: int) -> Iterator[Schedule]:
         """Select the new generation based on non-dominated sorting and crowding distance."""
+        population.sort(key=lambda p: (p.rank, -p.crowding - sum(p.fitness)))
         yield from population[:population_size]

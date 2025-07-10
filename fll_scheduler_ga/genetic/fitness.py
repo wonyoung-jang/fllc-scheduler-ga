@@ -1,7 +1,6 @@
 """Fitness evaluator for the FLL Scheduler GA."""
 
 import logging
-import statistics
 from dataclasses import dataclass, field
 from enum import StrEnum
 
@@ -60,11 +59,8 @@ class FitnessEvaluator:
             ov_s.append(team.score_opponent_variety())
             tc_s.append(team.score_table_consistency())
 
-        bt_ndist = statistics.NormalDist.from_samples(bt_s)
-        ov_ndist = statistics.NormalDist.from_samples(ov_s)
-        tc_ndist = statistics.NormalDist.from_samples(tc_s)
-        bt_score = bt_ndist.mean * (1 - bt_ndist.stdev)
-        ov_score = ov_ndist.mean * (1 - ov_ndist.stdev)
-        tc_score = tc_ndist.mean * (1 - tc_ndist.stdev)
+        bt_score = sum(bt_s) / len(bt_s) if bt_s else 0.0
+        ov_score = sum(ov_s) / len(ov_s) if ov_s else 0.0
+        tc_score = sum(tc_s) / len(tc_s) if tc_s else 0.0
 
         return bt_score, ov_score, tc_score
