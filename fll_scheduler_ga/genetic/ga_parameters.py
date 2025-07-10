@@ -37,16 +37,16 @@ class GaParameters:
             logger.warning("Elite size cannot be negative, defaulting to 0.")
 
         if self.elite_size >= self.population_size:
-            self.elite_size = self.population_size // 10
+            self.elite_size = max(1, self.population_size // 10)
             logger.warning("Elite size is greater than or equal to population size, defaulting to 10%%")
 
         if self.selection_size < 2:
             self.selection_size = 2
             logger.warning("Selection size must be at least 2, defaulting to 2.")
 
-        if self.selection_size > self.population_size:
-            self.selection_size = self.population_size // 5
-            logger.warning("Selection size is greater than population size, defaulting to 20%%")
+        if self.selection_size >= self.population_size:
+            self.selection_size = max(2, self.population_size // 5)
+            logger.warning("Selection size is greater than or equal to population size, defaulting to 20%%")
 
         if not (0.0 <= self.mutation_chance_low <= 1.0):
             self.mutation_chance_low = 0.2
@@ -57,7 +57,8 @@ class GaParameters:
             logger.warning("Mutation chance high must be between 0.0 and 1.0, defaulting to 0.8.")
 
         if self.mutation_chance_low > self.mutation_chance_high:
-            self.mutation_chance_low = self.mutation_chance_high - 0.1
+            self.mutation_chance_low = 0.2
+            self.mutation_chance_high = 0.8
             logger.warning(
                 "Mutation chance low cannot be greater than mutation chance high, defaulting to 0.2 and 0.8."
             )
