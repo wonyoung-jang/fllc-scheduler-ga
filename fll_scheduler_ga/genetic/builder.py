@@ -53,7 +53,6 @@ class ScheduleBuilder:
         for event in events_for_round:
             for i, t in enumerate(teams_needing_round):
                 if not t.conflicts(event):
-                    t.add_event(event)
                     self.schedule[event] = t
                     teams_needing_round.pop(i)
                     break
@@ -78,9 +77,6 @@ class ScheduleBuilder:
                 continue
 
             team2 = self.rng.choice(available_for_side2)
-
-            team1.add_event(side1)
-            team2.add_event(side2)
 
             team1.add_opponent(team2)
             team2.add_opponent(team1)

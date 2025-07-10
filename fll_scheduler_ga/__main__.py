@@ -228,9 +228,10 @@ def summary(args: argparse.Namespace, ga: GA) -> None:
     plot.plot_fitness(save_dir=output_dir / "fitness_vs_generation.png")
     plot.plot_pareto_front(save_dir=output_dir / "pareto_front_tradeoffs.png")
 
-    ga.population.sort(key=lambda s: (s.rank, -s.crowding))
+    front = ga.pareto_front()
+    front.sort(key=lambda s: (s.rank, -s.crowding))
 
-    for i, schedule in enumerate(ga.pareto_front(), start=1):
+    for i, schedule in enumerate(front, start=1):
         name = f"front_{schedule.rank}_schedule_{i}"
         suffixes = (
             "csv",

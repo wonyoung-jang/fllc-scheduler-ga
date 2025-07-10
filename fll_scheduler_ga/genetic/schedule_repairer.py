@@ -133,13 +133,10 @@ class ScheduleRepairer:
 
     def populate_single(self, schedule: Schedule, event: Event, team: Team) -> None:
         """Populate a single event in the schedule."""
-        team.add_event(event)
         schedule[event] = team
 
     def populate_match(self, schedule: Schedule, event1: Event, event2: Event, team1: Team, team2: Team) -> None:
         """Populate a match event in the schedule."""
-        team1.add_event(event1)
-        team2.add_event(event2)
         team1.add_opponent(team2)
         team2.add_opponent(team1)
         schedule[event1] = team1

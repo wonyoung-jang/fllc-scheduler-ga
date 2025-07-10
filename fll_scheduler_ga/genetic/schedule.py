@@ -52,6 +52,7 @@ class Schedule:
     def __setitem__(self, event: Event, team: Team) -> None:
         """Assign a team to a specific event."""
         self._schedule[event] = team
+        team.add_event(event)
         self._cached_matches = None
         self._cached_all_teams = None
         self._hash = None
