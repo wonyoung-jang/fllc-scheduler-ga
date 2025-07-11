@@ -96,9 +96,8 @@ class SwapTeamMutation(Mutation):
         team2_b.switch_opponent(team2_a, team1_a)
 
         del child[event1_a]
-        child[event1_a] = team2_a
-
         del child[event2_a]
+        child[event1_a] = team2_a
         child[event2_a] = team1_a
 
         return True
@@ -193,11 +192,10 @@ class SwapMatchMutation(Mutation):
 
         del child[event1_a]
         del child[event1_b]
-        child[event1_a] = team2_a
-        child[event1_b] = team2_b
-
         del child[event2_a]
         del child[event2_b]
+        child[event1_a] = team2_a
+        child[event1_b] = team2_b
         child[event2_a] = team1_a
         child[event2_b] = team1_b
 
