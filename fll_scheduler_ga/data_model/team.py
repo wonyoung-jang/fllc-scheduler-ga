@@ -108,11 +108,6 @@ class Team:
         """Check if the team still needs to participate in a given round type."""
         return self.round_types[round_type]
 
-    def switch_event(self, event_to_unbook: Event, new_event: Event) -> None:
-        """Switch booking for a team, unbooking the current event and booking the new one."""
-        self.remove_event(event_to_unbook)
-        self.add_event(new_event)
-
     def remove_event(self, event: Event) -> None:
         """Unbook a team from an event."""
         self.round_types[event.round_type] += 1

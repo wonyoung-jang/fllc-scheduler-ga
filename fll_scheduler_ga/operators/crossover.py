@@ -68,7 +68,7 @@ class EventCrossover(Crossover):
             if (event2 := event1.paired_event) is None:
                 team = get_team_from_child(parent[event1])
                 if first or (not team.conflicts(event1) and team.needs_round(event1.round_type)):
-                    self.repairer.populate_single(child, event1, team)
+                    child[event1] = team
                 continue
 
             if event2 is not None and event1.location.side != 1:
@@ -83,7 +83,7 @@ class EventCrossover(Crossover):
                 and team1.needs_round(event1.round_type)
                 and team2.needs_round(event2.round_type)
             ):
-                self.repairer.populate_match(child, event1, event2, team1, team2)
+                child.add_match(event1, event2, team1, team2)
 
 
 @dataclass(slots=True)

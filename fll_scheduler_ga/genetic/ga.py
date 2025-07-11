@@ -56,6 +56,8 @@ class GA:
     _crossover_ratio: dict[str, int] = field(default_factory=dict, init=False, repr=False)
     _mutation_ratio: dict[str, int] = field(default_factory=dict, init=False, repr=False)
 
+    _best_schedules: dict[str, Schedule] = field(default_factory=dict, init=False)
+
     def pareto_front(self) -> Population:
         """Get the current Pareto front from the population."""
         if not self.population:
@@ -138,7 +140,7 @@ class GA:
         ]
 
         self.logger.info("Initializing population with %d individuals.", num_to_create)
-        attempts, max_attempts = 0, 10
+        attempts, max_attempts = 0, 1000
         init_pop: Population = []
         add_to_init_pop = init_pop.append
 
@@ -182,25 +184,6 @@ class GA:
 
             self._notify_gen_end(generation, this_gen_fitness)
 
-    def mutate_population(self, population: Population) -> None:
-        """Mutate the population by applying mutations to each individual."""
-        low = self.ga_parameters.mutation_chance_low
-        high = self.ga_parameters.mutation_chance_high
-
-        for individual in population:
-            mutation_chance = low if individual.rank == 0 else high
-            if mutation_chance > self.rng.random():
-                m = self.rng.choice(self.mutations)
-                mutation_success = m.mutate(individual)
-                if mutation_success:
-                    self._notify_mutation(m.__class__.__name__, successful=True)
-                    self._mutation_ratio["success"] = self._mutation_ratio.get("success", 0) + 1
-                    if (new_fitness := self.fitness.evaluate(individual)) is not None:
-                        individual.fitness = new_fitness
-                else:
-                    self._notify_mutation(m.__class__.__name__, successful=False)
-                    self._mutation_ratio["failure"] = self._mutation_ratio.get("failure", 0) + 1
-
     def evolve(self, num_offspring: int, existing_hashes: set[int]) -> Population:
         """Evolve the population to create a new generation."""
         new_population: Population = []
@@ -208,7 +191,7 @@ class GA:
         attempts, max_attempts = 0, num_offspring * 9999
 
         while len(new_population) < num_offspring and attempts < max_attempts:
-            if child := self.crossover_population():
+            if child := self.crossover_population(self.population):
                 child_hash = hash(child)
                 if child_hash not in child_hashes:
                     child_hashes.add(child_hash)
@@ -228,10 +211,29 @@ class GA:
 
         return new_population
 
-    def crossover_population(self) -> Schedule | None:
+    def mutate_population(self, population: Population) -> None:
+        """Mutate the population by applying mutations to each individual."""
+        low = self.ga_parameters.mutation_chance_low
+        high = self.ga_parameters.mutation_chance_high
+
+        for individual in population:
+            mutation_chance = low if individual.rank == 0 else high
+            if mutation_chance > self.rng.random():
+                m = self.rng.choice(self.mutations)
+                mutation_success = m.mutate(individual)
+                if mutation_success:
+                    self._notify_mutation(m.__class__.__name__, successful=True)
+                    self._mutation_ratio["success"] = self._mutation_ratio.get("success", 0) + 1
+                    if (new_fitness := self.fitness.evaluate(individual)) is not None:
+                        individual.fitness = new_fitness
+                else:
+                    self._notify_mutation(m.__class__.__name__, successful=False)
+                    self._mutation_ratio["failure"] = self._mutation_ratio.get("failure", 0) + 1
+
+    def crossover_population(self, population: Population) -> Schedule | None:
         """Evolve the population by one individual and return the best of the parents and child."""
         selector = self.rng.choice(self.selections)
-        parents: list[Schedule] = list(selector.select(self.population, 2))
+        parents: list[Schedule] = list(selector.select(population, 2))
         child: Schedule = None
         if self.ga_parameters.crossover_chance > self.rng.random():
             c = self.rng.choice(self.crossovers)

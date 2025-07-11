@@ -90,7 +90,7 @@ class ScheduleRepairer:
         for team in teams:
             for i, event in enumerate(open_events):
                 if not team.conflicts(event):
-                    self.populate_single(schedule, event, team)
+                    schedule[event] = team
                     open_events.pop(i)
                     break
 
@@ -116,28 +116,17 @@ class ScheduleRepairer:
             if not partner_found:
                 logger.debug("Could not find a match partner for team %d", team1.identity)
 
-    def _find_and_populate_match(self, team1: Team, team2: Team, open_events: list[Event], schedule: Schedule) -> None:
+    def _find_and_populate_match(self, t1: Team, t2: Team, open_events: list[Event], schedule: Schedule) -> None:
         """Find an open match slot for two teams and populate it."""
         for i, e1 in enumerate(open_events):
             e2 = e1.paired_event
 
-            if not team1.conflicts(e1) and not team2.conflicts(e2):
-                self.populate_match(schedule, e1, e2, team1, team2)
+            if not t1.conflicts(e1) and not t2.conflicts(e2):
+                schedule.add_match(e1, e2, t1, t2)
                 open_events.pop(i)
                 return
 
-            if not team1.conflicts(e2) and not team2.conflicts(e1):
-                self.populate_match(schedule, e2, e1, team1, team2)
+            if not t1.conflicts(e2) and not t2.conflicts(e1):
+                schedule.add_match(e2, e1, t1, t2)
                 open_events.pop(i)
                 return
-
-    def populate_single(self, schedule: Schedule, event: Event, team: Team) -> None:
-        """Populate a single event in the schedule."""
-        schedule[event] = team
-
-    def populate_match(self, schedule: Schedule, event1: Event, event2: Event, team1: Team, team2: Team) -> None:
-        """Populate a match event in the schedule."""
-        team1.add_opponent(team2)
-        team2.add_opponent(team1)
-        schedule[event1] = team1
-        schedule[event2] = team2

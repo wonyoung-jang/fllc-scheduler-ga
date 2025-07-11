@@ -90,15 +90,16 @@ class SwapTeamMutation(Mutation):
         event1_a, team1_a, team1_b = match1_data
         event2_a, team2_a, team2_b = match2_data
 
-        team1_a.switch_event(event1_a, event2_a)
-        team2_a.switch_event(event2_a, event1_a)
-
         team1_a.switch_opponent(team1_b, team2_b)
         team1_b.switch_opponent(team1_a, team2_a)
         team2_a.switch_opponent(team2_b, team1_b)
         team2_b.switch_opponent(team2_a, team1_a)
 
-        child[event1_a], child[event2_a] = team2_a, team1_a
+        del child[event1_a]
+        child[event1_a] = team2_a
+
+        del child[event2_a]
+        child[event2_a] = team1_a
 
         return True
 
@@ -190,13 +191,15 @@ class SwapMatchMutation(Mutation):
         event1_a, event1_b, team1_a, team1_b = match1_data
         event2_a, event2_b, team2_a, team2_b = match2_data
 
-        team1_a.switch_event(event1_a, event2_a)
-        team1_b.switch_event(event1_b, event2_b)
-        team2_a.switch_event(event2_a, event1_a)
-        team2_b.switch_event(event2_b, event1_b)
+        del child[event1_a]
+        del child[event1_b]
+        child[event1_a] = team2_a
+        child[event1_b] = team2_b
 
-        child[event1_a], child[event1_b] = team2_a, team2_b
-        child[event2_a], child[event2_b] = team1_a, team1_b
+        del child[event2_a]
+        del child[event2_b]
+        child[event2_a] = team1_a
+        child[event2_b] = team1_b
 
         return True
 

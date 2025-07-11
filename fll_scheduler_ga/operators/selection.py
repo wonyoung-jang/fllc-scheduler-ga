@@ -40,5 +40,5 @@ class ElitismSelectionNSGA2(Selection):
 
     def select(self, population: Population, population_size: int) -> Iterator[Schedule]:
         """Select the new generation based on non-dominated sorting and crowding distance."""
-        population.sort(key=lambda p: (p.rank, -p.crowding - sum(p.fitness)))
+        population.sort(key=lambda p: (p.rank, -p.crowding, -sum(p.fitness)))
         yield from population[:population_size]

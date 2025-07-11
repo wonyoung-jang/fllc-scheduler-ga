@@ -49,10 +49,35 @@ class Schedule:
             msg = f"The event {event} is not scheduled."
             raise KeyError(msg) from None
 
+    def __delitem__(self, event: Event) -> None:
+        """Remove a specific event from the schedule."""
+        if event not in self._schedule:
+            msg = f"The event {event} is not scheduled."
+            raise KeyError(msg)
+
+        team = self._schedule.pop(event)
+        team.remove_event(event)
+
+        self._cached_matches = None
+        self._cached_all_teams = None
+        self._hash = None
+
     def __setitem__(self, event: Event, team: Team) -> None:
         """Assign a team to a specific event."""
         self._schedule[event] = team
         team.add_event(event)
+
+        self._cached_matches = None
+        self._cached_all_teams = None
+        self._hash = None
+
+    def add_match(self, e1: Event, e2: Event, t1: Team, t2: Team) -> None:
+        """Add a match event to the schedule."""
+        self[e1] = t1
+        self[e2] = t2
+        t1.add_opponent(t2)
+        t2.add_opponent(t1)
+
         self._cached_matches = None
         self._cached_all_teams = None
         self._hash = None
@@ -65,18 +90,24 @@ class Schedule:
         """Iterate over the Events in the schedule."""
         return iter(self._schedule)
 
+    def __eq__(self, other: object) -> bool:
+        """Two Schedules are equal iff they assign the same teams to the same events."""
+        if not isinstance(other, Schedule):
+            return NotImplemented
+
+        self._schedule = dict(sorted(self._schedule.items()))
+        other._schedule = dict(sorted(other._schedule.items()))
+        return frozenset((e.identity, t.identity) for e, t in self._schedule.items()) == frozenset(
+            (e.identity, t.identity) for e, t in other._schedule.items()
+        )
+
     def __hash__(self) -> int:
-        """Return a hash of the schedule based on its teams."""
-        if self._hash is not None:
-            return self._hash
+        """Hash is based on the frozenset of (event_id, team_id) pairs."""
+        if self._hash is None:
+            self._schedule = dict(sorted(self._schedule.items()))
+            key = frozenset((e.identity, t.identity) for e, t in self._schedule.items())
+            self._hash = hash(key)
 
-        sched_hash = []
-        sorted_schedule = sorted(self._schedule.items(), key=lambda x: x[0].identity)
-
-        for e, t in sorted_schedule:
-            sched_hash.extend([e.identity, t.identity])
-
-        self._hash = hash(tuple(sched_hash))
         return self._hash
 
     def get_matches(self) -> dict[str, list[tuple[Event, Event, Team, Team]]]:

@@ -61,25 +61,16 @@ class ScheduleBuilder:
         """Book all events for a specific round type."""
         events_for_round = self.events.get(r.round_type, [])
         self.rng.shuffle(events_for_round)
-        all_teams = self.schedule.all_teams()
+        teams = self.schedule.all_teams()
 
         events = ((e, e.paired_event) for e in events_for_round if e.location.side == 1)
 
         for side1, side2 in events:
-            available_for_event = [t for t in all_teams if t.needs_round(r.round_type) and not t.conflicts(side1)]
+            available = [t for t in teams if t.needs_round(r.round_type) and not t.conflicts(side1)]
 
-            if not (available_for_side1 := available_for_event):
+            if len(available) < 2:
                 continue
 
-            team1 = self.rng.choice(available_for_side1)
+            team1, team2 = self.rng.sample(available, 2)
 
-            if not (available_for_side2 := [t for t in available_for_event if t.identity != team1.identity]):
-                continue
-
-            team2 = self.rng.choice(available_for_side2)
-
-            team1.add_opponent(team2)
-            team2.add_opponent(team1)
-
-            self.schedule[side1] = team1
-            self.schedule[side2] = team2
+            self.schedule.add_match(side1, side2, team1, team2)
