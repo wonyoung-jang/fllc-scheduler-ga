@@ -15,7 +15,7 @@ logger = getLogger(__name__)
 type TeamMap = dict[int, Team]
 type Individual = dict[Event, Team]
 
-ZERO_BREAK_PENALTY = 0.0001
+ZERO_BREAK_PENALTY = 10e-6
 
 
 @dataclass(slots=True, frozen=True)
@@ -71,6 +71,7 @@ class Team:
     _cached_break_time_score: float | None = field(default=None, repr=False)
     _cached_opponent_score: float | None = field(default=None, repr=False)
     _cached_table_score: float | None = field(default=None, repr=False)
+    _cached_theoretical_max_table_score: float | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to sort events and time slots."""
@@ -220,6 +221,9 @@ class Team:
         num_total_opponents = len(self.opponents)
         opponent_ratio = num_unique_opponents / num_total_opponents if num_total_opponents else 1.0
 
+        if num_unique_opponents == 1:
+            opponent_ratio = 0.0  # penalty for lack of variety
+
         self._cached_opponent_score = opponent_ratio
         return self._cached_opponent_score
 
@@ -228,9 +232,16 @@ class Team:
         if self._cached_table_score is not None:
             return self._cached_table_score
 
+        if self._cached_theoretical_max_table_score is None:
+            num_total_locations = len(self.locations)
+            self._cached_theoretical_max_table_score = 1 / (1 + (1 / num_total_locations))
+
         num_unique_locations = len(set(self.locations))
         num_total_locations = len(self.locations)
-        table_ratio = 1 / num_unique_locations if num_total_locations else 1.0
+        table_ratio = num_unique_locations / num_total_locations if num_total_locations else 1.0
 
-        self._cached_table_score = table_ratio
+        if num_unique_locations == num_total_locations:
+            table_ratio = 9999  # penalty for too much variety
+
+        self._cached_table_score = (1 / (1 + table_ratio)) / self._cached_theoretical_max_table_score
         return self._cached_table_score
