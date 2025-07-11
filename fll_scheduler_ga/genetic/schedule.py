@@ -1,7 +1,7 @@
 """Represents a schedule (individual) with its associated fitness score."""
 
 from collections import defaultdict
-from collections.abc import Generator, ItemsView, Iterator, ValuesView
+from collections.abc import Generator, ItemsView, KeysView, ValuesView
 from dataclasses import dataclass, field
 
 from ..data_model.event import Event
@@ -140,9 +140,9 @@ class Schedule:
             self._cached_all_teams = list(self._teams.values())
         return self._cached_all_teams
 
-    def keys(self) -> Iterator[Event]:
+    def keys(self) -> KeysView[Event]:
         """Return an iterator over the events (keys)."""
-        yield from self._schedule.keys()
+        return self._schedule.keys()
 
     def values(self) -> ValuesView[Team]:
         """Return an iterator over the assigned teams/matches (values)."""

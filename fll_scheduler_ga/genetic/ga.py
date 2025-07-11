@@ -56,7 +56,7 @@ class GA:
     _crossover_ratio: dict[str, int] = field(default_factory=dict, init=False, repr=False)
     _mutation_ratio: dict[str, int] = field(default_factory=dict, init=False, repr=False)
 
-    _best_schedules: dict[str, Schedule] = field(default_factory=dict, init=False)
+    best: Schedule | None = field(default=None, init=False)
 
     def pareto_front(self) -> Population:
         """Get the current Pareto front from the population."""
@@ -96,31 +96,7 @@ class GA:
         non_dominated_sort(self.population)
 
         self._notify_on_finish(self.population, self.pareto_front())
-        crossover_total = self._crossover_ratio.get("success", 0) + self._crossover_ratio.get("failure", 0)
-        crossover_success_percentage = (
-            self._crossover_ratio.get("success", 0) / crossover_total if crossover_total > 0 else 0.0
-        )
-        mutation_total = self._mutation_ratio.get("success", 0) + self._mutation_ratio.get("failure", 0)
-        mutation_success_percentage = (
-            self._mutation_ratio.get("success", 0) / mutation_total if mutation_total > 0 else 0.0
-        )
-        self.logger.info(
-            "Crossovers success ratio: %s/%s = %s",
-            self._crossover_ratio.get("success", 0),
-            crossover_total,
-            f"{crossover_success_percentage:.2%}",
-        )
-        self.logger.info(
-            "Mutations success ratio: %s/%s = %s",
-            self._mutation_ratio.get("success", 0),
-            mutation_total,
-            f"{mutation_success_percentage:.2%}",
-        )
-        self.logger.info(
-            "Unique/Total individuals: %s/%s",
-            len({hash(s) for s in self.population}),
-            len(self.population),
-        )
+
         return True
 
     def initialize_population(self) -> None:
@@ -181,8 +157,20 @@ class GA:
 
             non_dominated_sort(self.population)
             this_gen_fitness = self._update_fitness_history()
+            self.update_best_schedule_fitness()
 
             self._notify_gen_end(generation, this_gen_fitness)
+
+    def update_best_schedule_fitness(self) -> None:
+        """Update the best schedule fitness if a better one is found."""
+        if not (front := self.pareto_front()):
+            return
+
+        current_best = max(front, key=lambda s: sum(s.fitness))
+
+        if self.best is None or sum(current_best.fitness) > sum(self.best.fitness):
+            self.best = current_best.clone()
+            self.logger.debug("Initial best schedule set with fitness: %s", self.best.fitness)
 
     def evolve(self, num_offspring: int, existing_hashes: set[int]) -> Population:
         """Evolve the population to create a new generation."""
@@ -276,5 +264,30 @@ class GA:
 
     def _notify_on_finish(self, pop: Population, front: Population) -> None:
         """Notify observers when the genetic algorithm run is finished."""
+        crossover_total = self._crossover_ratio.get("success", 0) + self._crossover_ratio.get("failure", 0)
+        crossover_success_percentage = (
+            self._crossover_ratio.get("success", 0) / crossover_total if crossover_total > 0 else 0.0
+        )
+        mutation_total = self._mutation_ratio.get("success", 0) + self._mutation_ratio.get("failure", 0)
+        mutation_success_percentage = (
+            self._mutation_ratio.get("success", 0) / mutation_total if mutation_total > 0 else 0.0
+        )
+        self.logger.info(
+            "Crossovers success ratio: %s/%s = %s",
+            self._crossover_ratio.get("success", 0),
+            crossover_total,
+            f"{crossover_success_percentage:.2%}",
+        )
+        self.logger.info(
+            "Mutations success ratio: %s/%s = %s",
+            self._mutation_ratio.get("success", 0),
+            mutation_total,
+            f"{mutation_success_percentage:.2%}",
+        )
+        self.logger.info(
+            "Unique/Total individuals: %s/%s",
+            len({hash(s) for s in self.population}),
+            len(self.population),
+        )
         for obs in self.observers:
             obs.on_finish(pop, front)

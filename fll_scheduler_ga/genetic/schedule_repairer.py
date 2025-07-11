@@ -108,7 +108,8 @@ class ScheduleRepairer:
 
             for j, team2 in enumerate(team_pool):
                 if team1.identity != team2.identity:
-                    self._find_and_populate_match(team1, team2, open_events, schedule)
+                    if not self._find_and_populate_match(team1, team2, open_events, schedule):
+                        break
                     team_pool.pop(j)
                     partner_found = True
                     break
@@ -116,7 +117,7 @@ class ScheduleRepairer:
             if not partner_found:
                 logger.debug("Could not find a match partner for team %d", team1.identity)
 
-    def _find_and_populate_match(self, t1: Team, t2: Team, open_events: list[Event], schedule: Schedule) -> None:
+    def _find_and_populate_match(self, t1: Team, t2: Team, open_events: list[Event], schedule: Schedule) -> bool:
         """Find an open match slot for two teams and populate it."""
         for i, e1 in enumerate(open_events):
             e2 = e1.paired_event
@@ -124,9 +125,11 @@ class ScheduleRepairer:
             if not t1.conflicts(e1) and not t2.conflicts(e2):
                 schedule.add_match(e1, e2, t1, t2)
                 open_events.pop(i)
-                return
+                return True
 
             if not t1.conflicts(e2) and not t2.conflicts(e1):
                 schedule.add_match(e2, e1, t1, t2)
                 open_events.pop(i)
-                return
+                return True
+
+        return False

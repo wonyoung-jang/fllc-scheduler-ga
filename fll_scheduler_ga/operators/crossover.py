@@ -41,15 +41,15 @@ class EventCrossover(Crossover):
 
     def crossover(self, parents: list[Schedule]) -> Schedule | None:
         """Crossover two parents to produce a child."""
-        child = None
         p1, p2 = self.rng.sample(parents, k=2)
 
         if child1 := self._produce_child(p1, p2):
-            child = child1
-        elif child2 := self._produce_child(p2, p1):
-            child = child2
+            return child1
 
-        return child
+        if child2 := self._produce_child(p2, p1):
+            return child2
+
+        return None
 
     def _produce_child(self, p1: Schedule, p2: Schedule) -> Schedule | None:
         """Produce a child schedule from two parents."""
@@ -71,17 +71,17 @@ class EventCrossover(Crossover):
                     child[event1] = team
                 continue
 
-            if event2 is not None and event1.location.side != 1:
+            if event1.location.side != 1:
                 continue
 
             team1 = get_team_from_child(parent[event1])
             team2 = get_team_from_child(parent[event2])
 
-            if first or (
-                not team1.conflicts(event1)
-                and not team2.conflicts(event2)
-                and team1.needs_round(event1.round_type)
-                and team2.needs_round(event2.round_type)
+            if first or not (
+                team1.conflicts(event1)
+                or team2.conflicts(event2)
+                or not team1.needs_round(event1.round_type)
+                or not team2.needs_round(event2.round_type)
             ):
                 child.add_match(event1, event2, team1, team2)
 
