@@ -25,7 +25,14 @@ from fll_scheduler_ga.operators.mutation import (
     SwapTeamWithinLocation,
     SwapTeamWithinTimeSlot,
 )
-from fll_scheduler_ga.operators.selection import ElitismSelectionNSGA2, TournamentSelectionNSGA2
+from fll_scheduler_ga.operators.selection import (
+    Elitism,
+    RandomSelect,
+    RankBased,
+    RouletteWheel,
+    StochasticUniversalSampling,
+    TournamentSelect,
+)
 from fll_scheduler_ga.preflight.preflight import run_preflight_checks
 from fll_scheduler_ga.visualize.plot import Plot
 
@@ -279,8 +286,14 @@ def create_ga_instance(config: dict, event_factory: EventFactory, ga_parameters:
     """Create and return a GA instance with the provided configuration."""
     event_conflicts = EventConflicts(event_factory)
     team_factory = TeamFactory(config, event_conflicts.conflicts)
-    selections = (TournamentSelectionNSGA2(ga_parameters, rng),)
-    elitism = ElitismSelectionNSGA2(ga_parameters, rng)
+    selections = (
+        RouletteWheel(ga_parameters, rng),
+        RankBased(ga_parameters, rng),
+        StochasticUniversalSampling(ga_parameters, rng),
+        TournamentSelect(ga_parameters, rng),
+        RandomSelect(ga_parameters, rng),
+    )
+    elitism = Elitism(ga_parameters, rng)
 
     crossovers = (
         KPoint(team_factory, event_factory, rng, k=1),  # Single-point

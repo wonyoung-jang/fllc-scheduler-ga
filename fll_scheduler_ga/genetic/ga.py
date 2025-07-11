@@ -58,6 +58,11 @@ class GA:
 
     best: Schedule | None = field(default=None, init=False)
 
+    def __post_init__(self) -> None:
+        """Post-initialization to set up the initial state."""
+        # TODO(wonyoung-jang): Create adaptive selection mechanism to handle stagnation  # noqa: FIX002, TD003
+        self.selections = (self.selections[-1], self.selections[-2])  # debugging
+
     def pareto_front(self) -> Population:
         """Get the current Pareto front from the population."""
         if not self.population:
