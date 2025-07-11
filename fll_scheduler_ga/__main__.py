@@ -39,7 +39,25 @@ from fll_scheduler_ga.visualize.plot import Plot
 logger = logging.getLogger(__name__)
 
 
-def create_parser() -> argparse.ArgumentParser:
+def setup_environment() -> tuple[argparse.Namespace, GA]:
+    """Set up the environment for the application."""
+    try:
+        args = _create_parser().parse_args()
+        _initialize_logging(args)
+        config_parser = get_config_parser(Path(args.config_file))
+        config = load_tournament_config(config_parser)
+        event_factory = EventFactory(config)
+        run_preflight_checks(config, event_factory)
+        ga_parameters = _build_ga_parameters_from_args(args, config_parser)
+        rng = _setup_rng(args)
+        ga = _create_ga_instance(config, event_factory, ga_parameters, rng)
+    except (FileNotFoundError, KeyError):
+        logger.exception("Error loading configuration")
+    else:
+        return args, ga
+
+
+def _create_parser() -> argparse.ArgumentParser:
     """Create the argument parser for the application.
 
     Returns:
@@ -132,7 +150,26 @@ def create_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def build_ga_parameters_from_args(args: argparse.Namespace, config_parser: ConfigParser) -> GaParameters:
+def _initialize_logging(args: argparse.Namespace) -> None:
+    """Initialize logging for the application."""
+    file_handler = logging.FileHandler(args.log_file, mode="w", encoding="utf-8")
+    file_handler.setLevel(args.loglevel_file)
+    file_handler.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s[%(name)s] %(message)s"))
+
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(args.loglevel_console)
+    console_handler.setFormatter(logging.Formatter("%(levelname)s[%(name)s] %(message)s"))
+
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(console_handler)
+
+    args_str = "\n".join(f"\t{k} = {v}" for k, v in args.__dict__.items())
+    logger.info("Starting fll-scheduler-ga application with args:\n%s", args_str)
+
+
+def _build_ga_parameters_from_args(args: argparse.Namespace, config_parser: ConfigParser) -> GaParameters:
     """Build a GaParameters, overriding defaults with any provided CLI args.
 
     Args:
@@ -168,110 +205,7 @@ def build_ga_parameters_from_args(args: argparse.Namespace, config_parser: Confi
     return ga_params
 
 
-def initialize_logging(args: argparse.Namespace) -> None:
-    """Initialize logging for the application."""
-    file_handler = logging.FileHandler(args.log_file, mode="w", encoding="utf-8")
-    file_handler.setLevel(args.loglevel_file)
-    file_handler.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s[%(name)s] %(message)s"))
-
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(args.loglevel_console)
-    console_handler.setFormatter(logging.Formatter("%(levelname)s[%(name)s] %(message)s"))
-
-    root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG)
-    root_logger.addHandler(file_handler)
-    root_logger.addHandler(console_handler)
-
-    args_str = "\n".join(f"\t{k} = {v}" for k, v in args.__dict__.items())
-    logger.info("Starting fll-scheduler-ga application with args:\n%s", args_str)
-
-
-def generate_summary_report(schedule: Schedule, evaluator: FitnessEvaluator, path: Path) -> None:
-    """Generate a text summary report for a single schedule."""
-    obj_names = evaluator.objectives
-    scores = schedule.fitness
-    with path.open("w", encoding="utf-8") as f:
-        f.write(f"--- FLL Scheduler GA Summary Report ({id(schedule)}) ---\n\n")
-        f.write("Objective Scores:\n")
-        for name, score in zip(obj_names, scores, strict=False):
-            f.write(f"  - {name}: {score:.4f}\n")
-
-        f.write("\nNotes:\n")
-        all_teams: list[Team] = schedule.all_teams()
-        worst_team = min(all_teams, key=lambda t: t.score_break_time())
-        f.write(f"  - Team with worst break time distribution: Team {worst_team.identity}\n")
-
-
-def generate_pareto_summary(front: list[Schedule], evaluator: FitnessEvaluator, path: Path) -> None:
-    """Generate a summary of the Pareto front."""
-    schedule_enum_digits = len(str(len(front)))
-    obj_names = evaluator.objectives
-    front.sort(key=lambda s: (s.rank, -s.crowding))
-    with path.open("w", encoding="utf-8") as f:
-        f.write("Schedule, ID, Hash, Rank, Crowding, ")
-        for name in obj_names:
-            f.write(f"{name}, ")
-        f.write("Sum\n")
-        for i, schedule in enumerate(front, start=1):
-            rank = schedule.rank
-            crowding = schedule.crowding
-            if crowding == float("inf"):
-                crowding = 9.9999
-
-            f.write(f"{i:0{schedule_enum_digits}}, {id(schedule)}, {hash(schedule)}, {rank}, {crowding:.4f}, ")
-            for score in schedule.fitness:
-                f.write(f"{score:.4f}, ")
-            f.write(f"{sum(schedule.fitness):.4f}\n")
-
-
-def summary(args: argparse.Namespace, ga: GA) -> None:
-    """Run the fll-scheduler-ga application and generate summary reports."""
-    output_dir = Path(args.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    logger.info("Output directory: %s", output_dir)
-
-    plot = Plot(ga)
-    plot.plot_fitness(save_dir=output_dir / "fitness_vs_generation.png")
-    plot.plot_pareto_front(save_dir=output_dir / "pareto_front_tradeoffs.png")
-
-    front = ga.pareto_front()
-    front.sort(key=lambda s: (s.rank, -s.crowding))
-
-    for i, schedule in enumerate(front, start=1):
-        name = f"front_{schedule.rank}_schedule_{i}"
-        suffixes = (
-            "csv",
-            "html",
-        )
-        for suffix in suffixes:
-            suffix_subdir = output_dir / suffix
-            suffix_subdir.mkdir(parents=True, exist_ok=True)
-            output_path = suffix_subdir / name
-            output_path = output_path.with_suffix(f".{suffix}")
-            exporter = get_exporter(output_path)
-            exporter.export(schedule, output_path)
-
-        txt_subdir = output_dir / "txt"
-        txt_subdir.mkdir(parents=True, exist_ok=True)
-        generate_summary_report(schedule, ga.fitness, txt_subdir / f"{name}_summary.txt")
-
-    generate_pareto_summary(ga.population, ga.fitness, output_dir / "pareto_summary.csv")
-
-
-def setup_environment(args: argparse.Namespace) -> tuple[dict, ConfigParser, EventFactory]:
-    """Set up the environment for the application."""
-    try:
-        config_parser = get_config_parser(Path(args.config_file))
-        config = load_tournament_config(config_parser)
-        event_factory = EventFactory(config)
-    except (FileNotFoundError, KeyError):
-        logger.exception("Error loading configuration")
-    else:
-        return config, config_parser, event_factory
-
-
-def setup_rng(args: argparse.Namespace) -> Random:
+def _setup_rng(args: argparse.Namespace) -> Random:
     """Set up the random number generator."""
     if args.seed is not None:
         rng_seed = args.seed
@@ -282,18 +216,19 @@ def setup_rng(args: argparse.Namespace) -> Random:
     return Random(rng_seed)
 
 
-def create_ga_instance(config: dict, event_factory: EventFactory, ga_parameters: GaParameters, rng: Random) -> GA:
+def _create_ga_instance(config: dict, event_factory: EventFactory, ga_parameters: GaParameters, rng: Random) -> GA:
     """Create and return a GA instance with the provided configuration."""
     event_conflicts = EventConflicts(event_factory)
     team_factory = TeamFactory(config, event_conflicts.conflicts)
     selections = (
-        RouletteWheel(ga_parameters, rng),
-        RankBased(ga_parameters, rng),
-        StochasticUniversalSampling(ga_parameters, rng),
-        TournamentSelect(ga_parameters, rng),
-        RandomSelect(ga_parameters, rng),
+        # Sorted by selection pressure (highest to lowest)
+        RouletteWheel(rng),
+        RankBased(rng, selection_pressure=1.5),
+        StochasticUniversalSampling(rng),
+        TournamentSelect(rng, tournament_size=ga_parameters.selection_size),
+        RandomSelect(rng),
     )
-    elitism = Elitism(ga_parameters, rng)
+    elitism = Elitism(rng)  # Separate survival selection
 
     crossovers = (
         KPoint(team_factory, event_factory, rng, k=1),  # Single-point
@@ -331,22 +266,88 @@ def create_ga_instance(config: dict, event_factory: EventFactory, ga_parameters:
         mutations=mutations,
         logger=logger,
         observers=observers,
-        fitness=evaluator,
+        evaluator=evaluator,
     )
+
+
+def generate_summary(args: argparse.Namespace, ga: GA) -> None:
+    """Run the fll-scheduler-ga application and generate summary reports."""
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    logger.info("Output directory: %s", output_dir)
+
+    plot = Plot(ga)
+    plot.plot_fitness(save_dir=output_dir / "fitness_vs_generation.png")
+    plot.plot_pareto_front(save_dir=output_dir / "pareto_front_tradeoffs.png")
+
+    front = ga.pareto_front()
+    front.sort(key=lambda s: (s.rank, -s.crowding))
+
+    for i, schedule in enumerate(front, start=1):
+        name = f"front_{schedule.rank}_schedule_{i}"
+        suffixes = (
+            "csv",
+            "html",
+        )
+        for suffix in suffixes:
+            suffix_subdir = output_dir / suffix
+            suffix_subdir.mkdir(parents=True, exist_ok=True)
+            output_path = suffix_subdir / name
+            output_path = output_path.with_suffix(f".{suffix}")
+            exporter = get_exporter(output_path)
+            exporter.export(schedule, output_path)
+
+        txt_subdir = output_dir / "txt"
+        txt_subdir.mkdir(parents=True, exist_ok=True)
+        _generate_summary_report(schedule, ga.evaluator, txt_subdir / f"{name}_summary.txt")
+
+    _generate_pareto_summary(ga.population, ga.evaluator, output_dir / "pareto_summary.csv")
+
+
+def _generate_summary_report(schedule: Schedule, evaluator: FitnessEvaluator, path: Path) -> None:
+    """Generate a text summary report for a single schedule."""
+    obj_names = evaluator.objectives
+    scores = schedule.fitness
+    with path.open("w", encoding="utf-8") as f:
+        f.write(f"--- FLL Scheduler GA Summary Report ({id(schedule)}) ---\n\n")
+        f.write("Objective Scores:\n")
+        for name, score in zip(obj_names, scores, strict=False):
+            f.write(f"  - {name}: {score:.4f}\n")
+
+        f.write("\nNotes:\n")
+        all_teams: list[Team] = schedule.all_teams()
+        worst_team = min(all_teams, key=lambda t: t.score_break_time())
+        f.write(f"  - Team with worst break time distribution: Team {worst_team.identity}\n")
+
+
+def _generate_pareto_summary(front: list[Schedule], evaluator: FitnessEvaluator, path: Path) -> None:
+    """Generate a summary of the Pareto front."""
+    schedule_enum_digits = len(str(len(front)))
+    obj_names = evaluator.objectives
+    front.sort(key=lambda s: (s.rank, -s.crowding))
+    with path.open("w", encoding="utf-8") as f:
+        f.write("Schedule, ID, Hash, Rank, Crowding, ")
+        for name in obj_names:
+            f.write(f"{name}, ")
+        f.write("Sum\n")
+        for i, schedule in enumerate(front, start=1):
+            rank = schedule.rank
+            crowding = schedule.crowding
+            if crowding == float("inf"):
+                crowding = 9.9999
+
+            f.write(f"{i:0{schedule_enum_digits}}, {id(schedule)}, {hash(schedule)}, {rank}, {crowding:.4f}, ")
+            for score in schedule.fitness:
+                f.write(f"{score:.4f}, ")
+            f.write(f"{sum(schedule.fitness):.4f}\n")
 
 
 def main() -> None:
     """Run the fll-scheduler-ga application."""
-    args = create_parser().parse_args()
-    initialize_logging(args)
-    config, config_parser, event_factory = setup_environment(args)
-    run_preflight_checks(config, event_factory)
-    ga_parameters = build_ga_parameters_from_args(args, config_parser)
-    rng = setup_rng(args)
-    ga = create_ga_instance(config, event_factory, ga_parameters, rng)
+    args, ga = setup_environment()
 
     if ga.run():
-        summary(args, ga)
+        generate_summary(args, ga)
     else:
         logger.warning("Genetic algorithm did not produce a valid final schedule.")
 

@@ -50,7 +50,7 @@ class Plot:
         if not (history := self.ga_instance.fitness_history):
             logger.error("Cannot plot fitness. No generation history was recorded.")
             return None
-        history_df = pd.DataFrame(data=history, columns=self.ga_instance.fitness.objectives)
+        history_df = pd.DataFrame(data=history, columns=self.ga_instance.evaluator.objectives)
         plt = get_matplotlib()
         fig, ax = plt.subplots(figsize=(12, 7))
         history_df.plot(kind="line", ax=ax, linewidth=2.5, alpha=0.8)
@@ -72,7 +72,7 @@ class Plot:
             logger.warning("Cannot plot an empty Pareto front.")
             return None
 
-        objectives = self.ga_instance.fitness.objectives
+        objectives = self.ga_instance.evaluator.objectives
         fig = self._plot_parallel(front, objectives, title)
         self._finalize(fig, save_dir, "pareto_parallel.png")
 

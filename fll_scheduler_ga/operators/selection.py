@@ -11,7 +11,6 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from random import Random
 
-from ..genetic.ga_parameters import GaParameters
 from ..genetic.schedule import Population, Schedule
 
 
@@ -19,7 +18,6 @@ from ..genetic.schedule import Population, Schedule
 class Selection(ABC):
     """Abstract base class for selection operators in genetic algorithms."""
 
-    ga_parameters: GaParameters
     rng: Random
 
 
@@ -71,11 +69,13 @@ class RankBased(Selection):
     Higher-ranked individuals have a higher chance of being selected.
     """
 
+    selection_pressure: float
+
     def select(self, population: Population, num_parents: int) -> Iterator[Schedule]:
         """Select individuals based on their rank."""
         population.sort(key=lambda p: (p.rank, -p.crowding, -sum(p.fitness)), reverse=True)
         picks = sorted(self.rng.uniform(0, 1) for _ in range(num_parents))
-        sp = self.rng.uniform(1, 2)
+        sp = self.selection_pressure
         n = len(population)
 
         for pick in picks:
@@ -122,10 +122,12 @@ class TournamentSelect(Selection):
     Selects the winner based on rank, then crowding distance.
     """
 
+    tournament_size: int
+
     def select(self, population: Population, num_parents: int) -> Iterator[Schedule]:
         """Select individuals using NSGA-II tournament selection."""
         for _ in range(num_parents):
-            tournament = self.rng.sample(population, self.ga_parameters.selection_size)
+            tournament = self.rng.sample(population, self.tournament_size)
             yield min(tournament, key=lambda p: (p.rank, -p.crowding, -sum(p.fitness)))
 
 

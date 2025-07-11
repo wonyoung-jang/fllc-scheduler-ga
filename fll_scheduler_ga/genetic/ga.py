@@ -48,7 +48,7 @@ class GA:
     mutations: tuple[Mutation]
     logger: logging.Logger
     observers: list[GaObserver]
-    fitness: FitnessEvaluator
+    evaluator: FitnessEvaluator
     fitness_history: list[tuple] = field(default_factory=list, init=False, repr=False)
     population: Population = field(default_factory=list, init=False, repr=False)
 
@@ -114,7 +114,7 @@ class GA:
                 self.team_factory,
                 self.event_factory,
                 self.config,
-                self.fitness,
+                self.evaluator,
                 seed,
             )
             for seed in worker_seeds
@@ -217,7 +217,7 @@ class GA:
                 if mutation_success:
                     self._notify_mutation(m.__class__.__name__, successful=True)
                     self._mutation_ratio["success"] = self._mutation_ratio.get("success", 0) + 1
-                    if (new_fitness := self.fitness.evaluate(individual)) is not None:
+                    if (new_fitness := self.evaluator.evaluate(individual)) is not None:
                         individual.fitness = new_fitness
                 else:
                     self._notify_mutation(m.__class__.__name__, successful=False)
@@ -234,7 +234,7 @@ class GA:
             if child is not None:
                 self._notify_crossover(f"{c.__class__.__name__} 0", successful=True)
                 self._crossover_ratio["success"] = self._crossover_ratio.get("success", 0) + 1
-                child.fitness = self.fitness.evaluate(child)
+                child.fitness = self.evaluator.evaluate(child)
             else:
                 self._notify_crossover(f"{c.__class__.__name__} 0", successful=False)
                 self._crossover_ratio["failure"] = self._crossover_ratio.get("failure", 0) + 1
