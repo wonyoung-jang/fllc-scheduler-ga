@@ -72,10 +72,12 @@ class Team:
     _cached_opponent_score: float | None = field(default=None, repr=False)
     _cached_table_score: float | None = field(default=None, repr=False)
     _cached_theoretical_max_table_score: float | None = field(default=None, repr=False)
+    _rounds_needed: int = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to sort events and time slots."""
         self.identity = self.info.identity
+        self._rounds_needed = sum(self.round_types.values())
 
     def __hash__(self) -> int:
         """Hash function for the team based on its identity."""
@@ -99,11 +101,13 @@ class Team:
         new_team._cached_break_time_score = self._cached_break_time_score
         new_team._cached_opponent_score = self._cached_opponent_score
         new_team._cached_table_score = self._cached_table_score
+        new_team._cached_theoretical_max_table_score = self._cached_theoretical_max_table_score
+        new_team._rounds_needed = self._rounds_needed
         return new_team
 
     def rounds_needed(self) -> int:
         """Get the total number of rounds still needed for the team."""
-        return sum(self.round_types.values())
+        return self._rounds_needed
 
     def needs_round(self, round_type: RoundType) -> int:
         """Check if the team still needs to participate in a given round type."""
@@ -112,6 +116,7 @@ class Team:
     def remove_event(self, event: Event) -> None:
         """Unbook a team from an event."""
         self.round_types[event.round_type] += 1
+        self._rounds_needed += 1
         self.events.remove(event)
         self._event_ids.remove(event.identity)
         if event.location.teams_per_round == 2:
@@ -124,9 +129,8 @@ class Team:
 
     def add_event(self, event: Event) -> None:
         """Book a team for an event."""
-        if self.round_types[event.round_type] <= 0:
-            logger.debug("Team %d already has %s", self.identity, event)
         self.round_types[event.round_type] -= 1
+        self._rounds_needed -= 1
         bisect.insort(self.events, event, key=lambda e: e.timeslot.start)
         self._event_ids.add(event.identity)
         if event.location.teams_per_round == 2:

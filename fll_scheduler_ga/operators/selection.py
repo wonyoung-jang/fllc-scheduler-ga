@@ -46,8 +46,7 @@ class RouletteWheel(Selection):
         total_fitness = sum(sum(schedule.fitness) for schedule in population if schedule.fitness is not None)
 
         if total_fitness == 0:
-            msg = "Total fitness is zero, cannot perform roulette wheel selection."
-            raise ValueError(msg)
+            yield from self.rng.sample(population, num_parents)
 
         picks = sorted(self.rng.uniform(0, total_fitness) for _ in range(num_parents))
         current = 0
@@ -126,10 +125,6 @@ class TournamentSelect(Selection):
 
     def select(self, population: Population, num_parents: int) -> Iterator[Schedule]:
         """Select individuals using NSGA-II tournament selection."""
-        if not 2 <= self.tournament_size <= len(population):
-            msg = "Tournament size must be between 2 and the population size."
-            raise ValueError(msg)
-
         for _ in range(num_parents):
             tournament = self.rng.sample(population, self.tournament_size)
             yield min(tournament, key=lambda p: (p.rank, -p.crowding, -sum(p.fitness)))

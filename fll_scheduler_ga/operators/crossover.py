@@ -42,11 +42,11 @@ class EventCrossover(Crossover):
         """Crossover two parents to produce a child."""
         p1, p2 = self.rng.sample(parents, k=2)
 
-        if child1 := self._produce_child(p1, p2):
-            return child1
+        if child := self._produce_child(p1, p2):
+            return child
 
-        if child2 := self._produce_child(p2, p1):
-            return child2
+        if child := self._produce_child(p2, p1):
+            return child
 
         return None
 

@@ -4,9 +4,9 @@ import logging
 import random
 from dataclasses import dataclass, field
 
-from ..config.config import Round, RoundType, TournamentConfig
+from ..config.config import RoundType, TournamentConfig
 from ..data_model.event import Event, EventFactory
-from ..data_model.team import TeamFactory
+from ..data_model.team import Team, TeamFactory
 from .fitness import FitnessEvaluator
 from .schedule import Schedule
 from .schedule_repairer import ScheduleRepairer
@@ -35,54 +35,48 @@ class ScheduleBuilder:
     config: TournamentConfig
     repairer: ScheduleRepairer
     rng: random.Random
-    schedule: Schedule = field(init=False, repr=False)
     events: dict[RoundType, list[Event]] = field(init=False, repr=False)
+    teams: list[Team] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
         self.events = self.event_factory.build()
 
+        for events in self.events.values():
+            self.rng.shuffle(events)
+
     def build(self) -> Schedule:
         """Construct and return the final schedule."""
-        self.schedule = Schedule(self.team_factory.build())
+        schedule = Schedule(self.team_factory.build())
+        self.teams = schedule.all_teams()
+        self.rng.shuffle(self.teams)
 
         for r in self.config.rounds:
-            if r.teams_per_round == 1:
-                self._book_judging_rounds(r)
+            if r.teams_per_round == r.rounds_per_team == 1:
+                self._build_singles(schedule, r.round_type)
             else:
-                self._book_rounds(r)
+                self._build_matches(schedule, r.round_type)
 
-        return self.schedule if self.schedule and self.repairer.repair(self.schedule) else None
+        return schedule if schedule and self.repairer.repair(schedule) else None
 
-    def _book_judging_rounds(self, r: Round) -> None:
+    def _build_singles(self, schedule: Schedule, rt: RoundType) -> None:
         """Book all judging events for a specific round type."""
-        events_for_round = self.events.get(r.round_type, [])
-        teams_needing_round = [t for t in self.schedule.all_teams() if t.needs_round(r.round_type)]
+        events_for_round = self.events.get(rt, [])
+        teams = (t for t in self.teams if t.needs_round(rt))
 
-        self.rng.shuffle(events_for_round)
-        self.rng.shuffle(teams_needing_round)
+        for event, team in zip(events_for_round, teams, strict=False):
+            schedule[event] = team
 
-        for event in events_for_round:
-            for i, t in enumerate(teams_needing_round):
-                if not t.conflicts(event):
-                    self.schedule[event] = t
-                    teams_needing_round.pop(i)
-                    break
-
-    def _book_rounds(self, r: Round) -> None:
+    def _build_matches(self, schedule: Schedule, rt: RoundType) -> None:
         """Book all events for a specific round type."""
-        events_for_round = self.events.get(r.round_type, [])
-        self.rng.shuffle(events_for_round)
-        teams = self.schedule.all_teams()
+        events_for_round = self.events.get(rt, [])
+        teams = self.teams
+        match_events = ((e, e.paired_event) for e in events_for_round if e.location.side == 1)
 
-        events = ((e, e.paired_event) for e in events_for_round if e.location.side == 1)
+        for side1, side2 in match_events:
+            available = (t for t in teams if t.needs_round(rt) and not t.conflicts(side1))
 
-        for side1, side2 in events:
-            available = [t for t in teams if t.needs_round(r.round_type) and not t.conflicts(side1)]
-
-            if len(available) < 2:
+            if (team1 := next(available, None)) is None or (team2 := next(available, None)) is None:
                 continue
 
-            team1, team2 = self.rng.sample(available, 2)
-
-            self.schedule.add_match(side1, side2, team1, team2)
+            schedule.add_match(side1, side2, team1, team2)

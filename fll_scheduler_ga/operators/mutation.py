@@ -25,6 +25,10 @@ class Mutation(ABC):
     def mutate(self, child: Schedule) -> bool:
         """Mutate a child schedule to introduce genetic diversity."""
 
+    @abstractmethod
+    def get_swap_candidates(self, child: Schedule) -> tuple[tuple[Event, Event, Team, Team] | None]:
+        """Get candidates for swapping teams in the child schedule."""
+
     def get_match_pool(self, child: Schedule) -> Iterator[tuple[Event, Event, Team, Team]]:
         """Get a pool of matches from the child schedule."""
         matches = child.get_matches()
@@ -34,6 +38,22 @@ class Mutation(ABC):
 
         match_pool = matches[self.rng.choice(list(matches.keys()))]
         yield from self.rng.sample(match_pool, k=len(match_pool))
+
+    def yield_swap_candidates(self, child: Schedule) -> Iterator[tuple[tuple[Event, Event, Team, Team], ...]]:
+        """Yield candidates for swapping teams in matches."""
+        match_pool = self.get_match_pool(child)
+
+        for match1_data in match_pool:
+            if (match2_data := next(match_pool, None)) is None:
+                continue
+
+            event1a, _, _, _ = match1_data
+            event2a, _, _, _ = match2_data
+
+            if not self._validate_swap(event1a, event2a):
+                continue
+
+            yield match1_data, match2_data
 
     def _validate_swap(self, event1: Event, event2: Event) -> bool:
         """Check if the swap between two events is valid based on timeslot and location."""
@@ -58,49 +78,41 @@ class Mutation(ABC):
 class SwapTeamMutation(Mutation):
     """Mutation operator for swapping single team between two matches."""
 
-    def _get_swap_candidates(self, child: Schedule) -> tuple[tuple[Event, Team, Team] | None]:
+    def get_swap_candidates(self, child: Schedule) -> tuple[tuple[Event, Team, Team] | None]:
         """Get two matches to swap in the child schedule."""
-        match_pool = list(self.get_match_pool(child))
+        for match1_data, match2_data in self.yield_swap_candidates(child):
+            event1a, _, team1a, team1b = match1_data
+            event2a, _, team2a, team2b = match2_data
 
-        for i, match1_data in enumerate(match_pool):
-            event1_a, _, team1_a, team1_b = match1_data
-            next_i = i + 1
+            if team1a.identity in (team2a.identity, team2b.identity) or team2a.identity == team1b.identity:
+                continue
 
-            for match2_data in match_pool[next_i:]:
-                event2_a, _, team2_a, team2_b = match2_data
+            if team1a.conflicts(event2a) or team2a.conflicts(event1a):
+                continue
 
-                if not self._validate_swap(event1_a, event2_a):
-                    continue
-
-                if team1_a.identity in (team2_a.identity, team2_b.identity) or team2_a.identity == team1_b.identity:
-                    continue
-
-                if team1_a.conflicts(event2_a) or team2_a.conflicts(event1_a):
-                    continue
-
-                return (event1_a, team1_a, team1_b), (event2_a, team2_a, team2_b)
+            return match1_data, match2_data
 
         return None, None
 
     def mutate(self, child: Schedule) -> bool:
         """Swap one team from two different matches."""
-        match1_data, match2_data = self._get_swap_candidates(child)
+        match1_data, match2_data = self.get_swap_candidates(child)
 
         if not match1_data:
             return False
 
-        event1_a, team1_a, team1_b = match1_data
-        event2_a, team2_a, team2_b = match2_data
+        event1a, _, team1a, team1b = match1_data
+        event2a, _, team2a, team2b = match2_data
 
-        team1_a.switch_opponent(team1_b, team2_b)
-        team1_b.switch_opponent(team1_a, team2_a)
-        team2_a.switch_opponent(team2_b, team1_b)
-        team2_b.switch_opponent(team2_a, team1_a)
+        team1a.switch_opponent(team1b, team2b)
+        team1b.switch_opponent(team1a, team2a)
+        team2a.switch_opponent(team2b, team1b)
+        team2b.switch_opponent(team2a, team1a)
 
-        del child[event1_a]
-        del child[event2_a]
-        child[event1_a] = team2_a
-        child[event2_a] = team1_a
+        del child[event1a]
+        del child[event2a]
+        child[event1a] = team2a
+        child[event2a] = team1a
 
         return True
 
@@ -109,49 +121,41 @@ class SwapTeamMutation(Mutation):
 class SwapMatchMutation(Mutation):
     """Base class for mutations that swap the locations of two entire matches."""
 
-    def _get_swap_candidates(self, child: Schedule) -> tuple[tuple[Event, Event, Team, Team] | None]:
+    def get_swap_candidates(self, child: Schedule) -> tuple[tuple[Event, Event, Team, Team] | None]:
         """Get two matches to swap in the child schedule."""
-        match_pool = list(self.get_match_pool(child))
+        for match1_data, match2_data in self.yield_swap_candidates(child):
+            event1a, event1b, team1a, team1b = match1_data
+            event2a, event2b, team2a, team2b = match2_data
 
-        for i, match1_data in enumerate(match_pool):
-            event1_a, event1_b, team1_a, team1_b = match1_data
-            next_i = i + 1
+            if (
+                team1a.conflicts(event2a)
+                or team1b.conflicts(event2b)
+                or team2a.conflicts(event1a)
+                or team2b.conflicts(event1b)
+            ):
+                continue
 
-            for match2_data in match_pool[next_i:]:
-                event2_a, event2_b, team2_a, team2_b = match2_data
-
-                if not self._validate_swap(event1_a, event2_a):
-                    continue
-
-                if (
-                    team1_a.conflicts(event2_a)
-                    or team1_b.conflicts(event2_b)
-                    or team2_a.conflicts(event1_a)
-                    or team2_b.conflicts(event1_b)
-                ):
-                    continue
-
-                return (event1_a, event1_b, team1_a, team1_b), (event2_a, event2_b, team2_a, team2_b)
+            return match1_data, match2_data
 
         return None, None
 
     def mutate(self, child: Schedule) -> bool:
         """Swap two entire matches."""
-        match1_data, match2_data = self._get_swap_candidates(child)
+        match1_data, match2_data = self.get_swap_candidates(child)
 
         if not match1_data:
             return False
 
-        event1_a, event1_b, team1_a, team1_b = match1_data
-        event2_a, event2_b, team2_a, team2_b = match2_data
+        event1a, event1b, team1a, team1b = match1_data
+        event2a, event2b, team2a, team2b = match2_data
 
-        del child[event1_a]
-        del child[event1_b]
-        del child[event2_a]
-        del child[event2_b]
-        child[event1_a] = team2_a
-        child[event1_b] = team2_b
-        child[event2_a] = team1_a
-        child[event2_b] = team1_b
+        del child[event1a]
+        del child[event1b]
+        del child[event2a]
+        del child[event2b]
+        child[event1a] = team2a
+        child[event1b] = team2b
+        child[event2a] = team1a
+        child[event2b] = team1b
 
         return True

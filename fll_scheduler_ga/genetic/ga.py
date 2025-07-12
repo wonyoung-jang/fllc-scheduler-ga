@@ -2,6 +2,7 @@
 
 import logging
 import multiprocessing
+from collections import Counter
 from dataclasses import dataclass, field
 from random import Random
 
@@ -11,7 +12,7 @@ from ..data_model.team import TeamFactory
 from ..observers.base_observer import GaObserver
 from ..operators.crossover import Crossover
 from ..operators.mutation import Mutation
-from ..operators.nsga2 import non_dominated_sort
+from ..operators.nsga2 import NSGA2
 from ..operators.selection import Selection
 from .builder import create_and_evaluate_schedule
 from .fitness import FitnessEvaluator
@@ -44,8 +45,8 @@ class GA:
     population: Population = field(default_factory=list, init=False, repr=False)
 
     _last_reported_fitness: tuple[float, ...] = field(default=None, init=False)
-    _crossover_ratio: dict[str, int] = field(default_factory=dict, init=False, repr=False)
-    _mutation_ratio: dict[str, int] = field(default_factory=dict, init=False, repr=False)
+    _crossover_ratio: Counter = field(default_factory=Counter, init=False, repr=False)
+    _mutation_ratio: Counter = field(default_factory=Counter, init=False, repr=False)
 
     best: Schedule | None = field(default=None, init=False)
 
@@ -89,7 +90,7 @@ class GA:
             self.logger.critical("No valid schedule meeting all hard constraints was found.")
             return False
 
-        non_dominated_sort(self.population)
+        NSGA2.non_dominated_sort(self.population)
 
         self._notify_on_finish(self.population, self.pareto_front())
 
@@ -138,7 +139,7 @@ class GA:
 
     def generation(self) -> None:
         """Perform a single generation step of the genetic algorithm."""
-        non_dominated_sort(self.population)
+        NSGA2.non_dominated_sort(self.population)
         this_gen_fitness = self._update_fitness_history()
         num_offspring = self.ga_parameters.population_size - self.ga_parameters.elite_size
 
@@ -152,7 +153,7 @@ class GA:
                 self.logger.warning("No valid individuals in the current population.")
                 return
 
-            non_dominated_sort(self.population)
+            NSGA2.non_dominated_sort(self.population)
             this_gen_fitness = self._update_fitness_history()
             self.update_best_schedule_fitness()
 
@@ -191,7 +192,7 @@ class GA:
                 num_offspring,
             )
 
-        non_dominated_sort(new_population)
+        NSGA2.non_dominated_sort(new_population)
         self.mutate_population(new_population)
 
         return new_population
@@ -208,12 +209,12 @@ class GA:
                 mutation_success = m.mutate(individual)
                 if mutation_success:
                     self._notify_mutation(m.__class__.__name__, successful=True)
-                    self._mutation_ratio["success"] = self._mutation_ratio.get("success", 0) + 1
+                    self._mutation_ratio["success"] += 1
                     if (new_fitness := self.evaluator.evaluate(individual)) is not None:
                         individual.fitness = new_fitness
                 else:
                     self._notify_mutation(m.__class__.__name__, successful=False)
-                    self._mutation_ratio["failure"] = self._mutation_ratio.get("failure", 0) + 1
+                    self._mutation_ratio["failure"] += 1
 
     def crossover_population(self, population: Population) -> Schedule | None:
         """Evolve the population by one individual and return the best of the parents and child."""
@@ -225,11 +226,11 @@ class GA:
             child = c.crossover(parents)
             if child is not None:
                 self._notify_crossover(f"{c.__class__.__name__} 0", successful=True)
-                self._crossover_ratio["success"] = self._crossover_ratio.get("success", 0) + 1
+                self._crossover_ratio["success"] += 1
                 child.fitness = self.evaluator.evaluate(child)
             else:
                 self._notify_crossover(f"{c.__class__.__name__} 0", successful=False)
-                self._crossover_ratio["failure"] = self._crossover_ratio.get("failure", 0) + 1
+                self._crossover_ratio["failure"] += 1
 
         return child
 
