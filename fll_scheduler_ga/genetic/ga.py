@@ -13,24 +13,14 @@ from ..operators.crossover import Crossover
 from ..operators.mutation import Mutation
 from ..operators.nsga2 import non_dominated_sort
 from ..operators.selection import Selection
-from .builder import ScheduleBuilder
+from .builder import create_and_evaluate_schedule
 from .fitness import FitnessEvaluator
 from .ga_parameters import GaParameters
 from .schedule import Population, Schedule
+from .schedule_repairer import ScheduleRepairer
 
 RANDOM_SEED = (1, 2**32 - 1)
-
-
-def create_and_evaluate_schedule(
-    args: tuple[TeamFactory, EventFactory, TournamentConfig, FitnessEvaluator, int],
-) -> Schedule | None:
-    """Create and evaluate a schedule in a separate process."""
-    team_factory, event_factory, config, evaluator, seed = args
-    schedule = ScheduleBuilder(team_factory, event_factory, config, Random(seed)).build()
-    if fitness_scores := evaluator.evaluate(schedule):
-        schedule.fitness = fitness_scores
-        return schedule
-    return None
+ATTEMPTS = (0, 2**12 - 1)
 
 
 @dataclass(slots=True)
@@ -49,6 +39,7 @@ class GA:
     logger: logging.Logger
     observers: list[GaObserver]
     evaluator: FitnessEvaluator
+    repairer: ScheduleRepairer
     fitness_history: list[tuple] = field(default_factory=list, init=False, repr=False)
     population: Population = field(default_factory=list, init=False, repr=False)
 
@@ -115,13 +106,14 @@ class GA:
                 self.event_factory,
                 self.config,
                 self.evaluator,
+                self.repairer,
                 seed,
             )
             for seed in worker_seeds
         ]
 
         self.logger.info("Initializing population with %d individuals.", num_to_create)
-        attempts, max_attempts = 0, 1000
+        attempts, max_attempts = ATTEMPTS
         init_pop: Population = []
         add_to_init_pop = init_pop.append
 
@@ -181,7 +173,7 @@ class GA:
         """Evolve the population to create a new generation."""
         new_population: Population = []
         child_hashes = existing_hashes.copy()
-        attempts, max_attempts = 0, num_offspring * 9999
+        attempts, max_attempts = ATTEMPTS
 
         while len(new_population) < num_offspring and attempts < max_attempts:
             if child := self.crossover_population(self.population):
@@ -225,8 +217,8 @@ class GA:
 
     def crossover_population(self, population: Population) -> Schedule | None:
         """Evolve the population by one individual and return the best of the parents and child."""
-        selector = self.rng.choice(self.selections)
-        parents: list[Schedule] = list(selector.select(population, 2))
+        s = self.rng.choice(self.selections)
+        parents: list[Schedule] = list(s.select(population, 2))
         child: Schedule = None
         if self.ga_parameters.crossover_chance > self.rng.random():
             c = self.rng.choice(self.crossovers)

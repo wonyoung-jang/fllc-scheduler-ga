@@ -13,17 +13,14 @@ from fll_scheduler_ga.genetic.fitness import FitnessEvaluator
 from fll_scheduler_ga.genetic.ga import GA, RANDOM_SEED
 from fll_scheduler_ga.genetic.ga_parameters import GaParameters
 from fll_scheduler_ga.genetic.schedule import Schedule
+from fll_scheduler_ga.genetic.schedule_repairer import ScheduleRepairer
 from fll_scheduler_ga.io.export import get_exporter
 from fll_scheduler_ga.observers.loggers import LoggingObserver
 from fll_scheduler_ga.observers.progress import TqdmObserver
 from fll_scheduler_ga.operators.crossover import KPoint, Scattered, Uniform
 from fll_scheduler_ga.operators.mutation import (
-    SwapMatchAcrossLocation,
-    SwapMatchWithinLocation,
-    SwapMatchWithinTimeSlot,
-    SwapTeamAcrossLocation,
-    SwapTeamWithinLocation,
-    SwapTeamWithinTimeSlot,
+    SwapMatchMutation,
+    SwapTeamMutation,
 )
 from fll_scheduler_ga.operators.selection import (
     Elitism,
@@ -230,21 +227,23 @@ def _create_ga_instance(config: dict, event_factory: EventFactory, ga_parameters
     )
     elitism = Elitism(rng)  # Separate survival selection
 
+    repairer = ScheduleRepairer(event_factory, rng, config=config)
+
     crossovers = (
-        KPoint(team_factory, event_factory, rng, k=1),  # Single-point
-        KPoint(team_factory, event_factory, rng, k=2),  # Two-point
-        KPoint(team_factory, event_factory, rng, k=8),  # K point (8)
-        Scattered(team_factory, event_factory, rng),
-        Uniform(team_factory, event_factory, rng),
+        KPoint(team_factory, event_factory, rng, repairer=repairer, k=1),  # Single-point
+        KPoint(team_factory, event_factory, rng, repairer=repairer, k=2),  # Two-point
+        KPoint(team_factory, event_factory, rng, repairer=repairer, k=8),  # K point (8)
+        Scattered(team_factory, event_factory, rng, repairer=repairer),
+        Uniform(team_factory, event_factory, rng, repairer=repairer),
     )
 
     mutations = (
-        SwapMatchWithinTimeSlot(rng),
-        SwapMatchWithinLocation(rng),
-        SwapMatchAcrossLocation(rng),
-        SwapTeamWithinLocation(rng),
-        SwapTeamWithinTimeSlot(rng),
-        SwapTeamAcrossLocation(rng),
+        SwapMatchMutation(rng, same_timeslot=False, same_location=False),
+        SwapMatchMutation(rng, same_timeslot=False, same_location=True),
+        SwapMatchMutation(rng, same_timeslot=True, same_location=False),
+        SwapTeamMutation(rng, same_timeslot=False, same_location=False),
+        SwapTeamMutation(rng, same_timeslot=False, same_location=True),
+        SwapTeamMutation(rng, same_timeslot=True, same_location=False),
     )
 
     evaluator = FitnessEvaluator(config)
@@ -267,6 +266,7 @@ def _create_ga_instance(config: dict, event_factory: EventFactory, ga_parameters
         logger=logger,
         observers=observers,
         evaluator=evaluator,
+        repairer=repairer,
     )
 
 
@@ -277,8 +277,12 @@ def generate_summary(args: argparse.Namespace, ga: GA) -> None:
     logger.info("Output directory: %s", output_dir)
 
     plot = Plot(ga)
-    plot.plot_fitness(save_dir=output_dir / "fitness_vs_generation.png")
-    plot.plot_pareto_front(save_dir=output_dir / "pareto_front_tradeoffs.png")
+
+    fitness_plot_path = output_dir / "fitness_vs_generation.png"
+    plot.plot_fitness(save_dir=fitness_plot_path)
+
+    pareto_plot_path = output_dir / "pareto_front.png"
+    plot.plot_pareto_front(save_dir=pareto_plot_path)
 
     front = ga.pareto_front()
     front.sort(key=lambda s: (s.rank, -s.crowding))
@@ -299,9 +303,11 @@ def generate_summary(args: argparse.Namespace, ga: GA) -> None:
 
         txt_subdir = output_dir / "txt"
         txt_subdir.mkdir(parents=True, exist_ok=True)
-        _generate_summary_report(schedule, ga.evaluator, txt_subdir / f"{name}_summary.txt")
+        txt_output_path = txt_subdir / f"{name}_summary.txt"
+        _generate_summary_report(schedule, ga.evaluator, txt_output_path)
 
-    _generate_pareto_summary(ga.population, ga.evaluator, output_dir / "pareto_summary.csv")
+    pareto_summary_path = output_dir / "pareto_summary.csv"
+    _generate_pareto_summary(ga.population, ga.evaluator, pareto_summary_path)
 
 
 def _generate_summary_report(schedule: Schedule, evaluator: FitnessEvaluator, path: Path) -> None:

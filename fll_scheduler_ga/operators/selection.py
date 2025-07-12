@@ -126,6 +126,10 @@ class TournamentSelect(Selection):
 
     def select(self, population: Population, num_parents: int) -> Iterator[Schedule]:
         """Select individuals using NSGA-II tournament selection."""
+        if not 2 <= self.tournament_size <= len(population):
+            msg = "Tournament size must be between 2 and the population size."
+            raise ValueError(msg)
+
         for _ in range(num_parents):
             tournament = self.rng.sample(population, self.tournament_size)
             yield min(tournament, key=lambda p: (p.rank, -p.crowding, -sum(p.fitness)))

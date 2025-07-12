@@ -7,10 +7,23 @@ from dataclasses import dataclass, field
 from ..config.config import Round, RoundType, TournamentConfig
 from ..data_model.event import Event, EventFactory
 from ..data_model.team import TeamFactory
+from .fitness import FitnessEvaluator
 from .schedule import Schedule
 from .schedule_repairer import ScheduleRepairer
 
 logger = logging.getLogger(__name__)
+
+
+def create_and_evaluate_schedule(
+    args: tuple[TeamFactory, EventFactory, TournamentConfig, FitnessEvaluator, ScheduleRepairer, int],
+) -> Schedule | None:
+    """Create and evaluate a schedule in a separate process."""
+    team_factory, event_factory, config, evaluator, repairer, seed = args
+    schedule = ScheduleBuilder(team_factory, event_factory, config, repairer, random.Random(seed)).build()
+    if fitness_scores := evaluator.evaluate(schedule):
+        schedule.fitness = fitness_scores
+        return schedule
+    return None
 
 
 @dataclass(slots=True)
@@ -20,15 +33,14 @@ class ScheduleBuilder:
     team_factory: TeamFactory
     event_factory: EventFactory
     config: TournamentConfig
+    repairer: ScheduleRepairer
     rng: random.Random
     schedule: Schedule = field(init=False, repr=False)
     events: dict[RoundType, list[Event]] = field(init=False, repr=False)
-    repairer: ScheduleRepairer = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
         self.events = self.event_factory.build()
-        self.repairer = ScheduleRepairer(self.event_factory, self.rng)
 
     def build(self) -> Schedule:
         """Construct and return the final schedule."""

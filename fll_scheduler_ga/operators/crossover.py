@@ -27,13 +27,12 @@ class Crossover(ABC):
 class EventCrossover(Crossover):
     """Abstract base class for crossover operators in the FLL Scheduler GA."""
 
+    repairer: ScheduleRepairer
     events: list[Event] = field(init=False, repr=False)
-    repairer: ScheduleRepairer = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
         self.events = self.event_factory.flat_list()
-        self.repairer = ScheduleRepairer(self.event_factory, self.rng)
 
     @abstractmethod
     def get_genes(self, p1: Schedule, p2: Schedule) -> tuple[Iterable[Event], Iterable[Event]]:

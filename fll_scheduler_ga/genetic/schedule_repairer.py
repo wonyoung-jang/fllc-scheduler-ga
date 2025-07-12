@@ -20,13 +20,12 @@ class ScheduleRepairer:
 
     event_factory: EventFactory
     rng: random.Random
-    config: TournamentConfig = field(init=False)
+    config: TournamentConfig
     all_events: set[Event] = field(init=False)
     rt_teams_needed: dict[str, int] = field(init=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
-        self.config = self.event_factory.config
         self.all_events = set(self.event_factory.flat_list())
         self.rt_teams_needed = {rc.round_type: rc.teams_per_round for rc in self.config.rounds}
 
@@ -53,7 +52,7 @@ class ScheduleRepairer:
             elif tpr == 2:
                 self._assign_matches(teams, open_events.get((rt, tpr), []), schedule)
 
-        return all(t.rounds_needed() == 0 for t in schedule.all_teams())
+        return not any(t.rounds_needed() for t in schedule.all_teams())
 
     def _get_open_events(self, schedule: Schedule) -> defaultdict[tuple[str, int], list[Event]]:
         """Find all event slots not currently booked in the schedule."""
