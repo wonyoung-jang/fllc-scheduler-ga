@@ -48,8 +48,6 @@ class GA:
     _crossover_ratio: Counter = field(default_factory=Counter, init=False, repr=False)
     _mutation_ratio: Counter = field(default_factory=Counter, init=False, repr=False)
 
-    best: Schedule | None = field(default=None, init=False)
-
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
         # TODO(wonyoung-jang): Create adaptive selection mechanism to handle stagnation  # noqa: FIX002, TD003
@@ -142,13 +140,13 @@ class GA:
         """Perform a single generation step of the genetic algorithm."""
         self.nsga2.non_dominated_sort(self.population)
         this_gen_fitness = self._update_fitness_history()
-        num_offspring = self.ga_parameters.population_size - self.ga_parameters.elite_size
+        num_elites = self.ga_parameters.elite_size
+        num_offspring = self.ga_parameters.population_size - num_elites
 
         for generation in range(self.ga_parameters.generations):
-            elites = list(self.elitism.select(self.population, self.ga_parameters.elite_size))
+            elites = list(self.elitism.select(self.population, num_elites))
             elite_hashes = {hash(e) for e in elites}
-            offspring = self.evolve(num_offspring, elite_hashes)
-            self.population = elites + offspring
+            self.population = elites + self.evolve(num_offspring, elite_hashes)
 
             if not self.population:
                 self.logger.warning("No valid individuals in the current population.")
@@ -156,20 +154,8 @@ class GA:
 
             self.nsga2.non_dominated_sort(self.population)
             this_gen_fitness = self._update_fitness_history()
-            self.update_best_schedule_fitness()
 
             self._notify_gen_end(generation, this_gen_fitness)
-
-    def update_best_schedule_fitness(self) -> None:
-        """Update the best schedule fitness if a better one is found."""
-        if not (front := self.pareto_front()):
-            return
-
-        current_best = max(front, key=lambda s: sum(s.fitness))
-
-        if self.best is None or sum(current_best.fitness) > sum(self.best.fitness):
-            self.best = current_best.clone()
-            self.logger.debug("Initial best schedule set with fitness: %s", self.best.fitness)
 
     def evolve(self, num_offspring: int, existing_hashes: set[int]) -> Population:
         """Evolve the population to create a new generation."""
@@ -221,6 +207,8 @@ class GA:
                 else:
                     self._notify_mutation(m.__class__.__name__, successful=False)
                     self._mutation_ratio["failure"] += 1
+            else:
+                self._mutation_ratio["no mutation"] += 1
 
     def crossover_population(self, population: Population) -> Schedule | None:
         """Evolve the population by one individual and return the best of the parents and child."""
@@ -241,6 +229,8 @@ class GA:
             else:
                 self._notify_crossover(f"{c.__class__.__name__} 0", successful=False)
                 self._crossover_ratio["failure"] += 1
+        else:
+            self._crossover_ratio["no crossover"] += 1
 
         return child
 
@@ -281,16 +271,18 @@ class GA:
             self._mutation_ratio.get("success", 0) / mutation_total if mutation_total > 0 else 0.0
         )
         self.logger.info(
-            "Crossovers success ratio: %s/%s = %s",
+            "Crossovers success ratio: %s/%s = %s | %s",
             self._crossover_ratio.get("success", 0),
             crossover_total,
             f"{crossover_success_percentage:.2%}",
+            self._crossover_ratio,
         )
         self.logger.info(
-            "Mutations success ratio: %s/%s = %s",
+            "Mutations success ratio: %s/%s = %s | %s",
             self._mutation_ratio.get("success", 0),
             mutation_total,
             f"{mutation_success_percentage:.2%}",
+            self._mutation_ratio,
         )
         self.logger.info(
             "Unique/Total individuals: %s/%s",
