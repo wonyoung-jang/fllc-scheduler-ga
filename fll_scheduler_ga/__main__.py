@@ -67,6 +67,7 @@ def _create_parser() -> argparse.ArgumentParser:
         "log_file": "fll_scheduler_ga.log",
         "loglevel_file": "DEBUG",
         "loglevel_console": "INFO",
+        "no_plotting": False,
     }
     parser = argparse.ArgumentParser(
         description="Generate a tournament schedule using a Genetic Algorithm.",
@@ -143,6 +144,12 @@ def _create_parser() -> argparse.ArgumentParser:
         "--mutation_chance_high",
         type=float,
         help="(OPTIONAL) Upper bound of mutation chance (0.0 to 1.0).",
+    )
+    parser.add_argument(
+        "--no_plotting",
+        action="store_true",
+        default=_default_values["no_plotting"],
+        help="Disable plotting of results.",
     )
     return parser
 
@@ -276,13 +283,14 @@ def generate_summary(args: argparse.Namespace, ga: GA) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     logger.info("Output directory: %s", output_dir)
 
-    plot = Plot(ga)
+    if not args.no_plotting:
+        plot = Plot(ga)
 
-    fitness_plot_path = output_dir / "fitness_vs_generation.png"
-    plot.plot_fitness(save_dir=fitness_plot_path)
+        fitness_plot_path = output_dir / "fitness_vs_generation.png"
+        plot.plot_fitness(save_dir=fitness_plot_path)
 
-    pareto_plot_path = output_dir / "pareto_front.png"
-    plot.plot_pareto_front(save_dir=pareto_plot_path)
+        pareto_plot_path = output_dir / "pareto_front.png"
+        plot.plot_pareto_front(save_dir=pareto_plot_path)
 
     front = ga.pareto_front()
     front.sort(key=lambda s: (s.rank, -s.crowding))
