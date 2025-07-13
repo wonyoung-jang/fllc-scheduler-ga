@@ -57,7 +57,8 @@ class ScheduleBuilder:
             else:
                 self._build_matches(schedule, r.round_type)
 
-        return schedule if schedule and self.repairer.repair(schedule) else None
+        self.repairer.repair(schedule)
+        return schedule if schedule.all_teams_scheduled() else None
 
     def _build_singles(self, schedule: Schedule, rt: RoundType) -> None:
         """Book all judging events for a specific round type."""

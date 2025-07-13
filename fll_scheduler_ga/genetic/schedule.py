@@ -19,23 +19,12 @@ class Schedule:
     fitness: tuple[float, ...] | None = field(default=None, compare=False)
     rank: int = field(default=9999, compare=True)
     crowding: float = field(default=0.0, compare=False)
-    _cached_all_teams: list[Team] = field(
-        default=None,
-        init=False,
-        repr=False,
-        compare=False,
-    )
+    _cached_all_teams: list[Team] = field(default=None, init=False, repr=False, compare=False)
     _cached_matches: dict[str, list[tuple[Event, Event, Team, Team]]] = field(
-        default=None,
-        init=False,
-        repr=False,
-        compare=False,
+        default=None, init=False, repr=False, compare=False
     )
-    _hash: int = field(
-        default=None,
-        init=False,
-        repr=False,
-    )
+    _hash: int = field(default=None, init=False, repr=False)
+    _events: dict[int, Event] = field(default_factory=dict, init=False, repr=False, compare=False)
 
     def __len__(self) -> int:
         """Return the number of scheduled events."""
@@ -152,6 +141,10 @@ class Schedule:
         """Return an iterator over the (event, team/match) pairs."""
         return self._schedule.items()
 
-    def get_team(self, team: Team) -> Team:
+    def get_team(self, team_id: int) -> Team:
         """Get a team object by its identity."""
-        return self._teams[team.identity]
+        return self._teams[team_id]
+
+    def all_teams_scheduled(self) -> bool:
+        """Check if all teams are scheduled."""
+        return all(team.rounds_needed() == 0 for team in self.all_teams())

@@ -71,7 +71,6 @@ class Team:
     _cached_break_time_score: float | None = field(default=None, repr=False)
     _cached_opponent_score: float | None = field(default=None, repr=False)
     _cached_table_score: float | None = field(default=None, repr=False)
-    _cached_theoretical_max_table_score: float | None = field(default=None, repr=False)
     _rounds_needed: int = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -101,7 +100,6 @@ class Team:
         new_team._cached_break_time_score = self._cached_break_time_score
         new_team._cached_opponent_score = self._cached_opponent_score
         new_team._cached_table_score = self._cached_table_score
-        new_team._cached_theoretical_max_table_score = self._cached_theoretical_max_table_score
         new_team._rounds_needed = self._rounds_needed
         return new_team
 
@@ -236,16 +234,15 @@ class Team:
         if self._cached_table_score is not None:
             return self._cached_table_score
 
-        if self._cached_theoretical_max_table_score is None:
-            num_total_locations = len(self.locations)
-            self._cached_theoretical_max_table_score = 1 / (1 + (1 / num_total_locations))
-
         num_unique_locations = len(set(self.locations))
         num_total_locations = len(self.locations)
-        table_ratio = num_unique_locations / num_total_locations if num_total_locations else 1.0
 
+        table_ratio = num_unique_locations / num_total_locations if num_total_locations else 1
+        table_ratio = 1 / (1 + table_ratio)
+
+        table_penalty = 1
         if num_unique_locations == num_total_locations:
-            table_ratio = 9999  # penalty for too much variety
+            table_penalty = ZERO_BREAK_PENALTY**num_total_locations
 
-        self._cached_table_score = (1 / (1 + table_ratio)) / self._cached_theoretical_max_table_score
+        self._cached_table_score = table_ratio * table_penalty
         return self._cached_table_score

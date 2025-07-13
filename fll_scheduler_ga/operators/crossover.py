@@ -56,33 +56,28 @@ class EventCrossover(Crossover):
         p1_genes, p2_genes = self.get_genes(p1, p2)
         self._transfer_genes(child, p1, p1_genes, first=True)
         self._transfer_genes(child, p2, p2_genes)
-        return child if child and self.repairer.repair(child) else None
+        self.repairer.repair(child)
+        return child if child.all_teams_scheduled() else None
 
     def _transfer_genes(
         self, child: Schedule, parent: Schedule, events: Iterable[Event], *, first: bool = False
     ) -> None:
         """Populate the child individual from parent genes."""
-        get_team_from_child = child.get_team
         for event1 in events:
-            if (event2 := event1.paired_event) is None:
-                team = get_team_from_child(parent[event1])
+            if (event2 := event1.paired_event) and event1.location.side == 1:
+                team1 = child.get_team(parent[event1].identity)
+                team2 = child.get_team(parent[event2].identity)
+                if first or not (
+                    team1.conflicts(event1)
+                    or team2.conflicts(event2)
+                    or not team1.needs_round(event1.round_type)
+                    or not team2.needs_round(event2.round_type)
+                ):
+                    child.add_match(event1, event2, team1, team2)
+            elif event2 is None:
+                team = child.get_team(parent[event1].identity)
                 if first or (not team.conflicts(event1) and team.needs_round(event1.round_type)):
                     child[event1] = team
-                continue
-
-            if event1.location.side != 1:
-                continue
-
-            team1 = get_team_from_child(parent[event1])
-            team2 = get_team_from_child(parent[event2])
-
-            if first or not (
-                team1.conflicts(event1)
-                or team2.conflicts(event2)
-                or not team1.needs_round(event1.round_type)
-                or not team2.needs_round(event2.round_type)
-            ):
-                child.add_match(event1, event2, team1, team2)
 
 
 @dataclass(slots=True)
@@ -129,8 +124,8 @@ class Scattered(EventCrossover):
         """Get the genes for the crossover."""
         evts = self.events
         ne = len(evts)
-        indices = self.rng.sample(range(ne), ne)
         mid = ne // 2
+        indices = self.rng.sample(range(ne), ne)
         p1_genes = (evts[i] for i in indices[:mid] if evts[i] in p1)
         p2_genes = (evts[i] for i in indices[mid:] if evts[i] in p2)
         return p1_genes, p2_genes
@@ -147,7 +142,7 @@ class Uniform(EventCrossover):
         """Get the genes for the crossover."""
         evts = self.events
         ne = len(evts)
-        indices = [1 if self.rng.uniform(0, 1) < 0.5 else 2 for _ in range(ne)]
-        p1_genes = (evts[i] for i in range(ne) if indices[i] == 1 and evts[i] in p1)
-        p2_genes = (evts[i] for i in range(ne) if indices[i] == 2 and evts[i] in p2)
+        indices = (1 if self.rng.uniform(0, 1) < 0.5 else 2 for _ in range(ne))
+        p1_genes = (evts[i] for i in range(ne) if next(indices, 0) == 1 and evts[i] in p1)
+        p2_genes = (evts[i] for i in range(ne) if next(indices, 0) == 2 and evts[i] in p2)
         return p1_genes, p2_genes

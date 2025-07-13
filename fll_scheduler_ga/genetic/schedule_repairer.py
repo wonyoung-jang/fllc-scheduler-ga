@@ -29,7 +29,7 @@ class ScheduleRepairer:
         self.all_events = set(self.event_factory.flat_list())
         self.rt_teams_needed = {rc.round_type: rc.teams_per_round for rc in self.config.rounds}
 
-    def repair(self, schedule: Schedule) -> bool:
+    def repair(self, schedule: Schedule) -> None:
         """Repair missing assignments in the schedule.
 
         Fills in missing events for teams by assigning them to available
@@ -37,10 +37,6 @@ class ScheduleRepairer:
 
         Args:
             schedule (Schedule): The schedule to repair.
-
-        Returns:
-            bool: True if the schedule was successfully repaired (all teams have all
-                  required events), False otherwise.
 
         """
         open_events = self._get_open_events(schedule)
@@ -51,8 +47,6 @@ class ScheduleRepairer:
                 self._assign_singles(teams, open_events.get((rt, tpr), []), schedule)
             elif tpr == 2:
                 self._assign_matches(teams, open_events.get((rt, tpr), []), schedule)
-
-        return not any(t.rounds_needed() for t in schedule.all_teams())
 
     def _get_open_events(self, schedule: Schedule) -> defaultdict[tuple[str, int], list[Event]]:
         """Find all event slots not currently booked in the schedule."""

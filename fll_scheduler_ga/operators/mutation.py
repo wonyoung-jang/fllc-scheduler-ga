@@ -36,7 +36,8 @@ class Mutation(ABC):
         if len(matches) < 2:
             return
 
-        match_pool = matches[self.rng.choice(list(matches.keys()))]
+        target_roundtype = self.rng.choice(list(matches.keys()))
+        match_pool = matches[target_roundtype]
         yield from self.rng.sample(match_pool, k=len(match_pool))
 
     def yield_swap_candidates(self, child: Schedule) -> Iterator[tuple[tuple[Event, Event, Team, Team], ...]]:
@@ -47,8 +48,8 @@ class Mutation(ABC):
             if (match2_data := next(match_pool, None)) is None:
                 continue
 
-            event1a, _, _, _ = match1_data
-            event2a, _, _, _ = match2_data
+            event1a = match1_data[0]
+            event2a = match2_data[0]
 
             if not self._validate_swap(event1a, event2a):
                 continue
