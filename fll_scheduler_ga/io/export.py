@@ -1,5 +1,6 @@
 """Module for exporting schedules to different formats."""
 
+import argparse
 import csv
 import logging
 from pathlib import Path
@@ -7,9 +8,92 @@ from pathlib import Path
 from ..data_model.location import Location
 from ..data_model.team import Individual, Team
 from ..data_model.time import TimeSlot
+from ..genetic.fitness import FitnessEvaluator
+from ..genetic.ga import GA
+from ..genetic.schedule import Schedule
+from ..visualize.plot import Plot
 from .base_exporter import Exporter
 
 logger = logging.getLogger(__name__)
+
+
+def generate_summary(args: argparse.Namespace, ga: GA) -> None:
+    """Run the fll-scheduler-ga application and generate summary reports."""
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    logger.info("Output directory: %s", output_dir)
+
+    if not args.no_plotting:
+        plot = Plot(ga)
+
+        fitness_plot_path = output_dir / "fitness_vs_generation.png"
+        plot.plot_fitness(save_dir=fitness_plot_path)
+
+        pareto_plot_path = output_dir / "pareto_front.png"
+        plot.plot_pareto_front(save_dir=pareto_plot_path)
+
+    front = ga.pareto_front()
+    front.sort(key=lambda s: (s.rank, -s.crowding))
+
+    for i, schedule in enumerate(front, start=1):
+        name = f"front_{schedule.rank}_schedule_{i}"
+        suffixes = (
+            "csv",
+            "html",
+        )
+        for suffix in suffixes:
+            suffix_subdir = output_dir / suffix
+            suffix_subdir.mkdir(parents=True, exist_ok=True)
+            output_path = suffix_subdir / name
+            output_path = output_path.with_suffix(f".{suffix}")
+            exporter = get_exporter(output_path)
+            exporter.export(schedule, output_path)
+
+        txt_subdir = output_dir / "txt"
+        txt_subdir.mkdir(parents=True, exist_ok=True)
+        txt_output_path = txt_subdir / f"{name}_summary.txt"
+        generate_summary_report(schedule, ga.evaluator, txt_output_path)
+
+    pareto_summary_path = output_dir / "pareto_summary.csv"
+    generate_pareto_summary(ga.population, ga.evaluator, pareto_summary_path)
+
+
+def generate_summary_report(schedule: Schedule, evaluator: FitnessEvaluator, path: Path) -> None:
+    """Generate a text summary report for a single schedule."""
+    obj_names = evaluator.objectives
+    scores = schedule.fitness
+    with path.open("w", encoding="utf-8") as f:
+        f.write(f"--- FLL Scheduler GA Summary Report ({id(schedule)}) ---\n\n")
+        f.write("Objective Scores:\n")
+        for name, score in zip(obj_names, scores, strict=False):
+            f.write(f"  - {name}: {score:.4f}\n")
+
+        f.write("\nNotes:\n")
+        all_teams: list[Team] = schedule.all_teams()
+        worst_team = min(all_teams, key=lambda t: t.score_break_time())
+        f.write(f"  - Team with worst break time distribution: Team {worst_team.identity}\n")
+
+
+def generate_pareto_summary(front: list[Schedule], evaluator: FitnessEvaluator, path: Path) -> None:
+    """Generate a summary of the Pareto front."""
+    schedule_enum_digits = len(str(len(front)))
+    obj_names = evaluator.objectives
+    front.sort(key=lambda s: (s.rank, -s.crowding))
+    with path.open("w", encoding="utf-8") as f:
+        f.write("Schedule, ID, Hash, Rank, Crowding, ")
+        for name in obj_names:
+            f.write(f"{name}, ")
+        f.write("Sum\n")
+        for i, schedule in enumerate(front, start=1):
+            rank = schedule.rank
+            crowding = schedule.crowding
+            if crowding == float("inf"):
+                crowding = 9.9999
+
+            f.write(f"{i:0{schedule_enum_digits}}, {id(schedule)}, {hash(schedule)}, {rank}, {crowding:.4f}, ")
+            for score in schedule.fitness:
+                f.write(f"{score:.4f}, ")
+            f.write(f"{sum(schedule.fitness):.4f}\n")
 
 
 def get_exporter(path: Path) -> Exporter:

@@ -44,23 +44,23 @@ class FitnessEvaluator:
             logger.debug("%s: %s", HardConstraints.SCHEDULE_EXISTENCE, "Schedule is empty")
             return None
 
-        bt_s = []
-        ov_s = []
-        tc_s = []
+        if not schedule.all_teams_scheduled():
+            logger.debug("%s: %s", HardConstraints.ALL_EVENTS_SCHEDULED, "Not all events are scheduled")
+            return None
+
+        bt_s = 0
+        ov_s = 0
+        tc_s = 0
 
         all_teams = schedule.all_teams()
 
         for team in all_teams:
-            if team.rounds_needed():
-                logger.debug("%s: %s", HardConstraints.ALL_EVENTS_SCHEDULED, f"{team.identity} team needs rounds")
-                return None
+            bt_s += team.score_break_time()
+            ov_s += team.score_opponent_variety()
+            tc_s += team.score_table_consistency()
 
-            bt_s.append(team.score_break_time())
-            ov_s.append(team.score_opponent_variety())
-            tc_s.append(team.score_table_consistency())
-
-        bt_score = sum(bt_s) / len(bt_s) if bt_s else 0.0
-        ov_score = sum(ov_s) / len(ov_s) if ov_s else 0.0
-        tc_score = sum(tc_s) / len(tc_s) if tc_s else 0.0
+        bt_score = bt_s / len(all_teams) if all_teams else 1.0
+        ov_score = ov_s / len(all_teams) if all_teams else 1.0
+        tc_score = tc_s / len(all_teams) if all_teams else 1.0
 
         return bt_score, ov_score, tc_score

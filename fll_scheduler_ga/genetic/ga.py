@@ -28,7 +28,7 @@ ATTEMPTS = (0, 2**12 - 1)
 class GA:
     """Genetic algorithm for the FLL Scheduler GA."""
 
-    ga_parameters: GaParameters
+    ga_params: GaParameters
     config: TournamentConfig
     rng: Random
     event_factory: EventFactory
@@ -80,7 +80,7 @@ class GA:
 
     def run(self) -> bool:
         """Run the genetic algorithm and return the best schedule found."""
-        self._notify_on_start(self.ga_parameters.generations)
+        self._notify_on_start(self.ga_params.generations)
 
         self.initialize_population()
         self.generation()
@@ -97,7 +97,7 @@ class GA:
 
     def initialize_population(self) -> None:
         """Initialize the population with random organisms using multiprocessing."""
-        num_to_create = self.ga_parameters.population_size
+        num_to_create = self.ga_params.population_size
         seeder = Random(self.rng.randint(*RANDOM_SEED))
         worker_seeds = [seeder.randint(*RANDOM_SEED) for _ in range(num_to_create)]
         worker_args = [
@@ -140,10 +140,10 @@ class GA:
         """Perform a single generation step of the genetic algorithm."""
         self.nsga2.non_dominated_sort(self.population)
         this_gen_fitness = self._update_fitness_history()
-        num_elites = self.ga_parameters.elite_size
-        num_offspring = self.ga_parameters.population_size - num_elites
+        num_elites = self.ga_params.elite_size
+        num_offspring = self.ga_params.population_size - num_elites
 
-        for generation in range(self.ga_parameters.generations):
+        for generation in range(self.ga_params.generations):
             elites = list(self.elitism.select(self.population, num_elites))
             elite_hashes = {hash(e) for e in elites}
             self.population = elites + self.evolve(num_offspring, elite_hashes)
@@ -186,13 +186,16 @@ class GA:
 
     def mutate_population(self, population: Population) -> None:
         """Mutate the population by applying mutations to each individual."""
-        low = self.ga_parameters.mutation_chance_low
-        high = self.ga_parameters.mutation_chance_high
+        low = self.ga_params.mutation_chance_low
+        high = self.ga_params.mutation_chance_high
         rank_mask = sorted({i.rank for i in population})
-        mid_rank = min((max(rank_mask) - min(rank_mask)) // 2, 1)
 
         for individual in population:
-            mutation_chance = low if individual.rank < mid_rank else high
+            if max(rank_mask) > 0:
+                normalized_rank = individual.rank / max(rank_mask)
+                mutation_chance = low + (high - low) * normalized_rank
+            else:
+                mutation_chance = low
 
             if mutation_chance > self.rng.random():
                 m = self.rng.choice(self.mutations)
@@ -216,7 +219,7 @@ class GA:
         parents: list[Schedule] = list(s.select(population, 2))
         child: Schedule = None
 
-        if self.ga_parameters.crossover_chance > self.rng.random():
+        if self.ga_params.crossover_chance > self.rng.random():
             c = self.rng.choice(self.crossovers)
             child = c.crossover(parents)
 
@@ -244,8 +247,8 @@ class GA:
         for obs in self.observers:
             obs.on_generation_end(
                 generation + 1,
-                self.ga_parameters.generations,
-                self.ga_parameters.population_size,
+                self.ga_params.generations,
+                self.ga_params.population_size,
                 best_fitness,
                 len(self.pareto_front()),
             )

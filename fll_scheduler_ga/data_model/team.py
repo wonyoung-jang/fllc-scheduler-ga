@@ -1,8 +1,9 @@
 """Team data model for FLL Scheduler GA."""
 
-import bisect
 import math
 from dataclasses import dataclass, field
+from datetime import datetime
+from functools import cache
 from logging import getLogger
 
 from ..config.config import RoundType, TournamentConfig
@@ -15,7 +16,13 @@ logger = getLogger(__name__)
 type TeamMap = dict[int, Team]
 type Individual = dict[Event, Team]
 
-ZERO_BREAK_PENALTY = 10e-6
+ZERO_PENALTY = 10e-9
+
+
+@cache
+def get_break_time(start: datetime, stop: datetime) -> float:
+    """Calculate the break time in minutes between two time slots."""
+    return (start - stop).total_seconds() // 60
 
 
 @dataclass(slots=True, frozen=True)
@@ -111,6 +118,11 @@ class Team:
         """Check if the team still needs to participate in a given round type."""
         return self.round_types[round_type]
 
+    def switch_event(self, old_event: Event, new_event: Event) -> None:
+        """Switch an event for the team."""
+        self.remove_event(old_event)
+        self.add_event(new_event)
+
     def remove_event(self, event: Event) -> None:
         """Unbook a team from an event."""
         self.round_types[event.round_type] += 1
@@ -120,24 +132,20 @@ class Team:
         if event.location.teams_per_round == 2:
             self.locations.remove(event.location)
 
-        if self._cached_break_time_score is not None:
-            self._cached_break_time_score = None
-        if self._cached_table_score is not None:
-            self._cached_table_score = None
+        self._cached_break_time_score = None
+        self._cached_table_score = None
 
     def add_event(self, event: Event) -> None:
         """Book a team for an event."""
         self.round_types[event.round_type] -= 1
         self._rounds_needed -= 1
-        bisect.insort(self.events, event, key=lambda e: e.timeslot.start)
+        self.events.append(event)
         self._event_ids.add(event.identity)
         if event.location.teams_per_round == 2:
             self.locations.append(event.location)
 
-        if self._cached_break_time_score is not None:
-            self._cached_break_time_score = None
-        if self._cached_table_score is not None:
-            self._cached_table_score = None
+        self._cached_break_time_score = None
+        self._cached_table_score = None
 
     def switch_opponent(self, old_opponent: "Team", new_opponent: "Team") -> None:
         """Switch the opponent for a given event."""
@@ -147,14 +155,12 @@ class Team:
     def remove_opponent(self, opponent: "Team") -> None:
         """Remove an opponent for a given event."""
         self.opponents.remove(opponent.identity)
-        if self._cached_opponent_score is not None:
-            self._cached_opponent_score = None
+        self._cached_opponent_score = None
 
     def add_opponent(self, opponent: "Team") -> None:
         """Add an opponent for a given event."""
         self.opponents.append(opponent.identity)
-        if self._cached_opponent_score is not None:
-            self._cached_opponent_score = None
+        self._cached_opponent_score = None
 
     def conflicts(self, new_event: Event) -> bool:
         """Check if adding a new event would cause a time conflict.
@@ -182,10 +188,13 @@ class Team:
         if len(self.events) < 2:
             return 1.0
 
-        break_times = [
-            (self.events[i].timeslot.start - self.events[i - 1].timeslot.stop).total_seconds() // 60
-            for i in range(1, len(self.events))
-        ]
+        self.events.sort(key=lambda e: e.timeslot.start)
+
+        break_times = []
+        for i in range(1, len(self.events)):
+            start = self.events[i].timeslot.start
+            stop = self.events[i - 1].timeslot.stop
+            break_times.append(get_break_time(start, stop))
 
         n = len(break_times)
 
@@ -208,7 +217,7 @@ class Team:
         sum_sq_diff = sum((b - mean_x) ** 2 for b in break_times)
         variance = sum_sq_diff / n
         stdev_x = math.sqrt(variance)
-        penalty = ZERO_BREAK_PENALTY**zero_breaks
+        penalty = ZERO_PENALTY**zero_breaks
         coeff_of_variation = stdev_x / mean_x if mean_x > 0 else 0
 
         self._cached_break_time_score = penalty * (1.0 / (1.0 + coeff_of_variation))
@@ -223,10 +232,11 @@ class Team:
         num_total_opponents = len(self.opponents)
         opponent_ratio = num_unique_opponents / num_total_opponents if num_total_opponents else 1.0
 
-        if num_unique_opponents == 1:
-            opponent_ratio = 0.0  # penalty for lack of variety
+        opponent_penalty = 1
+        if num_unique_opponents != num_total_opponents:
+            opponent_penalty = ZERO_PENALTY ** (num_total_opponents - num_unique_opponents)
 
-        self._cached_opponent_score = opponent_ratio
+        self._cached_opponent_score = opponent_ratio * opponent_penalty
         return self._cached_opponent_score
 
     def score_table_consistency(self) -> float:
@@ -242,7 +252,7 @@ class Team:
 
         table_penalty = 1
         if num_unique_locations == num_total_locations:
-            table_penalty = ZERO_BREAK_PENALTY**num_total_locations
+            table_penalty = ZERO_PENALTY**num_total_locations
 
         self._cached_table_score = table_ratio * table_penalty
         return self._cached_table_score

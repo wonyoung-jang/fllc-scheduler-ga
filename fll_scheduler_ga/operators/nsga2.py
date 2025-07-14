@@ -84,14 +84,23 @@ class NSGA2:
                 front[i].crowding += (next_in_front_fitness - prev_in_front_fitness) * inv_range
 
     @staticmethod
-    def dominates(p: Schedule, q: Schedule) -> bool:
-        """Check if individual p dominates individual q."""
-        if p.fitness is None or q.fitness is None:
+    def dominates(s1: Schedule, s2: Schedule) -> bool:
+        """Check if schedule s1 dominates schedule s2.
+
+        Args:
+            s1 (Schedule): The first schedule to compare.
+            s2 (Schedule): The second schedule to compare.
+
+        Returns:
+            bool: True if s1 dominates s2, False otherwise.
+
+        """
+        if s1.fitness is None or s2.fitness is None:
             return False
 
         better_in_any = False
 
-        for ps, qs in zip(p.fitness, q.fitness, strict=True):
+        for ps, qs in zip(s1.fitness, s2.fitness, strict=True):
             if ps < qs:
                 return False
 

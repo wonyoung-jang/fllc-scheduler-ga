@@ -62,10 +62,10 @@ class ScheduleBuilder:
 
     def _build_singles(self, schedule: Schedule, rt: RoundType) -> None:
         """Book all judging events for a specific round type."""
-        events_for_round = self.events.get(rt, [])
+        events = self.events.get(rt, [])
         teams = (t for t in self.teams if t.needs_round(rt))
 
-        for event, team in zip(events_for_round, teams, strict=False):
+        for event, team in zip(events, teams, strict=False):
             schedule[event] = team
 
     def _build_matches(self, schedule: Schedule, rt: RoundType) -> None:

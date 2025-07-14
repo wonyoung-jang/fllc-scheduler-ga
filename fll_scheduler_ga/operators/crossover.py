@@ -6,7 +6,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from random import Random
 
-from ..data_model.event import Event, EventFactory
+from ..data_model.event import Event
 from ..data_model.team import TeamFactory
 from ..genetic.schedule import Schedule
 from ..genetic.schedule_repairer import ScheduleRepairer
@@ -19,27 +19,40 @@ class Crossover(ABC):
     """Abstract base class for crossover operators in the FLL Scheduler GA."""
 
     team_factory: TeamFactory
-    event_factory: EventFactory
+    events: list[Event]
     rng: Random
+    repairer: ScheduleRepairer
 
 
 @dataclass(slots=True)
 class EventCrossover(Crossover):
     """Abstract base class for crossover operators in the FLL Scheduler GA."""
 
-    repairer: ScheduleRepairer
-    events: list[Event] = field(init=False, repr=False)
-
-    def __post_init__(self) -> None:
-        """Post-initialization to set up the initial state."""
-        self.events = self.event_factory.flat_list()
-
     @abstractmethod
     def get_genes(self, p1: Schedule, p2: Schedule) -> tuple[Iterable[Event], Iterable[Event]]:
-        """Get the genes for the crossover."""
+        """Get the genes for the crossover.
+
+        Args:
+            p1 (Schedule): First parent schedule.
+            p2 (Schedule): Second parent schedule.
+
+        Returns:
+                tuple[Iterable[Event], Iterable[Event]]: Genes from both parents.
+
+        """
+        msg = "Subclasses must implement this method."
+        raise NotImplementedError(msg)
 
     def crossover(self, parents: list[Schedule]) -> Schedule | None:
-        """Crossover two parents to produce a child."""
+        """Crossover two parents to produce a child.
+
+        Args:
+            parents (list[Schedule]): List of parent schedules.
+
+        Returns:
+            Schedule | None: The child schedule produced from the crossover, or None if unsuccessful.
+
+        """
         p1, p2 = self.rng.sample(parents, k=2)
 
         if child := self._produce_child(p1, p2):
@@ -62,7 +75,15 @@ class EventCrossover(Crossover):
     def _transfer_genes(
         self, child: Schedule, parent: Schedule, events: Iterable[Event], *, first: bool = False
     ) -> None:
-        """Populate the child individual from parent genes."""
+        """Populate the child individual from parent genes.
+
+        Args:
+            child (Schedule): The child schedule to populate.
+            parent (Schedule): The parent schedule to copy genes from.
+            events (Iterable[Event]): The events to copy.
+            first (bool, optional): Whether this is the first parent. Defaults to False.
+
+        """
         for event1 in events:
             if (event2 := event1.paired_event) and event1.location.side == 1:
                 team1 = child.get_team(parent[event1].identity)
@@ -88,14 +109,21 @@ class KPoint(EventCrossover):
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
-        super(KPoint, self).__post_init__()
-
         if not 1 <= self.k < len(self.events):
             msg = "k must be between 1 and the number of events."
             raise ValueError(msg)
 
-    def get_genes(self, p1: Schedule, p2: Schedule) -> tuple[Iterable[Event], Iterable[Event]]:
-        """Get the genes for the crossover."""
+    def get_genes(self, p1: Schedule, p2: Schedule) -> tuple[Iterable[Event], ...]:
+        """Get the genes for the crossover.
+
+        Args:
+            p1 (Schedule): First parent schedule.
+            p2 (Schedule): Second parent schedule.
+
+        Returns:
+                tuple[Iterable[Event], ...]: Genes from both parents.
+
+        """
         evts = self.events
         ne = len(evts)
         indices = sorted(self.rng.sample(range(1, ne), self.k))
@@ -120,8 +148,17 @@ class Scattered(EventCrossover):
     Shuffled indices split parent 50/50.
     """
 
-    def get_genes(self, p1: Schedule, p2: Schedule) -> tuple[Iterable[Event], Iterable[Event]]:
-        """Get the genes for the crossover."""
+    def get_genes(self, p1: Schedule, p2: Schedule) -> tuple[Iterable[Event], ...]:
+        """Get the genes for the crossover.
+
+        Args:
+            p1 (Schedule): First parent schedule.
+            p2 (Schedule): Second parent schedule.
+
+        Returns:
+                tuple[Iterable[Event], ...]: Genes from both parents.
+
+        """
         evts = self.events
         ne = len(evts)
         mid = ne // 2
@@ -138,8 +175,17 @@ class Uniform(EventCrossover):
     Each gene is chosen from either parent by flipping a coin for each gene.
     """
 
-    def get_genes(self, p1: Schedule, p2: Schedule) -> tuple[Iterable[Event], Iterable[Event]]:
-        """Get the genes for the crossover."""
+    def get_genes(self, p1: Schedule, p2: Schedule) -> tuple[Iterable[Event], ...]:
+        """Get the genes for the crossover.
+
+        Args:
+            p1 (Schedule): First parent schedule.
+            p2 (Schedule): Second parent schedule.
+
+        Returns:
+                tuple[Iterable[Event], ...]: Genes from both parents.
+
+        """
         evts = self.events
         ne = len(evts)
         indices = (1 if self.rng.uniform(0, 1) < 0.5 else 2 for _ in range(ne))

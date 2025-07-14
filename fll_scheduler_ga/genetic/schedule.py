@@ -1,13 +1,14 @@
 """Represents a schedule (individual) with its associated fitness score."""
 
 from collections import defaultdict
-from collections.abc import Generator, ItemsView, KeysView, ValuesView
+from collections.abc import ItemsView, KeysView, ValuesView
 from dataclasses import dataclass, field
 
 from ..data_model.event import Event
 from ..data_model.team import Individual, Team, TeamMap
 
 type Population = list[Schedule]
+type Match = tuple[Event, Event, Team, Team]
 
 
 @dataclass(slots=True, order=True)
@@ -60,6 +61,30 @@ class Schedule:
         self._cached_all_teams = None
         self._hash = None
 
+    def __contains__(self, event: Event) -> bool:
+        """Check if a specific event is scheduled."""
+        return event in self._schedule
+
+    def __eq__(self, other: object) -> bool:
+        """Two Schedules are equal if they assign the same teams to the same events."""
+        if not isinstance(other, Schedule):
+            return NotImplemented
+
+        self_schedule = dict(sorted(self._schedule.items()))
+        other_schedule = dict(sorted(other._schedule.items()))
+        return frozenset((e.identity, t.identity) for e, t in self_schedule.items()) == frozenset(
+            (e.identity, t.identity) for e, t in other_schedule.items()
+        )
+
+    def __hash__(self) -> int:
+        """Hash is based on the frozenset of (event_id, team_id) pairs."""
+        if self._hash is None:
+            self_schedule = dict(sorted(self._schedule.items()))
+            key = frozenset((e.identity, t.identity) for e, t in self_schedule.items())
+            self._hash = hash(key)
+
+        return self._hash
+
     def add_match(self, e1: Event, e2: Event, t1: Team, t2: Team) -> None:
         """Add a match event to the schedule."""
         self[e1] = t1
@@ -71,35 +96,7 @@ class Schedule:
         self._cached_all_teams = None
         self._hash = None
 
-    def __contains__(self, event: Event) -> bool:
-        """Check if a specific event is scheduled."""
-        return event in self._schedule
-
-    def __iter__(self) -> Generator[Event]:
-        """Iterate over the Events in the schedule."""
-        return iter(self._schedule)
-
-    def __eq__(self, other: object) -> bool:
-        """Two Schedules are equal iff they assign the same teams to the same events."""
-        if not isinstance(other, Schedule):
-            return NotImplemented
-
-        self._schedule = dict(sorted(self._schedule.items()))
-        other._schedule = dict(sorted(other._schedule.items()))
-        return frozenset((e.identity, t.identity) for e, t in self._schedule.items()) == frozenset(
-            (e.identity, t.identity) for e, t in other._schedule.items()
-        )
-
-    def __hash__(self) -> int:
-        """Hash is based on the frozenset of (event_id, team_id) pairs."""
-        if self._hash is None:
-            self._schedule = dict(sorted(self._schedule.items()))
-            key = frozenset((e.identity, t.identity) for e, t in self._schedule.items())
-            self._hash = hash(key)
-
-        return self._hash
-
-    def get_matches(self) -> dict[str, list[tuple[Event, Event, Team, Team]]]:
+    def get_matches(self) -> dict[str, list[Match]]:
         """Get all matches in the schedule."""
         if self._cached_matches is not None:
             return self._cached_matches
