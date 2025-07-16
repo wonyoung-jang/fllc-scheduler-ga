@@ -31,11 +31,12 @@ class NSGA2:
                 pop[i].rank = 0
                 fronts[0].append(i)
 
-        NSGA2.compute_crowding_dist([pop[i] for i in fronts[0]])
+        if fronts[0]:
+            NSGA2.compute_crowding_dist([pop[i] for i in fronts[0]])
 
         current_front = 0
 
-        while current_front < len(fronts):
+        while current_front < len(fronts) and fronts[current_front]:
             next_front = []
 
             for i in fronts[current_front]:
@@ -46,23 +47,32 @@ class NSGA2:
                         pop[j].rank = current_front + 1
                         next_front.append(j)
 
-            current_front += 1
-
             if next_front:
                 NSGA2.compute_crowding_dist([pop[i] for i in next_front])
                 fronts.append(next_front)
 
+            current_front += 1
+
     @staticmethod
     def compute_crowding_dist(front: Population) -> None:
         """Calculate the crowding distance for each individual in a front."""
+        if not front:
+            return
+
         first_of_front: Schedule = front[0]
-        if not front or not first_of_front.fitness:
+        if not first_of_front.fitness:
             return
 
         num_objectives = len(first_of_front.fitness)
+        front_size = len(front)
 
         for p in front:
             p.crowding = 0.0
+
+        if front_size <= 2:
+            for p in front:
+                p.crowding = float("inf")
+            return
 
         for m in range(num_objectives):
             front.sort(key=lambda p: p.fitness[m])
@@ -76,31 +86,30 @@ class NSGA2:
             if f_diff == 0:
                 continue
 
-            inv_range = 1.0 / f_diff
-
-            for i in range(1, len(front) - 1):
-                next_in_front_fitness = front[i + 1].fitness[m]
-                prev_in_front_fitness = front[i - 1].fitness[m]
-                front[i].crowding += (next_in_front_fitness - prev_in_front_fitness) * inv_range
+            for i in range(1, front_size - 1):
+                if front[i].crowding != float("inf"):
+                    next_fitness = front[i + 1].fitness[m]
+                    prev_fitness = front[i - 1].fitness[m]
+                    front[i].crowding += (next_fitness - prev_fitness) / f_diff
 
     @staticmethod
-    def dominates(s1: Schedule, s2: Schedule) -> bool:
-        """Check if schedule s1 dominates schedule s2.
+    def dominates(p: Schedule, q: Schedule) -> bool:
+        """Check if schedule p dominates schedule q.
 
         Args:
-            s1 (Schedule): The first schedule to compare.
-            s2 (Schedule): The second schedule to compare.
+            p (Schedule): The first schedule to compare.
+            q (Schedule): The second schedule to compare.
 
         Returns:
-            bool: True if s1 dominates s2, False otherwise.
+            bool: True if p dominates q, False otherwise.
 
         """
-        if s1.fitness is None or s2.fitness is None:
+        if p.fitness is None or q.fitness is None:
             return False
 
         better_in_any = False
 
-        for ps, qs in zip(s1.fitness, s2.fitness, strict=True):
+        for ps, qs in zip(p.fitness, q.fitness, strict=True):
             if ps < qs:
                 return False
 

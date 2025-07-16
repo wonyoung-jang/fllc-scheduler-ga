@@ -13,15 +13,19 @@ from .time import HHMM_FMT, TimeSlot
 logger = logging.getLogger(__name__)
 
 
-@dataclass(slots=True, unsafe_hash=True, order=True)
+@dataclass(slots=True, order=True)
 class Event:
     """Data model for an event in a schedule."""
 
-    identity: int = field(hash=True, compare=True)
+    identity: int = field(compare=True)
     round_type: RoundType = field(compare=False)
     timeslot: TimeSlot = field(compare=False)
     location: Room | Table = field(compare=False)
     paired_event: "Event | None" = field(default=None, repr=False, compare=False)
+
+    def __hash__(self) -> int:
+        """Use the unique identity for hashing."""
+        return self.identity
 
     def __str__(self) -> str:
         """Get string representation of Event."""

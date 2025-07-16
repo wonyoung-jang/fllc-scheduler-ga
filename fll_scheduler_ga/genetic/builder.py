@@ -7,15 +7,15 @@ from dataclasses import dataclass, field
 from ..config.config import RoundType, TournamentConfig
 from ..data_model.event import Event, EventFactory
 from ..data_model.team import Team, TeamFactory
+from ..operators.repairer import Repairer
 from .fitness import FitnessEvaluator
 from .schedule import Schedule
-from .schedule_repairer import ScheduleRepairer
 
 logger = logging.getLogger(__name__)
 
 
 def create_and_evaluate_schedule(
-    args: tuple[TeamFactory, EventFactory, TournamentConfig, FitnessEvaluator, ScheduleRepairer, int],
+    args: tuple[TeamFactory, EventFactory, TournamentConfig, FitnessEvaluator, Repairer, int],
 ) -> Schedule | None:
     """Create and evaluate a schedule in a separate process."""
     team_factory, event_factory, config, evaluator, repairer, seed = args
@@ -33,20 +33,17 @@ class ScheduleBuilder:
     team_factory: TeamFactory
     event_factory: EventFactory
     config: TournamentConfig
-    repairer: ScheduleRepairer
+    repairer: Repairer
     rng: random.Random
     events: dict[RoundType, list[Event]] = field(init=False, repr=False)
     teams: list[Team] = field(init=False, repr=False)
 
-    def __post_init__(self) -> None:
-        """Post-initialization to set up the initial state."""
+    def build(self) -> Schedule:
+        """Construct and return the final schedule."""
         self.events = self.event_factory.build()
-
         for events in self.events.values():
             self.rng.shuffle(events)
 
-    def build(self) -> Schedule:
-        """Construct and return the final schedule."""
         schedule = Schedule(self.team_factory.build())
         self.teams = schedule.all_teams()
         self.rng.shuffle(self.teams)
@@ -66,6 +63,7 @@ class ScheduleBuilder:
         teams = (t for t in self.teams if t.needs_round(rt))
 
         for event, team in zip(events, teams, strict=False):
+            team.add_event(event)
             schedule[event] = team
 
     def _build_matches(self, schedule: Schedule, rt: RoundType) -> None:
@@ -80,4 +78,9 @@ class ScheduleBuilder:
             if (team1 := next(available, None)) is None or (team2 := next(available, None)) is None:
                 continue
 
-            schedule.add_match(side1, side2, team1, team2)
+            team1.add_event(side1)
+            team2.add_event(side2)
+            schedule[side1] = team1
+            schedule[side2] = team2
+            team1.add_opponent(team2)
+            team2.add_opponent(team1)

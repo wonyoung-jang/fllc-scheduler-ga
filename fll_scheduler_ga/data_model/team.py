@@ -2,8 +2,6 @@
 
 import math
 from dataclasses import dataclass, field
-from datetime import datetime
-from functools import cache
 from logging import getLogger
 
 from ..config.config import RoundType, TournamentConfig
@@ -16,13 +14,7 @@ logger = getLogger(__name__)
 type TeamMap = dict[int, Team]
 type Individual = dict[Event, Team]
 
-ZERO_PENALTY = 10e-9
-
-
-@cache
-def get_break_time(start: datetime, stop: datetime) -> float:
-    """Calculate the break time in minutes between two time slots."""
-    return (start - stop).total_seconds() // 60
+ZERO_PENALTY = 1e-16
 
 
 @dataclass(slots=True, frozen=True)
@@ -73,6 +65,8 @@ class Team:
     events: list[Event] = field(default_factory=list)
     opponents: list[int] = field(default_factory=list, repr=False)
     locations: list[Location] = field(default_factory=list, repr=False)
+
+    fitness: tuple[float] = field(default=None, init=False, repr=False)
 
     _event_ids: set[int] = field(default_factory=set, repr=False)
     _cached_break_time_score: float | None = field(default=None, repr=False)
@@ -180,6 +174,14 @@ class Team:
 
         return new_event.identity in self._event_ids
 
+    def score(self) -> None:
+        """Calculate the fitness score for the team based on various criteria."""
+        self.fitness = (
+            self.score_break_time(),
+            self.score_opponent_variety(),
+            self.score_table_consistency(),
+        )
+
     def score_break_time(self) -> float:
         """Calculate a score based on the break times between events."""
         if self._cached_break_time_score is not None:
@@ -194,7 +196,8 @@ class Team:
         for i in range(1, len(self.events)):
             start = self.events[i].timeslot.start
             stop = self.events[i - 1].timeslot.stop
-            break_times.append(get_break_time(start, stop))
+            duration_seconds = (start - stop).total_seconds()
+            break_times.append(duration_seconds // 60)
 
         n = len(break_times)
 
@@ -246,7 +249,6 @@ class Team:
 
         num_unique_locations = len(set(self.locations))
         num_total_locations = len(self.locations)
-
         table_ratio = num_unique_locations / num_total_locations if num_total_locations else 1
         table_ratio = 1 / (1 + table_ratio)
 

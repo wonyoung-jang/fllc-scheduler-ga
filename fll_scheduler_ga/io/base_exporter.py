@@ -3,7 +3,9 @@
 from abc import ABC, abstractmethod
 
 from ..config.config import RoundType
-from ..data_model.team import Individual
+from ..data_model.location import Location
+from ..data_model.team import Individual, Team
+from ..data_model.time import TimeSlot
 
 
 class Exporter(ABC):
@@ -24,3 +26,18 @@ class Exporter(ABC):
             grouped.setdefault(event.round_type, {})
             grouped[event.round_type][event] = team
         return grouped
+
+
+class GridBasedExporter(Exporter):
+    """Base class for exporters that render a grid-based schedule."""
+
+    def _build_grid_data(
+        self, schedule: Individual
+    ) -> tuple[list[TimeSlot], list[Location], dict[tuple[TimeSlot, Location], Team]]:
+        """Build the common grid data structure from a schedule."""
+        grid_lookup = {(e.timeslot, e.location): team for e, team in schedule.items()}
+        timeslots = sorted({i[0] for i in grid_lookup}, key=lambda ts: ts.start)
+        locations = sorted(
+            {i[1] for i in grid_lookup}, key=lambda loc: (loc.identity, loc.side if hasattr(loc, "side") else 0)
+        )
+        return timeslots, locations, grid_lookup

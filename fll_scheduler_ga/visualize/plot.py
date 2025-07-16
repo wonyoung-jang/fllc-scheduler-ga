@@ -57,7 +57,7 @@ class Plot:
         x = np.arange(len(history_df))
         for col in history_df.columns:
             y = history_df[col].to_numpy()
-            z = np.polyfit(x, y, 2)
+            z = np.polyfit(x, y, 5)
             p = np.poly1d(z)
             ax.plot(x, p(x), linestyle="--", linewidth=2, label=f"{col} Trend")
         ax.set(title=title, xlabel=xlabel, ylabel=ylabel)

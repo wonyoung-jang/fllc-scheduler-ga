@@ -12,21 +12,17 @@ from fll_scheduler_ga.data_model.team import TeamFactory
 from fll_scheduler_ga.genetic.fitness import FitnessEvaluator
 from fll_scheduler_ga.genetic.ga import GA, RANDOM_SEED
 from fll_scheduler_ga.genetic.ga_parameters import GaParameters
-from fll_scheduler_ga.genetic.schedule_repairer import ScheduleRepairer
 from fll_scheduler_ga.io.export import generate_summary
 from fll_scheduler_ga.observers.loggers import LoggingObserver
 from fll_scheduler_ga.observers.progress import TqdmObserver
-from fll_scheduler_ga.operators.crossover import KPoint, Scattered, Uniform
+from fll_scheduler_ga.operators.crossover import KPoint, RoundTypeCrossover, Scattered, Uniform
 from fll_scheduler_ga.operators.mutation import (
     SwapMatchMutation,
     SwapTeamMutation,
 )
+from fll_scheduler_ga.operators.repairer import Repairer
 from fll_scheduler_ga.operators.selection import (
     Elitism,
-    RandomSelect,
-    RankBased,
-    RouletteWheel,
-    StochasticUniversalSampling,
     TournamentSelect,
 )
 from fll_scheduler_ga.preflight.preflight import run_preflight_checks
@@ -222,19 +218,16 @@ def _create_ga_instance(config: dict, event_factory: EventFactory, ga_params: Ga
     """Create and return a GA instance with the provided configuration."""
     event_conflicts = EventConflicts(event_factory)
     team_factory = TeamFactory(config, event_conflicts.conflicts)
-    selections = (
-        # Sorted by selection pressure (highest to lowest)
-        RouletteWheel(rng),
-        RankBased(rng, selection_pressure=1.5),
-        StochasticUniversalSampling(rng),
-        TournamentSelect(rng, tournament_size=ga_params.selection_size),
-        RandomSelect(rng),
-    )
+    selection = TournamentSelect(rng, tournament_size=ga_params.selection_size)
     elitism = Elitism(rng)  # Separate survival selection
+    evaluator = FitnessEvaluator(config)
+    observers = (
+        LoggingObserver(logger),
+        TqdmObserver(logger),
+    )
 
     events_list = event_factory.flat_list()
-
-    repairer = ScheduleRepairer(rng, config, set(events_list))
+    repairer = Repairer(rng, config, set(events_list))
 
     crossovers = (
         KPoint(team_factory, events_list, rng, repairer, k=1),  # Single-point
@@ -242,23 +235,17 @@ def _create_ga_instance(config: dict, event_factory: EventFactory, ga_params: Ga
         KPoint(team_factory, events_list, rng, repairer, k=8),  # K point (8)
         Scattered(team_factory, events_list, rng, repairer),
         Uniform(team_factory, events_list, rng, repairer),
+        RoundTypeCrossover(team_factory, events_list, rng, repairer),
     )
 
     mutations = (
-        SwapMatchMutation(rng, same_timeslot=False, same_location=False),
-        SwapMatchMutation(rng, same_timeslot=False, same_location=True),
-        SwapMatchMutation(rng, same_timeslot=True, same_location=False),
-        SwapTeamMutation(rng, same_timeslot=False, same_location=False),
-        SwapTeamMutation(rng, same_timeslot=False, same_location=True),
-        SwapTeamMutation(rng, same_timeslot=True, same_location=False),
+        SwapMatchMutation(rng, same_timeslot=False, same_location=False),  # Across timeslots and locations
+        SwapMatchMutation(rng, same_timeslot=False, same_location=True),  # Across timeslots, same location
+        SwapMatchMutation(rng, same_timeslot=True, same_location=False),  # Same timeslot, across locations
+        SwapTeamMutation(rng, same_timeslot=False, same_location=False),  # Across timeslots and locations
+        SwapTeamMutation(rng, same_timeslot=False, same_location=True),  # Across timeslots, same location
+        SwapTeamMutation(rng, same_timeslot=True, same_location=False),  # Same timeslot, across locations
     )
-
-    evaluator = FitnessEvaluator(config)
-
-    observers = [
-        LoggingObserver(logger),
-        TqdmObserver(logger),
-    ]
 
     return GA(
         ga_params=ga_params,
@@ -266,7 +253,7 @@ def _create_ga_instance(config: dict, event_factory: EventFactory, ga_params: Ga
         rng=rng,
         event_factory=event_factory,
         team_factory=team_factory,
-        selections=selections,
+        selection=selection,
         elitism=elitism,
         crossovers=crossovers,
         mutations=mutations,

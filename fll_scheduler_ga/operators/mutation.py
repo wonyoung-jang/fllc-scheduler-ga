@@ -82,7 +82,7 @@ class Mutation(ABC):
 
         for match1_data in match_pool:
             if (match2_data := next(match_pool, None)) is None:
-                continue
+                return
 
             event1a = match1_data[0]
             event2a = match2_data[0]
@@ -139,7 +139,10 @@ class SwapTeamMutation(Mutation):
             event1a, _, team1a, team1b = match1_data
             event2a, _, team2a, team2b = match2_data
 
-            if team1a.identity in (team2a.identity, team2b.identity) or team2a.identity == team1b.identity:
+            match1_team_ids = {team1a.identity, team1b.identity}
+            match2_team_ids = {team2a.identity, team2b.identity}
+
+            if match1_team_ids.intersection(match2_team_ids):
                 continue
 
             if team1a.conflicts(event2a) or team2a.conflicts(event1a):
@@ -174,6 +177,9 @@ class SwapTeamMutation(Mutation):
 
         team1a.switch_event(event1a, event2a)
         team2a.switch_event(event2a, event1a)
+
+        child[event1a] = team2a
+        child[event2a] = team1a
 
         return True
 
@@ -230,5 +236,10 @@ class SwapMatchMutation(Mutation):
         team1b.switch_event(event1b, event2b)
         team2a.switch_event(event2a, event1a)
         team2b.switch_event(event2b, event1b)
+
+        child[event1a] = team2a
+        child[event1b] = team2b
+        child[event2a] = team1a
+        child[event2b] = team1b
 
         return True

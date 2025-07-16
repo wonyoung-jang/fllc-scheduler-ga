@@ -31,7 +31,7 @@ class TqdmObserver(GaObserver):
         """Update progress bar with no new best."""
         fitness_str = ", ".join([f"{s:.3f}" for s in best_fitness])
         fitness_str += f" | {sum(best_fitness):.3f}"
-        self._progress_bar.set_description(f"Front: {front_size:<3} | Avg Fitness: {fitness_str}")
+        self._progress_bar.set_description(f"Front: {front_size:<2}/{population_size:<2} | Avg Fitness: {fitness_str}")
         self._progress_bar.update(1)
 
     def on_finish(self, pop: Population, front: Population) -> None:

@@ -5,14 +5,12 @@ import csv
 import logging
 from pathlib import Path
 
-from ..data_model.location import Location
 from ..data_model.team import Individual, Team
-from ..data_model.time import TimeSlot
 from ..genetic.fitness import FitnessEvaluator
 from ..genetic.ga import GA
 from ..genetic.schedule import Schedule
 from ..visualize.plot import Plot
-from .base_exporter import Exporter
+from .base_exporter import Exporter, GridBasedExporter
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +76,7 @@ def generate_pareto_summary(front: list[Schedule], evaluator: FitnessEvaluator, 
     """Generate a summary of the Pareto front."""
     schedule_enum_digits = len(str(len(front)))
     obj_names = evaluator.objectives
-    front.sort(key=lambda s: (s.rank, -s.crowding))
+    front.sort(key=lambda s: (s.rank, -s.crowding, -sum(s.fitness)))
     with path.open("w", encoding="utf-8") as f:
         f.write("Schedule, ID, Hash, Rank, Crowding, ")
         for name in obj_names:
@@ -106,21 +104,6 @@ def get_exporter(path: Path) -> Exporter:
         logger.warning("No exporter found for file extension %s. Defaulting to CSV.", path.suffix)
         return CsvExporter()
     return exporter()
-
-
-class GridBasedExporter(Exporter):
-    """Base class for exporters that render a grid-based schedule."""
-
-    def _build_grid_data(
-        self, schedule: Individual
-    ) -> tuple[list[TimeSlot], list[Location], dict[tuple[TimeSlot, Location], Team]]:
-        """Build the common grid data structure from a schedule."""
-        grid_lookup = {(e.timeslot, e.location): team for e, team in schedule.items()}
-        timeslots = sorted({i[0] for i in grid_lookup}, key=lambda ts: ts.start)
-        locations = sorted(
-            {i[1] for i in grid_lookup}, key=lambda loc: (loc.identity, loc.side if hasattr(loc, "side") else 0)
-        )
-        return timeslots, locations, grid_lookup
 
 
 class CsvExporter(GridBasedExporter):

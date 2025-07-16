@@ -9,7 +9,7 @@ from random import Random
 from ..data_model.event import Event
 from ..data_model.team import TeamFactory
 from ..genetic.schedule import Schedule
-from ..genetic.schedule_repairer import ScheduleRepairer
+from .repairer import Repairer
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,21 @@ class Crossover(ABC):
     team_factory: TeamFactory
     events: list[Event]
     rng: Random
-    repairer: ScheduleRepairer
+    repairer: Repairer
+
+    @abstractmethod
+    def crossover(self, parents: list[Schedule]) -> list[Schedule]:
+        """Crossover two parents to produce a child.
+
+        Args:
+            parents (list[Schedule]): List of parent schedules.
+
+        Returns:
+            list[Schedule]: The child schedule produced from the crossover, or None if unsuccessful.
+
+        """
+        msg = "Subclasses must implement this method."
+        raise NotImplementedError(msg)
 
 
 @dataclass(slots=True)
@@ -43,25 +57,25 @@ class EventCrossover(Crossover):
         msg = "Subclasses must implement this method."
         raise NotImplementedError(msg)
 
-    def crossover(self, parents: list[Schedule]) -> Schedule | None:
+    def crossover(self, parents: list[Schedule]) -> list[Schedule]:
         """Crossover two parents to produce a child.
 
         Args:
             parents (list[Schedule]): List of parent schedules.
 
         Returns:
-            Schedule | None: The child schedule produced from the crossover, or None if unsuccessful.
+            list[Schedule]: The child schedule produced from the crossover, or None if unsuccessful.
 
         """
         p1, p2 = self.rng.sample(parents, k=2)
 
-        if child := self._produce_child(p1, p2):
-            return child
+        if not (child1 := self._produce_child(p1, p2)):
+            return []
 
-        if child := self._produce_child(p2, p1):
-            return child
+        if not (child2 := self._produce_child(p2, p1)):
+            return []
 
-        return None
+        return [child1, child2]
 
     def _produce_child(self, p1: Schedule, p2: Schedule) -> Schedule | None:
         """Produce a child schedule from two parents."""
@@ -88,16 +102,22 @@ class EventCrossover(Crossover):
             if (event2 := event1.paired_event) and event1.location.side == 1:
                 team1 = child.get_team(parent[event1].identity)
                 team2 = child.get_team(parent[event2].identity)
-                if first or not (
-                    team1.conflicts(event1)
-                    or team2.conflicts(event2)
-                    or not team1.needs_round(event1.round_type)
-                    or not team2.needs_round(event2.round_type)
+                if first or (
+                    team1.needs_round(event1.round_type)
+                    and team2.needs_round(event2.round_type)
+                    and not team1.conflicts(event1)
+                    and not team2.conflicts(event2)
                 ):
-                    child.add_match(event1, event2, team1, team2)
+                    team1.add_event(event1)
+                    team2.add_event(event2)
+                    child[event1] = team1
+                    child[event2] = team2
+                    team1.add_opponent(team2)
+                    team2.add_opponent(team1)
             elif event2 is None:
                 team = child.get_team(parent[event1].identity)
-                if first or (not team.conflicts(event1) and team.needs_round(event1.round_type)):
+                if first or (team.needs_round(event1.round_type) and not team.conflicts(event1)):
+                    team.add_event(event1)
                     child[event1] = team
 
 
@@ -191,4 +211,30 @@ class Uniform(EventCrossover):
         indices = (1 if self.rng.uniform(0, 1) < 0.5 else 2 for _ in range(ne))
         p1_genes = (evts[i] for i in range(ne) if next(indices, 0) == 1 and evts[i] in p1)
         p2_genes = (evts[i] for i in range(ne) if next(indices, 0) == 2 and evts[i] in p2)
+        return p1_genes, p2_genes
+
+
+@dataclass(slots=True)
+class RoundTypeCrossover(EventCrossover):
+    """Round type crossover operator for genetic algorithms.
+
+    Each gene is chosen based on the round type of the event.
+    """
+
+    def get_genes(self, p1: Schedule, p2: Schedule) -> tuple[Iterable[Event], ...]:
+        """Get the genes for the crossover.
+
+        Args:
+            p1 (Schedule): First parent schedule.
+            p2 (Schedule): Second parent schedule.
+
+        Returns:
+                tuple[Iterable[Event], ...]: Genes from both parents.
+
+        """
+        evts = self.events
+        teams = p1.all_teams()
+        rt = list(teams[0].round_types.keys())
+        p1_genes = (e for e in evts for i, r in enumerate(rt) if e.round_type == r and i % 2 != 0 and e in p1)
+        p2_genes = (e for e in evts for i, r in enumerate(rt) if e.round_type == r and i % 2 == 0 and e in p2)
         return p1_genes, p2_genes

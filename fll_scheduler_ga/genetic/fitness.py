@@ -54,13 +54,19 @@ class FitnessEvaluator:
 
         all_teams = schedule.all_teams()
 
-        for team in all_teams:
-            bt_s += team.score_break_time()
-            ov_s += team.score_opponent_variety()
-            tc_s += team.score_table_consistency()
+        if not all_teams:
+            return 1, 1, 1
 
-        bt_score = bt_s / len(all_teams) if all_teams else 1.0
-        ov_score = ov_s / len(all_teams) if all_teams else 1.0
-        tc_score = tc_s / len(all_teams) if all_teams else 1.0
+        for team in all_teams:
+            team.score()
+            bt_s += team.fitness[0]
+            ov_s += team.fitness[1]
+            tc_s += team.fitness[2]
+
+        num_teams = len(all_teams)
+
+        bt_score = bt_s / num_teams
+        ov_score = ov_s / num_teams
+        tc_score = tc_s / num_teams
 
         return bt_score, ov_score, tc_score

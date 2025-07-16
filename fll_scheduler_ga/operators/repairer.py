@@ -9,13 +9,13 @@ from dataclasses import dataclass, field
 from ..config.config import TournamentConfig
 from ..data_model.event import Event
 from ..data_model.team import Team
-from .schedule import Schedule
+from ..genetic.schedule import Schedule
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
-class ScheduleRepairer:
+class Repairer:
     """Class to handle the repair of schedules with missing event assignments."""
 
     rng: random.Random
@@ -84,6 +84,7 @@ class ScheduleRepairer:
                 if team.conflicts(event):
                     continue
 
+                team.add_event(event)
                 schedule[event] = team
                 events.pop(i)
                 break
@@ -101,10 +102,12 @@ class ScheduleRepairer:
                 if team1.identity == team2.identity:
                     continue
 
-                if self._find_and_populate_match(team1, team2, events, schedule):
-                    teams.pop(j)
-                    partner_found = True
+                if not self._find_and_populate_match(team1, team2, events, schedule):
                     break
+
+                teams.pop(j)
+                partner_found = True
+                break
 
             if not partner_found:
                 logger.debug("Could not find a match partner for team %d", team1.identity)
@@ -120,7 +123,12 @@ class ScheduleRepairer:
             if t2.conflicts(e2):
                 continue
 
-            schedule.add_match(e1, e2, t1, t2)
+            t1.add_event(e1)
+            t2.add_event(e2)
+            schedule[e1] = t1
+            schedule[e2] = t2
+            t1.add_opponent(t2)
+            t2.add_opponent(t1)
             events.pop(i)
             return True
 

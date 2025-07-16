@@ -39,24 +39,9 @@ class Schedule:
             msg = f"The event {event} is not scheduled."
             raise KeyError(msg) from None
 
-    def __delitem__(self, event: Event) -> None:
-        """Remove a specific event from the schedule."""
-        if event not in self._schedule:
-            msg = f"The event {event} is not scheduled."
-            raise KeyError(msg)
-
-        team = self._schedule.pop(event)
-        team.remove_event(event)
-
-        self._cached_matches = None
-        self._cached_all_teams = None
-        self._hash = None
-
     def __setitem__(self, event: Event, team: Team) -> None:
         """Assign a team to a specific event."""
         self._schedule[event] = team
-        team.add_event(event)
-
         self._cached_matches = None
         self._cached_all_teams = None
         self._hash = None
@@ -69,32 +54,13 @@ class Schedule:
         """Two Schedules are equal if they assign the same teams to the same events."""
         if not isinstance(other, Schedule):
             return NotImplemented
-
-        self_schedule = dict(sorted(self._schedule.items()))
-        other_schedule = dict(sorted(other._schedule.items()))
-        return frozenset((e.identity, t.identity) for e, t in self_schedule.items()) == frozenset(
-            (e.identity, t.identity) for e, t in other_schedule.items()
-        )
+        return self.fitness == other.fitness
 
     def __hash__(self) -> int:
         """Hash is based on the frozenset of (event_id, team_id) pairs."""
         if self._hash is None:
-            self_schedule = dict(sorted(self._schedule.items()))
-            key = frozenset((e.identity, t.identity) for e, t in self_schedule.items())
-            self._hash = hash(key)
-
+            self._hash = hash(self.fitness)
         return self._hash
-
-    def add_match(self, e1: Event, e2: Event, t1: Team, t2: Team) -> None:
-        """Add a match event to the schedule."""
-        self[e1] = t1
-        self[e2] = t2
-        t1.add_opponent(t2)
-        t2.add_opponent(t1)
-
-        self._cached_matches = None
-        self._cached_all_teams = None
-        self._hash = None
 
     def get_matches(self) -> dict[str, list[Match]]:
         """Get all matches in the schedule."""
@@ -102,13 +68,11 @@ class Schedule:
             return self._cached_matches
 
         self._cached_matches = defaultdict(list)
-
         for event1, team1 in self._schedule.items():
             if not (event2 := event1.paired_event) or event1.location.side != 1:
                 continue
 
             rt = event1.round_type
-
             if team2 := self._schedule[event2]:
                 self._cached_matches[rt].append((event1, event2, team1, team2))
 
