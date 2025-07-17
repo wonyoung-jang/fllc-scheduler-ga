@@ -5,9 +5,10 @@ from collections.abc import ItemsView, KeysView, ValuesView
 from dataclasses import dataclass, field
 
 from ..data_model.event import Event
-from ..data_model.team import Individual, Team, TeamMap
+from ..data_model.team import Team, TeamMap
 
 type Population = list[Schedule]
+type Individual = dict[Event, Team]
 type Match = tuple[Event, Event, Team, Team]
 
 
@@ -107,7 +108,3 @@ class Schedule:
     def get_team(self, team_id: int) -> Team:
         """Get a team object by its identity."""
         return self._teams[team_id]
-
-    def all_teams_scheduled(self) -> bool:
-        """Check if all teams are scheduled."""
-        return all(team.rounds_needed() == 0 for team in self.all_teams())

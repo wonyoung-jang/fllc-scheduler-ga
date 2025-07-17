@@ -53,6 +53,6 @@ class TournamentSelect(Selection):
         """Select individuals using NSGA-II tournament selection."""
         for _ in range(num_parents):
             yield min(
-                self.rng.sample(population, self.tournament_size),
+                self.rng.sample(population, min(self.tournament_size, len(population))),
                 key=lambda p: (p.rank, -p.crowding),
             )

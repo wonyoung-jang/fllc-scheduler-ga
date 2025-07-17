@@ -31,27 +31,31 @@ class FitnessEvaluator:
 
     config: TournamentConfig
     objectives: list[FitnessObjective] = field(default_factory=list, init=False)
-    score_map: dict[FitnessObjective, list[float]] = field(default=None, init=False)
+    score_map: dict[FitnessObjective, float] = field(default=None, init=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the configuration."""
-        self.score_map = {key: [] for key in list(FitnessObjective)}
+        self.score_map = dict.fromkeys(list(FitnessObjective), 0)
         self.objectives.extend(self.score_map.keys())
+
+    def check(self, schedule: Schedule) -> bool:
+        """Check if the schedule meets hard constraints."""
+        if not schedule:
+            logger.debug("%s: %s", HardConstraints.SCHEDULE_EXISTENCE, "Schedule is empty")
+            return False
+
+        if len(schedule) < self.config.total_slots:
+            logger.debug("%s: %s", HardConstraints.ALL_EVENTS_SCHEDULED, "Not all events are scheduled")
+            return False
+
+        return True
 
     def evaluate(self, schedule: Schedule) -> tuple[float, ...] | None:
         """Evaluate the fitness of a schedule."""
-        if not schedule:
-            logger.debug("%s: %s", HardConstraints.SCHEDULE_EXISTENCE, "Schedule is empty")
+        if not self.check(schedule):
             return None
 
-        if not schedule.all_teams_scheduled():
-            logger.debug("%s: %s", HardConstraints.ALL_EVENTS_SCHEDULED, "Not all events are scheduled")
-            return None
-
-        bt_s = 0
-        ov_s = 0
-        tc_s = 0
-
+        score_map = self.score_map.copy()
         all_teams = schedule.all_teams()
 
         if not all_teams:
@@ -59,14 +63,17 @@ class FitnessEvaluator:
 
         for team in all_teams:
             team.score()
-            bt_s += team.fitness[0]
-            ov_s += team.fitness[1]
-            tc_s += team.fitness[2]
+            score_map[FitnessObjective.BREAK_TIME] += team.fitness[0]
+            score_map[FitnessObjective.OPPONENT_VARIETY] += team.fitness[1]
+            score_map[FitnessObjective.TABLE_CONSISTENCY] += team.fitness[2]
 
         num_teams = len(all_teams)
 
-        bt_score = bt_s / num_teams
-        ov_score = ov_s / num_teams
-        tc_score = tc_s / num_teams
+        bt_score = score_map[FitnessObjective.BREAK_TIME] / num_teams
+        ov_score = score_map[FitnessObjective.OPPONENT_VARIETY] / num_teams
+        tc_score = score_map[FitnessObjective.TABLE_CONSISTENCY] / num_teams
+
+        if ov_score != 1:
+            return bt_score / 2, ov_score / 2, tc_score / 2
 
         return bt_score, ov_score, tc_score

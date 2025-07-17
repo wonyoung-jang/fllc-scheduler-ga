@@ -54,6 +54,7 @@ class TournamentConfig:
     num_teams: int
     rounds: list[Round]
     round_requirements: dict[RoundType, int]
+    total_slots: int
 
     def __str__(self) -> str:
         """Represent the TournamentConfig."""
@@ -101,7 +102,7 @@ def load_tournament_config(parser: ConfigParser) -> TournamentConfig:
 
     """
     num_teams = parser["DEFAULT"].getint("num_teams")
-    parsed_rounds = []
+    parsed_rounds: list[Round] = []
     round_reqs = {}
 
     for section in parser.sections():
@@ -131,6 +132,7 @@ def load_tournament_config(parser: ConfigParser) -> TournamentConfig:
         msg = "No rounds defined in the configuration file."
         raise ValueError(msg)
 
-    config = TournamentConfig(num_teams, parsed_rounds, round_reqs)
+    total_slots = sum(num_teams * r.rounds_per_team for r in parsed_rounds)
+    config = TournamentConfig(num_teams, parsed_rounds, round_reqs, total_slots)
     logger.info("Loaded tournament configuration: %s", config)
     return config

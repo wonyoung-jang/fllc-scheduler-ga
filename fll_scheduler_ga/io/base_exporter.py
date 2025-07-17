@@ -4,8 +4,9 @@ from abc import ABC, abstractmethod
 
 from ..config.config import RoundType
 from ..data_model.location import Location
-from ..data_model.team import Individual, Team
+from ..data_model.team import Team
 from ..data_model.time import TimeSlot
+from ..genetic.schedule import Individual
 
 
 class Exporter(ABC):

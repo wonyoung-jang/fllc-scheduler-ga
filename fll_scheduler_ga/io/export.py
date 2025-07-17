@@ -5,10 +5,10 @@ import csv
 import logging
 from pathlib import Path
 
-from ..data_model.team import Individual, Team
+from ..data_model.team import Team
 from ..genetic.fitness import FitnessEvaluator
 from ..genetic.ga import GA
-from ..genetic.schedule import Schedule
+from ..genetic.schedule import Individual, Schedule
 from ..visualize.plot import Plot
 from .base_exporter import Exporter, GridBasedExporter
 

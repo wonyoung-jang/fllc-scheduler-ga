@@ -12,6 +12,8 @@ from .time import HHMM_FMT, TimeSlot
 
 logger = logging.getLogger(__name__)
 
+type EventMap = dict[int, Event]
+
 
 @dataclass(slots=True, order=True)
 class Event:
@@ -40,6 +42,7 @@ class EventFactory:
     _id_counter: itertools.count = field(default_factory=itertools.count, init=False, repr=False)
     _cached_events: dict[RoundType, list[Event]] = field(default=None, init=False, repr=False)
     _cached_flat_list: dict[RoundType, list[Event]] = field(default=None, init=False, repr=False)
+    _cached_eventmap: EventMap = field(default=None, init=False, repr=False)
     _cached_locations: dict[tuple[int, int, int], Room | Table] = field(default_factory=dict, init=False, repr=False)
     _cached_timeslots: dict[tuple[datetime, datetime], TimeSlot] = field(default_factory=dict, init=False, repr=False)
 
@@ -47,6 +50,7 @@ class EventFactory:
         """Post-initialization to set up the initial state."""
         self.build()
         self.flat_list()
+        self.event_map()
 
     def build(self) -> dict[RoundType, list[Event]]:
         """Create and return all Events for the tournament.
@@ -67,6 +71,12 @@ class EventFactory:
         if not self._cached_flat_list:
             self._cached_flat_list = [e for el in self._cached_events.values() for e in el]
         return self._cached_flat_list
+
+    def event_map(self) -> EventMap:
+        """Get a mapping of event identities to Event objects."""
+        if not self._cached_eventmap:
+            self._cached_eventmap = {e.identity: e for e in self.flat_list()}
+        return self._cached_eventmap
 
     def create_events(self, r: Round) -> Generator[Event]:
         """Generate all possible Events for a given Round configuration.

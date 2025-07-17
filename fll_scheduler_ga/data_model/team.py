@@ -1,8 +1,8 @@
 """Team data model for FLL Scheduler GA."""
 
-import math
 from dataclasses import dataclass, field
 from logging import getLogger
+from math import sqrt
 
 from ..config.config import RoundType, TournamentConfig
 from ..data_model.event import Event
@@ -12,9 +12,8 @@ logger = getLogger(__name__)
 
 
 type TeamMap = dict[int, Team]
-type Individual = dict[Event, Team]
 
-ZERO_PENALTY = 1e-16
+PENALTY = 1e-16
 
 
 @dataclass(slots=True, frozen=True)
@@ -169,51 +168,49 @@ class Team:
         """Calculate the fitness score for the team based on various criteria."""
         if self.fitness is None:
             self.fitness = (
-                self.score_break_time(),
-                self.score_opponent_variety(),
-                self.score_table_consistency(),
+                self.score_break_time(PENALTY),
+                self.score_opponent_variety(PENALTY),
+                self.score_table_consistency(PENALTY),
             )
 
-    def score_break_time(self) -> float:
+    def score_break_time(self, penalty: float = 0.01) -> float:
         """Calculate a score based on the break times between events."""
         if len(self.events) < 2:
-            return 1.0
-        self.events.sort(key=lambda e: e.timeslot.start)
+            return 1
+        _events = self.events
+        _events.sort(key=lambda e: e.timeslot.start)
         break_times = []
-        for i in range(1, len(self.events)):
-            start = self.events[i].timeslot.start
-            stop = self.events[i - 1].timeslot.stop
+        for i in range(1, len(_events)):
+            start = _events[i].timeslot.start
+            stop = _events[i - 1].timeslot.stop
             duration_seconds = (start - stop).total_seconds()
             break_times.append(duration_seconds // 60)
         if not (n := len(break_times)):
-            return 1.0
-        sum_x = 0.0
-        zero_breaks = 0
-        for b in break_times:
-            if b == 0:
-                zero_breaks += 1
-            sum_x += b
+            return 1
+        sum_x = sum(break_times)
         if sum_x <= 0:
-            return 0.0
+            return 0
         mean_x = sum_x / n
         sum_sq_diff = sum((b - mean_x) ** 2 for b in break_times)
         variance = sum_sq_diff / n
-        stdev_x = math.sqrt(variance)
-        penalty = ZERO_PENALTY**zero_breaks
+        stdev_x = sqrt(variance)
         coeff_of_variation = stdev_x / mean_x if mean_x > 0 else 0
-        return penalty * (1.0 / (1.0 + coeff_of_variation))
+        break_ratio = 1 / (1 + coeff_of_variation)
+        zero_breaks = break_times.count(0)
+        break_penalty = penalty**zero_breaks
+        return break_ratio * break_penalty
 
-    def score_opponent_variety(self) -> float:
+    def score_opponent_variety(self, penalty: float = 0.01) -> float:
         """Calculate a score based on the variety of opponents faced."""
         num_unique_opponents = len(set(self.opponents))
         num_total_opponents = len(self.opponents)
-        opponent_ratio = num_unique_opponents / num_total_opponents if num_total_opponents else 1.0
+        opponent_ratio = num_unique_opponents / num_total_opponents if num_total_opponents else 1
         opponent_penalty = 1
         if num_unique_opponents != num_total_opponents:
-            opponent_penalty = ZERO_PENALTY ** (num_total_opponents - num_unique_opponents)
+            opponent_penalty = penalty ** (num_total_opponents - num_unique_opponents)
         return opponent_ratio * opponent_penalty
 
-    def score_table_consistency(self) -> float:
+    def score_table_consistency(self, penalty: float = 0.01) -> float:
         """Calculate a score based on the consistency of table assignments."""
         num_unique_locations = len(set(self.locations))
         num_total_locations = len(self.locations)
@@ -221,5 +218,5 @@ class Team:
         table_ratio = 1 / (1 + table_ratio)
         table_penalty = 1
         if num_unique_locations == num_total_locations:
-            table_penalty = ZERO_PENALTY**num_total_locations
+            table_penalty = penalty**num_total_locations
         return table_ratio * table_penalty

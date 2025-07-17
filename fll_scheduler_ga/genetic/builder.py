@@ -55,7 +55,7 @@ class ScheduleBuilder:
                 self._build_matches(schedule, r.round_type)
 
         self.repairer.repair(schedule)
-        return schedule if schedule.all_teams_scheduled() else None
+        return schedule if len(schedule) == self.config.total_slots else None
 
     def _build_singles(self, schedule: Schedule, rt: RoundType) -> None:
         """Book all judging events for a specific round type."""
@@ -74,13 +74,18 @@ class ScheduleBuilder:
 
         for side1, side2 in match_events:
             available = (t for t in teams if t.needs_round(rt) and not t.conflicts(side1))
+            if not (team1 := next(available, None)):
+                continue
 
-            if (team1 := next(available, None)) is None or (team2 := next(available, None)) is None:
+            available = (
+                t for t in teams if t.needs_round(rt) and not t.conflicts(side1) and t.identity not in team1.opponents
+            )
+            if not (team2 := next(available, None)):
                 continue
 
             team1.add_event(side1)
             team2.add_event(side2)
-            schedule[side1] = team1
-            schedule[side2] = team2
             team1.add_opponent(team2)
             team2.add_opponent(team1)
+            schedule[side1] = team1
+            schedule[side2] = team2

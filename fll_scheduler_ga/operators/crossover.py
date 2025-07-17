@@ -2,7 +2,7 @@
 
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from random import Random
 
@@ -57,25 +57,23 @@ class EventCrossover(Crossover):
         msg = "Subclasses must implement this method."
         raise NotImplementedError(msg)
 
-    def crossover(self, parents: list[Schedule]) -> list[Schedule]:
+    def crossover(self, parents: list[Schedule]) -> Iterator[Schedule]:
         """Crossover two parents to produce a child.
 
         Args:
             parents (list[Schedule]): List of parent schedules.
 
-        Returns:
-            list[Schedule]: The child schedule produced from the crossover, or None if unsuccessful.
+        Yields:
+            Schedule: The child schedule produced from the crossover.
 
         """
         p1, p2 = parents
 
-        if not (child1 := self._produce_child(p1, p2)):
-            return []
+        if child1 := self._produce_child(p1, p2):
+            yield child1
 
-        if not (child2 := self._produce_child(p2, p1)):
-            return []
-
-        return [child1, child2]
+        if child2 := self._produce_child(p2, p1):
+            yield child2
 
     def _produce_child(self, p1: Schedule, p2: Schedule) -> Schedule | None:
         """Produce a child schedule from two parents."""
@@ -84,7 +82,7 @@ class EventCrossover(Crossover):
         self._transfer_genes(child, p1, p1_genes, first=True)
         self._transfer_genes(child, p2, p2_genes)
         self.repairer.repair(child)
-        return child if child.all_teams_scheduled() else None
+        return child if len(child) == self.team_factory.config.total_slots else None
 
     def _transfer_genes(
         self, child: Schedule, parent: Schedule, events: Iterable[Event], *, first: bool = False

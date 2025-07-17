@@ -153,7 +153,6 @@ class GA:
                         valid_count += 1
                         if valid_count >= num_to_create:
                             break
-
                 attempts += 1
                 self.logger.info("Attempt %d: Created %d valid schedules so far.", attempts, len(self.population))
             except Exception:
@@ -214,24 +213,24 @@ class GA:
                 if child_count >= num_offspring:
                     return
 
-    def crossover_child(self, parents: list[Schedule, Schedule]) -> Population:
+    def crossover_child(self, parents: list[Schedule, Schedule]) -> Iterator[Schedule]:
         """Evolve the population by one individual and return the best of the parents and child."""
         c = self.rng.choice(self.crossovers)
         crossover_chance = self.ga_params.crossover_chance
-
+        crossover_success = False
         if crossover_chance > self.rng.random():
-            if not (children := c.crossover(parents)):
+            for child in c.crossover(parents):
+                crossover_success = True
+                child.fitness = self.evaluator.evaluate(child)
+                yield child
+            if crossover_success:
+                self._notify_crossover(f"{c.__class__.__name__}", successful=True)
+                self._crossover_ratio["success"] += 1
+            else:
                 self._notify_crossover(f"{c.__class__.__name__}", successful=False)
                 self._crossover_ratio["failure"] += 1
-                return []
-            self._notify_crossover(f"{c.__class__.__name__}", successful=True)
-            self._crossover_ratio["success"] += 1
-            for child in children:
-                child.fitness = self.evaluator.evaluate(child)
-            return children
-
-        self._crossover_ratio["no crossover"] += 1
-        return []
+        else:
+            self._crossover_ratio["no crossover"] += 1
 
     def mutate_child(self, child: Schedule) -> bool:
         """Mutate the child schedule."""
@@ -293,14 +292,14 @@ class GA:
             self._mutation_ratio.get("success", 0) / mutation_total if mutation_total > 0 else 0.0
         )
         self.logger.info(
-            "Crossovers success ratio: %s/%s = %s | %s",
+            "Crossover success ratio: %s/%s = %s | %s",
             self._crossover_ratio.get("success", 0),
             crossover_total,
             f"{crossover_success_percentage:.2%}",
             self._crossover_ratio,
         )
         self.logger.info(
-            "Mutations success ratio: %s/%s = %s | %s",
+            "Mutation success ratio: %s/%s = %s | %s",
             self._mutation_ratio.get("success", 0),
             mutation_total,
             f"{mutation_success_percentage:.2%}",
