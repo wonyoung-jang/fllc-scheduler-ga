@@ -18,15 +18,9 @@ from fll_scheduler_ga.io.export import generate_summary
 from fll_scheduler_ga.observers.loggers import LoggingObserver
 from fll_scheduler_ga.observers.progress import TqdmObserver
 from fll_scheduler_ga.operators.crossover import KPoint, RoundTypeCrossover, Scattered, Uniform
-from fll_scheduler_ga.operators.mutation import (
-    SwapMatchMutation,
-    SwapTeamMutation,
-)
+from fll_scheduler_ga.operators.mutation import SwapMatchMutation, SwapTeamMutation
 from fll_scheduler_ga.operators.repairer import Repairer
-from fll_scheduler_ga.operators.selection import (
-    Elitism,
-    TournamentSelect,
-)
+from fll_scheduler_ga.operators.selection import Elitism, TournamentSelect
 from fll_scheduler_ga.preflight.preflight import run_preflight_checks
 
 logger = logging.getLogger(__name__)
