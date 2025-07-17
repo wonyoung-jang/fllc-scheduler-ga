@@ -73,7 +73,4 @@ class FitnessEvaluator:
         ov_score = score_map[FitnessObjective.OPPONENT_VARIETY] / num_teams
         tc_score = score_map[FitnessObjective.TABLE_CONSISTENCY] / num_teams
 
-        if ov_score != 1:
-            return bt_score / 2, ov_score / 2, tc_score / 2
-
         return bt_score, ov_score, tc_score

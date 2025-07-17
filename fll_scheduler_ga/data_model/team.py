@@ -178,7 +178,7 @@ class Team:
         if len(self.events) < 2:
             return 1
         _events = self.events
-        _events.sort(key=lambda e: e.timeslot.start)
+        _events.sort(key=lambda e: e.identity)
         break_times = []
         for i in range(1, len(_events)):
             start = _events[i].timeslot.start

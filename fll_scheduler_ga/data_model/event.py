@@ -31,7 +31,7 @@ class Event:
 
     def __str__(self) -> str:
         """Get string representation of Event."""
-        return f"Round type: {self.round_type}, {self.location}, {self.timeslot}"
+        return f"{self.identity}, {self.round_type}, {self.location}, {self.timeslot}"
 
 
 @dataclass(slots=True)
@@ -41,7 +41,7 @@ class EventFactory:
     config: TournamentConfig
     _id_counter: itertools.count = field(default_factory=itertools.count, init=False, repr=False)
     _cached_events: dict[RoundType, list[Event]] = field(default=None, init=False, repr=False)
-    _cached_flat_list: dict[RoundType, list[Event]] = field(default=None, init=False, repr=False)
+    _cached_flat_list: list[Event] = field(default=None, init=False, repr=False)
     _cached_eventmap: EventMap = field(default=None, init=False, repr=False)
     _cached_locations: dict[tuple[int, int, int], Room | Table] = field(default_factory=dict, init=False, repr=False)
     _cached_timeslots: dict[tuple[datetime, datetime], TimeSlot] = field(default_factory=dict, init=False, repr=False)
@@ -70,6 +70,12 @@ class EventFactory:
         """Get a flat list of all Events across all RoundTypes."""
         if not self._cached_flat_list:
             self._cached_flat_list = [e for el in self._cached_events.values() for e in el]
+            self._cached_flat_list.sort(key=lambda e: e.timeslot.start)
+            for i, e in enumerate(self._cached_flat_list):
+                e.identity = i + 1
+            for e in self._cached_events.values():
+                for event in e:
+                    event.identity = self._cached_flat_list.index(event) + 1
         return self._cached_flat_list
 
     def event_map(self) -> EventMap:
