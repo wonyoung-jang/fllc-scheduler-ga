@@ -83,20 +83,20 @@ class Team:
         """Get the count a team is counted as."""
         return 1
 
-    def clone(self) -> "Team":
-        """Create a deep copy of the Team instance."""
-        new_team = Team(
-            info=self.info,
-            round_types=self.round_types.copy(),
-            event_conflict_map=self.event_conflict_map,
-        )
-        new_team.events = self.events[:]
-        new_team.opponents = self.opponents[:]
-        new_team.locations = self.locations[:]
-        new_team.fitness = self.fitness
-        new_team._event_ids = self._event_ids.copy()
-        new_team._rounds_needed = self._rounds_needed
-        return new_team
+    # def clone(self) -> "Team":
+    #     """Create a deep copy of the Team instance."""
+    #     new_team = Team(
+    #         info=self.info,
+    #         round_types=self.round_types.copy(),
+    #         event_conflict_map=self.event_conflict_map,
+    #     )
+    #     new_team.events = self.events[:]
+    #     new_team.opponents = self.opponents[:]
+    #     new_team.locations = self.locations[:]
+    #     new_team.fitness = self.fitness
+    #     new_team._event_ids = self._event_ids.copy()
+    #     new_team._rounds_needed = self._rounds_needed
+    #     return new_team
 
     def rounds_needed(self) -> int:
         """Get the total number of rounds still needed for the team."""
@@ -156,21 +156,21 @@ class Team:
             bool: True if there is a conflict, False otherwise.
 
         """
+        if new_event.identity in self._event_ids:
+            return True
+
         if not (potential_conflicts := self.event_conflict_map.get(new_event.identity)):
             return False
 
-        if self._event_ids.intersection(potential_conflicts):
-            return True
-
-        return new_event.identity in self._event_ids
+        return any(existing_event_id in potential_conflicts for existing_event_id in self._event_ids)
 
     def score(self) -> None:
         """Calculate the fitness score for the team based on various criteria."""
         if self.fitness is None:
             self.fitness = (
                 self.score_break_time(PENALTY),
-                self.score_opponent_variety(PENALTY),
                 self.score_table_consistency(PENALTY),
+                self.score_opponent_variety(PENALTY),
             )
 
     def score_break_time(self, penalty: float = 0.01) -> float:
@@ -200,16 +200,6 @@ class Team:
         break_penalty = penalty**zero_breaks
         return break_ratio * break_penalty
 
-    def score_opponent_variety(self, penalty: float = 0.01) -> float:
-        """Calculate a score based on the variety of opponents faced."""
-        num_unique_opponents = len(set(self.opponents))
-        num_total_opponents = len(self.opponents)
-        opponent_ratio = num_unique_opponents / num_total_opponents if num_total_opponents else 1
-        opponent_penalty = 1
-        if num_unique_opponents != num_total_opponents:
-            opponent_penalty = penalty ** (num_total_opponents - num_unique_opponents)
-        return opponent_ratio * opponent_penalty
-
     def score_table_consistency(self, penalty: float = 0.01) -> float:
         """Calculate a score based on the consistency of table assignments."""
         num_unique_locations = len(set(self.locations))
@@ -220,3 +210,13 @@ class Team:
         if num_unique_locations == num_total_locations:
             table_penalty = penalty**num_total_locations
         return table_ratio * table_penalty
+
+    def score_opponent_variety(self, penalty: float = 0.01) -> float:
+        """Calculate a score based on the variety of opponents faced."""
+        num_unique_opponents = len(set(self.opponents))
+        num_total_opponents = len(self.opponents)
+        opponent_ratio = num_unique_opponents / num_total_opponents if num_total_opponents else 1
+        opponent_penalty = 1
+        if num_unique_opponents != num_total_opponents:
+            opponent_penalty = penalty ** (num_total_opponents - num_unique_opponents)
+        return opponent_ratio * opponent_penalty

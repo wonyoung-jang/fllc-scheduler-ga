@@ -73,9 +73,6 @@ class EventFactory:
             self._cached_flat_list.sort(key=lambda e: e.timeslot.start)
             for i, e in enumerate(self._cached_flat_list):
                 e.identity = i + 1
-            for e in self._cached_events.values():
-                for event in e:
-                    event.identity = self._cached_flat_list.index(event) + 1
         return self._cached_flat_list
 
     def event_map(self) -> EventMap:

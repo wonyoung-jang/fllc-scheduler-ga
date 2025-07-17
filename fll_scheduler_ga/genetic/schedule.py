@@ -4,11 +4,12 @@ from collections import defaultdict
 from collections.abc import ItemsView, KeysView, ValuesView
 from dataclasses import dataclass, field
 
+from ..config.config import RoundType
 from ..data_model.event import Event
 from ..data_model.team import Team, TeamMap
 
 type Population = list[Schedule]
-type Individual = dict[Event, Team]
+type Individual = dict[Event, int]
 type Match = tuple[Event, Event, Team, Team]
 
 
@@ -22,9 +23,7 @@ class Schedule:
     rank: int = field(default=9999, compare=True)
     crowding: float = field(default=0.0, compare=False)
     _cached_all_teams: list[Team] = field(default=None, init=False, repr=False, compare=False)
-    _cached_matches: dict[str, list[tuple[Event, Event, Team, Team]]] = field(
-        default=None, init=False, repr=False, compare=False
-    )
+    _cached_matches: dict[RoundType, list[Match]] = field(default=None, init=False, repr=False, compare=False)
     _hash: int = field(default=None, init=False, repr=False)
 
     def __len__(self) -> int:
@@ -34,14 +33,15 @@ class Schedule:
     def __getitem__(self, event: Event) -> Team:
         """Get the team assigned to a specific event."""
         try:
-            return self._schedule[event]
+            team_id = self._schedule[event]
+            return self._teams[team_id]
         except KeyError:
             msg = f"The event {event} is not scheduled."
             raise KeyError(msg) from None
 
     def __setitem__(self, event: Event, team: Team) -> None:
         """Assign a team to a specific event."""
-        self._schedule[event] = team
+        self._schedule[event] = team.identity
         self._cached_matches = None
         self._cached_all_teams = None
         self._hash = None
@@ -60,32 +60,34 @@ class Schedule:
         """Hash is based on the frozenset of (event_id, team_id) pairs."""
         if self._hash is None:
             canonical_representation = tuple(
-                sorted((event.identity, team.identity) for event, team in self._schedule.items())
+                sorted((event.identity, team_id) for event, team_id in self._schedule.items())
             )
             self._hash = hash(canonical_representation)
         return self._hash
 
-    def get_matches(self) -> dict[str, list[Match]]:
+    def get_matches(self) -> dict[RoundType, list[Match]]:
         """Get all matches in the schedule."""
         if self._cached_matches is not None:
             return self._cached_matches
 
         self._cached_matches = defaultdict(list)
-        for event1, team1 in self._schedule.items():
+        for event1, t1 in self._schedule.items():
             if not (event2 := event1.paired_event) or event1.location.side != 1:
                 continue
 
             rt = event1.round_type
-            if team2 := self._schedule[event2]:
+            if t2 := self._schedule[event2]:
+                team1 = self._teams[t1]
+                team2 = self._teams[t2]
                 self._cached_matches[rt].append((event1, event2, team1, team2))
 
         return self._cached_matches
 
-    def clone(self) -> "Schedule":
-        """Create a deep copy of the Schedule instance."""
-        new_teams = {identity: team.clone() for identity, team in self._teams.items()}
-        new_individual = {event: new_teams[team.identity] for event, team in self._schedule.items()}
-        return Schedule(new_teams, new_individual, self.fitness, self.rank, self.crowding)
+    # def clone(self) -> "Schedule":
+    #     """Create a deep copy of the Schedule instance."""
+    #     new_teams = {identity: team.clone() for identity, team in self._teams.items()}
+    #     new_individual = {event: new_teams[team_id] for event, team_id in self._schedule.items()}
+    #     return Schedule(new_teams, new_individual, self.fitness, self.rank, self.crowding)
 
     def all_teams(self) -> list[Team]:
         """Return a list of all teams in the schedule."""

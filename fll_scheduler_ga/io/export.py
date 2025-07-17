@@ -5,7 +5,6 @@ import csv
 import logging
 from pathlib import Path
 
-from ..data_model.team import Team
 from ..genetic.fitness import FitnessEvaluator
 from ..genetic.ga import GA
 from ..genetic.schedule import Individual, Schedule
@@ -146,9 +145,9 @@ class CsvExporter(GridBasedExporter):
         for time_slot in timeslots:
             r = [time_slot.start_str]
             for location in locations:
-                team_or_match = grid_lookup.get((time_slot, location))
-                if isinstance(team_or_match, Team):
-                    r.append(str(team_or_match.identity))
+                team = grid_lookup.get((time_slot, location))
+                if isinstance(team, int):
+                    r.append(str(team))
                 else:
                     r.append("")
             rows.append(r)
@@ -240,9 +239,9 @@ class HtmlExporter(GridBasedExporter):
         for time_slot in timeslots:
             html.append(f"<tr><td>{time_slot.start_str}</td>")
             for location in locations:
-                team_or_match = grid_lookup.get((time_slot, location))
-                if isinstance(team_or_match, Team):
-                    html.append(f"<td>{team_or_match.identity}</td>")
+                team = grid_lookup.get((time_slot, location))
+                if isinstance(team, int):
+                    html.append(f"<td>{team}</td>")
                 else:
                     html.append("<td></td>")
             html.append("</tr>")

@@ -21,8 +21,8 @@ class FitnessObjective(StrEnum):
     """Enumeration of fitness objectives for the FLL Scheduler GA."""
 
     BREAK_TIME = "BreakTime"
-    OPPONENT_VARIETY = "OpponentVariety"
     TABLE_CONSISTENCY = "TableConsistency"
+    OPPONENT_VARIETY = "OpponentVariety"
 
 
 @dataclass(slots=True)
@@ -55,22 +55,15 @@ class FitnessEvaluator:
         if not self.check(schedule):
             return None
 
-        score_map = self.score_map.copy()
-        all_teams = schedule.all_teams()
-
-        if not all_teams:
+        if not (all_teams := schedule.all_teams()):
             return 1, 1, 1
 
+        score_map = self.score_map.copy()
         for team in all_teams:
             team.score()
             score_map[FitnessObjective.BREAK_TIME] += team.fitness[0]
-            score_map[FitnessObjective.OPPONENT_VARIETY] += team.fitness[1]
-            score_map[FitnessObjective.TABLE_CONSISTENCY] += team.fitness[2]
+            score_map[FitnessObjective.TABLE_CONSISTENCY] += team.fitness[1]
+            score_map[FitnessObjective.OPPONENT_VARIETY] += team.fitness[2]
 
         num_teams = len(all_teams)
-
-        bt_score = score_map[FitnessObjective.BREAK_TIME] / num_teams
-        ov_score = score_map[FitnessObjective.OPPONENT_VARIETY] / num_teams
-        tc_score = score_map[FitnessObjective.TABLE_CONSISTENCY] / num_teams
-
-        return bt_score, ov_score, tc_score
+        return tuple(s / num_teams for s in score_map.values()) if num_teams > 0 else (1, 1, 1)

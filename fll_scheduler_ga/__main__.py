@@ -2,6 +2,7 @@
 
 import argparse
 import logging
+import pickle
 from configparser import ConfigParser
 from pathlib import Path
 from random import Random
@@ -12,6 +13,7 @@ from fll_scheduler_ga.data_model.team import TeamFactory
 from fll_scheduler_ga.genetic.fitness import FitnessEvaluator
 from fll_scheduler_ga.genetic.ga import GA, RANDOM_SEED
 from fll_scheduler_ga.genetic.ga_parameters import GaParameters
+from fll_scheduler_ga.genetic.schedule import Population
 from fll_scheduler_ga.io.export import generate_summary
 from fll_scheduler_ga.observers.loggers import LoggingObserver
 from fll_scheduler_ga.observers.progress import TqdmObserver
@@ -42,6 +44,7 @@ def setup_environment() -> tuple[argparse.Namespace, GA]:
         ga_params = _build_ga_parameters_from_args(args, config_parser)
         rng = _setup_rng(args, config_parser)
         ga = _create_ga_instance(config, event_factory, ga_params, rng)
+        ga.set_seed_file(args.seed_file)
     except (FileNotFoundError, KeyError):
         logger.exception("Error loading configuration")
     else:
@@ -62,6 +65,7 @@ def _create_parser() -> argparse.ArgumentParser:
         "loglevel_file": "DEBUG",
         "loglevel_console": "INFO",
         "no_plotting": False,
+        "seed_file": "fllc_genetic.pkl",
     }
     parser = argparse.ArgumentParser(
         description="Generate a tournament schedule using a Genetic Algorithm.",
@@ -144,6 +148,12 @@ def _create_parser() -> argparse.ArgumentParser:
         action="store_true",
         default=_default_values["no_plotting"],
         help="Disable plotting of results.",
+    )
+    parser.add_argument(
+        "--seed_file",
+        type=str,
+        default=_default_values["seed_file"],
+        help="Path to the seed file for the genetic algorithm.",
     )
     return parser
 
@@ -236,7 +246,7 @@ def _create_ga_instance(config: dict, event_factory: EventFactory, ga_params: Ga
     crossovers = (
         KPoint(team_factory, events_list, rng, repairer, k=1),  # Single-point
         KPoint(team_factory, events_list, rng, repairer, k=2),  # Two-point
-        KPoint(team_factory, events_list, rng, repairer, k=8),  # K point (8)
+        KPoint(team_factory, events_list, rng, repairer, k=4),  # K point (4)
         Scattered(team_factory, events_list, rng, repairer),
         Uniform(team_factory, events_list, rng, repairer),
         RoundTypeCrossover(team_factory, events_list, rng, repairer),
@@ -268,15 +278,35 @@ def _create_ga_instance(config: dict, event_factory: EventFactory, ga_params: Ga
     )
 
 
+def save_population_to_seed_file(population: Population, seed_file: str | Path) -> None:
+    """Save the final population to a file to be used as a seed for a future run."""
+    path = Path(seed_file)
+    logger.info("Saving final population of size %d to seed file: %s", len(population), path)
+    try:
+        with path.open("wb") as f:
+            pickle.dump(population, f)
+    except (OSError, pickle.PicklingError):
+        logger.exception("Error saving population to seed file: %s", path)
+
+
 def main() -> None:
     """Run the fll-scheduler-ga application."""
     args, ga = setup_environment()
+    if not ga:
+        return
 
-    if ga.run():
-        generate_summary(args, ga)
-    else:
-        logger.warning("Genetic algorithm did not produce a valid final schedule.")
-
+    try:
+        ga.run()
+    except KeyboardInterrupt:
+        logger.warning("Run interrupted by user. Saving final population and results before exiting.")
+    except Exception:
+        logger.exception("An unhandled error occurred during the GA run. Saving state before exiting.")
+    finally:
+        if ga.population:
+            save_population_to_seed_file(ga.population, args.seed_file)
+            generate_summary(args, ga)
+        else:
+            logger.warning("GA run finished with no valid population to save or summarize.")
     logger.info("fll-scheduler-ga application finished")
 
 

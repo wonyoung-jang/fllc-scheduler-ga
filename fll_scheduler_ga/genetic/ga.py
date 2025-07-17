@@ -1,11 +1,12 @@
 """Genetic algorithm for FLL Scheduler GA."""
 
 import logging
-import multiprocessing
+import pickle
 import time
 from collections import Counter, defaultdict
 from collections.abc import Iterator
 from dataclasses import dataclass, field
+from pathlib import Path
 from random import Random
 
 from ..config.config import TournamentConfig
@@ -48,13 +49,18 @@ class GA:
     population: Population = field(default_factory=list, init=False, repr=False)
 
     _population_hashes: set = field(default_factory=set, init=False, repr=False)
-
+    _seed_file: Path | None = field(default=None, init=False, repr=False)
     _crossover_ratio: Counter = field(default_factory=Counter, init=False, repr=False)
     _mutation_ratio: Counter = field(default_factory=Counter, init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
         self.nsga2 = NSGA2
+
+    def set_seed_file(self, file_path: str | Path | None) -> None:
+        """Set the file path for loading a seed population."""
+        if file_path:
+            self._seed_file = Path(file_path)
 
     def pareto_front(self) -> Population:
         """Get the current Pareto front from the population."""
@@ -97,6 +103,24 @@ class GA:
         current_hashes = {hash(s) for s in self.population}
         self._population_hashes = current_hashes
 
+    def _load_population_from_seed(self) -> None:
+        """Load and integrate a population from a seed file."""
+        self.logger.info("Loading seed population from: %s", self._seed_file)
+        try:
+            with self._seed_file.open("rb") as f:
+                seeded_population = pickle.load(f)
+
+            added_count = 0
+            for schedule in seeded_population:
+                if self._add_to_population(schedule):
+                    added_count += 1
+
+            self.logger.info("Loaded %d unique individuals from seed file.", added_count)
+        except (OSError, pickle.UnpicklingError, KeyError, EOFError):
+            self.logger.exception("Could not load or parse seed file. Starting with a fresh population.")
+            self.population.clear()
+            self._population_hashes.clear()
+
     def run(self) -> bool:
         """Run the genetic algorithm and return the best schedule found."""
         start_time = time.time()
@@ -124,10 +148,22 @@ class GA:
 
     def initialize_population(self) -> None:
         """Initialize the population with random organisms using multiprocessing."""
-        num_to_create = self.ga_params.population_size
-        seeder = Random(self.rng.randint(*RANDOM_SEED))
+        if self._seed_file and self._seed_file.exists():
+            self._load_population_from_seed()
+
+        num_to_create = self.ga_params.population_size - len(self.population)
+        if num_to_create <= 0:
+            self.logger.info(
+                "Population at/above capacity from seed file. Selecting best to fit %d.", self.ga_params.population_size
+            )
+            self.nsga2.non_dominated_sort(self.population)
+            self.population = list(self.elitism.select(self.population, self.ga_params.population_size))
+            self._cleanup_population_tracking()
+            self._update_fitness_history()
+            return
 
         self.logger.info("Initializing population with %d individuals.", num_to_create)
+        seeder = Random(self.rng.randint(*RANDOM_SEED))
         attempts, max_attempts = ATTEMPTS
 
         while len(self.population) < num_to_create and attempts < max_attempts:
@@ -143,21 +179,15 @@ class GA:
                 )
                 for seed in worker_seeds
             ]
-            try:
-                with multiprocessing.Pool() as pool:
-                    population = pool.map(create_and_evaluate_schedule, worker_args)
 
-                valid_count = 0
-                for p in filter(None, population):
-                    if self._add_to_population(p):
-                        valid_count += 1
-                        if valid_count >= num_to_create:
-                            break
-                attempts += 1
-                self.logger.info("Attempt %d: Created %d valid schedules so far.", attempts, len(self.population))
-            except Exception:
-                attempts += 1
-                self.logger.exception("Error during population initialization.")
+            init_pop = filter(None, [create_and_evaluate_schedule(wa) for wa in worker_args])
+            for p in init_pop:
+                self._add_to_population(p)
+                if len(self.population) >= num_to_create:
+                    break
+            attempts += 1
+
+            self.logger.info("Attempt %d: Created %d valid schedules so far.", attempts, len(self.population))
 
         if not self.population or not self.population[0].fitness:
             self.logger.critical("No valid initial schedules could be built.")
@@ -180,8 +210,7 @@ class GA:
                 self.logger.debug(
                     "Population did not grow in generation %d. Current size: %d.", generation + 1, len(self.population)
                 )
-                this_gen_fitness = self._update_fitness_history()
-                self._notify_gen_end(generation, this_gen_fitness)
+                self._notify_gen_end(generation, self._update_fitness_history())
                 continue
 
             self.nsga2.non_dominated_sort(self.population)
@@ -192,8 +221,7 @@ class GA:
                 return False
 
             self._cleanup_population_tracking()
-            this_gen_fitness = self._update_fitness_history()
-            self._notify_gen_end(generation, this_gen_fitness)
+            self._notify_gen_end(generation, self._update_fitness_history())
 
         return True
 
@@ -283,26 +311,26 @@ class GA:
 
     def _notify_on_finish(self, pop: Population, front: Population) -> None:
         """Notify observers when the genetic algorithm run is finished."""
-        crossover_total = self._crossover_ratio.get("success", 0) + self._crossover_ratio.get("failure", 0)
-        crossover_success_percentage = (
-            self._crossover_ratio.get("success", 0) / crossover_total if crossover_total > 0 else 0.0
-        )
-        mutation_total = self._mutation_ratio.get("success", 0) + self._mutation_ratio.get("failure", 0)
-        mutation_success_percentage = (
-            self._mutation_ratio.get("success", 0) / mutation_total if mutation_total > 0 else 0.0
-        )
+        c_success = self._crossover_ratio["success"]
+        c_total = c_success + self._crossover_ratio["failure"]
+        c_success_percentage = c_success / c_total if c_total > 0 else 0.0
+
+        m_success = self._mutation_ratio["success"]
+        m_total = m_success + self._mutation_ratio["failure"]
+        m_success_percentage = m_success / m_total if m_total > 0 else 0.0
+
         self.logger.info(
             "Crossover success ratio: %s/%s = %s | %s",
-            self._crossover_ratio.get("success", 0),
-            crossover_total,
-            f"{crossover_success_percentage:.2%}",
+            c_success,
+            c_total,
+            f"{c_success_percentage:.2%}",
             self._crossover_ratio,
         )
         self.logger.info(
             "Mutation success ratio: %s/%s = %s | %s",
-            self._mutation_ratio.get("success", 0),
-            mutation_total,
-            f"{mutation_success_percentage:.2%}",
+            m_success,
+            m_total,
+            f"{m_success_percentage:.2%}",
             self._mutation_ratio,
         )
         self.logger.info(

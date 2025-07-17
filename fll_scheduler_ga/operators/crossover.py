@@ -77,12 +77,13 @@ class EventCrossover(Crossover):
 
     def _produce_child(self, p1: Schedule, p2: Schedule) -> Schedule | None:
         """Produce a child schedule from two parents."""
+        total_slots = self.team_factory.config.total_slots
         child = Schedule(self.team_factory.build())
         p1_genes, p2_genes = self.get_genes(p1, p2)
         self._transfer_genes(child, p1, p1_genes, first=True)
         self._transfer_genes(child, p2, p2_genes)
         self.repairer.repair(child)
-        return child if len(child) == self.team_factory.config.total_slots else None
+        return child if len(child) == total_slots else None
 
     def _transfer_genes(
         self, child: Schedule, parent: Schedule, events: Iterable[Event], *, first: bool = False
@@ -108,10 +109,10 @@ class EventCrossover(Crossover):
                 ):
                     team1.add_event(event1)
                     team2.add_event(event2)
-                    child[event1] = team1
-                    child[event2] = team2
                     team1.add_opponent(team2)
                     team2.add_opponent(team1)
+                    child[event1] = team1
+                    child[event2] = team2
             elif event2 is None:
                 team = child.get_team(parent[event1].identity)
                 if first or (team.needs_round(event1.round_type) and not team.conflicts(event1)):
