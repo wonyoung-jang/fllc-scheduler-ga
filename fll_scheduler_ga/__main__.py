@@ -40,7 +40,7 @@ def setup_environment() -> tuple[argparse.Namespace, GA]:
         event_factory = EventFactory(config)
         run_preflight_checks(config, event_factory)
         ga_params = _build_ga_parameters_from_args(args, config_parser)
-        rng = _setup_rng(args)
+        rng = _setup_rng(args, config_parser)
         ga = _create_ga_instance(config, event_factory, ga_params, rng)
     except (FileNotFoundError, KeyError):
         logger.exception("Error loading configuration")
@@ -203,9 +203,13 @@ def _build_ga_parameters_from_args(args: argparse.Namespace, config_parser: Conf
     return ga_params
 
 
-def _setup_rng(args: argparse.Namespace) -> Random:
+def _setup_rng(args: argparse.Namespace, config_parser: ConfigParser) -> Random:
     """Set up the random number generator."""
-    if args.seed is not None:
+    config_genetic = config_parser["genetic"]
+    if "seed" in config_genetic:
+        rng_seed = config_genetic.get("seed", 0)
+        logger.info("Using RNG seed from config: %d", rng_seed)
+    elif args.seed is not None:
         rng_seed = args.seed
         logger.info("Using provided RNG seed: %d", args.seed)
     else:

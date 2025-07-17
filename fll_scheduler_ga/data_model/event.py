@@ -125,18 +125,26 @@ class EventConflicts:
 
     event_factory: EventFactory
     conflicts: dict[int, set[int]] = field(default_factory=dict, init=False, repr=False)
+    available: dict[int, set[int]] = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to create the event availability map."""
         events = sorted(self.event_factory.flat_list())
+        self.available = {e.identity: set() for e in events}
+        self.conflicts = {e.identity: set() for e in events}
 
         for event in events:
             logger.debug("Event %d: %s", event.identity, event)
-            self.conflicts[event.identity] = {
-                other.identity
-                for other in events
-                if other.identity != event.identity and event.timeslot.overlaps(other.timeslot)
-            }
+            for other in events:
+                if other.identity == event.identity:
+                    continue
+                if event.timeslot.overlaps(other.timeslot):
+                    self.conflicts[event.identity].add(other.identity)
+                else:
+                    self.available[event.identity].add(other.identity)
 
         for k, v in self.conflicts.items():
             logger.debug("Event %d conflicts with %d other events: %s", k, len(v), v)
+
+        for k, v in self.available.items():
+            logger.debug("Event %d has %d available events: %s", k, len(v), v)

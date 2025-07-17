@@ -114,8 +114,9 @@ def _plot_pareto_scatter(front: Population, objectives: list[str], title: str, s
         ax.set(title=title, xlabel=x_obj, ylabel=y_obj)
         _attach_colorbar(ax, distances, label="Crowding Distance")
     elif len(objectives) == 3:
-        fig = plt.figure(figsize=(12, 10))
+        fig = plt.figure(figsize=(10, 8))
         ax = fig.add_subplot(111, projection="3d")
+        ax.view_init(azim=45, elev=30)
         x_obj, y_obj, z_obj = objectives
         ax.scatter(dataframe[x_obj], dataframe[y_obj], dataframe[z_obj], c=distances, cmap="viridis", s=60)
         ax.set(title=title, xlabel=x_obj, ylabel=y_obj, zlabel=z_obj)

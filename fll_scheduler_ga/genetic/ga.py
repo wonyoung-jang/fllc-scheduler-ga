@@ -79,8 +79,7 @@ class GA:
 
     def _update_fitness_history(self) -> tuple[float, ...]:
         """Update the fitness history with the current generation's fitness."""
-        this_gen_fitness = self._calculate_this_gen_fitness()
-        if this_gen_fitness:
+        if this_gen_fitness := self._calculate_this_gen_fitness():
             self.fitness_history.append(this_gen_fitness)
         return this_gen_fitness
 
@@ -113,6 +112,10 @@ class GA:
         except Exception:
             self.logger.exception("An error occurred during the genetic algorithm run.")
             return False
+        except KeyboardInterrupt:
+            self.logger.warning("Genetic algorithm run interrupted by user. Saving...")
+            self._notify_on_finish(self.population, self.pareto_front())
+            return True
         finally:
             if start_time:
                 total_time = time.time() - start_time
@@ -161,25 +164,35 @@ class GA:
             self.logger.critical("No valid initial schedules could be built.")
             return
 
+        self.nsga2.non_dominated_sort(self.population)
+        self._update_fitness_history()
+
     def generation(self) -> bool:
         """Perform a single generation step of the genetic algorithm."""
-        self.nsga2.non_dominated_sort(self.population)
-        this_gen_fitness = self._update_fitness_history()
         num_offspring = self.ga_params.population_size - self.ga_params.elite_size
-        num_generations = self.ga_params.generations
 
-        for generation in range(num_generations):
+        for generation in range(self.ga_params.generations):
+            pop_changed = False
             for o in self.evolve(num_offspring):
-                self._add_to_population(o)
+                if self._add_to_population(o):
+                    pop_changed = True
+
+            if not pop_changed:
+                self.logger.debug(
+                    "Population did not grow in generation %d. Current size: %d.", generation + 1, len(self.population)
+                )
+                this_gen_fitness = self._update_fitness_history()
+                self._notify_gen_end(generation, this_gen_fitness)
+                continue
 
             self.nsga2.non_dominated_sort(self.population)
             self.population = list(self.elitism.select(self.population, self.ga_params.population_size))
-            self._cleanup_population_tracking()
 
             if not self.population:
                 self.logger.warning("No valid individuals in the current population.")
                 return False
 
+            self._cleanup_population_tracking()
             this_gen_fitness = self._update_fitness_history()
             self._notify_gen_end(generation, this_gen_fitness)
 
@@ -187,7 +200,7 @@ class GA:
 
     def evolve(self, num_offspring: int) -> Iterator[Schedule]:
         """Evolve the population to create a new generation."""
-        num_offspring //= 2
+        child_count = 0
         for _ in range(num_offspring):
             parents = list(self.selection.select(self.population, 2))
             if parents[0] == parents[1]:
@@ -195,7 +208,11 @@ class GA:
 
             for child in self.crossover_child(parents):
                 self.mutate_child(child)
+                child_count += 1
                 yield child
+
+                if child_count >= num_offspring:
+                    return
 
     def crossover_child(self, parents: list[Schedule, Schedule]) -> Population:
         """Evolve the population by one individual and return the best of the parents and child."""
@@ -220,10 +237,10 @@ class GA:
         """Mutate the child schedule."""
         low = self.ga_params.mutation_chance_low
         high = self.ga_params.mutation_chance_high
-        total_fitness = sum(child.fitness)
-        last_fitness = sum(self.fitness_history[-1]) if self.fitness_history else 0
-        child_is_better = total_fitness > last_fitness
-        mutation_chance = low if child_is_better else high
+        max_rank = max(p.rank for p in self.population) if self.population else 0
+        mutation_chance = high
+        if max_rank > 0:
+            mutation_chance = low + (high - low) * (child.rank / max_rank)
 
         if mutation_chance > self.rng.random():
             m = self.rng.choice(self.mutations)

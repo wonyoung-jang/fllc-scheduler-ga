@@ -28,9 +28,9 @@ class GaParameters:
             self.crossover_chance = 0.5
             logger.warning("Crossover chance must be between 0.0 and 1.0, defaulting to 0.5.")
 
-        if self.population_size < 2:
-            self.population_size = 2
-            logger.warning("Population size must be at least 2, defaulting to 2.")
+        if 2 <= self.population_size <= self.selection_size:
+            self.population_size = self.selection_size + 1
+            logger.warning("Population size must be greater than selection size, defaulting to selection_size + 1.")
 
         if self.elite_size < 0:
             self.elite_size = 0

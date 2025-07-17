@@ -67,7 +67,7 @@ class EventCrossover(Crossover):
             list[Schedule]: The child schedule produced from the crossover, or None if unsuccessful.
 
         """
-        p1, p2 = self.rng.sample(parents, k=2)
+        p1, p2 = parents
 
         if not (child1 := self._produce_child(p1, p2)):
             return []

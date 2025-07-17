@@ -25,7 +25,6 @@ class Schedule:
         default=None, init=False, repr=False, compare=False
     )
     _hash: int = field(default=None, init=False, repr=False)
-    _events: dict[int, Event] = field(default_factory=dict, init=False, repr=False, compare=False)
 
     def __len__(self) -> int:
         """Return the number of scheduled events."""
@@ -54,12 +53,15 @@ class Schedule:
         """Two Schedules are equal if they assign the same teams to the same events."""
         if not isinstance(other, Schedule):
             return NotImplemented
-        return self.fitness == other.fitness
+        return self._schedule == other._schedule
 
     def __hash__(self) -> int:
         """Hash is based on the frozenset of (event_id, team_id) pairs."""
         if self._hash is None:
-            self._hash = hash(self.fitness)
+            canonical_representation = tuple(
+                sorted((event.identity, team.identity) for event, team in self._schedule.items())
+            )
+            self._hash = hash(canonical_representation)
         return self._hash
 
     def get_matches(self) -> dict[str, list[Match]]:

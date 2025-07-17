@@ -76,21 +76,22 @@ class NSGA2:
 
         for m in range(num_objectives):
             front.sort(key=lambda p: p.fitness[m])
-            front[0].crowding = float("inf")
-            front[-1].crowding = float("inf")
-
-            f_min = front[0].fitness[m]
-            f_max = front[-1].fitness[m]
+            front_min = front[0]
+            front_max = front[-1]
+            front_min.crowding = float("inf")
+            front_max.crowding = float("inf")
+            f_min = front_min.fitness[m]
+            f_max = front_max.fitness[m]
             f_diff = f_max - f_min
 
             if f_diff == 0:
-                continue
+                f_diff = 1e-9
 
             for i in range(1, front_size - 1):
-                if front[i].crowding != float("inf"):
-                    next_fitness = front[i + 1].fitness[m]
-                    prev_fitness = front[i - 1].fitness[m]
-                    front[i].crowding += (next_fitness - prev_fitness) / f_diff
+                next_fitness = front[i + 1].fitness[m]
+                prev_fitness = front[i - 1].fitness[m]
+                diff_fitness = next_fitness - prev_fitness
+                front[i].crowding += diff_fitness / f_diff
 
     @staticmethod
     def dominates(p: Schedule, q: Schedule) -> bool:

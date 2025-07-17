@@ -69,9 +69,6 @@ class Team:
     fitness: tuple[float] = field(default=None, init=False, repr=False)
 
     _event_ids: set[int] = field(default_factory=set, repr=False)
-    _cached_break_time_score: float | None = field(default=None, repr=False)
-    _cached_opponent_score: float | None = field(default=None, repr=False)
-    _cached_table_score: float | None = field(default=None, repr=False)
     _rounds_needed: int = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -97,10 +94,8 @@ class Team:
         new_team.events = self.events[:]
         new_team.opponents = self.opponents[:]
         new_team.locations = self.locations[:]
+        new_team.fitness = self.fitness
         new_team._event_ids = self._event_ids.copy()
-        new_team._cached_break_time_score = self._cached_break_time_score
-        new_team._cached_opponent_score = self._cached_opponent_score
-        new_team._cached_table_score = self._cached_table_score
         new_team._rounds_needed = self._rounds_needed
         return new_team
 
@@ -125,9 +120,7 @@ class Team:
         self._event_ids.remove(event.identity)
         if event.location.teams_per_round == 2:
             self.locations.remove(event.location)
-
-        self._cached_break_time_score = None
-        self._cached_table_score = None
+        self.fitness = None
 
     def add_event(self, event: Event) -> None:
         """Book a team for an event."""
@@ -137,9 +130,7 @@ class Team:
         self._event_ids.add(event.identity)
         if event.location.teams_per_round == 2:
             self.locations.append(event.location)
-
-        self._cached_break_time_score = None
-        self._cached_table_score = None
+        self.fitness = None
 
     def switch_opponent(self, old_opponent: "Team", new_opponent: "Team") -> None:
         """Switch the opponent for a given event."""
@@ -149,12 +140,12 @@ class Team:
     def remove_opponent(self, opponent: "Team") -> None:
         """Remove an opponent for a given event."""
         self.opponents.remove(opponent.identity)
-        self._cached_opponent_score = None
+        self.fitness = None
 
     def add_opponent(self, opponent: "Team") -> None:
         """Add an opponent for a given event."""
         self.opponents.append(opponent.identity)
-        self._cached_opponent_score = None
+        self.fitness = None
 
     def conflicts(self, new_event: Event) -> bool:
         """Check if adding a new event would cause a time conflict.
@@ -176,85 +167,59 @@ class Team:
 
     def score(self) -> None:
         """Calculate the fitness score for the team based on various criteria."""
-        self.fitness = (
-            self.score_break_time(),
-            self.score_opponent_variety(),
-            self.score_table_consistency(),
-        )
+        if self.fitness is None:
+            self.fitness = (
+                self.score_break_time(),
+                self.score_opponent_variety(),
+                self.score_table_consistency(),
+            )
 
     def score_break_time(self) -> float:
         """Calculate a score based on the break times between events."""
-        if self._cached_break_time_score is not None:
-            return self._cached_break_time_score
-
         if len(self.events) < 2:
             return 1.0
-
         self.events.sort(key=lambda e: e.timeslot.start)
-
         break_times = []
         for i in range(1, len(self.events)):
             start = self.events[i].timeslot.start
             stop = self.events[i - 1].timeslot.stop
             duration_seconds = (start - stop).total_seconds()
             break_times.append(duration_seconds // 60)
-
-        n = len(break_times)
-
-        if n == 0:
+        if not (n := len(break_times)):
             return 1.0
-
         sum_x = 0.0
         zero_breaks = 0
-
         for b in break_times:
             if b == 0:
                 zero_breaks += 1
-
             sum_x += b
-
         if sum_x <= 0:
             return 0.0
-
         mean_x = sum_x / n
         sum_sq_diff = sum((b - mean_x) ** 2 for b in break_times)
         variance = sum_sq_diff / n
         stdev_x = math.sqrt(variance)
         penalty = ZERO_PENALTY**zero_breaks
         coeff_of_variation = stdev_x / mean_x if mean_x > 0 else 0
-
-        self._cached_break_time_score = penalty * (1.0 / (1.0 + coeff_of_variation))
-        return self._cached_break_time_score
+        return penalty * (1.0 / (1.0 + coeff_of_variation))
 
     def score_opponent_variety(self) -> float:
         """Calculate a score based on the variety of opponents faced."""
-        if self._cached_opponent_score is not None:
-            return self._cached_opponent_score
-
         num_unique_opponents = len(set(self.opponents))
         num_total_opponents = len(self.opponents)
         opponent_ratio = num_unique_opponents / num_total_opponents if num_total_opponents else 1.0
-
         opponent_penalty = 1
         if num_unique_opponents != num_total_opponents:
             opponent_penalty = ZERO_PENALTY ** (num_total_opponents - num_unique_opponents)
-
-        self._cached_opponent_score = opponent_ratio * opponent_penalty
-        return self._cached_opponent_score
+        return opponent_ratio * opponent_penalty
 
     def score_table_consistency(self) -> float:
         """Calculate a score based on the consistency of table assignments."""
-        if self._cached_table_score is not None:
-            return self._cached_table_score
-
         num_unique_locations = len(set(self.locations))
         num_total_locations = len(self.locations)
         table_ratio = num_unique_locations / num_total_locations if num_total_locations else 1
         table_ratio = 1 / (1 + table_ratio)
-
         table_penalty = 1
         if num_unique_locations == num_total_locations:
             table_penalty = ZERO_PENALTY**num_total_locations
-
-        self._cached_table_score = table_ratio * table_penalty
-        return self._cached_table_score
+        return table_ratio * table_penalty

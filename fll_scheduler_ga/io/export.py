@@ -31,7 +31,7 @@ def generate_summary(args: argparse.Namespace, ga: GA) -> None:
         plot.plot_pareto_front(save_dir=pareto_plot_path)
 
     front = ga.pareto_front()
-    front.sort(key=lambda s: (s.rank, -s.crowding))
+    front.sort(key=lambda s: (s.rank, -s.crowding, -sum(s.fitness)))
 
     for i, schedule in enumerate(front, start=1):
         name = f"front_{schedule.rank}_schedule_{i}"
@@ -65,11 +65,6 @@ def generate_summary_report(schedule: Schedule, evaluator: FitnessEvaluator, pat
         f.write("Objective Scores:\n")
         for name, score in zip(obj_names, scores, strict=False):
             f.write(f"  - {name}: {score:.4f}\n")
-
-        f.write("\nNotes:\n")
-        all_teams: list[Team] = schedule.all_teams()
-        worst_team = min(all_teams, key=lambda t: t.score_break_time())
-        f.write(f"  - Team with worst break time distribution: Team {worst_team.identity}\n")
 
 
 def generate_pareto_summary(front: list[Schedule], evaluator: FitnessEvaluator, path: Path) -> None:
