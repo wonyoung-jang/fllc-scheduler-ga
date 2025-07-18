@@ -13,7 +13,6 @@ from fll_scheduler_ga.data_model.team import TeamFactory
 from fll_scheduler_ga.genetic.fitness import FitnessEvaluator
 from fll_scheduler_ga.genetic.ga import GA, RANDOM_SEED
 from fll_scheduler_ga.genetic.ga_parameters import GaParameters
-from fll_scheduler_ga.genetic.schedule import Population
 from fll_scheduler_ga.io.export import generate_summary
 from fll_scheduler_ga.observers.loggers import LoggingObserver
 from fll_scheduler_ga.observers.progress import TqdmObserver
@@ -260,8 +259,10 @@ def _create_ga_instance(config: dict, event_factory: EventFactory, ga_params: Ga
     )
 
 
-def save_population_to_seed_file(population: Population, seed_file: str | Path) -> None:
+def save_population_to_seed_file(ga: GA, seed_file: str | Path, *, front: bool = False) -> None:
     """Save the final population to a file to be used as a seed for a future run."""
+    population = ga.pareto_front() if front else ga.population
+
     if not population:
         logger.warning("No population to save to seed file.")
         return
@@ -288,7 +289,7 @@ def main() -> None:
     except Exception:
         logger.exception("An unhandled error occurred during the GA run. Saving state before exiting.")
     finally:
-        save_population_to_seed_file(ga.population, args.seed_file)
+        save_population_to_seed_file(ga, args.seed_file, front=True)
         generate_summary(args, ga)
 
     logger.info("fll-scheduler-ga application finished")

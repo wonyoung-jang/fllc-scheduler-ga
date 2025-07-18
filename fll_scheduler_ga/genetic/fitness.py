@@ -68,7 +68,7 @@ class FitnessEvaluator:
             tuple[float, ...] | None: A tuple of fitness scores for each objective,
 
         """
-        unique_opponents_possible = self.config.unique_opponents_possible
+        # unique_opponents_possible = self.config.unique_opponents_possible
 
         if not self.check(schedule):
             return None
@@ -84,7 +84,7 @@ class FitnessEvaluator:
             if not (num_teams := len(all_teams)):
                 return 1, 1, 1
 
-            if unique_opponents_possible and score_map[FitnessObjective.OPPONENT_VARIETY] / num_teams != 1:
-                return tuple(s / (num_teams * 2) for s in score_map.values())
+            # if unique_opponents_possible and score_map[FitnessObjective.OPPONENT_VARIETY] / num_teams != 1:
+            #     return tuple(s / (num_teams * 2) for s in score_map.values())
             return tuple(s / num_teams for s in score_map.values())
         return 1, 1, 1

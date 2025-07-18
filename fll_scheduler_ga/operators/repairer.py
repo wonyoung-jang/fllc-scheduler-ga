@@ -30,8 +30,7 @@ class Repairer:
     def repair(self, schedule: Schedule) -> Schedule | None:
         """Repair missing assignments in the schedule.
 
-        Fills in missing events for teams by assigning them to available
-        (un-booked) event slots.
+        Fills in missing events for teams by assigning them to available (unbooked) event slots.
 
         Args:
             schedule (Schedule): The schedule to repair.

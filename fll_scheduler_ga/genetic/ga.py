@@ -151,7 +151,7 @@ class GA:
             self._load_population_from_seed()
 
         num_to_create = self.ga_params.population_size - len(self.population)
-        if num_to_create <= 0:
+        if num_to_create < 0:
             self.logger.info(
                 "Population at/above capacity from seed file. Selecting best to fit %d.", self.ga_params.population_size
             )
