@@ -91,10 +91,9 @@ class GA:
 
     def _add_to_population(self, schedule: Schedule) -> bool:
         """Add a schedule to population if it's not a duplicate."""
-        schedule_hash = hash(schedule)
-        if schedule_hash not in self._population_hashes:
+        if hash(schedule) not in self._population_hashes:
             self.population.append(schedule)
-            self._population_hashes.add(schedule_hash)
+            self._population_hashes.add(hash(schedule))
             return True
         return False
 
@@ -229,11 +228,11 @@ class GA:
         """Evolve the population to create a new generation."""
         child_count = 0
         for _ in range(num_offspring):
-            parents = list(self.selection.select(self.population, 2))
-            if parents[0] == parents[1]:
+            p1, p2 = self.selection.select(self.population, 2)
+            if p1 == p2:
                 continue
 
-            for child in self.crossover_child(parents):
+            for child in self.crossover_child([p1, p2]):
                 self.mutate_child(child)
                 child_count += 1
                 yield child
@@ -243,6 +242,7 @@ class GA:
 
     def crossover_child(self, parents: list[Schedule, Schedule]) -> Iterator[Schedule]:
         """Evolve the population by one individual and return the best of the parents and child."""
+        # self.crossovers = self.crossovers[-1:] # Keep only the last crossover operator
         c = self.rng.choice(self.crossovers)
         crossover_chance = self.ga_params.crossover_chance
         crossover_success = False
@@ -251,14 +251,8 @@ class GA:
                 crossover_success = True
                 child.fitness = self.evaluator.evaluate(child)
                 yield child
-            if crossover_success:
-                self._notify_crossover(f"{c.__class__.__name__}", successful=True)
-                self._crossover_ratio["success"] += 1
-            else:
-                self._notify_crossover(f"{c.__class__.__name__}", successful=False)
-                self._crossover_ratio["failure"] += 1
-        else:
-            self._crossover_ratio["no crossover"] += 1
+            self._notify_crossover(f"{c.__class__.__name__}", successful=crossover_success)
+            self._crossover_ratio["success" if crossover_success else "failure"] += 1
 
     def mutate_child(self, child: Schedule) -> None:
         """Mutate the child schedule."""
@@ -269,16 +263,13 @@ class GA:
 
         if mutation_chance > self.rng.random():
             m = self.rng.choice(self.mutations)
-            mutation_success = m.mutate(child)
-            if mutation_success:
+            if m.mutate(child):
+                child.fitness = self.evaluator.evaluate(child)
                 self._notify_mutation(m.__class__.__name__, successful=True)
                 self._mutation_ratio["success"] += 1
-                child.fitness = self.evaluator.evaluate(child)
             else:
                 self._notify_mutation(m.__class__.__name__, successful=False)
                 self._mutation_ratio["failure"] += 1
-        else:
-            self._mutation_ratio["no mutation"] += 1
 
     def _notify_on_start(self, num_generations: int) -> None:
         """Notify observers when the genetic algorithm run starts."""

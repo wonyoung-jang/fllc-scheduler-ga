@@ -27,7 +27,7 @@ class Repairer:
         """Post-initialization to set up the initial state."""
         self.rt_teams_needed = {rc.round_type: rc.teams_per_round for rc in self.config.rounds}
 
-    def repair(self, schedule: Schedule) -> None:
+    def repair(self, schedule: Schedule) -> Schedule | None:
         """Repair missing assignments in the schedule.
 
         Fills in missing events for teams by assigning them to available
@@ -41,18 +41,21 @@ class Repairer:
         needs_by_rt = self._get_team_needs(schedule)
 
         for (rt, tpr), teams in needs_by_rt.items():
+            slots = open_events.get((rt, tpr), [])
             if tpr == 1:
-                self._assign_singles(teams, open_events.get((rt, tpr), []), schedule)
+                self._assign_singles(teams, slots, schedule)
             elif tpr == 2:
-                self._assign_matches(teams, open_events.get((rt, tpr), []), schedule)
+                self._assign_matches(teams, slots, schedule)
+
+        return schedule if len(schedule) == self.config.total_slots else None
 
     def _get_open_events(self, schedule: Schedule) -> dict[tuple[str, int], list[Event]]:
         """Find all event slots not currently booked in the schedule."""
         open_events = defaultdict(list)
-        unbooked_events = self.set_of_events.difference(schedule.keys())
+        unbooked = self.set_of_events.difference(schedule.keys())
 
-        for e in unbooked_events:
-            if (e.paired_event is not None and e.location.side == 1) or e.paired_event is None:
+        for e in unbooked:
+            if (e.paired_event and e.location.side == 1) or e.paired_event is None:
                 key = (e.round_type, self.rt_teams_needed[e.round_type])
                 open_events[key].append(e)
 
@@ -69,8 +72,7 @@ class Repairer:
             for rt, num_needed in team.round_types.items():
                 if num_needed > 0:
                     key = (rt, self.rt_teams_needed[rt])
-                    for _ in range(num_needed):
-                        needs_by_rt[key].append(team)
+                    needs_by_rt[key].extend([team] * num_needed)
 
         for teams in needs_by_rt.values():
             self.rng.shuffle(teams)

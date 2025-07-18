@@ -17,7 +17,13 @@ from fll_scheduler_ga.genetic.schedule import Population
 from fll_scheduler_ga.io.export import generate_summary
 from fll_scheduler_ga.observers.loggers import LoggingObserver
 from fll_scheduler_ga.observers.progress import TqdmObserver
-from fll_scheduler_ga.operators.crossover import KPoint, RoundTypeCrossover, Scattered, Uniform
+from fll_scheduler_ga.operators.crossover import (
+    KPoint,
+    PartialCrossover,
+    RoundTypeCrossover,
+    Scattered,
+    Uniform,
+)
 from fll_scheduler_ga.operators.mutation import SwapMatchMutation, SwapTeamMutation
 from fll_scheduler_ga.operators.repairer import Repairer
 from fll_scheduler_ga.operators.selection import Elitism, TournamentSelect
@@ -234,6 +240,7 @@ def _create_ga_instance(config: dict, event_factory: EventFactory, ga_params: Ga
             Scattered(team_factory, event_factory.flat_list(), rng, repairer),
             Uniform(team_factory, event_factory.flat_list(), rng, repairer),
             RoundTypeCrossover(team_factory, event_factory.flat_list(), rng, repairer),
+            PartialCrossover(team_factory, event_factory.flat_list(), rng, repairer),
         ),
         mutations=(
             SwapMatchMutation(rng, same_timeslot=False, same_location=False),  # Across timeslots and locations

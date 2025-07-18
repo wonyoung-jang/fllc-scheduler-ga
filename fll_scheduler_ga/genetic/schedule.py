@@ -77,8 +77,7 @@ class Schedule:
 
             rt = event1.round_type
             if t2 := self._schedule[event2]:
-                team1 = self._teams[t1]
-                team2 = self._teams[t2]
+                team1, team2 = self._teams[t1], self._teams[t2]
                 self._cached_matches[rt].append((event1, event2, team1, team2))
 
         return self._cached_matches

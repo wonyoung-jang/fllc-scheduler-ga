@@ -51,7 +51,7 @@ class EventCrossover(Crossover):
             p2 (Schedule): Second parent schedule.
 
         Returns:
-                tuple[Iterable[Event], Iterable[Event]]: Genes from both parents.
+            tuple[Iterable[Event], Iterable[Event]]: Genes from both parents.
 
         """
         msg = "Subclasses must implement this method."
@@ -76,14 +76,21 @@ class EventCrossover(Crossover):
             yield child2
 
     def _produce_child(self, p1: Schedule, p2: Schedule) -> Schedule | None:
-        """Produce a child schedule from two parents."""
-        total_slots = self.team_factory.config.total_slots
+        """Produce a child schedule from two parents.
+
+        Args:
+            p1 (Schedule): First parent schedule.
+            p2 (Schedule): Second parent schedule.
+
+        Returns:
+            Schedule | None: The child schedule produced from the crossover, or None if unsuccessful.
+
+        """
         child = Schedule(self.team_factory.build())
         p1_genes, p2_genes = self.get_genes(p1, p2)
         self._transfer_genes(child, p1, p1_genes, first=True)
         self._transfer_genes(child, p2, p2_genes)
-        self.repairer.repair(child)
-        return child if len(child) == total_slots else None
+        return self.repairer.repair(child)
 
     def _transfer_genes(
         self, child: Schedule, parent: Schedule, events: Iterable[Event], *, first: bool = False
@@ -140,7 +147,7 @@ class KPoint(EventCrossover):
             p2 (Schedule): Second parent schedule.
 
         Returns:
-                tuple[Iterable[Event], ...]: Genes from both parents.
+            tuple[Iterable[Event], ...]: Genes from both parents.
 
         """
         evts = self.events
@@ -175,7 +182,7 @@ class Scattered(EventCrossover):
             p2 (Schedule): Second parent schedule.
 
         Returns:
-                tuple[Iterable[Event], ...]: Genes from both parents.
+            tuple[Iterable[Event], ...]: Genes from both parents.
 
         """
         evts = self.events
@@ -202,7 +209,7 @@ class Uniform(EventCrossover):
             p2 (Schedule): Second parent schedule.
 
         Returns:
-                tuple[Iterable[Event], ...]: Genes from both parents.
+            tuple[Iterable[Event], ...]: Genes from both parents.
 
         """
         evts = self.events
@@ -228,7 +235,7 @@ class RoundTypeCrossover(EventCrossover):
             p2 (Schedule): Second parent schedule.
 
         Returns:
-                tuple[Iterable[Event], ...]: Genes from both parents.
+            tuple[Iterable[Event], ...]: Genes from both parents.
 
         """
         evts = self.events
@@ -236,4 +243,31 @@ class RoundTypeCrossover(EventCrossover):
         rt = list(teams[0].round_types.keys())
         p1_genes = (e for e in evts for i, r in enumerate(rt) if e.round_type == r and i % 2 != 0 and e in p1)
         p2_genes = (e for e in evts for i, r in enumerate(rt) if e.round_type == r and i % 2 == 0 and e in p2)
+        return p1_genes, p2_genes
+
+
+@dataclass(slots=True)
+class PartialCrossover(EventCrossover):
+    """Partial crossover operator for genetic algorithms.
+
+    This operator takes a random subset of events from each parent.
+    """
+
+    def get_genes(self, p1: Schedule, p2: Schedule) -> tuple[Iterable[Event], ...]:
+        """Get the genes for the crossover.
+
+        Args:
+            p1 (Schedule): First parent schedule.
+            p2 (Schedule): Second parent schedule.
+
+        Returns:
+            tuple[Iterable[Event], ...]: Genes from both parents.
+
+        """
+        evts = self.events
+        ne = len(evts)
+        thirds = sorted(self.rng.sample(range(1, ne), 3))
+        indices = self.rng.sample(range(ne), ne)
+        p1_genes = (evts[i] for i in indices[: thirds[0]] if evts[i] in p1)
+        p2_genes = (evts[i] for i in indices[thirds[2] :] if evts[i] in p2)
         return p1_genes, p2_genes

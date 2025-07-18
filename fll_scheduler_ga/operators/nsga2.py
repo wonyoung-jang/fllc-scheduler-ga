@@ -85,7 +85,7 @@ class NSGA2:
             f_diff = f_max - f_min
 
             if f_diff == 0:
-                f_diff = 1e-9
+                f_diff = 1e-16
 
             for i in range(1, front_size - 1):
                 next_fitness = front[i + 1].fitness[m]

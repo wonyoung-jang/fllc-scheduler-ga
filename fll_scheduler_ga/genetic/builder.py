@@ -20,8 +20,8 @@ def create_and_evaluate_schedule(
     """Create and evaluate a schedule in a separate process."""
     team_factory, event_factory, config, evaluator, repairer, seed = args
     schedule = ScheduleBuilder(team_factory, event_factory, config, repairer, random.Random(seed)).build()
-    if fitness_scores := evaluator.evaluate(schedule):
-        schedule.fitness = fitness_scores
+    if score := evaluator.evaluate(schedule):
+        schedule.fitness = score
         return schedule
     return None
 
@@ -38,7 +38,7 @@ class ScheduleBuilder:
     events: dict[RoundType, list[Event]] = field(init=False, repr=False)
     teams: list[Team] = field(init=False, repr=False)
 
-    def build(self) -> Schedule:
+    def build(self) -> Schedule | None:
         """Construct and return the final schedule."""
         self.events = self.event_factory.build()
         for events in self.events.values():
@@ -54,8 +54,7 @@ class ScheduleBuilder:
             else:
                 self._build_matches(schedule, r.round_type)
 
-        self.repairer.repair(schedule)
-        return schedule if len(schedule) == self.config.total_slots else None
+        return self.repairer.repair(schedule)
 
     def _build_singles(self, schedule: Schedule, rt: RoundType) -> None:
         """Book all judging events for a specific round type."""
