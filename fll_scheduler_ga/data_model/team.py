@@ -83,21 +83,6 @@ class Team:
         """Get the count a team is counted as."""
         return 1
 
-    # def clone(self) -> "Team":
-    #     """Create a deep copy of the Team instance."""
-    #     new_team = Team(
-    #         info=self.info,
-    #         round_types=self.round_types.copy(),
-    #         event_conflict_map=self.event_conflict_map,
-    #     )
-    #     new_team.events = self.events[:]
-    #     new_team.opponents = self.opponents[:]
-    #     new_team.locations = self.locations[:]
-    #     new_team.fitness = self.fitness
-    #     new_team._event_ids = self._event_ids.copy()
-    #     new_team._rounds_needed = self._rounds_needed
-    #     return new_team
-
     def rounds_needed(self) -> int:
         """Get the total number of rounds still needed for the team."""
         return self._rounds_needed
@@ -188,35 +173,35 @@ class Team:
         if not (n := len(break_times)):
             return 1
         sum_x = sum(break_times)
-        if sum_x <= 0:
-            return 0
         mean_x = sum_x / n
+        if mean_x == 0:
+            return 0
         sum_sq_diff = sum((b - mean_x) ** 2 for b in break_times)
         variance = sum_sq_diff / n
         stdev_x = sqrt(variance)
-        coeff_of_variation = stdev_x / mean_x if mean_x > 0 else 0
+        coeff_of_variation = stdev_x / mean_x
+
         break_ratio = 1 / (1 + coeff_of_variation)
-        zero_breaks = break_times.count(0)
-        break_penalty = penalty**zero_breaks
+        break_penalty = penalty ** break_times.count(0)
         return break_ratio * break_penalty
 
     def score_table_consistency(self, penalty: float = 0.01) -> float:
         """Calculate a score based on the consistency of table assignments."""
-        num_unique_locations = len(set(self.locations))
-        num_total_locations = len(self.locations)
-        table_ratio = num_unique_locations / num_total_locations if num_total_locations else 1
+        unique, total = self._get_unique_and_total(self.locations)
+        table_ratio = unique / total if total else 1
         table_ratio = 1 / (1 + table_ratio)
-        table_penalty = 1
-        if num_unique_locations == num_total_locations:
-            table_penalty = penalty**num_total_locations
+        table_penalty = penalty**total if unique == total else 1
         return table_ratio * table_penalty
 
     def score_opponent_variety(self, penalty: float = 0.01) -> float:
         """Calculate a score based on the variety of opponents faced."""
-        num_unique_opponents = len(set(self.opponents))
-        num_total_opponents = len(self.opponents)
-        opponent_ratio = num_unique_opponents / num_total_opponents if num_total_opponents else 1
-        opponent_penalty = 1
-        if num_unique_opponents != num_total_opponents:
-            opponent_penalty = penalty ** (num_total_opponents - num_unique_opponents)
+        unique, total = self._get_unique_and_total(self.opponents)
+        opponent_ratio = unique / total if total else 1
+        opponent_penalty = penalty ** (total - unique) if unique != total else 1
         return opponent_ratio * opponent_penalty
+
+    @staticmethod
+    def _get_unique_and_total(items: list[int]) -> tuple[int, int]:
+        """Get the count of unique and total items."""
+        unique_items = set(items)
+        return len(unique_items), len(items)

@@ -182,8 +182,8 @@ def _build_ga_parameters_from_args(args: argparse.Namespace, config_parser: Conf
         GaParameters: Parameters for the genetic algorithm.
 
     """
-    config_genetic = config_parser["genetic"]
-    config_args = {
+    config_genetic = config_parser["genetic"] if config_parser.has_section("genetic") else {}
+    params = {
         "population_size": config_genetic.getint("population_size", 16),
         "generations": config_genetic.getint("generations", 128),
         "elite_size": config_genetic.getint("elite_size", 2),
@@ -192,88 +192,73 @@ def _build_ga_parameters_from_args(args: argparse.Namespace, config_parser: Conf
         "mutation_chance_low": config_genetic.getfloat("mutation_chance_low", 0.2),
         "mutation_chance_high": config_genetic.getfloat("mutation_chance_high", 0.8),
     }
-    cli_args = {
-        "population_size": args.population_size,
-        "generations": args.generations,
-        "elite_size": args.elite_size,
-        "selection_size": args.selection_size,
-        "crossover_chance": args.crossover_chance,
-        "mutation_chance_low": args.mutation_chance_low,
-        "mutation_chance_high": args.mutation_chance_high,
-    }
-    provided_args = {k: v if v is not None else config_args[k] for k, v in cli_args.items()}
-    ga_params = GaParameters(**provided_args)
+
+    for key in params:
+        if cli_val := getattr(args, key, None):
+            params[key] = cli_val
+
+    ga_params = GaParameters(**params)
     logger.info("Using GA parameters: %s", ga_params)
     return ga_params
 
 
 def _setup_rng(args: argparse.Namespace, config_parser: ConfigParser) -> Random:
     """Set up the random number generator."""
-    config_genetic = config_parser["genetic"]
-    if "seed" in config_genetic:
-        rng_seed = config_genetic.get("seed", 0)
-        logger.info("Using RNG seed from config: %d", rng_seed)
-    elif args.seed is not None:
+    if args.seed is not None:
         rng_seed = args.seed
-        logger.info("Using provided RNG seed: %d", args.seed)
+    elif "genetic" in config_parser and "seed" in config_parser["genetic"]:
+        rng_seed = config_parser["genetic"].getint("seed")
     else:
         rng_seed = Random().randint(*RANDOM_SEED)
-        logger.info("Using master RNG seed: %d", rng_seed)
+
+    logger.info("Using master RNG seed: %d", rng_seed)
     return Random(rng_seed)
 
 
 def _create_ga_instance(config: dict, event_factory: EventFactory, ga_params: GaParameters, rng: Random) -> GA:
     """Create and return a GA instance with the provided configuration."""
-    event_conflicts = EventConflicts(event_factory)
-    team_factory = TeamFactory(config, event_conflicts.conflicts)
-    selection = TournamentSelect(rng, tournament_size=ga_params.selection_size)
-    elitism = Elitism(rng)  # Separate survival selection
-    evaluator = FitnessEvaluator(config)
-    observers = (
-        LoggingObserver(logger),
-        TqdmObserver(logger),
-    )
-
-    events_list = event_factory.flat_list()
-    repairer = Repairer(rng, config, set(events_list))
-
-    crossovers = (
-        KPoint(team_factory, events_list, rng, repairer, k=1),  # Single-point
-        KPoint(team_factory, events_list, rng, repairer, k=2),  # Two-point
-        KPoint(team_factory, events_list, rng, repairer, k=4),  # K point (4)
-        Scattered(team_factory, events_list, rng, repairer),
-        Uniform(team_factory, events_list, rng, repairer),
-        RoundTypeCrossover(team_factory, events_list, rng, repairer),
-    )
-
-    mutations = (
-        SwapMatchMutation(rng, same_timeslot=False, same_location=False),  # Across timeslots and locations
-        SwapMatchMutation(rng, same_timeslot=False, same_location=True),  # Across timeslots, same location
-        SwapMatchMutation(rng, same_timeslot=True, same_location=False),  # Same timeslot, across locations
-        SwapTeamMutation(rng, same_timeslot=False, same_location=False),  # Across timeslots and locations
-        SwapTeamMutation(rng, same_timeslot=False, same_location=True),  # Across timeslots, same location
-        SwapTeamMutation(rng, same_timeslot=True, same_location=False),  # Same timeslot, across locations
-    )
-
+    team_factory = TeamFactory(config, EventConflicts(event_factory).conflicts)
+    repairer = Repairer(rng, config, set(event_factory.flat_list()))
     return GA(
         ga_params=ga_params,
         config=config,
         rng=rng,
         event_factory=event_factory,
         team_factory=team_factory,
-        selection=selection,
-        elitism=elitism,
-        crossovers=crossovers,
-        mutations=mutations,
+        selection=TournamentSelect(rng, tournament_size=ga_params.selection_size),
+        elitism=Elitism(rng),
+        crossovers=(
+            KPoint(team_factory, event_factory.flat_list(), rng, repairer, k=1),  # Single-point
+            KPoint(team_factory, event_factory.flat_list(), rng, repairer, k=2),  # Two-point
+            KPoint(team_factory, event_factory.flat_list(), rng, repairer, k=4),  # K point (4)
+            Scattered(team_factory, event_factory.flat_list(), rng, repairer),
+            Uniform(team_factory, event_factory.flat_list(), rng, repairer),
+            RoundTypeCrossover(team_factory, event_factory.flat_list(), rng, repairer),
+        ),
+        mutations=(
+            SwapMatchMutation(rng, same_timeslot=False, same_location=False),  # Across timeslots and locations
+            SwapMatchMutation(rng, same_timeslot=False, same_location=True),  # Across timeslots, same location
+            SwapMatchMutation(rng, same_timeslot=True, same_location=False),  # Same timeslot, across locations
+            SwapTeamMutation(rng, same_timeslot=False, same_location=False),  # Across timeslots and locations
+            SwapTeamMutation(rng, same_timeslot=False, same_location=True),  # Across timeslots, same location
+            SwapTeamMutation(rng, same_timeslot=True, same_location=False),  # Same timeslot, across locations
+        ),
         logger=logger,
-        observers=observers,
-        evaluator=evaluator,
+        observers=(
+            LoggingObserver(logger),
+            TqdmObserver(logger),
+        ),
+        evaluator=FitnessEvaluator(config),
         repairer=repairer,
     )
 
 
 def save_population_to_seed_file(population: Population, seed_file: str | Path) -> None:
     """Save the final population to a file to be used as a seed for a future run."""
+    if not population:
+        logger.warning("No population to save to seed file.")
+        return
+
     path = Path(seed_file)
     logger.info("Saving final population of size %d to seed file: %s", len(population), path)
     try:
@@ -296,11 +281,9 @@ def main() -> None:
     except Exception:
         logger.exception("An unhandled error occurred during the GA run. Saving state before exiting.")
     finally:
-        if ga.population:
-            save_population_to_seed_file(ga.population, args.seed_file)
-            generate_summary(args, ga)
-        else:
-            logger.warning("GA run finished with no valid population to save or summarize.")
+        save_population_to_seed_file(ga.population, args.seed_file)
+        generate_summary(args, ga)
+
     logger.info("fll-scheduler-ga application finished")
 
 

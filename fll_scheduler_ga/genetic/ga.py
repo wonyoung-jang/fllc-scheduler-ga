@@ -260,28 +260,25 @@ class GA:
         else:
             self._crossover_ratio["no crossover"] += 1
 
-    def mutate_child(self, child: Schedule) -> bool:
+    def mutate_child(self, child: Schedule) -> None:
         """Mutate the child schedule."""
         low = self.ga_params.mutation_chance_low
         high = self.ga_params.mutation_chance_high
-        max_rank = max(p.rank for p in self.population) if self.population else 0
-        mutation_chance = high
-        if max_rank > 0:
-            mutation_chance = low + (high - low) * (child.rank / max_rank)
+        last_fitness = self.fitness_history[-1] if self.fitness_history else (0, 0, 0)
+        mutation_chance = low if sum(child.fitness) > sum(last_fitness) else high
 
         if mutation_chance > self.rng.random():
             m = self.rng.choice(self.mutations)
-            if m.mutate(child):
+            mutation_success = m.mutate(child)
+            if mutation_success:
                 self._notify_mutation(m.__class__.__name__, successful=True)
                 self._mutation_ratio["success"] += 1
                 child.fitness = self.evaluator.evaluate(child)
-                return True
-            self._notify_mutation(m.__class__.__name__, successful=False)
-            self._mutation_ratio["failure"] += 1
+            else:
+                self._notify_mutation(m.__class__.__name__, successful=False)
+                self._mutation_ratio["failure"] += 1
         else:
             self._mutation_ratio["no mutation"] += 1
-
-        return False
 
     def _notify_on_start(self, num_generations: int) -> None:
         """Notify observers when the genetic algorithm run starts."""

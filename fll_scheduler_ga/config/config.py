@@ -55,6 +55,7 @@ class TournamentConfig:
     rounds: list[Round]
     round_requirements: dict[RoundType, int]
     total_slots: int
+    unique_opponents_possible: bool
 
     def __str__(self) -> str:
         """Represent the TournamentConfig."""
@@ -64,7 +65,9 @@ class TournamentConfig:
             f"TournamentConfig:\n"
             f"\tnum_teams: {self.num_teams}\n"
             f"\trounds: {rounds_str}\n"
-            f"\tround_requirements: {round_reqs_str}"
+            f"\tround_requirements: {round_reqs_str}\n"
+            f"\ttotal_slots: {self.total_slots}\n"
+            f"\tunique_opponents_possible: {self.unique_opponents_possible}"
         )
 
 
@@ -133,6 +136,12 @@ def load_tournament_config(parser: ConfigParser) -> TournamentConfig:
         raise ValueError(msg)
 
     total_slots = sum(num_teams * r.rounds_per_team for r in parsed_rounds)
-    config = TournamentConfig(num_teams, parsed_rounds, round_reqs, total_slots)
+
+    unique_opponents_possible = False
+    max_rounds_per_team = max(r.rounds_per_team for r in parsed_rounds)
+    if 1 <= max_rounds_per_team <= num_teams - 1:
+        unique_opponents_possible = True
+
+    config = TournamentConfig(num_teams, parsed_rounds, round_reqs, total_slots, unique_opponents_possible)
     logger.info("Loaded tournament configuration: %s", config)
     return config

@@ -18,7 +18,7 @@ class TqdmObserver(GaObserver):
 
     def on_start(self, num_generations: int) -> None:
         """Initialize the progress bar at the start of the GA run."""
-        self._progress_bar = tqdm(total=num_generations, unit="gen")
+        self._progress_bar = tqdm(total=num_generations, unit="gen", desc="Initializing...")
 
     def on_generation_end(
         self,
@@ -29,9 +29,10 @@ class TqdmObserver(GaObserver):
         front_size: int,
     ) -> None:
         """Update progress bar with no new best."""
-        fitness_str = ", ".join([f"{s:.3f}" for s in best_fitness])
-        fitness_str += f" | {sum(best_fitness):.3f}"
-        self._progress_bar.set_description(f"Front: {front_size:<2}/{population_size:<2} | Avg Fitness: {fitness_str}")
+        if best_fitness:
+            fitness_str = ", ".join([f"{s:.3f}" for s in best_fitness])
+            fitness_str += f" | Σ={sum(best_fitness):.3f}"
+            self._progress_bar.set_description(f"Front: {front_size:<3}/{population_size:<3} | Avg: {fitness_str}")
         self._progress_bar.update(1)
 
     def on_finish(self, pop: Population, front: Population) -> None:

@@ -83,12 +83,6 @@ class Schedule:
 
         return self._cached_matches
 
-    # def clone(self) -> "Schedule":
-    #     """Create a deep copy of the Schedule instance."""
-    #     new_teams = {identity: team.clone() for identity, team in self._teams.items()}
-    #     new_individual = {event: new_teams[team_id] for event, team_id in self._schedule.items()}
-    #     return Schedule(new_teams, new_individual, self.fitness, self.rank, self.crowding)
-
     def all_teams(self) -> list[Team]:
         """Return a list of all teams in the schedule."""
         if self._cached_all_teams is None:
