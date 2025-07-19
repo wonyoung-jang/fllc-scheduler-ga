@@ -76,21 +76,15 @@ class NSGA2:
 
         for m in range(num_objectives):
             front.sort(key=lambda p: p.fitness[m])
-            front_min = front[0]
-            front_max = front[-1]
-            front_min.crowding = float("inf")
-            front_max.crowding = float("inf")
-            f_min = front_min.fitness[m]
-            f_max = front_max.fitness[m]
-            f_diff = f_max - f_min
+            front_min, front_max = front[0], front[-1]
+            front_min.crowding = front_max.crowding = float("inf")
+            f_diff = front_max.fitness[m] - front_min.fitness[m]
 
             if f_diff == 0:
                 f_diff = 1e-16
 
             for i in range(1, front_size - 1):
-                next_fitness = front[i + 1].fitness[m]
-                prev_fitness = front[i - 1].fitness[m]
-                diff_fitness = next_fitness - prev_fitness
+                diff_fitness = front[i + 1].fitness[m] - front[i - 1].fitness[m]
                 front[i].crowding += diff_fitness / f_diff
 
     @staticmethod

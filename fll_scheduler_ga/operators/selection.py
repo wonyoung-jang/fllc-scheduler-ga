@@ -52,7 +52,15 @@ class TournamentSelect(Selection):
     def select(self, population: Population, num_parents: int) -> Iterator[Schedule]:
         """Select individuals using NSGA-II tournament selection."""
         for _ in range(num_parents):
-            yield min(
-                self.rng.sample(population, min(self.tournament_size, len(population))),
-                key=lambda p: (p.rank, -p.crowding),
-            )
+            sample_size = min(self.tournament_size, len(population))
+            tournament = self.rng.sample(population, k=sample_size)
+            yield min(tournament, key=lambda p: (p.rank, -p.crowding))
+
+
+@dataclass(slots=True)
+class RandomSelect(Selection):
+    """Random selection of individuals from the population."""
+
+    def select(self, population: Population, num_parents: int) -> Iterator[Schedule]:
+        """Select individuals randomly from the population."""
+        yield from self.rng.sample(population, k=num_parents)

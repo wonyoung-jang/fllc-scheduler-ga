@@ -25,7 +25,7 @@ from fll_scheduler_ga.operators.crossover import (
 )
 from fll_scheduler_ga.operators.mutation import SwapMatchMutation, SwapTeamMutation
 from fll_scheduler_ga.operators.repairer import Repairer
-from fll_scheduler_ga.operators.selection import Elitism, TournamentSelect
+from fll_scheduler_ga.operators.selection import Elitism, RandomSelect, TournamentSelect
 from fll_scheduler_ga.preflight.preflight import run_preflight_checks
 
 logger = logging.getLogger(__name__)
@@ -230,7 +230,10 @@ def _create_ga_instance(config: dict, event_factory: EventFactory, ga_params: Ga
         rng=rng,
         event_factory=event_factory,
         team_factory=team_factory,
-        selection=TournamentSelect(rng, tournament_size=ga_params.selection_size),
+        selections=(
+            TournamentSelect(rng, tournament_size=ga_params.selection_size),
+            RandomSelect(rng),
+        ),
         elitism=Elitism(rng),
         crossovers=(
             KPoint(team_factory, event_factory.flat_list(), rng, repairer, k=1),  # Single-point

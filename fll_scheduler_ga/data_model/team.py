@@ -59,14 +59,11 @@ class Team:
     info: TeamInfo
     round_types: dict[RoundType, int]
     event_conflict_map: dict[int, set[int]]
-
     identity: int = field(init=False, repr=False)
     events: list[Event] = field(default_factory=list)
     opponents: list[int] = field(default_factory=list, repr=False)
     locations: list[Location] = field(default_factory=list, repr=False)
-
     fitness: tuple[float] = field(default=None, init=False, repr=False)
-
     _event_ids: set[int] = field(default_factory=set, repr=False)
     _rounds_needed: int = field(init=False, repr=False)
 

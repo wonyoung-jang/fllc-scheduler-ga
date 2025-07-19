@@ -36,7 +36,7 @@ class GA:
     rng: Random
     event_factory: EventFactory
     team_factory: TeamFactory
-    selection: Selection
+    selections: tuple[Selection]
     elitism: Selection
     crossovers: tuple[Crossover]
     mutations: tuple[Mutation]
@@ -228,7 +228,10 @@ class GA:
         """Evolve the population to create a new generation."""
         child_count = 0
         for _ in range(num_offspring):
-            p1, p2 = self.selection.select(self.population, 2)
+            s = self.selections[0]  # Tournament selection
+            if self.rng.random() < 0.05:
+                s = self.selections[-1]  # Random selection
+            p1, p2 = s.select(self.population, 2)
             if p1 == p2:
                 continue
 

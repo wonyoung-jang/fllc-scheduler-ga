@@ -30,21 +30,21 @@ class Round:
 
     def __post_init__(self) -> None:
         """Post-initialization to calculate the number of slots."""
+        self.num_slots = self.get_num_slots()
+
+    def get_num_slots(self) -> int:
+        """Get the number of slots available for this round."""
         total_num_teams = self.num_teams * self.rounds_per_team
         slots_per_timeslot = self.num_locations * self.teams_per_round
-
         if slots_per_timeslot == 0:
-            self.num_slots = 0
-            return
+            return 0
 
         minimum_slots = math.ceil(total_num_teams / slots_per_timeslot)
-
         if self.stop_time:
             total_available = self.stop_time - self.start_time
             slots_in_window = int(total_available / self.duration_minutes)
-            self.num_slots = max(minimum_slots, slots_in_window)
-        else:
-            self.num_slots = minimum_slots
+            return max(minimum_slots, slots_in_window)
+        return minimum_slots
 
 
 @dataclass(slots=True, frozen=True)
@@ -83,8 +83,7 @@ def get_config_parser(path: Path | None = None) -> ConfigParser:
     """
     if path is None:
         try:
-            path = Path("fll_scheduler_ga/config.ini")
-            path = path.resolve()
+            path = Path("fll_scheduler_ga/config.ini").resolve()
         except FileNotFoundError:
             logger.exception("Configuration file not found. Please provide a valid path.")
 
