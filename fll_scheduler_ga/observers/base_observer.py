@@ -28,11 +28,3 @@ class GaObserver(ABC):
     @abstractmethod
     def on_finish(self, pop: Population, front: Population) -> None:
         """Call when the genetic algorithm run is finished."""
-
-    @abstractmethod
-    def on_mutation(self, mutation_name: str, *, successful: bool) -> None:
-        """Call when a mutation is applied."""
-
-    @abstractmethod
-    def on_crossover(self, crossover_name: str, *, successful: bool) -> None:
-        """Call when a crossover is applied."""

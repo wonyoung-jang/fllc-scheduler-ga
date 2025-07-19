@@ -254,7 +254,6 @@ class GA:
                 crossover_success = True
                 child.fitness = self.evaluator.evaluate(child)
                 yield child
-            self._notify_crossover(f"{c.__class__.__name__}", successful=crossover_success)
             self._crossover_ratio["success" if crossover_success else "failure"] += 1
 
     def mutate_child(self, child: Schedule) -> None:
@@ -268,10 +267,8 @@ class GA:
             m = self.rng.choice(self.mutations)
             if m.mutate(child):
                 child.fitness = self.evaluator.evaluate(child)
-                self._notify_mutation(m.__class__.__name__, successful=True)
                 self._mutation_ratio["success"] += 1
             else:
-                self._notify_mutation(m.__class__.__name__, successful=False)
                 self._mutation_ratio["failure"] += 1
 
     def _notify_on_start(self, num_generations: int) -> None:
@@ -289,16 +286,6 @@ class GA:
                 best_fitness,
                 len(self.pareto_front()),
             )
-
-    def _notify_mutation(self, mutation_name: str, *, successful: bool) -> None:
-        """Notify observers when a mutation is applied."""
-        for obs in self.observers:
-            obs.on_mutation(mutation_name, successful=successful)
-
-    def _notify_crossover(self, crossover_name: str, *, successful: bool) -> None:
-        """Notify observers when a crossover is applied."""
-        for obs in self.observers:
-            obs.on_crossover(crossover_name, successful=successful)
 
     def _notify_on_finish(self, pop: Population, front: Population) -> None:
         """Notify observers when the genetic algorithm run is finished."""

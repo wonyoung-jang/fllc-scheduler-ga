@@ -6,7 +6,7 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from random import Random
 
-from ..data_model.event import Event
+from ..data_model.event import Event, EventFactory
 from ..data_model.team import TeamFactory
 from ..genetic.schedule import Schedule
 from .repairer import Repairer
@@ -19,9 +19,14 @@ class Crossover(ABC):
     """Abstract base class for crossover operators in the FLL Scheduler GA."""
 
     team_factory: TeamFactory
-    events: list[Event]
+    event_factory: EventFactory
     rng: Random
     repairer: Repairer
+    events: list[Event] = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        """Post-initialization to validate the crossover operator."""
+        self.events = self.event_factory.flat_list()
 
     @abstractmethod
     def crossover(self, parents: list[Schedule]) -> list[Schedule]:
@@ -135,6 +140,7 @@ class KPoint(EventCrossover):
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
+        super(KPoint, self).__post_init__()
         if not 1 <= self.k < len(self.events):
             msg = "k must be between 1 and the number of events."
             raise ValueError(msg)

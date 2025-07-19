@@ -223,7 +223,7 @@ def _setup_rng(args: argparse.Namespace, config_parser: ConfigParser) -> Random:
 def _create_ga_instance(config: dict, event_factory: EventFactory, ga_params: GaParameters, rng: Random) -> GA:
     """Create and return a GA instance with the provided configuration."""
     team_factory = TeamFactory(config, EventConflicts(event_factory).conflicts)
-    repairer = Repairer(rng, config, set(event_factory.flat_list()))
+    repairer = Repairer(rng, config, event_factory)
     return GA(
         ga_params=ga_params,
         config=config,
@@ -236,13 +236,13 @@ def _create_ga_instance(config: dict, event_factory: EventFactory, ga_params: Ga
         ),
         elitism=Elitism(rng),
         crossovers=(
-            KPoint(team_factory, event_factory.flat_list(), rng, repairer, k=1),  # Single-point
-            KPoint(team_factory, event_factory.flat_list(), rng, repairer, k=2),  # Two-point
-            KPoint(team_factory, event_factory.flat_list(), rng, repairer, k=4),  # K point (4)
-            Scattered(team_factory, event_factory.flat_list(), rng, repairer),
-            Uniform(team_factory, event_factory.flat_list(), rng, repairer),
-            RoundTypeCrossover(team_factory, event_factory.flat_list(), rng, repairer),
-            PartialCrossover(team_factory, event_factory.flat_list(), rng, repairer),
+            KPoint(team_factory, event_factory, rng, repairer, k=1),  # Single-point
+            KPoint(team_factory, event_factory, rng, repairer, k=2),  # Two-point
+            KPoint(team_factory, event_factory, rng, repairer, k=4),  # K point (4)
+            Scattered(team_factory, event_factory, rng, repairer),
+            Uniform(team_factory, event_factory, rng, repairer),
+            RoundTypeCrossover(team_factory, event_factory, rng, repairer),
+            PartialCrossover(team_factory, event_factory, rng, repairer),
         ),
         mutations=(
             SwapMatchMutation(rng, same_timeslot=False, same_location=False),  # Across timeslots and locations

@@ -38,9 +38,3 @@ class TqdmObserver(GaObserver):
     def on_finish(self, pop: Population, front: Population) -> None:
         """Close the progress bar."""
         self._progress_bar.close()
-
-    def on_mutation(self, mutation_name: str, *, successful: bool) -> None:
-        """Handle mutation events, currently a no-op."""
-
-    def on_crossover(self, crossover_name: str, *, successful: bool) -> None:
-        """Handle crossover events, currently a no-op."""

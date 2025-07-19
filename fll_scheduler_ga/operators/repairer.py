@@ -7,7 +7,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 
 from ..config.config import TournamentConfig
-from ..data_model.event import Event
+from ..data_model.event import Event, EventFactory
 from ..data_model.team import Team
 from ..genetic.schedule import Schedule
 
@@ -20,11 +20,13 @@ class Repairer:
 
     rng: random.Random
     config: TournamentConfig
-    set_of_events: set[Event]
-    rt_teams_needed: dict[str, int] = field(init=False)
+    event_factory: EventFactory
+    set_of_events: set[Event] = field(init=False, repr=False)
+    rt_teams_needed: dict[str, int] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
+        self.set_of_events = set(self.event_factory.flat_list())
         self.rt_teams_needed = {rc.round_type: rc.teams_per_round for rc in self.config.rounds}
 
     def repair(self, schedule: Schedule) -> Schedule | None:

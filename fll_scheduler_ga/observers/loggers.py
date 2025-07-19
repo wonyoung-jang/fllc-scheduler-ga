@@ -40,17 +40,3 @@ class LoggingObserver(GaObserver):
             return
 
         self.logger.info("Final pareto front size: %d", len(front))
-
-    def on_mutation(self, mutation_name: str, *, successful: bool = False) -> None:
-        """Log mutation details."""
-        if not successful:
-            self.logger.debug("Mutation failed: %s", mutation_name)
-        else:
-            self.logger.debug("Mutation applied: %s", mutation_name)
-
-    def on_crossover(self, crossover_name: str, *, successful: bool) -> None:
-        """Log crossover details."""
-        if not successful:
-            self.logger.debug("Crossover failed: %s", crossover_name)
-        else:
-            self.logger.debug("Crossover applied: %s", crossover_name)
