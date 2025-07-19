@@ -71,13 +71,7 @@ class ScheduleBuilder:
 
         for side1, side2 in match_events:
             available = (t for t in teams if t.needs_round(rt) and not t.conflicts(side1))
-            if not (team1 := next(available, None)):
-                continue
-
-            available = (
-                t for t in teams if t.needs_round(rt) and not t.conflicts(side1) and t.identity not in team1.opponents
-            )
-            if not (team2 := next(available, None)):
+            if not (team1 := next(available, None)) or not (team2 := next(available, None)):
                 continue
 
             team1.add_event(side1)

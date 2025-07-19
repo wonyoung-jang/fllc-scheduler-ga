@@ -200,52 +200,39 @@ class GA:
         num_offspring = self.ga_params.population_size - self.ga_params.elite_size
 
         for generation in range(self.ga_params.generations):
-            pop_changed = False
-            for o in self.evolve(num_offspring):
-                if self._add_to_population(o):
-                    pop_changed = True
-
-            if not pop_changed:
-                self.logger.debug(
-                    "Population did not grow in generation %d. Current size: %d.", generation + 1, len(self.population)
-                )
-                self._notify_gen_end(generation, self._update_fitness_history())
-                continue
-
+            self.population = list(self.elitism.select(self.population, self.ga_params.elite_size))
+            self._cleanup_population_tracking()
+            self.evolve(num_offspring)
             self.nsga2.non_dominated_sort(self.population)
-            self.population = list(self.elitism.select(self.population, self.ga_params.population_size))
-
+            self._notify_gen_end(generation, self._update_fitness_history())
             if not self.population:
                 self.logger.warning("No valid individuals in the current population.")
                 return False
 
-            self._cleanup_population_tracking()
-            self._notify_gen_end(generation, self._update_fitness_history())
-
         return True
 
-    def evolve(self, num_offspring: int) -> Iterator[Schedule]:
+    def evolve(self, num_offspring: int) -> None:
         """Evolve the population to create a new generation."""
         child_count = 0
-        for _ in range(num_offspring):
+        while child_count < num_offspring:
             s = self.selections[0]  # Tournament selection
             if self.rng.random() < 0.05:
                 s = self.selections[-1]  # Random selection
+
             p1, p2 = s.select(self.population, 2)
             if p1 == p2:
                 continue
 
             for child in self.crossover_child([p1, p2]):
                 self.mutate_child(child)
-                child_count += 1
-                yield child
+                if self._add_to_population(child):
+                    child_count += 1
 
                 if child_count >= num_offspring:
-                    return
+                    break
 
     def crossover_child(self, parents: list[Schedule, Schedule]) -> Iterator[Schedule]:
         """Evolve the population by one individual and return the best of the parents and child."""
-        # self.crossovers = self.crossovers[-1:] # Keep only the last crossover operator
         c = self.rng.choice(self.crossovers)
         crossover_chance = self.ga_params.crossover_chance
         crossover_success = False
@@ -265,11 +252,9 @@ class GA:
 
         if mutation_chance > self.rng.random():
             m = self.rng.choice(self.mutations)
-            if m.mutate(child):
+            if mutation_success := m.mutate(child):
                 child.fitness = self.evaluator.evaluate(child)
-                self._mutation_ratio["success"] += 1
-            else:
-                self._mutation_ratio["failure"] += 1
+            self._mutation_ratio["success" if mutation_success else "failure"] += 1
 
     def _notify_on_start(self, num_generations: int) -> None:
         """Notify observers when the genetic algorithm run starts."""

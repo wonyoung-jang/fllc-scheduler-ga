@@ -36,8 +36,7 @@ class Elitism(Selection):
 
     def select(self, population: Population, population_size: int) -> Iterator[Schedule]:
         """Select the new generation based on non-dominated sorting and crowding distance."""
-        population.sort(key=lambda p: (p.rank, -p.crowding))
-        yield from population[:population_size]
+        yield from sorted(population, key=lambda p: (p.rank, -p.crowding))[:population_size]
 
 
 @dataclass(slots=True)
@@ -51,10 +50,10 @@ class TournamentSelect(Selection):
 
     def select(self, population: Population, num_parents: int) -> Iterator[Schedule]:
         """Select individuals using NSGA-II tournament selection."""
-        for _ in range(num_parents):
-            sample_size = min(self.tournament_size, len(population))
-            tournament = self.rng.sample(population, k=sample_size)
-            yield min(tournament, key=lambda p: (p.rank, -p.crowding))
+        yield from sorted(
+            self.rng.sample(population, k=min(self.tournament_size, len(population))),
+            key=lambda p: (p.rank, -p.crowding),
+        )[:num_parents]
 
 
 @dataclass(slots=True)

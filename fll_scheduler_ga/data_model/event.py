@@ -1,6 +1,5 @@
 """Event data model for FLL scheduling."""
 
-import itertools
 import logging
 from collections.abc import Generator
 from dataclasses import dataclass, field
@@ -39,7 +38,6 @@ class EventFactory:
     """Factory class to create Events based on Round configurations."""
 
     config: TournamentConfig
-    _id_counter: itertools.count = field(default_factory=itertools.count, init=False, repr=False)
     _cached_events: dict[RoundType, list[Event]] = field(default=None, init=False, repr=False)
     _cached_flat_list: list[Event] = field(default=None, init=False, repr=False)
     _cached_eventmap: EventMap = field(default=None, init=False, repr=False)
@@ -120,8 +118,8 @@ class EventFactory:
                     cache_key2 = (i, teams_per_round, 2)
                     side1_loc = self._cached_locations.setdefault(cache_key1, location_type(**params, side=1))
                     side2_loc = self._cached_locations.setdefault(cache_key2, location_type(**params, side=2))
-                    event1 = Event(next(self._id_counter), round_type, timeslot, side1_loc)
-                    event2 = Event(next(self._id_counter), round_type, timeslot, side2_loc)
+                    event1 = Event(0, round_type, timeslot, side1_loc)
+                    event2 = Event(0, round_type, timeslot, side2_loc)
                     event1.paired_event = event2
                     event2.paired_event = event1
                     yield event1
@@ -129,7 +127,7 @@ class EventFactory:
                 else:
                     cache_key = (i, teams_per_round)
                     location = self._cached_locations.setdefault(cache_key, location_type(**params))
-                    yield Event(next(self._id_counter), round_type, timeslot, location)
+                    yield Event(0, round_type, timeslot, location)
 
 
 @dataclass(slots=True)
