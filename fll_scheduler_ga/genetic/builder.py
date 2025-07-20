@@ -7,23 +7,9 @@ from dataclasses import dataclass, field
 from ..config.config import RoundType, TournamentConfig
 from ..data_model.event import Event, EventFactory
 from ..data_model.team import Team, TeamFactory
-from ..operators.repairer import Repairer
-from .fitness import FitnessEvaluator
 from .schedule import Schedule
 
 logger = logging.getLogger(__name__)
-
-
-def create_and_evaluate_schedule(
-    args: tuple[TeamFactory, EventFactory, TournamentConfig, FitnessEvaluator, Repairer, int],
-) -> Schedule | None:
-    """Create and evaluate a schedule in a separate process."""
-    team_factory, event_factory, config, evaluator, repairer, seed = args
-    schedule = ScheduleBuilder(team_factory, event_factory, config, repairer, random.Random(seed)).build()
-    if score := evaluator.evaluate(schedule):
-        schedule.fitness = score
-        return schedule
-    return None
 
 
 @dataclass(slots=True)
@@ -33,7 +19,6 @@ class ScheduleBuilder:
     team_factory: TeamFactory
     event_factory: EventFactory
     config: TournamentConfig
-    repairer: Repairer
     rng: random.Random
     teams: list[Team] = field(init=False, repr=False)
 
@@ -49,12 +34,13 @@ class ScheduleBuilder:
 
         for r in self.config.rounds:
             rt = r.round_type
+            evts = events.get(rt, [])
             if r.teams_per_round == r.rounds_per_team == 1:
-                self._build_singles(schedule, rt, events.get(rt, []))
+                self._build_singles(schedule, rt, evts)
             else:
-                self._build_matches(schedule, rt, events.get(rt, []))
+                self._build_matches(schedule, rt, evts)
 
-        return self.repairer.repair(schedule)
+        return schedule
 
     def _build_singles(self, schedule: Schedule, rt: RoundType, events: list[Event]) -> None:
         """Book all judging events for a specific round type."""

@@ -6,12 +6,46 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from random import Random
 
+from ..config.config import TournamentConfig
 from ..data_model.event import Event, EventFactory
 from ..data_model.team import TeamFactory
 from ..genetic.schedule import Schedule
-from .repairer import Repairer
 
 logger = logging.getLogger(__name__)
+
+
+def build_crossovers(
+    config: TournamentConfig, team_factory: TeamFactory, event_factory: EventFactory, rng: Random
+) -> Iterator["Crossover"]:
+    """Build and return a tuple of crossover operators based on the configuration."""
+    if "genetic.crossover" not in config.parser:
+        msg = "No crossover configuration found in the provided TournamentConfig."
+        raise ValueError(msg)
+    config_crossover_types = config.parser["genetic.crossover"].get("crossover_types", "").split(",")
+    crossover_types = [ct.strip() for ct in config_crossover_types if ct.strip()]
+    config_crossover_ks = config.parser["genetic.crossover"].get("crossover_ks", "").split(",")
+    crossover_ks = [int(k) for k in config_crossover_ks]
+    crossover_classes = {
+        "KPoint": KPoint,
+        "Scattered": Scattered,
+        "Uniform": Uniform,
+        "RoundTypeCrossover": RoundTypeCrossover,
+        "PartialCrossover": PartialCrossover,
+    }
+    for ct in crossover_types:
+        if ct not in crossover_classes:
+            msg = f"Unknown crossover type: {ct}"
+            raise ValueError(msg)
+        else:
+            crossover_class = crossover_classes[ct]
+            if ct == "KPoint":
+                if not crossover_ks:
+                    msg = "KPoint crossover requires at least one k value."
+                    raise ValueError(msg)
+                for _ in range(len(crossover_ks)):
+                    yield crossover_class(team_factory, event_factory, rng, k=crossover_ks.pop(0))
+            else:
+                yield crossover_class(team_factory, event_factory, rng)
 
 
 @dataclass(slots=True)
@@ -21,7 +55,6 @@ class Crossover(ABC):
     team_factory: TeamFactory
     event_factory: EventFactory
     rng: Random
-    repairer: Repairer
     events: list[Event] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -95,7 +128,7 @@ class EventCrossover(Crossover):
         p1_genes, p2_genes = self.get_genes(p1, p2)
         self._transfer_genes(child, p1, p1_genes, first=True)
         self._transfer_genes(child, p2, p2_genes)
-        return self.repairer.repair(child)
+        return child
 
     def _transfer_genes(
         self, child: Schedule, parent: Schedule, events: Iterable[Event], *, first: bool = False

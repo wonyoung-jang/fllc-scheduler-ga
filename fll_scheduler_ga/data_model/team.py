@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass, field
 from logging import getLogger
-from math import sqrt
 
 from ..config.config import RoundType, TournamentConfig
 from ..data_model.event import Event
@@ -12,7 +11,7 @@ logger = getLogger(__name__)
 
 type TeamMap = dict[int, Team]
 
-PENALTY = 1e-16
+PENALTY = 1e-16  # Penalty value for penalizing worse scores
 
 
 @dataclass(slots=True, frozen=True)
@@ -61,7 +60,6 @@ class Team:
     identity: int = field(init=False, repr=False)
     events: list[Event] = field(default_factory=list)
     opponents: list[int] = field(default_factory=list, repr=False)
-    fitness: tuple[float] = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to sort events and time slots."""
@@ -88,15 +86,11 @@ class Team:
         """Unbook a team from an event."""
         self.round_types[event.round_type] += 1
         self.events.remove(event)
-        if self.fitness is not None:
-            self.fitness = None
 
     def add_event(self, event: Event) -> None:
         """Book a team for an event."""
         self.round_types[event.round_type] -= 1
         self.events.append(event)
-        if self.fitness is not None:
-            self.fitness = None
 
     def switch_opponent(self, old_opponent: "Team", new_opponent: "Team") -> None:
         """Switch the opponent for a given event."""
@@ -106,14 +100,10 @@ class Team:
     def remove_opponent(self, opponent: "Team") -> None:
         """Remove an opponent for a given event."""
         self.opponents.remove(opponent.identity)
-        if self.fitness is not None:
-            self.fitness = None
 
     def add_opponent(self, opponent: "Team") -> None:
         """Add an opponent for a given event."""
         self.opponents.append(opponent.identity)
-        if self.fitness is not None:
-            self.fitness = None
 
     def conflicts(self, new_event: Event) -> bool:
         """Check if adding a new event would cause a time conflict.
@@ -133,61 +123,3 @@ class Team:
             return False
 
         return any(existing_event_id in potential_conflicts for existing_event_id in event_ids)
-
-    def score(self) -> None:
-        """Calculate the fitness score for the team based on various criteria."""
-        if self.fitness is None:
-            self.fitness = (
-                self.score_break_time(PENALTY),
-                self.score_table_consistency(PENALTY),
-                self.score_opponent_variety(PENALTY),
-            )
-
-    def score_break_time(self, penalty: float = 0.01) -> float:
-        """Calculate a score based on the break times between events."""
-        if len(self.events) < 2:
-            return 1
-        _events = self.events
-        _events.sort(key=lambda e: e.identity)
-        break_times = []
-        for i in range(1, len(_events)):
-            start = _events[i].timeslot.start
-            stop = _events[i - 1].timeslot.stop
-            duration_seconds = (start - stop).total_seconds()
-            break_times.append(duration_seconds // 60)
-        if not (n := len(break_times)):
-            return 1
-        sum_x = sum(break_times)
-        mean_x = sum_x / n
-        if mean_x == 0:
-            return 0
-        sum_sq_diff = sum((b - mean_x) ** 2 for b in break_times)
-        variance = sum_sq_diff / n
-        stdev_x = sqrt(variance)
-        coeff_of_variation = stdev_x / mean_x
-
-        break_ratio = 1 / (1 + coeff_of_variation)
-        break_penalty = penalty ** break_times.count(0)
-        return break_ratio * break_penalty
-
-    def score_table_consistency(self, penalty: float = 0.01) -> float:
-        """Calculate a score based on the consistency of table assignments."""
-        locations = [e.location.identity for e in self.events if e.location.teams_per_round == 2]
-        unique, total = self._get_unique_and_total(locations)
-        table_ratio = unique / total if total else 1
-        table_ratio = 1 / (1 + table_ratio)
-        table_penalty = penalty**total if unique == total else 1
-        return table_ratio * table_penalty
-
-    def score_opponent_variety(self, penalty: float = 0.01) -> float:
-        """Calculate a score based on the variety of opponents faced."""
-        unique, total = self._get_unique_and_total(self.opponents)
-        opponent_ratio = unique / total if total else 1
-        opponent_penalty = penalty ** (total - unique) if unique != total else 1
-        return opponent_ratio * opponent_penalty
-
-    @staticmethod
-    def _get_unique_and_total(items: list[int]) -> tuple[int, int]:
-        """Get the count of unique and total items."""
-        unique_items = set(items)
-        return len(unique_items), len(items)

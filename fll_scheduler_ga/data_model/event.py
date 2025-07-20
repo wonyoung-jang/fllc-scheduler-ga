@@ -149,6 +149,7 @@ class EventConflicts:
             for other in events:
                 if other.identity == event.identity:
                     continue
+
                 if event.timeslot.overlaps(other.timeslot):
                     self.conflicts[event.identity].add(other.identity)
                 else:

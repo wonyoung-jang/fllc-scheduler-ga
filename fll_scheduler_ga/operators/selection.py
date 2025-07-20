@@ -6,12 +6,44 @@ Higher selective pressure means better individuals have a higher chance
 of being selected.
 """
 
+import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass
 from random import Random
 
+from ..config.config import TournamentConfig
+from ..genetic.ga_parameters import GaParameters
 from ..genetic.schedule import Population, Schedule
+
+logger = logging.getLogger(__name__)
+
+
+def build_selections(config: TournamentConfig, rng: Random, ga_params: GaParameters) -> Iterator["Selection"]:
+    """Build and return a tuple of selection operators based on the configuration."""
+    if "genetic.selection" not in config.parser:
+        msg = "No selection configuration section '[genetic.selection]' found."
+        raise ValueError(msg)
+
+    variant_map = {
+        "TournamentSelect": lambda r: TournamentSelect(r, tournament_size=ga_params.selection_size),
+        "RandomSelect": lambda r: RandomSelect(r),
+    }
+
+    config_str = config.parser["genetic.selection"].get("selection_types", "")
+    enabled_variants = [v.strip() for v in config_str.split(",") if v.strip()]
+
+    if not enabled_variants:
+        logger.warning("No selection types enabled in the configuration. Selection will not occur.")
+        return
+
+    for variant_name in enabled_variants:
+        if variant_name not in variant_map:
+            msg = f"Unknown selection type in config: '{variant_name}'"
+            raise ValueError(msg)
+        else:
+            selection_factory = variant_map[variant_name]
+            yield selection_factory(rng)
 
 
 @dataclass(slots=True)

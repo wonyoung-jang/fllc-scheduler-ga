@@ -65,29 +65,31 @@ class Plot:
         return _finalize(fig, save_dir, "fitness_plot.png")
 
     def plot_pareto_front(
-        self, title: str = "Pareto Front: Trade-offs", save_dir: str | Path | None = None
+        self,
+        title: str = "Pareto Front: Trade-offs",
+        save_dir: str | Path | None = None,
     ) -> Any | None:
         """Generate and saves a parallel coordinates plot of the final Pareto front."""
-        if not (front := self.ga_instance.pareto_front()):
+        if not (pop := self.ga_instance.population):
             logger.warning("Cannot plot an empty Pareto front.")
             return None
 
         objectives = self.ga_instance.evaluator.objectives
-        fig = _plot_parallel(front, objectives, title)
+        fig = _plot_parallel(pop, objectives, title)
         _finalize(fig, save_dir, "pareto_parallel.png")
 
         if len(objectives) in (2, 3):
             scatter_name = f"pareto_scatter_{len(objectives)}d.png"
             return _plot_pareto_scatter(
-                front, objectives, title=title, save_dir=Path(save_dir).with_name(scatter_name) if save_dir else None
+                pop, objectives, title=title, save_dir=Path(save_dir).with_name(scatter_name) if save_dir else None
             )
         return fig
 
 
 def _plot_parallel(front: Population, objectives: list[str], title: str) -> None:
     """Create the parallel coordinates plot."""
-    data = [[p.fitness[i] for i, _ in enumerate(objectives)] + [p.crowding] for p in front]
-    objectives = [*objectives, "Crowding Distance"]
+    data = [[p.fitness[i] for i, _ in enumerate(objectives)] + [p.rank] for p in front]
+    objectives = [*objectives, "Rank"]
     dataframe = pd.DataFrame(data=data, columns=objectives)
     plt = get_matplotlib()
     fig, ax = plt.subplots(figsize=(12, 7))
@@ -97,30 +99,30 @@ def _plot_parallel(front: Population, objectives: list[str], title: str) -> None
     ax.set(title=title, xlabel="Objectives", ylabel="Score")
     plt.xticks(rotation=15, ha="right")
     ax.get_legend().remove()
-    _attach_colorbar(ax, dataframe[objectives[-1]], label="Crowding Distance")
+    _attach_colorbar(ax, dataframe[objectives[-1]], label="Rank")
     return fig
 
 
 def _plot_pareto_scatter(front: Population, objectives: list[str], title: str, save_dir: str | None) -> Any | None:
     """Create a 2D or 3D scatter plot of the Pareto front."""
     dataframe = pd.DataFrame(data=[p.fitness for p in front], columns=objectives)
-    distances = [p.crowding for p in front]
+    ranks = [p.rank for p in front]
     plt = get_matplotlib()
 
     if len(objectives) == 2:
         fig, ax = plt.subplots(figsize=(10, 8))
         x_obj, y_obj = objectives
-        ax.scatter(dataframe[x_obj], dataframe[y_obj], c=distances, cmap="viridis", s=60, alpha=0.8)
+        ax.scatter(dataframe[x_obj], dataframe[y_obj], c=ranks, cmap="viridis", s=60, alpha=0.8)
         ax.set(title=title, xlabel=x_obj, ylabel=y_obj)
-        _attach_colorbar(ax, distances, label="Crowding Distance")
+        _attach_colorbar(ax, ranks, label="Rank")
     elif len(objectives) == 3:
         fig = plt.figure(figsize=(10, 8))
         ax = fig.add_subplot(111, projection="3d")
-        ax.view_init(azim=45, elev=30)
+        ax.view_init(azim=45, elev=40)
         x_obj, y_obj, z_obj = objectives
-        ax.scatter(dataframe[x_obj], dataframe[y_obj], dataframe[z_obj], c=distances, cmap="viridis", s=60)
+        ax.scatter(dataframe[x_obj], dataframe[y_obj], dataframe[z_obj], c=ranks, cmap="viridis", s=60)
         ax.set(title=title, xlabel=x_obj, ylabel=y_obj, zlabel=z_obj)
-        _attach_colorbar(ax, distances, label="Crowding Distance")
+        _attach_colorbar(ax, ranks, label="Rank")
     else:
         logger.info("Scatter plot is only supported for 2 or 3 objectives.")
         return None
@@ -150,9 +152,19 @@ def _finalize(fig: Any, save_dir: str | Path | None, default_name: str) -> Any:
 def _attach_colorbar(ax: Any, values: list[float], label: str | None = None) -> None:
     """Attach a colorbar to the given axes."""
     plt = get_matplotlib()
-    norm = plt.Normalize(min(values), max(values))
-    sm = plt.cm.ScalarMappable(norm=norm, cmap="viridis")
+    unique_values = sorted(set(values))
+    cmap_name = "viridis_r"
+
+    if len(unique_values) <= 10:
+        cmap = plt.get_cmap(cmap_name, len(unique_values))
+        norm = plt.matplotlib.colors.BoundaryNorm(np.arange(min(values) - 0.5, max(values) + 1.5), cmap.N)
+        sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+        cbar = plt.colorbar(mappable=sm, ax=ax, ticks=unique_values)
+    else:
+        norm = plt.Normalize(min(values), max(values))
+        sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap_name)
+        cbar = plt.colorbar(mappable=sm, ax=ax)
+
     sm.set_array([])
-    cbar = plt.colorbar(mappable=sm, ax=ax)
     if label:
         cbar.set_label(label, fontsize=12)

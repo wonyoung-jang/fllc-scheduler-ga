@@ -6,10 +6,44 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from random import Random
 
+from ..config.config import TournamentConfig
 from ..data_model.event import Event
 from ..genetic.schedule import Match, Schedule
 
 logger = logging.getLogger(__name__)
+
+
+def build_mutations(config: TournamentConfig, rng: Random) -> Iterator["Mutation"]:
+    """Build and return a tuple of mutation operators based on the configuration."""
+    if "genetic.mutation" not in config.parser:
+        msg = "No mutation configuration section '[genetic.mutation]' found."
+        raise ValueError(msg)
+
+    variant_map = {
+        # SwapMatchMutation variants
+        "SwapMatch_CrossTimeLocation": lambda r: SwapMatchMutation(r, same_timeslot=False, same_location=False),
+        "SwapMatch_SameLocation": lambda r: SwapMatchMutation(r, same_timeslot=False, same_location=True),
+        "SwapMatch_SameTime": lambda r: SwapMatchMutation(r, same_timeslot=True, same_location=False),
+        # SwapTeamMutation variants
+        "SwapTeam_CrossTimeLocation": lambda r: SwapTeamMutation(r, same_timeslot=False, same_location=False),
+        "SwapTeam_SameLocation": lambda r: SwapTeamMutation(r, same_timeslot=False, same_location=True),
+        "SwapTeam_SameTime": lambda r: SwapTeamMutation(r, same_timeslot=True, same_location=False),
+    }
+
+    config_str = config.parser["genetic.mutation"].get("mutation_types", "")
+    enabled_variants = [v.strip() for v in config_str.split(",") if v.strip()]
+
+    if not enabled_variants:
+        logger.warning("No mutation types enabled in the configuration. Mutation will not occur.")
+        return
+
+    for variant_name in enabled_variants:
+        if variant_name not in variant_map:
+            msg = f"Unknown mutation type in config: '{variant_name}'"
+            raise ValueError(msg)
+        else:
+            mutation_factory = variant_map[variant_name]
+            yield mutation_factory(rng)
 
 
 @dataclass(slots=True, frozen=True)

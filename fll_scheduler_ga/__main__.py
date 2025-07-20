@@ -7,7 +7,7 @@ from configparser import ConfigParser
 from pathlib import Path
 from random import Random
 
-from fll_scheduler_ga.config.config import get_config_parser, load_tournament_config
+from fll_scheduler_ga.config.config import TournamentConfig, get_config_parser, load_tournament_config
 from fll_scheduler_ga.data_model.event import EventConflicts, EventFactory
 from fll_scheduler_ga.data_model.team import TeamFactory
 from fll_scheduler_ga.genetic.fitness import FitnessEvaluator
@@ -16,16 +16,10 @@ from fll_scheduler_ga.genetic.ga_parameters import GaParameters
 from fll_scheduler_ga.io.export import generate_summary
 from fll_scheduler_ga.observers.loggers import LoggingObserver
 from fll_scheduler_ga.observers.progress import TqdmObserver
-from fll_scheduler_ga.operators.crossover import (
-    KPoint,
-    PartialCrossover,
-    RoundTypeCrossover,
-    Scattered,
-    Uniform,
-)
-from fll_scheduler_ga.operators.mutation import SwapMatchMutation, SwapTeamMutation
+from fll_scheduler_ga.operators.crossover import build_crossovers
+from fll_scheduler_ga.operators.mutation import build_mutations
 from fll_scheduler_ga.operators.repairer import Repairer
-from fll_scheduler_ga.operators.selection import Elitism, RandomSelect, TournamentSelect
+from fll_scheduler_ga.operators.selection import Elitism, build_selections
 from fll_scheduler_ga.preflight.preflight import run_preflight_checks
 
 logger = logging.getLogger(__name__)
@@ -220,38 +214,28 @@ def _setup_rng(args: argparse.Namespace, config_parser: ConfigParser) -> Random:
     return Random(rng_seed)
 
 
-def _create_ga_instance(config: dict, event_factory: EventFactory, ga_params: GaParameters, rng: Random) -> GA:
+def _create_ga_instance(
+    config: TournamentConfig,
+    event_factory: EventFactory,
+    ga_params: GaParameters,
+    rng: Random,
+) -> GA:
     """Create and return a GA instance with the provided configuration."""
     team_factory = TeamFactory(config, EventConflicts(event_factory).conflicts)
     repairer = Repairer(rng, config, event_factory)
+    selections = tuple(build_selections(config, rng, ga_params))
+    crossovers = tuple(build_crossovers(config, team_factory, event_factory, rng))
+    mutations = tuple(build_mutations(config, rng))
     return GA(
         ga_params=ga_params,
         config=config,
         rng=rng,
         event_factory=event_factory,
         team_factory=team_factory,
-        selections=(
-            TournamentSelect(rng, tournament_size=ga_params.selection_size),
-            RandomSelect(rng),
-        ),
+        selections=selections,
         elitism=Elitism(rng),
-        crossovers=(
-            KPoint(team_factory, event_factory, rng, repairer, k=1),  # Single-point
-            KPoint(team_factory, event_factory, rng, repairer, k=2),  # Two-point
-            KPoint(team_factory, event_factory, rng, repairer, k=4),  # K point (4)
-            Scattered(team_factory, event_factory, rng, repairer),
-            Uniform(team_factory, event_factory, rng, repairer),
-            RoundTypeCrossover(team_factory, event_factory, rng, repairer),
-            PartialCrossover(team_factory, event_factory, rng, repairer),
-        ),
-        mutations=(
-            SwapMatchMutation(rng, same_timeslot=False, same_location=False),  # Across timeslots and locations
-            SwapMatchMutation(rng, same_timeslot=False, same_location=True),  # Across timeslots, same location
-            SwapMatchMutation(rng, same_timeslot=True, same_location=False),  # Same timeslot, across locations
-            SwapTeamMutation(rng, same_timeslot=False, same_location=False),  # Across timeslots and locations
-            SwapTeamMutation(rng, same_timeslot=False, same_location=True),  # Across timeslots, same location
-            SwapTeamMutation(rng, same_timeslot=True, same_location=False),  # Same timeslot, across locations
-        ),
+        crossovers=crossovers,
+        mutations=mutations,
         logger=logger,
         observers=(
             LoggingObserver(logger),
