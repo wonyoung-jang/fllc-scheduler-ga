@@ -1,6 +1,6 @@
-# FLL-C Scheduler GA (Genetic Algorithm)
+# FIRST LEGO League Challenge Scheduler NSGA-III (Non-dominated Sorting Genetic Algorithm III)
 
-FLL-C Scheduler GA uses a multi-objective genetic algorithm (NSGA-II) to generate schedules for FIRST LEGO League Challenge.
+FLL-C Scheduler NSGA-III uses a multi-objective optimization non-dominated sorting genetic algorithm (NSGA-III) to generate tournament schedules for FIRST LEGO League Challenge.
 
 ## Features
 
@@ -48,8 +48,11 @@ Create a file named `config.ini` to define your tournament's structure. The conf
 -   `elite_size`: The number of the best schedules to include in the next generation.
 -   `selection_size`: The number of schedules that compete to be selected to evolve into the next generation.
 -   `crossover_chance`: The chance of two parent schedules crossover breeding to create an offspring.
--   `mutation_chance_low`: The lower limit chance for an offspring schedule to mutate (adaptive). If they are better than the average of the population, they mutate based on this value.
--   `mutation_chance_high`: The higher limit chance for an offspring schedule to mutate (adaptive). If they are worse than the average of the population, they mutate based on this value.
+-   `mutation_chance`: The chance for an offspring schedule to mutate.
+-   `seed`: Random seed for reliable output.
+-   `genetic.selection`: Configure GA selection.
+-   `genetic.crossover`: Configure GA crossover.
+-   `genetic.mutation`: Configure GA muatation.
 
 **Round Parameters:**
 
@@ -67,15 +70,6 @@ Create a file named `config.ini` to define your tournament's structure. The conf
 ```ini
 [DEFAULT]
 num_teams = 42
-
-[genetic]
-population_size = 16
-generations = 128
-elite_size = 2
-selection_size = 4
-crossover_chance = 0.5
-mutation_chance_low = 0.2
-mutation_chance_high = 0.8
 
 [round.judging]
 round_type = Judging
@@ -101,6 +95,47 @@ teams_per_round = 2
 start_time = 13:30
 duration_minutes = 11
 num_locations = 4  ; i.e., 4 competition tables (A, B, C, D)
+
+[genetic]
+population_size = 16
+generations = 128
+elite_size = 2
+selection_size = 4
+crossover_chance = 0.5
+mutation_chance = 0.25
+seed = 999999
+
+[genetic.selection]
+; Available selection types: TournamentSelect, RandomSelect
+selection_types = TournamentSelect, RandomSelect
+
+[genetic.crossover]
+; Available crossover types: 
+;   - KPoint                (uses crossover_ks to determine split points)
+;   - Scattered             (swaps random half of events between parents)
+;   - Uniform               (swaps each gene randomly)
+;   - RoundTypeCrossover    (preserves whole round types during crossover)
+;   - PartialCrossover      (partially take genes from both parents, repair to complete the child)
+crossover_types = KPoint, Scattered, Uniform, RoundTypeCrossover, PartialCrossover
+; Split point values for KPoint crossover, does nothing if KPoint is not used
+crossover_ks = 1, 2, 4 
+
+[genetic.mutation]
+; Available mutation types:
+;   - SwapMatch_CrossTimeLocation (swaps entire matches across different times and locations)
+;   - SwapMatch_SameLocation      (swaps matches in the same location but at different times)
+;   - SwapMatch_SameTime          (swaps matches at the same time but in different locations)
+;   - SwapTeam_CrossTimeLocation  (swaps single teams across different times and locations)
+;   - SwapTeam_SameLocation       (swaps single teams in the same location but at different times)
+;   - SwapTeam_SameTime           (swaps single teams at the same time but in different locations)
+; Multiline string for better readability - MUST be indented
+mutation_types = 
+    SwapMatch_CrossTimeLocation, 
+    SwapMatch_SameLocation, 
+    SwapMatch_SameTime, 
+    SwapTeam_CrossTimeLocation, 
+    SwapTeam_SameLocation, 
+    SwapTeam_SameTime
 ```
 
 ### 2. Run the Scheduler
@@ -124,6 +159,6 @@ python fll_scheduler_ga --population_size 500 --crossover_chance 0.9
 After the run is complete, the following files will be created in the directory you specified:
 
 -   `.csv` and `.html` files showing human readable schedules.
--   `fitness_plot.png`: A line graph showing how the average fitness of the best solutions improved over each generation.
+-   `fitness_vs_generation.png`: A line graph showing how the average fitness of the best solutions improved over each generation.
 -   `pareto_front.png`: A parallel coordinates plot showing the trade-offs between the different objectives for all optimal solutions found.
--   `pareto_front_scatter.png`: (For 2 or 3 objectives) A scatter plot visualizing the Pareto front.
+-   `pareto_scatter_(2d or 3d).png`: (For 2 or 3 objectives) A scatter plot visualizing the Pareto front.
