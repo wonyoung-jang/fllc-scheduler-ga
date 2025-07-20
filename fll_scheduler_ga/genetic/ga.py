@@ -1,7 +1,7 @@
 """Genetic algorithm for FLL Scheduler GA."""
 
 import logging
-import pickle
+import shelve
 import time
 from collections import Counter, defaultdict
 from collections.abc import Iterator
@@ -106,8 +106,13 @@ class GA:
         """Load and integrate a population from a seed file."""
         self.logger.info("Loading seed population from: %s", self._seed_file)
         try:
-            with self._seed_file.open("rb") as f:
-                seeded_population = pickle.load(f)
+            with shelve.open(self._seed_file) as shelf:
+                if self.config != shelf["config"]:
+                    self.logger.warning(
+                        "Seed file configuration does not match current configuration. Using current config."
+                    )
+                    return
+                seeded_population = shelf["population"]
 
             added_count = 0
             for schedule in seeded_population:
@@ -115,7 +120,7 @@ class GA:
                     added_count += 1
 
             self.logger.info("Loaded %d unique individuals from seed file.", added_count)
-        except (OSError, pickle.UnpicklingError, KeyError, EOFError):
+        except (OSError, KeyError, EOFError, Exception):
             self.logger.exception("Could not load or parse seed file. Starting with a fresh population.")
             self.population.clear()
             self._population_hashes.clear()
@@ -227,11 +232,7 @@ class GA:
 
     def mutate_child(self, child: Schedule) -> None:
         """Mutate the child schedule."""
-        low = self.ga_params.mutation_chance_low
-        high = self.ga_params.mutation_chance_high
-        mutation_chance = (high - low) // 2
-
-        if mutation_chance > self.rng.random():
+        if self.ga_params.mutation_chance > self.rng.random():
             if mutation_success := self.rng.choice(self.mutations).mutate(child):
                 pass
             self._mutation_ratio["success" if mutation_success else "failure"] += 1

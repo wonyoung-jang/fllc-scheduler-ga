@@ -2,7 +2,7 @@
 
 import argparse
 import logging
-import pickle
+import shelve
 from configparser import ConfigParser
 from pathlib import Path
 from random import Random
@@ -25,7 +25,7 @@ from fll_scheduler_ga.preflight.preflight import run_preflight_checks
 logger = logging.getLogger(__name__)
 
 
-def setup_environment() -> tuple[argparse.Namespace, GA]:
+def setup_environment() -> tuple[argparse.Namespace, GA, TournamentConfig]:
     """Set up the environment for the application."""
     try:
         args = _create_parser().parse_args()
@@ -41,7 +41,7 @@ def setup_environment() -> tuple[argparse.Namespace, GA]:
     except (FileNotFoundError, KeyError):
         logger.exception("Error loading configuration")
     else:
-        return args, ga
+        return args, ga, config
 
 
 def _create_parser() -> argparse.ArgumentParser:
@@ -58,7 +58,7 @@ def _create_parser() -> argparse.ArgumentParser:
         "loglevel_file": "DEBUG",
         "loglevel_console": "INFO",
         "no_plotting": False,
-        "seed_file": "fllc_genetic.pkl",
+        "seed_file": "fllc_genetic.dbm",
     }
     parser = argparse.ArgumentParser(
         description="Generate a tournament schedule using a Genetic Algorithm.",
@@ -127,14 +127,9 @@ def _create_parser() -> argparse.ArgumentParser:
         help="(OPTIONAL) Chance of crossover (0.0 to 1.0).",
     )
     parser.add_argument(
-        "--mutation_chance_low",
+        "--mutation_chance",
         type=float,
-        help="(OPTIONAL) Lower bound of mutation chance (0.0 to 1.0).",
-    )
-    parser.add_argument(
-        "--mutation_chance_high",
-        type=float,
-        help="(OPTIONAL) Upper bound of mutation chance (0.0 to 1.0).",
+        help="(OPTIONAL) Mutation chance (0.0 to 1.0).",
     )
     parser.add_argument(
         "--no_plotting",
@@ -188,8 +183,7 @@ def _build_ga_parameters_from_args(args: argparse.Namespace, config_parser: Conf
         "elite_size": config_genetic.getint("elite_size", 2),
         "selection_size": config_genetic.getint("selection_size", 4),
         "crossover_chance": config_genetic.getfloat("crossover_chance", 0.5),
-        "mutation_chance_low": config_genetic.getfloat("mutation_chance_low", 0.2),
-        "mutation_chance_high": config_genetic.getfloat("mutation_chance_high", 0.8),
+        "mutation_chance": config_genetic.getfloat("mutation_chance", 0.05),
     }
 
     for key in params:
@@ -246,7 +240,9 @@ def _create_ga_instance(
     )
 
 
-def save_population_to_seed_file(ga: GA, seed_file: str | Path, *, front: bool = False) -> None:
+def save_population_to_seed_file(
+    ga: GA, config: TournamentConfig, seed_file: str | Path, *, front: bool = False
+) -> None:
     """Save the final population to a file to be used as a seed for a future run."""
     population = ga.pareto_front() if front else ga.population
 
@@ -257,15 +253,16 @@ def save_population_to_seed_file(ga: GA, seed_file: str | Path, *, front: bool =
     path = Path(seed_file)
     logger.info("Saving final population of size %d to seed file: %s", len(population), path)
     try:
-        with path.open("wb") as f:
-            pickle.dump(population, f)
-    except (OSError, pickle.PicklingError):
+        with shelve.open(path) as shelf:
+            shelf["population"] = population
+            shelf["config"] = config
+    except OSError:
         logger.exception("Error saving population to seed file: %s", path)
 
 
 def main() -> None:
     """Run the fll-scheduler-ga application."""
-    args, ga = setup_environment()
+    args, ga, config = setup_environment()
     if not ga:
         return
 
@@ -276,7 +273,7 @@ def main() -> None:
     except Exception:
         logger.exception("An unhandled error occurred during the GA run. Saving state before exiting.")
     finally:
-        save_population_to_seed_file(ga, args.seed_file, front=True)
+        save_population_to_seed_file(ga, config, args.seed_file, front=True)
         generate_summary(args, ga)
 
     logger.info("fll-scheduler-ga application finished")
