@@ -53,7 +53,7 @@ class Selection(ABC):
     rng: Random
 
     @abstractmethod
-    def select(self, population: Population, population_size: int) -> Iterator[Schedule]:
+    def select(self, population: Population, num_parents: int) -> Iterator[Schedule]:
         """Select individuals from the population to form the next generation."""
         msg = "Subclasses must implement this method."
         raise NotImplementedError(msg)
@@ -66,9 +66,9 @@ class Elitism(Selection):
     Selects the best individuals for the next generation by taking whole fronts until the population size is met.
     """
 
-    def select(self, population: Population, population_size: int) -> Iterator[Schedule]:
+    def select(self, population: Population, num_parents: int) -> Iterator[Schedule]:
         """Select the new generation based on non-dominated sorting and crowding distance."""
-        yield from sorted(population, key=lambda p: (p.rank, -p.crowding))[:population_size]
+        yield from sorted(population, key=lambda p: (p.rank, -p.crowding))[:num_parents]
 
 
 @dataclass(slots=True)

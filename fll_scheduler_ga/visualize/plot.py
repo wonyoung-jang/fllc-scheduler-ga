@@ -99,7 +99,7 @@ def _plot_parallel(front: Population, objectives: list[str], title: str) -> None
     ax.set(title=title, xlabel="Objectives", ylabel="Score")
     plt.xticks(rotation=15, ha="right")
     ax.get_legend().remove()
-    _attach_colorbar(ax, dataframe[objectives[-1]], label="Rank")
+    _attach_colorbar(ax, dataframe[objectives[-1]].tolist(), label="Rank")
     return fig
 
 

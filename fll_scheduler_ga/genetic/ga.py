@@ -50,7 +50,7 @@ class GA:
 
     _population_hashes: set = field(default_factory=set, init=False, repr=False)
     _seed_file: Path | None = field(default=None, init=False, repr=False)
-    _crossover_ratio: Counter = field(default_factory=Counter, init=False, repr=False)
+    _offspring_ratio: Counter = field(default_factory=Counter, init=False, repr=False)
     _mutation_ratio: Counter = field(default_factory=Counter, init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -107,7 +107,13 @@ class GA:
         self.logger.info("Loading seed population from: %s", self._seed_file)
         try:
             with shelve.open(self._seed_file) as shelf:
-                if self.config != shelf["config"]:
+                shelf_config: TournamentConfig = shelf.get("config")
+                if (
+                    self.config.num_teams != shelf_config.num_teams
+                    or self.config.rounds != shelf_config.rounds
+                    or self.config.round_requirements != shelf_config.round_requirements
+                    or self.config.total_slots != shelf_config.total_slots
+                ):
                     self.logger.warning(
                         "Seed file configuration does not match current configuration. Using current config."
                     )
@@ -142,7 +148,11 @@ class GA:
             return False
         except KeyboardInterrupt:
             self.logger.warning("Genetic algorithm run interrupted by user. Saving...")
+            for p in self.population:
+                if p.fitness is None:
+                    p.fitness = self.evaluator.evaluate(p)
             self.nsga2.non_dominated_sort(self.population)
+            self._update_fitness_history()
             self._notify_on_finish(self.population, self.pareto_front())
             return True
         finally:
@@ -204,37 +214,31 @@ class GA:
     def evolve(self, num_offspring: int) -> None:
         """Evolve the population to create a new generation."""
         child_count = 0
-        while child_count < num_offspring:
+        for _ in range(num_offspring):
             s = self.rng.choice(self.selections)
+            parents = tuple(s.select(self.population, num_parents=2))
 
-            p1, p2 = s.select(self.population, 2)
-            if p1 == p2:
-                continue
-
-            for child in self.crossover_child([p1, p2]):
+            for child in self.crossover_child(parents):
                 self.mutate_child(child)
                 if self.repairer.repair(child) and self._add_to_population(child):
                     child.fitness = self.evaluator.evaluate(child)
                     child_count += 1
+                    self._offspring_ratio["success"] += 1
+                else:
+                    self._offspring_ratio["failure"] += 1
 
                 if child_count >= num_offspring:
                     break
 
-    def crossover_child(self, parents: list[Schedule, Schedule]) -> Iterator[Schedule]:
+    def crossover_child(self, parents: tuple[Schedule, ...]) -> Iterator[Schedule]:
         """Evolve the population by one individual and return the best of the parents and child."""
-        crossover_chance = self.ga_params.crossover_chance
-        crossover_success = False
-        if crossover_chance > self.rng.random():
-            for child in self.rng.choice(self.crossovers).crossover(parents):
-                crossover_success = True
-                yield child
-            self._crossover_ratio["success" if crossover_success else "failure"] += 1
+        if self.ga_params.crossover_chance > self.rng.random():
+            yield from self.rng.choice(self.crossovers).crossover(parents)
 
     def mutate_child(self, child: Schedule) -> None:
         """Mutate the child schedule."""
         if self.ga_params.mutation_chance > self.rng.random():
-            if mutation_success := self.rng.choice(self.mutations).mutate(child):
-                pass
+            mutation_success = self.rng.choice(self.mutations).mutate(child)
             self._mutation_ratio["success" if mutation_success else "failure"] += 1
 
     def _notify_on_start(self, num_generations: int) -> None:
@@ -255,20 +259,20 @@ class GA:
 
     def _notify_on_finish(self, pop: Population, front: Population) -> None:
         """Notify observers when the genetic algorithm run is finished."""
-        c_success = self._crossover_ratio["success"]
-        c_total = c_success + self._crossover_ratio["failure"]
-        c_success_percentage = c_success / c_total if c_total > 0 else 0.0
+        o_success = self._offspring_ratio["success"]
+        o_total = o_success + self._offspring_ratio["failure"]
+        o_success_percentage = o_success / o_total if o_total > 0 else 0.0
 
         m_success = self._mutation_ratio["success"]
         m_total = m_success + self._mutation_ratio["failure"]
         m_success_percentage = m_success / m_total if m_total > 0 else 0.0
 
         self.logger.info(
-            "Crossover success ratio: %s/%s = %s | %s",
-            c_success,
-            c_total,
-            f"{c_success_percentage:.2%}",
-            self._crossover_ratio,
+            "Offspring success ratio: %s/%s = %s | %s",
+            o_success,
+            o_total,
+            f"{o_success_percentage:.2%}",
+            self._offspring_ratio,
         )
         self.logger.info(
             "Mutation success ratio: %s/%s = %s | %s",

@@ -149,9 +149,7 @@ class Mutation(ABC):
         if not (self.same_timeslot or self.same_location):
             return not (is_same_timeslot or is_same_location)
 
-        logger.warning("Invalid swap.")
-
-        return False
+        return None
 
 
 @dataclass(slots=True, frozen=True)

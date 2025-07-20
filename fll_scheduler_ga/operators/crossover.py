@@ -106,14 +106,9 @@ class EventCrossover(Crossover):
 
         """
         p1, p2 = parents
+        yield from (self._produce_child(p1, p2), self._produce_child(p2, p1))
 
-        if child1 := self._produce_child(p1, p2):
-            yield child1
-
-        if child2 := self._produce_child(p2, p1):
-            yield child2
-
-    def _produce_child(self, p1: Schedule, p2: Schedule) -> Schedule | None:
+    def _produce_child(self, p1: Schedule, p2: Schedule) -> Schedule:
         """Produce a child schedule from two parents.
 
         Args:
@@ -121,7 +116,7 @@ class EventCrossover(Crossover):
             p2 (Schedule): Second parent schedule.
 
         Returns:
-            Schedule | None: The child schedule produced from the crossover, or None if unsuccessful.
+            Schedule : The child schedule produced from crossover.
 
         """
         child = Schedule(self.team_factory.build())
@@ -253,9 +248,9 @@ class Uniform(EventCrossover):
         """
         evts = self.events
         ne = len(evts)
-        indices = (1 if self.rng.uniform(0, 1) < 0.5 else 2 for _ in range(ne))
-        p1_genes = (evts[i] for i in range(ne) if next(indices, 0) == 1 and evts[i] in p1)
-        p2_genes = (evts[i] for i in range(ne) if next(indices, 0) == 2 and evts[i] in p2)
+        indices = [1 if self.rng.uniform(0, 1) < 0.5 else 2 for _ in range(ne)]
+        p1_genes = (evts[i] for i in range(ne) if indices[i] == 1 and evts[i] in p1)
+        p2_genes = (evts[i] for i in range(ne) if indices[i] == 2 and evts[i] in p2)
         return p1_genes, p2_genes
 
 
