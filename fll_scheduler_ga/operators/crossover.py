@@ -3,10 +3,10 @@
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator
+from configparser import ConfigParser
 from dataclasses import dataclass, field
 from random import Random
 
-from ..config.config import TournamentConfig
 from ..data_model.event import Event, EventFactory
 from ..data_model.team import TeamFactory
 from ..genetic.schedule import Schedule
@@ -15,15 +15,15 @@ logger = logging.getLogger(__name__)
 
 
 def build_crossovers(
-    config: TournamentConfig, team_factory: TeamFactory, event_factory: EventFactory, rng: Random
+    config_parser: ConfigParser, team_factory: TeamFactory, event_factory: EventFactory, rng: Random
 ) -> Iterator["Crossover"]:
     """Build and return a tuple of crossover operators based on the configuration."""
-    if "genetic.crossover" not in config.parser:
+    if "genetic.crossover" not in config_parser:
         msg = "No crossover configuration found in the provided TournamentConfig."
         raise ValueError(msg)
-    config_crossover_types = config.parser["genetic.crossover"].get("crossover_types", "").split(",")
+    config_crossover_types = config_parser["genetic.crossover"].get("crossover_types", "").split(",")
     crossover_types = [ct.strip() for ct in config_crossover_types if ct.strip()]
-    config_crossover_ks = config.parser["genetic.crossover"].get("crossover_ks", "").split(",")
+    config_crossover_ks = config_parser["genetic.crossover"].get("crossover_ks", "").split(",")
     crossover_ks = [int(k) for k in config_crossover_ks]
     crossover_classes = {
         "KPoint": KPoint,
@@ -248,7 +248,7 @@ class Uniform(EventCrossover):
         """
         evts = self.events
         ne = len(evts)
-        indices = [1 if self.rng.uniform(0, 1) < 0.5 else 2 for _ in range(ne)]
+        indices = [1 if self.rng.choice([True, False]) else 2 for _ in range(ne)]
         p1_genes = (evts[i] for i in range(ne) if indices[i] == 1 and evts[i] in p1)
         p2_genes = (evts[i] for i in range(ne) if indices[i] == 2 and evts[i] in p2)
         return p1_genes, p2_genes

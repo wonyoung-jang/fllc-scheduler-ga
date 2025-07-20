@@ -9,19 +9,19 @@ of being selected.
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
+from configparser import ConfigParser
 from dataclasses import dataclass
 from random import Random
 
-from ..config.config import TournamentConfig
 from ..genetic.ga_parameters import GaParameters
 from ..genetic.schedule import Population, Schedule
 
 logger = logging.getLogger(__name__)
 
 
-def build_selections(config: TournamentConfig, rng: Random, ga_params: GaParameters) -> Iterator["Selection"]:
+def build_selections(config_parser: ConfigParser, rng: Random, ga_params: GaParameters) -> Iterator["Selection"]:
     """Build and return a tuple of selection operators based on the configuration."""
-    if "genetic.selection" not in config.parser:
+    if "genetic.selection" not in config_parser:
         msg = "No selection configuration section '[genetic.selection]' found."
         raise ValueError(msg)
 
@@ -30,7 +30,7 @@ def build_selections(config: TournamentConfig, rng: Random, ga_params: GaParamet
         "RandomSelect": lambda r: RandomSelect(r),
     }
 
-    config_str = config.parser["genetic.selection"].get("selection_types", "")
+    config_str = config_parser["genetic.selection"].get("selection_types", "")
     enabled_variants = [v.strip() for v in config_str.split(",") if v.strip()]
 
     if not enabled_variants:
@@ -61,27 +61,21 @@ class Selection(ABC):
 
 @dataclass(slots=True)
 class TournamentSelect(Selection):
-    """Tournament selection for multi-objective problems using NSGA-II principles.
-
-    Selects the winner based on rank, then crowding distance.
-    """
+    """Tournament selection for multi-objective problems using NSGA-III principles."""
 
     tournament_size: int
 
     def select(self, population: Population, num_parents: int) -> Iterator[Schedule]:
         """Select individuals using NSGA-III tournament selection."""
-        winners = []
         for _ in range(num_parents):
             tournament_contenders = self.rng.sample(population, k=min(self.tournament_size, len(population)))
-
             winner = tournament_contenders[0]
             for contender in tournament_contenders[1:]:
                 if contender.rank < winner.rank:
                     winner = contender
                 if contender.rank == winner.rank and self.rng.choice([True, False]):
                     winner = contender
-            winners.append(winner)
-        yield from winners
+            yield winner
 
 
 @dataclass(slots=True)

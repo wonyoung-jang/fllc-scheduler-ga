@@ -36,7 +36,7 @@ def setup_environment() -> tuple[argparse.Namespace, GA, TournamentConfig]:
         run_preflight_checks(config, event_factory)
         ga_params = _build_ga_parameters_from_args(args, config_parser)
         rng = _setup_rng(args, config_parser)
-        ga = _create_ga_instance(config, event_factory, ga_params, rng)
+        ga = _create_ga_instance(config, config_parser, event_factory, ga_params, rng)
         ga.set_seed_file(args.seed_file)
     except (FileNotFoundError, KeyError):
         logger.exception("Error loading configuration")
@@ -210,6 +210,7 @@ def _setup_rng(args: argparse.Namespace, config_parser: ConfigParser) -> Random:
 
 def _create_ga_instance(
     config: TournamentConfig,
+    config_parser: ConfigParser,
     event_factory: EventFactory,
     ga_params: GaParameters,
     rng: Random,
@@ -217,9 +218,9 @@ def _create_ga_instance(
     """Create and return a GA instance with the provided configuration."""
     team_factory = TeamFactory(config, EventConflicts(event_factory).conflicts)
     repairer = Repairer(rng, config, event_factory)
-    selections = tuple(build_selections(config, rng, ga_params))
-    crossovers = tuple(build_crossovers(config, team_factory, event_factory, rng))
-    mutations = tuple(build_mutations(config, rng))
+    selections = tuple(build_selections(config_parser, rng, ga_params))
+    crossovers = tuple(build_crossovers(config_parser, team_factory, event_factory, rng))
+    mutations = tuple(build_mutations(config_parser, rng))
     return GA(
         ga_params=ga_params,
         config=config,

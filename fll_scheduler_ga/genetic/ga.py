@@ -196,25 +196,12 @@ class GA:
         self._cleanup_population_tracking()
         self._update_fitness_history()
 
-    def initialize_schedules(self, num_schedules: int) -> None:
-        """Initialize a set of schedules."""
-        schedule_count = 0
-        seeder = Random(self.rng.randint(*RANDOM_SEED))
-        while schedule_count < num_schedules:
-            self.builder.rng = Random(seeder.randint(*RANDOM_SEED))
-            schedule = self.builder.build()
-            if self.repairer.repair(schedule) and self._add_to_population(schedule):
-                schedule.fitness = self.evaluator.evaluate(schedule)
-                schedule_count += 1
-
     def generation(self) -> bool:
         """Perform a single generation step of the genetic algorithm."""
         num_offspring = self.ga_params.population_size - self.ga_params.elite_size
         for generation in range(self.ga_params.generations):
             self.evolve(num_offspring)
             self.population = self.nsga3.select(self.population)
-            if len(self.population) < self.ga_params.population_size:
-                self.initialize_schedules(self.ga_params.population_size - len(self.population))
             self._cleanup_population_tracking()
             self._notify_gen_end(generation, self._update_fitness_history())
             if not self.population:
@@ -229,6 +216,8 @@ class GA:
         while child_count < num_offspring:
             s = self.rng.choice(self.selections)
             parents = tuple(s.select(self.population, num_parents=2))
+            if parents[0] == parents[1]:
+                continue
 
             for child in self.crossover_child(parents):
                 self.mutate_child(child)

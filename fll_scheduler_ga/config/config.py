@@ -51,7 +51,6 @@ class Round:
 class TournamentConfig:
     """Configuration for the tournament."""
 
-    parser: ConfigParser
     num_teams: int
     rounds: list[Round]
     round_requirements: dict[RoundType, int]
@@ -142,6 +141,6 @@ def load_tournament_config(parser: ConfigParser) -> TournamentConfig:
     if 1 <= max_rounds_per_team <= num_teams - 1:
         unique_opponents_possible = True
 
-    config = TournamentConfig(parser, num_teams, parsed_rounds, round_reqs, total_slots, unique_opponents_possible)
+    config = TournamentConfig(num_teams, parsed_rounds, round_reqs, total_slots, unique_opponents_possible)
     logger.info("Loaded tournament configuration: %s", config)
     return config

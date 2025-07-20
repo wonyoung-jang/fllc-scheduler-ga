@@ -57,10 +57,12 @@ class NSGA3:
             return next_pop
 
         last_front = fronts[last_front_idx]
-        if not last_front:
+        k = self.population_size - len(next_pop)
+
+        if len(last_front) < k:
+            next_pop.extend(last_front)
             return next_pop
 
-        k = self.population_size - len(next_pop)
         next_pop.extend(self._niching_selection(fronts[: last_front_idx + 1], last_front, k))
         return next_pop
 
@@ -119,49 +121,62 @@ class NSGA3:
             self._pop[i].rank = ranks[i]
 
     def _niching_selection(self, fronts_to_consider: list[Population], last_front: Population, k: int) -> Population:
-        """Select k individuals from the last front using niching."""
+        """Select k individuals from the last front using a robust niching mechanism."""
         self._normalize_objectives(fronts_to_consider)
         self._associate_and_calculate_distances()
 
-        ro = self._count_members_per_ref_point(fronts_to_consider[:-1])
-        selected_indices: set[int] = set()
+        ro = self._count_members_per_ref_point([p for front in fronts_to_consider[:-1] for p in front])
+        selected: list[Schedule] = []
         member_pool = last_front[:]
 
-        while len(selected_indices) < k:
-            min_ro = min(ro)
-            min_ro_indices = [i for i, x in enumerate(ro) if x == min_ro]
-            self.rng.shuffle(min_ro_indices)
-            found = False
-            for z_idx in min_ro_indices:
-                members_of_z = [p for p in member_pool if p.ref_point_idx == z_idx]
-                if not members_of_z:
-                    continue
-
-                if ro[z_idx] == 0:
-                    best_member = min(members_of_z, key=lambda p: p.distance_to_ref_point)
-                else:
-                    best_member = self.rng.choice(members_of_z)
-
-                selected_indices.add(self._pop.index(best_member))
-                member_pool.remove(best_member)
-                ro[z_idx] += 1
-                found = True
+        while len(selected) < k:
+            if not member_pool:
                 break
-            if not found:
-                break
-        return [self._pop[i] for i in selected_indices]
+
+            min_ro_val = min(ro)
+            potential_z_indices = [i for i, val in enumerate(ro) if val == min_ro_val]
+            self.rng.shuffle(potential_z_indices)
+
+            chosen_member = None
+            z_to_increment = -1
+
+            for z_idx in potential_z_indices:
+                associated_members = [p for p in member_pool if p.ref_point_idx == z_idx]
+                if associated_members:
+                    if ro[z_idx] == 0:
+                        chosen_member = min(associated_members, key=lambda p: p.distance_to_ref_point)
+                    else:
+                        chosen_member = self.rng.choice(associated_members)
+                    z_to_increment = z_idx
+                    break
+
+            if chosen_member is None:
+                chosen_member: Schedule = self.rng.choice(member_pool)
+                z_to_increment = chosen_member.ref_point_idx
+
+            selected.append(chosen_member)
+            member_pool.remove(chosen_member)
+            ro[z_to_increment] += 1
+
+        return selected
 
     def _normalize_objectives(self, fronts: list[Population]) -> None:
         """Normalize objectives for the entire population being considered."""
         population = [p for front in fronts for p in front]
-        if not population:
+        if not population or not any(p.fitness for p in population):
             return
 
         obj_values = np.array([p.fitness for p in population])
         ideal_point = np.min(obj_values, axis=0)
         max_values = np.max(obj_values, axis=0)
-        range_vals = max_values - ideal_point
-        range_vals[range_vals == 0] = 1e-6
+
+        # Calculate nadir point by taking the max from each objective across the last front considered
+        last_front_pop = [p for front in fronts for p in front if p.rank == fronts[-1][0].rank]
+        nadir_point = np.max(np.array([p.fitness for p in last_front_pop]), axis=0) if last_front_pop else max_values
+
+        range_vals = nadir_point - ideal_point
+        range_vals[range_vals < 1e-6] = 1e-6  # Avoid division by zero
+
         normalized = (obj_values - ideal_point) / range_vals
 
         for p, norm_fit in zip(population, normalized, strict=False):
@@ -176,11 +191,11 @@ class NSGA3:
             p.ref_point_idx = np.argmin(distances)
             p.distance_to_ref_point = distances[p.ref_point_idx]
 
-    def _count_members_per_ref_point(self, fronts: list[Population]) -> list[int]:
-        """Count how many individuals from non-last fronts are associated with each reference point."""
+    def _count_members_per_ref_point(self, population: Population) -> list[int]:
+        """Count how many individuals are associated with each reference point."""
         ro = [0] * len(self.ref_points)
-        for front in fronts:
-            for p in front:
+        for p in population:
+            if p.ref_point_idx is not None:
                 ro[p.ref_point_idx] += 1
         return ro
 

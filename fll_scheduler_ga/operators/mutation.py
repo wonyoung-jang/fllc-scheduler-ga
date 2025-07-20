@@ -3,19 +3,19 @@
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
+from configparser import ConfigParser
 from dataclasses import dataclass
 from random import Random
 
-from ..config.config import TournamentConfig
 from ..data_model.event import Event
 from ..genetic.schedule import Match, Schedule
 
 logger = logging.getLogger(__name__)
 
 
-def build_mutations(config: TournamentConfig, rng: Random) -> Iterator["Mutation"]:
+def build_mutations(config_parser: ConfigParser, rng: Random) -> Iterator["Mutation"]:
     """Build and return a tuple of mutation operators based on the configuration."""
-    if "genetic.mutation" not in config.parser:
+    if "genetic.mutation" not in config_parser:
         msg = "No mutation configuration section '[genetic.mutation]' found."
         raise ValueError(msg)
 
@@ -30,7 +30,7 @@ def build_mutations(config: TournamentConfig, rng: Random) -> Iterator["Mutation
         "SwapTeam_SameTime": lambda r: SwapTeamMutation(r, same_timeslot=True, same_location=False),
     }
 
-    config_str = config.parser["genetic.mutation"].get("mutation_types", "")
+    config_str = config_parser["genetic.mutation"].get("mutation_types", "")
     enabled_variants = [v.strip() for v in config_str.split(",") if v.strip()]
 
     if not enabled_variants:

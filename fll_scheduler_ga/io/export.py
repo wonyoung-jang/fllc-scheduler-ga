@@ -57,29 +57,24 @@ def generate_summary(args: argparse.Namespace, ga: GA) -> None:
 
 def generate_summary_report(schedule: Schedule, evaluator: FitnessEvaluator, path: Path) -> None:
     """Generate a text summary report for a single schedule."""
-    obj_names = evaluator.objectives
-    scores = schedule.fitness
     with path.open("w", encoding="utf-8") as f:
         f.write(f"--- FLL Scheduler GA Summary Report ({id(schedule)}) ---\n\n")
         f.write("Objective Scores:\n")
-        for name, score in zip(obj_names, scores, strict=False):
+        for name, score in zip(evaluator.objectives, schedule.fitness, strict=False):
             f.write(f"  - {name}: {score:.4f}\n")
 
 
 def generate_pareto_summary(front: list[Schedule], evaluator: FitnessEvaluator, path: Path) -> None:
     """Generate a summary of the Pareto front."""
     schedule_enum_digits = len(str(len(front)))
-    obj_names = evaluator.objectives
     front.sort(key=lambda s: (s.rank, -sum(s.fitness)))
     with path.open("w", encoding="utf-8") as f:
         f.write("Schedule, ID, Hash, Rank, ")
-        for name in obj_names:
+        for name in evaluator.objectives:
             f.write(f"{name}, ")
         f.write("Sum\n")
         for i, schedule in enumerate(front, start=1):
-            rank = schedule.rank
-
-            f.write(f"{i:0{schedule_enum_digits}}, {id(schedule)}, {hash(schedule)}, {rank}, ")
+            f.write(f"{i:0{schedule_enum_digits}}, {id(schedule)}, {hash(schedule)}, {schedule.rank}, ")
             for score in schedule.fitness:
                 f.write(f"{score:.4f}, ")
             f.write(f"{sum(schedule.fitness):.4f}\n")
