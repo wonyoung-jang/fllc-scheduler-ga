@@ -60,18 +60,6 @@ class Selection(ABC):
 
 
 @dataclass(slots=True)
-class Elitism(Selection):
-    """Elitism for NSGA-II.
-
-    Selects the best individuals for the next generation by taking whole fronts until the population size is met.
-    """
-
-    def select(self, population: Population, num_parents: int) -> Iterator[Schedule]:
-        """Select the new generation based on non-dominated sorting and crowding distance."""
-        yield from sorted(population, key=lambda p: (p.rank, -p.crowding))[:num_parents]
-
-
-@dataclass(slots=True)
 class TournamentSelect(Selection):
     """Tournament selection for multi-objective problems using NSGA-II principles.
 
@@ -81,11 +69,19 @@ class TournamentSelect(Selection):
     tournament_size: int
 
     def select(self, population: Population, num_parents: int) -> Iterator[Schedule]:
-        """Select individuals using NSGA-II tournament selection."""
-        yield from sorted(
-            self.rng.sample(population, k=min(self.tournament_size, len(population))),
-            key=lambda p: (p.rank, -p.crowding),
-        )[:num_parents]
+        """Select individuals using NSGA-III tournament selection."""
+        winners = []
+        for _ in range(num_parents):
+            tournament_contenders = self.rng.sample(population, k=min(self.tournament_size, len(population)))
+
+            winner = tournament_contenders[0]
+            for contender in tournament_contenders[1:]:
+                if contender.rank < winner.rank:
+                    winner = contender
+                if contender.rank == winner.rank and self.rng.choice([True, False]):
+                    winner = contender
+            winners.append(winner)
+        yield from winners
 
 
 @dataclass(slots=True)

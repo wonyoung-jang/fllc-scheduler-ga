@@ -4,6 +4,8 @@ from collections import defaultdict
 from collections.abc import ItemsView, KeysView, ValuesView
 from dataclasses import dataclass, field
 
+import numpy as np
+
 from ..config.config import RoundType
 from ..data_model.event import Event
 from ..data_model.team import Team, TeamMap
@@ -21,7 +23,11 @@ class Schedule:
     schedule: Individual = field(default_factory=dict, compare=False)
     fitness: tuple[float, ...] | None = field(default=None, compare=False)
     rank: int = field(default=9999, compare=True)
-    crowding: float = field(default=0.0, compare=False)
+
+    normalized_fitness: np.ndarray | None = field(default=None, init=False, repr=False, compare=False)
+    ref_point_idx: int = field(default=None, init=False, repr=False, compare=False)
+    distance_to_ref_point: float = field(default=None, init=False, repr=False, compare=False)
+
     _cached_all_teams: list[Team] = field(default=None, init=False, repr=False, compare=False)
     _cached_matches: dict[RoundType, list[Match]] = field(default=None, init=False, repr=False, compare=False)
     _cached_hash: int = field(default=None, init=False, repr=False)

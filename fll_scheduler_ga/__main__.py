@@ -19,7 +19,7 @@ from fll_scheduler_ga.observers.progress import TqdmObserver
 from fll_scheduler_ga.operators.crossover import build_crossovers
 from fll_scheduler_ga.operators.mutation import build_mutations
 from fll_scheduler_ga.operators.repairer import Repairer
-from fll_scheduler_ga.operators.selection import Elitism, build_selections
+from fll_scheduler_ga.operators.selection import build_selections
 from fll_scheduler_ga.preflight.preflight import run_preflight_checks
 
 logger = logging.getLogger(__name__)
@@ -227,7 +227,6 @@ def _create_ga_instance(
         event_factory=event_factory,
         team_factory=team_factory,
         selections=selections,
-        elitism=Elitism(rng),
         crossovers=crossovers,
         mutations=mutations,
         logger=logger,

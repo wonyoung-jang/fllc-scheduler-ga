@@ -15,7 +15,7 @@ from ..data_model.team import TeamFactory
 from ..observers.base_observer import GaObserver
 from ..operators.crossover import Crossover
 from ..operators.mutation import Mutation
-from ..operators.nsga2 import NSGA2
+from ..operators.nsga3 import NSGA3
 from ..operators.repairer import Repairer
 from ..operators.selection import Selection
 from .builder import ScheduleBuilder
@@ -37,14 +37,14 @@ class GA:
     event_factory: EventFactory
     team_factory: TeamFactory
     selections: tuple[Selection]
-    elitism: Selection
     crossovers: tuple[Crossover]
     mutations: tuple[Mutation]
     logger: logging.Logger
     observers: tuple[GaObserver]
     evaluator: FitnessEvaluator
     repairer: Repairer
-    nsga2: NSGA2 = field(default=None, init=False, repr=False)
+    builder: ScheduleBuilder = field(init=False, repr=False)
+    nsga3: NSGA3 = field(default=None, init=False, repr=False)
     fitness_history: list[tuple] = field(default_factory=list, init=False, repr=False)
     population: Population = field(default_factory=list, init=False, repr=False)
 
@@ -55,7 +55,9 @@ class GA:
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
-        self.nsga2 = NSGA2
+        seeder = Random(self.rng.randint(*RANDOM_SEED))
+        self.builder = ScheduleBuilder(self.team_factory, self.event_factory, self.config, seeder)
+        self.nsga3 = NSGA3(self.rng, len(self.evaluator.objectives), self.ga_params.population_size)
 
     def set_seed_file(self, file_path: str | Path | None) -> None:
         """Set the file path for loading a seed population."""
@@ -74,11 +76,10 @@ class GA:
         if not front:
             return ()
 
-        num_objectives = len(front[0].fitness)
         avg_fitness_front1 = defaultdict(list)
 
         for p in front:
-            for i in range(num_objectives):
+            for i, _ in enumerate(self.evaluator.objectives):
                 avg_fitness_front1[i].append(p.fitness[i])
 
         return tuple(sum(s) / len(s) for s in avg_fitness_front1.values())
@@ -99,8 +100,7 @@ class GA:
 
     def _cleanup_population_tracking(self) -> None:
         """Clean up population tracking structures after selection."""
-        current_hashes = {hash(s) for s in self.population}
-        self._population_hashes = current_hashes
+        self._population_hashes = {hash(s) for s in self.population}
 
     def _load_population_from_seed(self) -> None:
         """Load and integrate a population from a seed file."""
@@ -141,6 +141,7 @@ class GA:
                 self.logger.critical("No valid schedule meeting all hard constraints was found.")
                 return False
             if self.generation():
+                self.population = self.nsga3.select(self.population)
                 self._notify_on_finish(self.population, self.pareto_front())
                 return True
         except Exception:
@@ -151,7 +152,7 @@ class GA:
             for p in self.population:
                 if p.fitness is None:
                     p.fitness = self.evaluator.evaluate(p)
-            self.nsga2.non_dominated_sort(self.population)
+            self.population = self.nsga3.select(self.population)
             self._update_fitness_history()
             self._notify_on_finish(self.population, self.pareto_front())
             return True
@@ -175,12 +176,11 @@ class GA:
         self.logger.info("Initializing population with %d individuals.", num_to_create)
         seeder = Random(self.rng.randint(*RANDOM_SEED))
         attempts, max_attempts = ATTEMPTS
-        builder = ScheduleBuilder(self.team_factory, self.event_factory, self.config, seeder)
 
         num_created = 0
         while len(self.population) < num_to_create and attempts < max_attempts:
-            builder.rng = Random(seeder.randint(*RANDOM_SEED))
-            schedule = builder.build()
+            self.builder.rng = Random(seeder.randint(*RANDOM_SEED))
+            schedule = self.builder.build()
             if self.repairer.repair(schedule) and self._add_to_population(schedule):
                 schedule.fitness = self.evaluator.evaluate(schedule)
                 num_created += 1
@@ -192,17 +192,29 @@ class GA:
             self.logger.critical("No valid initial schedules could be built.")
             return
 
-        self.nsga2.non_dominated_sort(self.population)
+        self.population = self.nsga3.select(self.population)
         self._cleanup_population_tracking()
         self._update_fitness_history()
+
+    def initialize_schedules(self, num_schedules: int) -> None:
+        """Initialize a set of schedules."""
+        schedule_count = 0
+        seeder = Random(self.rng.randint(*RANDOM_SEED))
+        while schedule_count < num_schedules:
+            self.builder.rng = Random(seeder.randint(*RANDOM_SEED))
+            schedule = self.builder.build()
+            if self.repairer.repair(schedule) and self._add_to_population(schedule):
+                schedule.fitness = self.evaluator.evaluate(schedule)
+                schedule_count += 1
 
     def generation(self) -> bool:
         """Perform a single generation step of the genetic algorithm."""
         num_offspring = self.ga_params.population_size - self.ga_params.elite_size
         for generation in range(self.ga_params.generations):
             self.evolve(num_offspring)
-            self.nsga2.non_dominated_sort(self.population)
-            self.population = list(self.elitism.select(self.population, self.ga_params.population_size))
+            self.population = self.nsga3.select(self.population)
+            if len(self.population) < self.ga_params.population_size:
+                self.initialize_schedules(self.ga_params.population_size - len(self.population))
             self._cleanup_population_tracking()
             self._notify_gen_end(generation, self._update_fitness_history())
             if not self.population:
@@ -214,7 +226,7 @@ class GA:
     def evolve(self, num_offspring: int) -> None:
         """Evolve the population to create a new generation."""
         child_count = 0
-        for _ in range(num_offspring):
+        while child_count < num_offspring:
             s = self.rng.choice(self.selections)
             parents = tuple(s.select(self.population, num_parents=2))
 

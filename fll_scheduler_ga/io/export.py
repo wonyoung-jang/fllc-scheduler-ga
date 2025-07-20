@@ -30,7 +30,7 @@ def generate_summary(args: argparse.Namespace, ga: GA) -> None:
         plot.plot_pareto_front(save_dir=pareto_plot_path)
 
     front = ga.pareto_front()
-    front.sort(key=lambda s: (s.rank, -s.crowding, -sum(s.fitness)))
+    front.sort(key=lambda s: (s.rank, -sum(s.fitness)))
 
     for i, schedule in enumerate(front, start=1):
         name = f"front_{schedule.rank}_schedule_{i}"
@@ -70,19 +70,16 @@ def generate_pareto_summary(front: list[Schedule], evaluator: FitnessEvaluator, 
     """Generate a summary of the Pareto front."""
     schedule_enum_digits = len(str(len(front)))
     obj_names = evaluator.objectives
-    front.sort(key=lambda s: (s.rank, -s.crowding, -sum(s.fitness)))
+    front.sort(key=lambda s: (s.rank, -sum(s.fitness)))
     with path.open("w", encoding="utf-8") as f:
-        f.write("Schedule, ID, Hash, Rank, Crowding, ")
+        f.write("Schedule, ID, Hash, Rank, ")
         for name in obj_names:
             f.write(f"{name}, ")
         f.write("Sum\n")
         for i, schedule in enumerate(front, start=1):
             rank = schedule.rank
-            crowding = schedule.crowding
-            if crowding == float("inf"):
-                crowding = 9.9999
 
-            f.write(f"{i:0{schedule_enum_digits}}, {id(schedule)}, {hash(schedule)}, {rank}, {crowding:.4f}, ")
+            f.write(f"{i:0{schedule_enum_digits}}, {id(schedule)}, {hash(schedule)}, {rank}, ")
             for score in schedule.fitness:
                 f.write(f"{score:.4f}, ")
             f.write(f"{sum(schedule.fitness):.4f}\n")
