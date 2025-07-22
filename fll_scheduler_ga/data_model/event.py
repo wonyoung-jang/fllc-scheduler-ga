@@ -140,7 +140,7 @@ class EventConflicts:
 
     def __post_init__(self) -> None:
         """Post-initialization to create the event availability map."""
-        events = sorted(self.event_factory.flat_list())
+        events = sorted(self.event_factory.flat_list(), key=lambda e: e.identity)
         self.available = {e.identity: set() for e in events}
         self.conflicts = {e.identity: set() for e in events}
 

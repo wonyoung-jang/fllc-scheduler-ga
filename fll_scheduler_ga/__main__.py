@@ -7,7 +7,8 @@ from configparser import ConfigParser
 from pathlib import Path
 from random import Random
 
-from fll_scheduler_ga.config.config import TournamentConfig, get_config_parser, load_tournament_config
+from fll_scheduler_ga.config.config import TournamentConfig, load_tournament_config
+from fll_scheduler_ga.config.time_fitness import BreakTimeFitnessBenchmark, TableConsistencyBenchmark
 from fll_scheduler_ga.data_model.event import EventConflicts, EventFactory
 from fll_scheduler_ga.data_model.team import TeamFactory
 from fll_scheduler_ga.genetic.fitness import FitnessEvaluator
@@ -30,13 +31,12 @@ def setup_environment() -> tuple[argparse.Namespace, GA, TournamentConfig]:
     try:
         args = _create_parser().parse_args()
         _initialize_logging(args)
-        config_parser = get_config_parser(Path(args.config_file))
-        config = load_tournament_config(config_parser)
+        config, parser = load_tournament_config(Path(args.config_file))
         event_factory = EventFactory(config)
         run_preflight_checks(config, event_factory)
-        ga_params = _build_ga_parameters_from_args(args, config_parser)
-        rng = _setup_rng(args, config_parser)
-        ga = _create_ga_instance(config, config_parser, event_factory, ga_params, rng)
+        ga_params = _build_ga_parameters_from_args(args, parser)
+        rng = _setup_rng(args, parser)
+        ga = _create_ga_instance(config, parser, event_factory, ga_params, rng)
         ga.set_seed_file(args.seed_file)
     except (FileNotFoundError, KeyError):
         logger.exception("Error loading configuration")
@@ -58,7 +58,7 @@ def _create_parser() -> argparse.ArgumentParser:
         "loglevel_file": "DEBUG",
         "loglevel_console": "INFO",
         "no_plotting": False,
-        "seed_file": "fllc_genetic.dbm",
+        "seed_file": "fllc_genetic",
     }
     parser = argparse.ArgumentParser(
         description="Generate a tournament schedule using a Genetic Algorithm.",
@@ -143,6 +143,27 @@ def _create_parser() -> argparse.ArgumentParser:
         default=_default_values["seed_file"],
         help="Path to the seed file for the genetic algorithm.",
     )
+    parser.add_argument(
+        "--flush",
+        action="store_true",
+        help="Flush the cached population to the seed file at the end of the run.",
+    )
+    island_group = parser.add_argument_group("Island Model Parameters")
+    island_group.add_argument(
+        "--num_islands",
+        type=int,
+        help="(OPTIONAL) Number of islands for the GA (enables island model if > 1).",
+    )
+    island_group.add_argument(
+        "--migration_interval",
+        type=int,
+        help="(OPTIONAL) Generations between island migrations.",
+    )
+    island_group.add_argument(
+        "--migration_size",
+        type=int,
+        help="(OPTIONAL) Number of individuals to migrate.",
+    )
     return parser
 
 
@@ -162,7 +183,7 @@ def _initialize_logging(args: argparse.Namespace) -> None:
     root_logger.addHandler(console_handler)
 
     args_str = "\n".join(f"\t{k} = {v}" for k, v in args.__dict__.items())
-    logger.info("Starting fll-scheduler-ga application with args:\n%s", args_str)
+    logger.debug("Starting fll-scheduler-ga application with args:\n%s", args_str)
 
 
 def _build_ga_parameters_from_args(args: argparse.Namespace, config_parser: ConfigParser) -> GaParameters:
@@ -184,6 +205,9 @@ def _build_ga_parameters_from_args(args: argparse.Namespace, config_parser: Conf
         "selection_size": config_genetic.getint("selection_size", 4),
         "crossover_chance": config_genetic.getfloat("crossover_chance", 0.5),
         "mutation_chance": config_genetic.getfloat("mutation_chance", 0.05),
+        "num_islands": config_genetic.getint("num_islands", 10),
+        "migration_interval": config_genetic.getint("migration_interval", 10),
+        "migration_size": config_genetic.getint("migration_size", 2),
     }
 
     for key in params:
@@ -191,20 +215,23 @@ def _build_ga_parameters_from_args(args: argparse.Namespace, config_parser: Conf
             params[key] = cli_val
 
     ga_params = GaParameters(**params)
-    logger.info("Using GA parameters: %s", ga_params)
+    logger.debug("Using GA parameters: %s", ga_params)
     return ga_params
 
 
 def _setup_rng(args: argparse.Namespace, config_parser: ConfigParser) -> Random:
     """Set up the random number generator."""
+    rng_seed = ""
+
     if args.seed is not None:
         rng_seed = args.seed
     elif "genetic" in config_parser and "seed" in config_parser["genetic"]:
-        rng_seed = config_parser["genetic"].getint("seed")
-    else:
+        rng_seed = config_parser["genetic"]["seed"].strip()
+
+    if rng_seed == "":
         rng_seed = Random().randint(*RANDOM_SEED)
 
-    logger.info("Using master RNG seed: %d", rng_seed)
+    logger.info("Using RNG seed: %d", rng_seed)
     return Random(rng_seed)
 
 
@@ -221,6 +248,10 @@ def _create_ga_instance(
     selections = tuple(build_selections(config_parser, rng, ga_params))
     crossovers = tuple(build_crossovers(config_parser, team_factory, event_factory, rng))
     mutations = tuple(build_mutations(config_parser, rng))
+    break_time_benchmark = BreakTimeFitnessBenchmark(config, event_factory)
+    break_time_benchmark.run()
+    table_benchmark = TableConsistencyBenchmark(config, event_factory)
+    table_benchmark.run()
     return GA(
         ga_params=ga_params,
         config=config,
@@ -235,7 +266,7 @@ def _create_ga_instance(
             LoggingObserver(logger),
             TqdmObserver(logger),
         ),
-        evaluator=FitnessEvaluator(config),
+        evaluator=FitnessEvaluator(config, break_time_benchmark, table_benchmark),
         repairer=repairer,
     )
 
@@ -256,25 +287,34 @@ def save_population_to_seed_file(
         with shelve.open(path) as shelf:
             shelf["population"] = population
             shelf["config"] = config
+            shelf["ga_params"] = ga.ga_params
     except OSError:
         logger.exception("Error saving population to seed file: %s", path)
 
 
 def main() -> None:
     """Run the fll-scheduler-ga application."""
-    args, ga, config = setup_environment()
-    if not ga:
+    env = setup_environment()
+    if not env:
+        logger.error("Failed to set up the environment. Exiting.")
         return
 
+    args, ga, config = env
+
     try:
+        if args.flush:
+            path = Path(args.seed_file)
+            if path.exists():
+                path.unlink()
         ga.run()
     except KeyboardInterrupt:
         logger.warning("Run interrupted by user. Saving final population and results before exiting.")
     except Exception:
         logger.exception("An unhandled error occurred during the GA run. Saving state before exiting.")
     finally:
-        save_population_to_seed_file(ga, config, args.seed_file, front=True)
-        generate_summary(args, ga)
+        if ga.population:  # only save if a final population exists
+            save_population_to_seed_file(ga, config, args.seed_file, front=True)
+            generate_summary(args, ga)
 
     logger.info("fll-scheduler-ga application finished")
 

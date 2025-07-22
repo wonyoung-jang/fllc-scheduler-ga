@@ -11,8 +11,6 @@ logger = getLogger(__name__)
 
 type TeamMap = dict[int, Team]
 
-PENALTY = 1e-16  # Penalty value for penalizing worse scores
-
 
 @dataclass(slots=True, frozen=True)
 class TeamInfo:

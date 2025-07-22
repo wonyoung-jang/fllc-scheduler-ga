@@ -45,19 +45,20 @@ class NSGA3:
             points.append([x / p for x in temp_point])
         return np.array(points)
 
-    def select(self, population: Population) -> Population:
+    def select(self, population: Population, pop_size: int = 0) -> Population:
         """Select the next generation using NSGA-III principles."""
         self._pop = population
         self._non_dominated_sort()
+        population_size = pop_size if pop_size else self.population_size
         fronts = self._get_fronts()
         last_front_idx = self._determine_last_front(fronts)
 
         next_pop = [p for i in range(last_front_idx) for p in fronts[i]]
-        if len(next_pop) == self.population_size:
+        if len(next_pop) == population_size:
             return next_pop
 
         last_front = fronts[last_front_idx]
-        k = self.population_size - len(next_pop)
+        k = population_size - len(next_pop)
 
         if len(last_front) < k:
             next_pop.extend(last_front)

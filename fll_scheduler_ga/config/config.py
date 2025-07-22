@@ -87,22 +87,24 @@ def get_config_parser(path: Path | None = None) -> ConfigParser:
         except FileNotFoundError:
             logger.exception("Configuration file not found. Please provide a valid path.")
 
-    parser = ConfigParser()
+    parser = ConfigParser(inline_comment_prefixes=("#", ";"))
     parser.read(path)
-    logger.info("Configuration file loaded from %s", path)
+    logger.debug("Configuration file loaded from %s", path)
     return parser
 
 
-def load_tournament_config(parser: ConfigParser) -> TournamentConfig:
+def load_tournament_config(path: Path | None = None) -> tuple[TournamentConfig, ConfigParser]:
     """Load, parse, and return the tournament configuration.
 
     Args:
-        parser (ConfigParser): The configuration parser.
+        path (Path | None): The path to the configuration file.
 
     Returns:
         TournamentConfig: The parsed tournament configuration.
+        ConfigParser: The ConfigParser instance used to read the configuration.
 
     """
+    parser = get_config_parser(path)
     num_teams = parser["DEFAULT"].getint("num_teams")
     parsed_rounds: list[Round] = []
     round_reqs = {}
@@ -117,18 +119,17 @@ def load_tournament_config(parser: ConfigParser) -> TournamentConfig:
             if stop_time := parser[section].get("stop_time", ""):
                 stop_time = datetime.strptime(stop_time, HHMM_FMT).replace(tzinfo=UTC)
 
-            parsed_rounds.append(
-                Round(
-                    round_type=r_type,
-                    rounds_per_team=r_per_team,
-                    teams_per_round=parser[section].getint("teams_per_round"),
-                    start_time=start_time,
-                    stop_time=stop_time,
-                    duration_minutes=timedelta(minutes=parser[section].getint("duration_minutes")),
-                    num_locations=parser[section].getint("num_locations"),
-                    num_teams=num_teams,
-                )
+            curr_round = Round(
+                round_type=r_type,
+                rounds_per_team=r_per_team,
+                teams_per_round=parser[section].getint("teams_per_round"),
+                start_time=start_time,
+                stop_time=stop_time,
+                duration_minutes=timedelta(minutes=parser[section].getint("duration_minutes")),
+                num_locations=parser[section].getint("num_locations"),
+                num_teams=num_teams,
             )
+            parsed_rounds.append(curr_round)
 
     if not parsed_rounds:
         msg = "No rounds defined in the configuration file."
@@ -142,5 +143,5 @@ def load_tournament_config(parser: ConfigParser) -> TournamentConfig:
         unique_opponents_possible = True
 
     config = TournamentConfig(num_teams, parsed_rounds, round_reqs, total_slots, unique_opponents_possible)
-    logger.info("Loaded tournament configuration: %s", config)
-    return config
+    logger.debug("Loaded tournament configuration: %s", config)
+    return config, parser

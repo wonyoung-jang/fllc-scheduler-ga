@@ -137,10 +137,11 @@ class EventCrossover(Crossover):
             first (bool, optional): Whether this is the first parent. Defaults to False.
 
         """
+        get_team_from_child = child.get_team
         for event1 in events:
             if (event2 := event1.paired_event) and event1.location.side == 1:
-                team1 = child.get_team(parent[event1].identity)
-                team2 = child.get_team(parent[event2].identity)
+                team1 = get_team_from_child(parent[event1].identity)
+                team2 = get_team_from_child(parent[event2].identity)
                 if first or (
                     team1.needs_round(event1.round_type)
                     and team2.needs_round(event2.round_type)
@@ -154,7 +155,7 @@ class EventCrossover(Crossover):
                     child[event1] = team1
                     child[event2] = team2
             elif event2 is None:
-                team = child.get_team(parent[event1].identity)
+                team = get_team_from_child(parent[event1].identity)
                 if first or (team.needs_round(event1.round_type) and not team.conflicts(event1)):
                     team.add_event(event1)
                     child[event1] = team

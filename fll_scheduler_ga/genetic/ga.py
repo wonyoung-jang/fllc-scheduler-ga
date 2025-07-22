@@ -48,7 +48,9 @@ class GA:
     fitness_history: list[tuple] = field(default_factory=list, init=False, repr=False)
     population: Population = field(default_factory=list, init=False, repr=False)
 
-    _population_hashes: set = field(default_factory=set, init=False, repr=False)
+    islands: list[Population] = field(default_factory=list, init=False, repr=False)
+    _island_hashes: list[list[int]] = field(default_factory=list, init=False, repr=False)
+
     _seed_file: Path | None = field(default=None, init=False, repr=False)
     _offspring_ratio: Counter = field(default_factory=Counter, init=False, repr=False)
     _mutation_ratio: Counter = field(default_factory=Counter, init=False, repr=False)
@@ -56,8 +58,17 @@ class GA:
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
         seeder = Random(self.rng.randint(*RANDOM_SEED))
-        self.builder = ScheduleBuilder(self.team_factory, self.event_factory, self.config, seeder)
+        self.builder = ScheduleBuilder(
+            self.team_factory,
+            self.event_factory,
+            self.config,
+            Random(seeder.randint(*RANDOM_SEED)),
+        )
+        self.repairer.rng = Random(seeder.randint(*RANDOM_SEED))
         self.nsga3 = NSGA3(self.rng, len(self.evaluator.objectives), self.ga_params.population_size)
+        num_islands = self.ga_params.num_islands
+        self.islands = [[] for _ in range(num_islands)]
+        self._island_hashes = [[] for _ in range(num_islands)]
 
     def set_seed_file(self, file_path: str | Path | None) -> None:
         """Set the file path for loading a seed population."""
@@ -65,14 +76,14 @@ class GA:
             self._seed_file = Path(file_path)
 
     def pareto_front(self) -> Population:
-        """Get the current Pareto front from the population."""
+        """Get the Pareto front for each island in the population."""
         if not self.population:
-            return []
+            return [p for island in self.islands for p in island if p.rank == 0]
         return [p for p in self.population if p.rank == 0]
 
     def _calculate_this_gen_fitness(self) -> tuple[float, ...]:
         """Calculate the average fitness of the current generation."""
-        front = self.pareto_front()
+        front = [p for island in self.islands for p in island if p.rank == 0]
         if not front:
             return ()
 
@@ -84,77 +95,44 @@ class GA:
 
         return tuple(sum(s) / len(s) for s in avg_fitness_front1.values())
 
-    def _update_fitness_history(self) -> tuple[float, ...]:
+    def update_fitness_history(self) -> tuple[float, ...]:
         """Update the fitness history with the current generation's fitness."""
         if this_gen_fitness := self._calculate_this_gen_fitness():
             self.fitness_history.append(this_gen_fitness)
         return this_gen_fitness
 
-    def _add_to_population(self, schedule: Schedule) -> bool:
-        """Add a schedule to population if it's not a duplicate."""
-        if hash(schedule) not in self._population_hashes:
-            self.population.append(schedule)
-            self._population_hashes.add(hash(schedule))
+    def _add_to_island_population(self, schedule: Schedule, island_idx: int) -> bool:
+        """Add a schedule to a specific island's population if it's not a duplicate."""
+        island_pop = self.islands[island_idx]
+        island_hashes = self._island_hashes[island_idx]
+        schedule_hash = hash(schedule)
+        if schedule_hash not in island_hashes:
+            island_pop.append(schedule)
+            island_hashes.append(schedule_hash)
             return True
         return False
-
-    def _cleanup_population_tracking(self) -> None:
-        """Clean up population tracking structures after selection."""
-        self._population_hashes = {hash(s) for s in self.population}
-
-    def _load_population_from_seed(self) -> None:
-        """Load and integrate a population from a seed file."""
-        self.logger.info("Loading seed population from: %s", self._seed_file)
-        try:
-            with shelve.open(self._seed_file) as shelf:
-                shelf_config: TournamentConfig = shelf.get("config")
-                if (
-                    self.config.num_teams != shelf_config.num_teams
-                    or self.config.rounds != shelf_config.rounds
-                    or self.config.round_requirements != shelf_config.round_requirements
-                    or self.config.total_slots != shelf_config.total_slots
-                ):
-                    self.logger.warning(
-                        "Seed file configuration does not match current configuration. Using current config."
-                    )
-                    return
-                seeded_population = shelf["population"]
-
-            added_count = 0
-            for schedule in seeded_population:
-                if self._add_to_population(schedule):
-                    added_count += 1
-
-            self.logger.info("Loaded %d unique individuals from seed file.", added_count)
-        except (OSError, KeyError, EOFError, Exception):
-            self.logger.exception("Could not load or parse seed file. Starting with a fresh population.")
-            self.population.clear()
-            self._population_hashes.clear()
 
     def run(self) -> bool:
         """Run the genetic algorithm and return the best schedule found."""
         start_time = time.time()
-        self._notify_on_start(self.ga_params.generations)
+        self._notify_on_start()
+
         try:
             self.initialize_population()
-            if not self.population:
+            if not self.islands:
                 self.logger.critical("No valid schedule meeting all hard constraints was found.")
                 return False
-            if self.generation():
-                self.population = self.nsga3.select(self.population)
-                self._notify_on_finish(self.population, self.pareto_front())
-                return True
+            self.run_epochs()
+            self.aggregate_and_finalize_population()
+            self._notify_on_finish()
         except Exception:
             self.logger.exception("An error occurred during the genetic algorithm run.")
             return False
         except KeyboardInterrupt:
             self.logger.warning("Genetic algorithm run interrupted by user. Saving...")
-            for p in self.population:
-                if p.fitness is None:
-                    p.fitness = self.evaluator.evaluate(p)
-            self.population = self.nsga3.select(self.population)
-            self._update_fitness_history()
-            self._notify_on_finish(self.population, self.pareto_front())
+            self.aggregate_and_finalize_population()
+            self.update_fitness_history()
+            self._notify_on_finish()
             return True
         finally:
             if start_time:
@@ -163,75 +141,148 @@ class GA:
         return True
 
     def initialize_population(self) -> None:
-        """Initialize the population with random organisms."""
+        """Initialize the population for each island."""
         if self._seed_file and self._seed_file.exists():
             self._load_population_from_seed()
 
-        num_to_create = self.ga_params.population_size - len(self.population)
+        for i in range(self.ga_params.num_islands):
+            self._populate_island(i)
+            self.islands[i] = self.nsga3.select(self.islands[i])
+            self._island_hashes[i] = [hash(s) for s in self.islands[i]]
+
+        self.update_fitness_history()
+
+    def _load_population_from_seed(self) -> None:
+        """Load and integrate a population from a seed file."""
+        self.logger.info("Loading seed population from: %s", self._seed_file)
+        try:
+            with shelve.open(self._seed_file) as shelf:
+                shelf_config: TournamentConfig = shelf.get("config")
+                if self.config.num_teams != shelf_config.num_teams or self.config.rounds != shelf_config.rounds:
+                    self.logger.warning(
+                        "Seed file configuration does not match current configuration. Using current config."
+                    )
+                    return
+                shelf_params = shelf.get("ga_params")
+                if self.ga_params != shelf_params:
+                    self.logger.warning(
+                        "Seed file GA parameters do not match current parameters. Using current parameters."
+                    )
+                    return
+                seeded_population: Population = shelf.get("population", [])
+
+            for i, schedule in enumerate(seeded_population):
+                island_idx = i % self.ga_params.num_islands
+                if self._add_to_island_population(schedule, island_idx):
+                    if schedule.fitness is None:
+                        schedule.fitness = self.evaluator.evaluate(schedule)
+
+                    if schedule.fitness is None:
+                        self.islands[island_idx].pop()
+                        self._island_hashes[island_idx].pop()
+
+        except (OSError, KeyError, EOFError, Exception):
+            self.logger.exception("Could not load or parse seed file. Starting with a fresh population.")
+
+    def _populate_island(self, island_idx: int) -> None:
+        """Populate a single island with random organisms."""
+        num_to_create = self.ga_params.population_size - len(self.islands[island_idx])
         if num_to_create <= 0:
-            self._cleanup_population_tracking()
-            self._update_fitness_history()
             return
 
-        self.logger.info("Initializing population with %d individuals.", num_to_create)
+        self.logger.info("Initializing island %d with %d individuals.", island_idx, num_to_create)
         seeder = Random(self.rng.randint(*RANDOM_SEED))
         attempts, max_attempts = ATTEMPTS
-
         num_created = 0
-        while len(self.population) < num_to_create and attempts < max_attempts:
+        while len(self.islands[island_idx]) < self.ga_params.population_size and attempts < max_attempts:
             self.builder.rng = Random(seeder.randint(*RANDOM_SEED))
             schedule = self.builder.build()
-            if self.repairer.repair(schedule) and self._add_to_population(schedule):
+            if self.repairer.repair(schedule) and self._add_to_island_population(schedule, island_idx):
                 schedule.fitness = self.evaluator.evaluate(schedule)
                 num_created += 1
             else:
                 attempts += 1
-                self.logger.info("Attempt %d: Created %d valid schedules so far.", attempts, num_created)
 
-        if not self.population or not self.population[0].fitness:
-            self.logger.critical("No valid initial schedules could be built.")
+        if num_created < num_to_create:
+            self.logger.warning(
+                "Island %d: only created %d/%d valid individuals.", island_idx, num_created, num_to_create
+            )
+
+    def run_epochs(self) -> None:
+        """Perform main evolution loop: generations and migrations."""
+        num_islands = self.ga_params.num_islands
+        for generation in range(self.ga_params.generations):
+            for i in range(num_islands):
+                self._evolve_island(i)
+                self.islands[i] = self.nsga3.select(self.islands[i])
+                self._island_hashes[i] = [hash(s) for s in self.islands[i]]
+
+            self.update_fitness_history()
+            self._notify_on_generation_end(generation)
+
+            if num_islands > 1 and (generation + 1) % self.ga_params.migration_interval == 0:
+                self._migrate()
+
+    def _evolve_island(self, island_idx: int) -> None:
+        """Evolve an island's population to create a new generation."""
+        island_pop = self.islands[island_idx]
+        if not island_pop:
             return
 
-        self.population = self.nsga3.select(self.population)
-        self._cleanup_population_tracking()
-        self._update_fitness_history()
-
-    def generation(self) -> bool:
-        """Perform a single generation step of the genetic algorithm."""
         num_offspring = self.ga_params.population_size - self.ga_params.elite_size
-        for generation in range(self.ga_params.generations):
-            self.evolve(num_offspring)
-            self.population = self.nsga3.select(self.population)
-            self._cleanup_population_tracking()
-            self._notify_gen_end(generation, self._update_fitness_history())
-            if not self.population:
-                self.logger.warning("No valid individuals in the current population.")
-                return False
-
-        return True
-
-    def evolve(self, num_offspring: int) -> None:
-        """Evolve the population to create a new generation."""
         child_count = 0
+
+        repair = self.repairer.repair
+        evaluate = self.evaluator.evaluate
+        offspring_ratio = self._offspring_ratio
+
         while child_count < num_offspring:
-            s = self.rng.choice(self.selections)
-            parents = tuple(s.select(self.population, num_parents=2))
-            if parents[0] == parents[1]:
+            parents = tuple(self.rng.choice(self.selections).select(island_pop, num_parents=2))
+            if len(set(parents)) < 2:
                 continue
 
             for child in self.crossover_child(parents):
                 self.mutate_child(child)
-                if self.repairer.repair(child) and self._add_to_population(child):
-                    child.fitness = self.evaluator.evaluate(child)
+                if repair(child) and self._add_to_island_population(child, island_idx):
+                    child.fitness = evaluate(child)
                     child_count += 1
-                    self._offspring_ratio["success"] += 1
+                    offspring_ratio["success"] += 1
                 else:
-                    self._offspring_ratio["failure"] += 1
+                    offspring_ratio["failure"] += 1
 
                 if child_count >= num_offspring:
                     break
 
-    def crossover_child(self, parents: tuple[Schedule, ...]) -> Iterator[Schedule]:
+    def _migrate(self) -> None:
+        """Migrate the best individuals between islands using a ring topology."""
+        num_islands = self.ga_params.num_islands
+        migration_size = self.ga_params.migration_size
+        if num_islands <= 1 or migration_size == 0:
+            return
+
+        # Receive migrants using a ring topology (island i receives from neighboring island)
+        for i in range(num_islands):
+            src_i = (i - 1) % num_islands
+            self.islands[src_i].sort(key=lambda s: (s.rank, -sum(s.fitness)))
+            for migrant in self.islands[src_i][:migration_size]:
+                self._add_to_island_population(migrant, i)
+
+    def aggregate_and_finalize_population(self) -> None:
+        """Aggregate islands and run a final selection to produce the final population."""
+        self.population = list({ind for island in self.islands for ind in island})
+        for ind in self.population:
+            if ind.fitness is None:
+                ind.fitness = self.evaluator.evaluate(ind)
+
+        self.logger.info(
+            "Aggregated %d islands into a population of %d unique individuals for final selection.",
+            len(self.islands),
+            len(self.population),
+        )
+
+        self.population.sort(key=lambda s: (s.rank, -sum(s.fitness)))
+
+    def crossover_child(self, parents: tuple[Schedule, Schedule]) -> Iterator[Schedule]:
         """Evolve the population by one individual and return the best of the parents and child."""
         if self.ga_params.crossover_chance > self.rng.random():
             yield from self.rng.choice(self.crossovers).crossover(parents)
@@ -242,23 +293,24 @@ class GA:
             mutation_success = self.rng.choice(self.mutations).mutate(child)
             self._mutation_ratio["success" if mutation_success else "failure"] += 1
 
-    def _notify_on_start(self, num_generations: int) -> None:
+    def _notify_on_start(self) -> None:
         """Notify observers when the genetic algorithm run starts."""
         for obs in self.observers:
-            obs.on_start(num_generations)
+            obs.on_start(self.ga_params.generations)
 
-    def _notify_gen_end(self, generation: int, best_fitness: tuple[float, ...]) -> None:
+    def _notify_on_generation_end(self, generation: int) -> None:
         """Notify observers at the end of a generation."""
+        total_pop_size = sum(len(i) for i in self.islands)
         for obs in self.observers:
             obs.on_generation_end(
                 generation + 1,
                 self.ga_params.generations,
-                len(self.population),
-                best_fitness,
+                total_pop_size,
+                self.fitness_history[-1] if self.fitness_history else (),
                 len(self.pareto_front()),
             )
 
-    def _notify_on_finish(self, pop: Population, front: Population) -> None:
+    def _notify_on_finish(self) -> None:
         """Notify observers when the genetic algorithm run is finished."""
         o_success = self._offspring_ratio["success"]
         o_total = o_success + self._offspring_ratio["failure"]
@@ -269,14 +321,14 @@ class GA:
         m_success_percentage = m_success / m_total if m_total > 0 else 0.0
 
         self.logger.info(
-            "Offspring success ratio: %s/%s = %s | %s",
+            "Offspring success ratio: %s/%s = %s\n\t%s",
             o_success,
             o_total,
             f"{o_success_percentage:.2%}",
             self._offspring_ratio,
         )
         self.logger.info(
-            "Mutation success ratio: %s/%s = %s | %s",
+            "Mutation success ratio: %s/%s = %s\n\t%s",
             m_success,
             m_total,
             f"{m_success_percentage:.2%}",
@@ -288,4 +340,4 @@ class GA:
             len(self.population),
         )
         for obs in self.observers:
-            obs.on_finish(pop, front)
+            obs.on_finish(self.population, self.pareto_front())

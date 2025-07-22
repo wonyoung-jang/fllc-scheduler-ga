@@ -65,9 +65,7 @@ class Schedule:
     def __hash__(self) -> int:
         """Hash is based on the frozenset of (event_id, team_id) pairs."""
         if self._cached_hash is None:
-            canonical_representation = tuple(
-                sorted((event.identity, team_id) for event, team_id in self.schedule.items())
-            )
+            canonical_representation = frozenset((event.identity, team_id) for event, team_id in self.schedule.items())
             self._cached_hash = hash(canonical_representation)
         return self._cached_hash
 
