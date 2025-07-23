@@ -6,10 +6,10 @@ for each combination. This helps identify the theoretically best and worst
 schedules a team could receive, independent of other teams.
 """
 
-import itertools
 import logging
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
+from itertools import combinations, product
 from math import sqrt
 from pathlib import Path
 
@@ -93,7 +93,7 @@ class BreakTimeFitnessBenchmark:
         round_slot_combos = {}
         for rt, num_needed in self.config.round_requirements.items():
             available_slots = timeslots_by_round.get(rt, [])
-            round_slot_combos[rt] = list(itertools.combinations(available_slots, num_needed))
+            round_slot_combos[rt] = list(combinations(available_slots, num_needed))
             logger.debug("  %s: %d round combinations", f"{rt:<10}", len(round_slot_combos[rt]))
 
         valid_scored_schedules = []
@@ -101,7 +101,7 @@ class BreakTimeFitnessBenchmark:
         logger.debug("Generating and filtering all possible team schedules")
 
         # Filter, score, and store valid schedules
-        for schedule_tuple in itertools.product(*round_slot_combos.values()):  # Cartesian product
+        for schedule_tuple in product(*round_slot_combos.values()):  # Cartesian product
             total_generated += 1
             current_combination = [slot for combo in schedule_tuple for slot in combo]
             current_combination.sort(key=lambda ts: ts.start)
