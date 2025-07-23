@@ -7,7 +7,7 @@ from configparser import ConfigParser
 from pathlib import Path
 from random import Random
 
-from fll_scheduler_ga.config.benchmark import BreakTimeFitnessBenchmark, TableConsistencyBenchmark
+from fll_scheduler_ga.config.benchmark import FitnessBenchmark
 from fll_scheduler_ga.config.config import TournamentConfig, load_tournament_config
 from fll_scheduler_ga.data_model.event import EventConflicts, EventFactory
 from fll_scheduler_ga.data_model.team import TeamFactory
@@ -248,10 +248,7 @@ def _create_ga_instance(
     selections = tuple(build_selections(config_parser, rng, ga_params))
     crossovers = tuple(build_crossovers(config_parser, team_factory, event_factory, rng))
     mutations = tuple(build_mutations(config_parser, rng))
-    break_time_benchmark = BreakTimeFitnessBenchmark(config, event_factory)
-    break_time_benchmark.run()
-    table_benchmark = TableConsistencyBenchmark(config, event_factory)
-    table_benchmark.run()
+    benchmark = FitnessBenchmark(config, event_factory)
     return GA(
         ga_params=ga_params,
         config=config,
@@ -264,9 +261,9 @@ def _create_ga_instance(
         logger=logger,
         observers=(
             LoggingObserver(logger),
-            TqdmObserver(logger),
+            TqdmObserver(),
         ),
-        evaluator=FitnessEvaluator(config, break_time_benchmark, table_benchmark),
+        evaluator=FitnessEvaluator(config, benchmark),
         repairer=repairer,
     )
 

@@ -56,6 +56,7 @@ class Team:
     round_types: dict[RoundType, int]
     event_conflict_map: dict[int, set[int]]
     identity: int = field(init=False, repr=False)
+    fitness: tuple[float, ...] = field(init=False, repr=False)
     events: list[Event] = field(default_factory=list)
     opponents: list[int] = field(default_factory=list, repr=False)
 
@@ -65,7 +66,7 @@ class Team:
 
     def __hash__(self) -> int:
         """Hash function for the team based on its identity."""
-        return hash(self.info.identity)
+        return self.identity
 
     def rounds_needed(self) -> bool:
         """Get the total number of rounds still needed for the team."""

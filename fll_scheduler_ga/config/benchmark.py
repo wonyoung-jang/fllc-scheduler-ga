@@ -11,31 +11,33 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from itertools import combinations, product
 from math import sqrt
-from pathlib import Path
 
 from ..data_model.event import EventFactory
 from ..data_model.time import TimeSlot
-from .config import TournamentConfig, load_tournament_config
+from .config import TournamentConfig
 
 logger = logging.getLogger(__name__)
 PENALTY = 1e-16  # Penalty value for penalizing worse scores
 
 
 @dataclass(slots=True)
-class TableConsistencyBenchmark:
-    """Benchmark for evaluating table consistency fitness scores."""
+class FitnessBenchmark:
+    """Benchmark for evaluating fitness scores."""
 
     config: TournamentConfig
     event_factory: EventFactory
-    cache: dict = field(default_factory=dict, init=False, repr=False)
+    timeslots: dict = field(default_factory=dict, init=False, repr=False)
+    table: dict = field(default_factory=dict, init=False, repr=False)
+    opponents: dict = field(default_factory=dict, init=False, repr=False)
 
-    def run(self) -> None:
+    def __post_init__(self) -> None:
+        """Post-initialization to validate run benchmark."""
+        self.run_table_and_opponent_benchmarks()
+        self.run_timeslot_benchmarks()
+
+    def run_table_and_opponent_benchmarks(self) -> None:
         """Run the table consistency fitness benchmarking."""
         logger.info("Running table consistency fitness benchmarking...")
-        self.cache = {
-            "table": {},
-            "opponents": {},
-        }
 
         config_map = {r.round_type: r.teams_per_round for r in self.config.rounds}
         logger.debug("Finding events per round type:")
@@ -61,25 +63,16 @@ class TableConsistencyBenchmark:
         diff = maximum_score - minimum_score
 
         for k, v in cache_scorer.items():
-            self.cache["table"][k] = abs((v - minimum_score) / diff) if diff else 1
-            self.cache["opponents"][k] = abs((v - maximum_score) / diff) if diff else 1
-            logger.debug("  %s: %.3f", f"{k:<10}", self.cache["table"][k])
-            logger.debug("  %s: %.3f", f"{k:<10}", self.cache["opponents"][k])
+            self.table[k] = abs((v - minimum_score) / diff) if diff else 1
+            self.opponents[k] = abs((v - maximum_score) / diff) if diff else 1
+            logger.debug("  %s: %.3f", f"{k:<10}", self.table[k])
+            logger.debug("  %s: %.3f", f"{k:<10}", self.opponents[k])
 
-        if not self.cache:
+        if not self.table or not self.opponents:
             logger.warning("No valid schedules could be generated.")
             return
 
-
-@dataclass(slots=True)
-class BreakTimeFitnessBenchmark:
-    """Benchmark for evaluating break time fitness scores."""
-
-    config: TournamentConfig
-    event_factory: EventFactory
-    cache: dict = field(default_factory=dict, init=False, repr=False)
-
-    def run(self) -> None:
+    def run_timeslot_benchmarks(self) -> None:
         """Run the time slot fitness benchmarking."""
         logger.info("Running time slot fitness benchmarking...")
         logger.debug("Finding timeslots per round type:")
@@ -106,15 +99,15 @@ class BreakTimeFitnessBenchmark:
             current_combination = [slot for combo in schedule_tuple for slot in combo]
             current_combination.sort(key=lambda ts: ts.start)
 
-            if not BreakTimeFitnessBenchmark.has_overlaps(current_combination):
-                score = BreakTimeFitnessBenchmark.score_break_time(current_combination, PENALTY)
+            if not FitnessBenchmark.has_overlaps(current_combination):
+                score = FitnessBenchmark.score_break_time(current_combination, PENALTY)
                 valid_scored_schedules.append([score, current_combination])
-                self.cache[frozenset(current_combination)] = score
+                self.timeslots[frozenset(current_combination)] = score
 
         logger.debug("  Total potential: %d", total_generated)
-        logger.debug("  Valid (non-overlapping): %d", len(self.cache))
+        logger.debug("  Valid (non-overlapping): %d", len(self.timeslots))
 
-        if not self.cache:
+        if not self.timeslots:
             logger.warning("No valid schedules could be generated.")
             return
 
@@ -127,7 +120,7 @@ class BreakTimeFitnessBenchmark:
 
         for scores in valid_scored_schedules:
             scores[0] /= best_score
-            self.cache[frozenset(scores[1])] /= best_score
+            self.timeslots[frozenset(scores[1])] /= best_score
 
         unique_scores = Counter(score for score, _ in valid_scored_schedules)
         logger.debug("Unique scores found: %d", len(unique_scores))
@@ -189,24 +182,3 @@ class BreakTimeFitnessBenchmark:
         ratio = 1 / (1 + coefficient)
         b_penalty = penalty**zeros
         return ratio * b_penalty
-
-
-def main() -> None:
-    """Run the time slot fitness benchmarking."""
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s - %(levelname)s - %(message)s",
-        filename="time_fitness.log",
-        filemode="w",
-    )
-    # --- 1. SETUP ---
-    config, _ = load_tournament_config(Path("fll_scheduler_ga/config.ini"))
-    event_factory = EventFactory(config)
-    benchmark = BreakTimeFitnessBenchmark(config, event_factory)
-    benchmark.run()
-    table_benchmark = TableConsistencyBenchmark(config, event_factory)
-    table_benchmark.run()
-
-
-if __name__ == "__main__":
-    main()

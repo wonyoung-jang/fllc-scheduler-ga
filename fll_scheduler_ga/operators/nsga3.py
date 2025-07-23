@@ -49,6 +49,9 @@ class NSGA3:
 
     def select(self, population: Population, pop_size: int = 0) -> Population:
         """Select the next generation using NSGA-III principles."""
+        if not isinstance(population, list):
+            population = list(population)
+
         self._pop = population
         self._non_dominated_sort()
         population_size = pop_size if pop_size else self.population_size

@@ -15,6 +15,7 @@ class LoggingObserver(GaObserver):
 
     def on_start(self, num_generations: int) -> None:
         """Log the start of the genetic algorithm run."""
+        self.logger.info("Starting genetic algorithm run for %d generations.", num_generations)
 
     def on_generation_end(
         self,

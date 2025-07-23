@@ -153,7 +153,7 @@ def _attach_colorbar(ax: Any, values: list[float], label: str | None = None) -> 
     """Attach a colorbar to the given axes."""
     plt = get_matplotlib()
     unique_values = sorted(set(values))
-    cmap_name = "viridis_r"
+    cmap_name = "viridis"
 
     if len(unique_values) <= 10:
         cmap = plt.get_cmap(cmap_name, len(unique_values))

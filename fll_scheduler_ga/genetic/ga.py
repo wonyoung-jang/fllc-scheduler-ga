@@ -47,8 +47,7 @@ class GA:
     fitness_history: list[tuple] = field(default_factory=list, init=False, repr=False)
     population: Population = field(default_factory=list, init=False, repr=False)
 
-    islands: list[Population] = field(default_factory=list, init=False, repr=False)
-    _island_hashes: list[list[int]] = field(default_factory=list, init=False, repr=False)
+    island_hash_to_pop: dict[int, dict[int, Schedule]] = field(default_factory=dict, init=False, repr=False)
 
     _seed_file: Path | None = field(default=None, init=False, repr=False)
     _offspring_ratio: Counter = field(default_factory=Counter, init=False, repr=False)
@@ -65,9 +64,7 @@ class GA:
         )
         self.repairer.rng = Random(seeder.randint(*RANDOM_SEED))
         self.nsga3 = NSGA3(self.rng, len(self.evaluator.objectives), self.ga_params.population_size)
-        num_islands = self.ga_params.num_islands
-        self.islands = [[] for _ in range(num_islands)]
-        self._island_hashes = [[] for _ in range(num_islands)]
+        self.island_hash_to_pop = {i: {} for i in range(self.ga_params.num_islands)}
 
     def set_seed_file(self, file_path: str | Path | None) -> None:
         """Set the file path for loading a seed population."""
@@ -77,12 +74,12 @@ class GA:
     def pareto_front(self) -> Population:
         """Get the Pareto front for each island in the population."""
         if not self.population:
-            return [p for island in self.islands for p in island if p.rank == 0]
+            return [p for island in self.island_hash_to_pop.values() for p in island.values() if p.rank == 0]
         return [p for p in self.population if p.rank == 0]
 
     def _calculate_this_gen_fitness(self) -> tuple[float, ...]:
         """Calculate the average fitness of the current generation."""
-        front = [p for island in self.islands for p in island if p.rank == 0]
+        front = [p for island in self.island_hash_to_pop.values() for p in island.values() if p.rank == 0]
         if not front:
             return ()
 
@@ -102,12 +99,10 @@ class GA:
 
     def _add_to_island_population(self, schedule: Schedule, island_idx: int) -> bool:
         """Add a schedule to a specific island's population if it's not a duplicate."""
-        island_pop = self.islands[island_idx]
-        island_hashes = self._island_hashes[island_idx]
+        island_hash_to_pop = self.island_hash_to_pop[island_idx]
         schedule_hash = hash(schedule)
-        if schedule_hash not in island_hashes:
-            island_pop.append(schedule)
-            island_hashes.append(schedule_hash)
+        if schedule_hash not in island_hash_to_pop:
+            island_hash_to_pop[schedule_hash] = schedule
             return True
         return False
 
@@ -118,7 +113,7 @@ class GA:
 
         try:
             self.initialize_population()
-            if not self.islands:
+            if not self.island_hash_to_pop:
                 self.logger.critical("No valid schedule meeting all hard constraints was found.")
                 return False
             self.run_epochs()
@@ -135,8 +130,7 @@ class GA:
             return True
         finally:
             if start_time:
-                total_time = time.time() - start_time
-                self.logger.info("Total time taken: %.2f seconds", total_time)
+                self.logger.info("Total time taken: %.2f seconds", time.time() - start_time)
         return True
 
     def initialize_population(self) -> None:
@@ -146,8 +140,7 @@ class GA:
 
         for i in range(self.ga_params.num_islands):
             self._populate_island(i)
-            self.islands[i] = self.nsga3.select(self.islands[i])
-            self._island_hashes[i] = [hash(s) for s in self.islands[i]]
+            self.island_hash_to_pop[i] = {hash(s): s for s in self.nsga3.select(self.island_hash_to_pop[i].values())}
 
         self.update_fitness_history()
 
@@ -166,20 +159,15 @@ class GA:
 
             for i, schedule in enumerate(seeded_population):
                 island_idx = i % self.ga_params.num_islands
-                if self._add_to_island_population(schedule, island_idx):
-                    if schedule.fitness is None:
-                        schedule.fitness = self.evaluator.evaluate(schedule)
-
-                    if schedule.fitness is None:
-                        self.islands[island_idx].pop()
-                        self._island_hashes[island_idx].pop()
-
+                if self._add_to_island_population(schedule, island_idx) and schedule.fitness is None:
+                    schedule.fitness = self.evaluator.evaluate(schedule)
         except (OSError, KeyError, EOFError, Exception):
             self.logger.exception("Could not load or parse seed file. Starting with a fresh population.")
 
     def _populate_island(self, island_idx: int) -> None:
         """Populate a single island with random organisms."""
-        num_to_create = self.ga_params.population_size - len(self.islands[island_idx])
+        # If the island already has enough individuals from seed file, skip population.
+        num_to_create = self.ga_params.population_size - len(self.island_hash_to_pop[island_idx])
         if num_to_create <= 0:
             return
 
@@ -187,7 +175,7 @@ class GA:
         seeder = Random(self.rng.randint(*RANDOM_SEED))
         attempts, max_attempts = ATTEMPTS
         num_created = 0
-        while len(self.islands[island_idx]) < self.ga_params.population_size and attempts < max_attempts:
+        while len(self.island_hash_to_pop[island_idx]) < self.ga_params.population_size and attempts < max_attempts:
             self.builder.rng = Random(seeder.randint(*RANDOM_SEED))
             schedule = self.builder.build()
             if self.repairer.repair(schedule) and self._add_to_island_population(schedule, island_idx):
@@ -208,8 +196,9 @@ class GA:
         for generation in range(self.ga_params.generations):
             for i in range(num_islands):
                 self._evolve_island(i)
-                self.islands[i] = self.nsga3.select(self.islands[i])
-                self._island_hashes[i] = [hash(s) for s in self.islands[i]]
+                self.island_hash_to_pop[i] = {
+                    hash(s): s for s in self.nsga3.select(self.island_hash_to_pop[i].values())
+                }
 
             self.update_fitness_history()
             self._notify_on_generation_end(generation)
@@ -219,7 +208,7 @@ class GA:
 
     def _evolve_island(self, island_idx: int) -> None:
         """Evolve an island's population to create a new generation."""
-        island_pop = self.islands[island_idx]
+        island_pop = list(self.island_hash_to_pop[island_idx].values())
         if not island_pop:
             return
 
@@ -230,7 +219,8 @@ class GA:
         evaluate = self.evaluator.evaluate
         offspring_ratio = self._offspring_ratio
 
-        while child_count < num_offspring:
+        # while child_count < num_offspring:
+        for _ in range(num_offspring):
             parents = tuple(self.rng.choice(self.selections).select(island_pop, num_parents=2))
             if len(set(parents)) < 2:
                 continue
@@ -257,26 +247,26 @@ class GA:
         """Migrate the best individuals between islands using a ring topology."""
         num_islands = self.ga_params.num_islands
         migration_size = self.ga_params.migration_size
-        if num_islands <= 1 or migration_size == 0:
+        if migration_size == 0:
             return
 
         # Receive migrants using a ring topology (island i receives from neighboring island)
         for i in range(num_islands):
             src_i = (i - 1) % num_islands
-            src_island = sorted(self.islands[src_i], key=lambda s: (s.rank, -sum(s.fitness)))
+            src_island = sorted(self.island_hash_to_pop[src_i].values(), key=lambda s: (s.rank, -sum(s.fitness)))
             for migrant in src_island[:migration_size]:
                 self._add_to_island_population(migrant, i)
 
     def aggregate_and_finalize_population(self) -> None:
         """Aggregate islands and run a final selection to produce the final population."""
-        self.population = list({ind for island in self.islands for ind in island})
+        self.population = list({ind for island in self.island_hash_to_pop.values() for ind in island.values()})
         for ind in self.population:
             if ind.fitness is None:
                 ind.fitness = self.evaluator.evaluate(ind)
 
         self.logger.info(
             "Aggregated %d islands into a population of %d unique individuals for final selection.",
-            len(self.islands),
+            len(self.island_hash_to_pop),
             len(self.population),
         )
 
@@ -289,12 +279,11 @@ class GA:
 
     def _notify_on_generation_end(self, generation: int) -> None:
         """Notify observers at the end of a generation."""
-        total_pop_size = sum(len(i) for i in self.islands)
         for obs in self.observers:
             obs.on_generation_end(
                 generation + 1,
                 self.ga_params.generations,
-                total_pop_size,
+                self.ga_params.population_size * self.ga_params.num_islands,
                 self.fitness_history[-1] if self.fitness_history else (),
                 len(self.pareto_front()),
             )

@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import cache
 
-from ..config.benchmark import BreakTimeFitnessBenchmark, TableConsistencyBenchmark
+from ..config.benchmark import FitnessBenchmark
 from ..config.config import TournamentConfig
 from .schedule import Schedule
 
@@ -32,8 +32,7 @@ class FitnessEvaluator:
     """Calculates the fitness of a schedule."""
 
     config: TournamentConfig
-    break_time_benchmark: BreakTimeFitnessBenchmark
-    table_benchmark: TableConsistencyBenchmark
+    benchmark: FitnessBenchmark
     objectives: list[FitnessObjective] = field(default_factory=list, init=False)
 
     def __post_init__(self) -> None:
@@ -79,9 +78,10 @@ class FitnessEvaluator:
         if not self.check(schedule):
             return None
 
-        bt_cache = self.break_time_benchmark.cache
-        tc_cache = self.table_benchmark.cache["table"]
-        ov_cache = self.table_benchmark.cache["opponents"]
+        _benchmark = self.benchmark
+        bt_cache = _benchmark.timeslots
+        tc_cache = _benchmark.table
+        ov_cache = _benchmark.opponents
 
         if all_teams := schedule.all_teams():
             if not (num_teams := len(all_teams)):
@@ -91,15 +91,14 @@ class FitnessEvaluator:
             tc_total = 0
             ov_total = 0
             for team in all_teams:
-                bt_total += bt_cache[team.break_time_key()]
-                tc_total += tc_cache[team.table_consistency_key()]
-                ov_total += ov_cache[team.opponent_variety_key()]
-
-            return (
-                get_average(bt_total, num_teams),
-                get_average(tc_total, num_teams),
-                get_average(ov_total, num_teams),
-            )
+                t_bt = bt_cache[team.break_time_key()]
+                t_tc = tc_cache[team.table_consistency_key()]
+                t_ov = ov_cache[team.opponent_variety_key()]
+                team.fitness = (t_bt, t_tc, t_ov)
+                bt_total += t_bt
+                tc_total += t_tc
+                ov_total += t_ov
+            return tuple(get_average(total, num_teams) for total in (bt_total, tc_total, ov_total))
         return 1, 1, 1
 
 

@@ -1,7 +1,6 @@
 """Progress bar observer for the FLL Scheduler GA."""
 
 from dataclasses import dataclass, field
-from logging import Logger
 
 from tqdm import tqdm
 
@@ -13,7 +12,6 @@ from .base_observer import GaObserver
 class TqdmObserver(GaObserver):
     """Observer that displays a tqdm progress bar for generations."""
 
-    logger: Logger
     _progress_bar: tqdm = field(init=False, repr=False)
 
     def on_start(self, num_generations: int) -> None:
