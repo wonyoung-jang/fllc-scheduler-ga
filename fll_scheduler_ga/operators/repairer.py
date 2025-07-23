@@ -131,10 +131,10 @@ class Repairer:
 
             t1.add_event(e1)
             t2.add_event(e2)
-            schedule[e1] = t1
-            schedule[e2] = t2
             t1.add_opponent(t2)
             t2.add_opponent(t1)
+            schedule[e1] = t1
+            schedule[e2] = t2
             events.pop(i)
             return True
 

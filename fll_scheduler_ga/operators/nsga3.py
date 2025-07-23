@@ -3,6 +3,7 @@
 import random
 from collections import defaultdict
 from dataclasses import dataclass, field
+from functools import lru_cache
 from itertools import combinations
 
 import numpy as np
@@ -18,11 +19,11 @@ class NSGA3:
     num_objectives: int
     population_size: int
     ref_points: np.ndarray = field(init=False, repr=False)
-    _pop: Population = field(default_factory=list, init=False, repr=False)
+    _pop: Population = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to generate reference points."""
-        self.ref_points = self.generate_reference_points(self.get_num_divisions())
+        self.ref_points = self.generate_reference_points()
 
     def get_num_divisions(self) -> int:
         """Calculate the number of divisions for reference point generation."""
@@ -33,8 +34,9 @@ class NSGA3:
             p += 1
         return p
 
-    def generate_reference_points(self, p: int) -> np.ndarray:
+    def generate_reference_points(self) -> np.ndarray:
         """Generate a set of structured reference points."""
+        p = self.get_num_divisions()
         points = []
         for c in combinations(range(p + self.num_objectives - 1), self.num_objectives - 1):
             temp_point = [c[0] - 0]
@@ -77,8 +79,8 @@ class NSGA3:
     def _determine_last_front(self, fronts: list[Population]) -> int:
         """Determine which front is the last to be included."""
         count = 0
-        for i, f in enumerate(fronts):
-            count += len(f)
+        for i, front in enumerate(fronts):
+            count += len(front)
             if count >= self.population_size:
                 return i
         return len(fronts) - 1
@@ -93,10 +95,10 @@ class NSGA3:
 
         for i, j in combinations(range(pop_size), 2):
             p, q = self._pop[i], self._pop[j]
-            if self.dominates(p, q):
+            if dominates(p.fitness, q.fitness):
                 dominates_list[i].append(j)
                 dominated_counts[j] += 1
-            elif self.dominates(q, p):
+            elif dominates(q.fitness, p.fitness):
                 dominates_list[j].append(i)
                 dominated_counts[i] += 1
 
@@ -200,15 +202,17 @@ class NSGA3:
                 ro[p.ref_point_idx] += 1
         return ro
 
-    @staticmethod
-    def dominates(p: Schedule, q: Schedule) -> bool:
-        """Check if schedule p dominates schedule q."""
-        if p.fitness is None or q.fitness is None:
+
+@lru_cache(maxsize=512)
+def dominates(p_fitness: tuple[float] | None, q_fitness: tuple[float] | None) -> bool:
+    """Check if schedule p dominates schedule q."""
+    if p_fitness is None or q_fitness is None:
+        return False
+
+    better_in_any = False
+    for ps, qs in zip(p_fitness, q_fitness, strict=True):
+        if ps < qs:
             return False
-        better_in_any = False
-        for ps, qs in zip(p.fitness, q.fitness, strict=True):
-            if ps < qs:
-                return False
-            if ps > qs:
-                better_in_any = True
-        return better_in_any
+        if ps > qs:
+            better_in_any = True
+    return better_in_any

@@ -4,7 +4,6 @@ import logging
 import shelve
 import time
 from collections import Counter, defaultdict
-from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from random import Random
@@ -163,12 +162,6 @@ class GA:
                         "Seed file configuration does not match current configuration. Using current config."
                     )
                     return
-                shelf_params = shelf.get("ga_params")
-                if self.ga_params != shelf_params:
-                    self.logger.warning(
-                        "Seed file GA parameters do not match current parameters. Using current parameters."
-                    )
-                    return
                 seeded_population: Population = shelf.get("population", [])
 
             for i, schedule in enumerate(seeded_population):
@@ -200,6 +193,7 @@ class GA:
             if self.repairer.repair(schedule) and self._add_to_island_population(schedule, island_idx):
                 schedule.fitness = self.evaluator.evaluate(schedule)
                 num_created += 1
+                max_attempts += 1
             else:
                 attempts += 1
 
@@ -241,8 +235,14 @@ class GA:
             if len(set(parents)) < 2:
                 continue
 
-            for child in self.crossover_child(parents):
-                self.mutate_child(child)
+            if self.ga_params.crossover_chance < self.rng.random():
+                continue
+
+            for child in self.rng.choice(self.crossovers).crossover(parents):
+                if self.ga_params.mutation_chance > self.rng.random():
+                    mutation_success = self.rng.choice(self.mutations).mutate(child)
+                    self._mutation_ratio["success" if mutation_success else "failure"] += 1
+
                 if repair(child) and self._add_to_island_population(child, island_idx):
                     child.fitness = evaluate(child)
                     child_count += 1
@@ -263,8 +263,8 @@ class GA:
         # Receive migrants using a ring topology (island i receives from neighboring island)
         for i in range(num_islands):
             src_i = (i - 1) % num_islands
-            self.islands[src_i].sort(key=lambda s: (s.rank, -sum(s.fitness)))
-            for migrant in self.islands[src_i][:migration_size]:
+            src_island = sorted(self.islands[src_i], key=lambda s: (s.rank, -sum(s.fitness)))
+            for migrant in src_island[:migration_size]:
                 self._add_to_island_population(migrant, i)
 
     def aggregate_and_finalize_population(self) -> None:
@@ -281,17 +281,6 @@ class GA:
         )
 
         self.population.sort(key=lambda s: (s.rank, -sum(s.fitness)))
-
-    def crossover_child(self, parents: tuple[Schedule, Schedule]) -> Iterator[Schedule]:
-        """Evolve the population by one individual and return the best of the parents and child."""
-        if self.ga_params.crossover_chance > self.rng.random():
-            yield from self.rng.choice(self.crossovers).crossover(parents)
-
-    def mutate_child(self, child: Schedule) -> None:
-        """Mutate the child schedule."""
-        if self.ga_params.mutation_chance > self.rng.random():
-            mutation_success = self.rng.choice(self.mutations).mutate(child)
-            self._mutation_ratio["success" if mutation_success else "failure"] += 1
 
     def _notify_on_start(self) -> None:
         """Notify observers when the genetic algorithm run starts."""

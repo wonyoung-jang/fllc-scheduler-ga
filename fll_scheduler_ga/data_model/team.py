@@ -121,3 +121,15 @@ class Team:
             return False
 
         return any(existing_event_id in potential_conflicts for existing_event_id in event_ids)
+
+    def break_time_key(self) -> frozenset[int]:
+        """Get a key for the break time cache based on the team's events."""
+        return frozenset(e.timeslot for e in self.events)
+
+    def table_consistency_key(self) -> int:
+        """Get a key for the table consistency cache based on the team's events."""
+        return len({e.location for e in self.events if e.location.teams_per_round == 2})
+
+    def opponent_variety_key(self) -> int:
+        """Get a key for the opponent variety cache based on the team's events."""
+        return len(set(self.opponents))

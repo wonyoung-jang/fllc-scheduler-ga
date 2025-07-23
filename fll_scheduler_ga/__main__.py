@@ -7,8 +7,8 @@ from configparser import ConfigParser
 from pathlib import Path
 from random import Random
 
+from fll_scheduler_ga.config.benchmark import BreakTimeFitnessBenchmark, TableConsistencyBenchmark
 from fll_scheduler_ga.config.config import TournamentConfig, load_tournament_config
-from fll_scheduler_ga.config.time_fitness import BreakTimeFitnessBenchmark, TableConsistencyBenchmark
 from fll_scheduler_ga.data_model.event import EventConflicts, EventFactory
 from fll_scheduler_ga.data_model.team import TeamFactory
 from fll_scheduler_ga.genetic.fitness import FitnessEvaluator
@@ -287,7 +287,6 @@ def save_population_to_seed_file(
         with shelve.open(path) as shelf:
             shelf["population"] = population
             shelf["config"] = config
-            shelf["ga_params"] = ga.ga_params
     except OSError:
         logger.exception("Error saving population to seed file: %s", path)
 

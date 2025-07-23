@@ -5,8 +5,8 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import cache
 
+from ..config.benchmark import BreakTimeFitnessBenchmark, TableConsistencyBenchmark
 from ..config.config import TournamentConfig
-from ..config.time_fitness import BreakTimeFitnessBenchmark, TableConsistencyBenchmark
 from .schedule import Schedule
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -76,9 +76,6 @@ class FitnessEvaluator:
             tuple[float, ...] | None: A tuple of fitness scores for each objective,
 
         """
-        # Configurable bias if completely unique opponents are mathematically possible
-        # unique_opponents_possible = self.config.unique_opponents_possible
-
         if not self.check(schedule):
             return None
 
@@ -94,13 +91,10 @@ class FitnessEvaluator:
             tc_total = 0
             ov_total = 0
             for team in all_teams:
-                bt_total += bt_cache[frozenset(e.timeslot for e in team.events)]
-                tc_total += tc_cache[len({e.location for e in team.events if e.location.teams_per_round == 2})]
-                ov_total += ov_cache[len(set(team.opponents))]
+                bt_total += bt_cache[team.break_time_key()]
+                tc_total += tc_cache[team.table_consistency_key()]
+                ov_total += ov_cache[team.opponent_variety_key()]
 
-            # Configurable bias if completely unique opponents are mathematically possible
-            # if unique_opponents_possible and score_map[FitnessObjective.OPPONENT_VARIETY] / num_teams != 1:
-            #     return tuple(s / (num_teams * 2) for s in score_map.values())
             return (
                 get_average(bt_total, num_teams),
                 get_average(tc_total, num_teams),

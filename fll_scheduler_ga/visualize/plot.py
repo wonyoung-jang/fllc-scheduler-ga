@@ -15,6 +15,7 @@ from ..genetic.schedule import Population
 logger = logging.getLogger("visualize.plot")
 logging.getLogger("matplotlib").setLevel(logging.WARNING)
 logging.getLogger("PIL").setLevel(logging.WARNING)
+# FITNESS_AXIS_LIM = (0, 1)
 
 
 def get_matplotlib() -> Module:
@@ -47,20 +48,31 @@ class Plot:
             save_dir: Directory to save the figure. If None, the plot is shown.
 
         """
-        if not (history := self.ga_instance.fitness_history):
+        if not (history := self.ga_instance.fitness_history) or not any(history):
             logger.error("Cannot plot fitness. No generation history was recorded.")
             return None
+
+        history = [h for h in history if h]
+        if not history:
+            logger.warning("No fitness history to plot.")
+            return None
+
         history_df = pd.DataFrame(data=history, columns=self.ga_instance.evaluator.objectives)
         plt = get_matplotlib()
         fig, ax = plt.subplots(figsize=(12, 7))
         history_df.plot(kind="line", ax=ax, linewidth=2.5, alpha=0.8)
+
         x = np.arange(len(history_df))
         for col in history_df.columns:
             y = history_df[col].to_numpy()
-            z = np.polyfit(x, y, 5)
-            p = np.poly1d(z)
-            ax.plot(x, p(x), linestyle="--", linewidth=2, label=f"{col} Trend")
+            degree = min(5, len(y) - 1)
+            if degree > 0:
+                z = np.polyfit(x, y, degree)
+                p = np.poly1d(z)
+                ax.plot(x, p(x), linestyle="--", linewidth=2, label=f"{col} Trend")
+
         ax.set(title=title, xlabel=xlabel, ylabel=ylabel)
+
         ax.legend(title="Objectives", fontsize=10)
         return _finalize(fig, save_dir, "fitness_plot.png")
 
@@ -74,32 +86,38 @@ class Plot:
             logger.warning("Cannot plot an empty Pareto front.")
             return None
 
+        front = [p for p in pop if p.fitness is not None]
+        if not front:
+            logger.warning("Cannot plot an empty Pareto front.")
+            return None
+
         objectives = self.ga_instance.evaluator.objectives
-        fig = _plot_parallel(pop, objectives, title)
-        _finalize(fig, save_dir, "pareto_parallel.png")
+        fig = _plot_parallel(front, objectives, title)
+        if fig:
+            _finalize(fig, save_dir, "pareto_parallel.png")
 
         if len(objectives) in (2, 3):
             scatter_name = f"pareto_scatter_{len(objectives)}d.png"
-            return _plot_pareto_scatter(
-                pop, objectives, title=title, save_dir=Path(save_dir).with_name(scatter_name) if save_dir else None
-            )
+            scatter_path = Path(save_dir).with_name(scatter_name) if save_dir else None
+            return _plot_pareto_scatter(front, objectives, title=title, save_dir=scatter_path)
+
         return fig
 
 
 def _plot_parallel(front: Population, objectives: list[str], title: str) -> None:
     """Create the parallel coordinates plot."""
     data = [[p.fitness[i] for i, _ in enumerate(objectives)] + [p.rank] for p in front]
-    objectives = [*objectives, "Rank"]
-    dataframe = pd.DataFrame(data=data, columns=objectives)
+    plot_objectives = [*objectives, "Rank"]
+    dataframe = pd.DataFrame(data=data, columns=plot_objectives)
     plt = get_matplotlib()
     fig, ax = plt.subplots(figsize=(12, 7))
     pd.plotting.parallel_coordinates(
-        frame=dataframe, class_column=objectives[-1], ax=ax, linewidth=1.5, alpha=0.7, colormap="viridis"
+        frame=dataframe, class_column="Rank", ax=ax, linewidth=1.5, alpha=0.7, colormap="viridis"
     )
     ax.set(title=title, xlabel="Objectives", ylabel="Score")
     plt.xticks(rotation=15, ha="right")
     ax.get_legend().remove()
-    _attach_colorbar(ax, dataframe[objectives[-1]].tolist(), label="Rank")
+    _attach_colorbar(ax, dataframe["Rank"].tolist(), label="Rank")
     return fig
 
 
