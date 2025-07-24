@@ -138,27 +138,21 @@ class EventCrossover(Crossover):
 
         """
         get_team_from_child = child.get_team
-        for event1 in events:
-            if (event2 := event1.paired_event) and event1.location.side == 1:
-                team1 = get_team_from_child(parent[event1].identity)
-                team2 = get_team_from_child(parent[event2].identity)
+        for e1 in events:
+            if (e2 := e1.paired_event) and e1.location.side == 1:
+                t1 = get_team_from_child(parent[e1].identity)
+                t2 = get_team_from_child(parent[e2].identity)
                 if first or (
-                    team1.needs_round(event1.round_type)
-                    and team2.needs_round(event2.round_type)
-                    and not team1.conflicts(event1)
-                    and not team2.conflicts(event2)
+                    t1.needs_round(e1.round_type)
+                    and t2.needs_round(e2.round_type)
+                    and not t1.conflicts(e1)
+                    and not t2.conflicts(e2)
                 ):
-                    team1.add_event(event1)
-                    team2.add_event(event2)
-                    team1.add_opponent(team2)
-                    team2.add_opponent(team1)
-                    child[event1] = team1
-                    child[event2] = team2
-            elif event2 is None:
-                team = get_team_from_child(parent[event1].identity)
-                if first or (team.needs_round(event1.round_type) and not team.conflicts(event1)):
-                    team.add_event(event1)
-                    child[event1] = team
+                    child.assign_match(e1, e2, t1, t2)
+            elif e2 is None:
+                team = get_team_from_child(parent[e1].identity)
+                if first or (team.needs_round(e1.round_type) and not team.conflicts(e1)):
+                    child.assign_single(e1, team)
 
 
 @dataclass(slots=True)

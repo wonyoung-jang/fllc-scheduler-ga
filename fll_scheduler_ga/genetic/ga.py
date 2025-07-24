@@ -79,7 +79,7 @@ class GA:
 
     def _calculate_this_gen_fitness(self) -> tuple[float, ...]:
         """Calculate the average fitness of the current generation."""
-        front = [p for island in self.island_hash_to_pop.values() for p in island.values() if p.rank == 0]
+        front = self.pareto_front()
         if not front:
             return ()
 
@@ -213,14 +213,15 @@ class GA:
             return
 
         num_offspring = self.ga_params.population_size - self.ga_params.elite_size
+        attempts, max_attempts = 0, num_offspring * 5
         child_count = 0
 
         repair = self.repairer.repair
         evaluate = self.evaluator.evaluate
         offspring_ratio = self._offspring_ratio
 
-        # while child_count < num_offspring:
-        for _ in range(num_offspring):
+        while child_count < num_offspring and attempts < max_attempts:
+            attempts += 1
             parents = tuple(self.rng.choice(self.selections).select(island_pop, num_parents=2))
             if len(set(parents)) < 2:
                 continue
@@ -250,11 +251,25 @@ class GA:
         if migration_size == 0:
             return
 
-        # Receive migrants using a ring topology (island i receives from neighboring island)
+        all_migrants = []
+        for i in range(num_islands):
+            source_pop = self.island_hash_to_pop[i].values()
+            pareto_front = [p for p in source_pop if p.rank == 0]
+
+            # If front is too small, fill with best of the rest
+            if len(pareto_front) < migration_size:
+                the_rest = sorted([p for p in source_pop if p.rank > 0], key=lambda s: (s.rank, -sum(s.fitness)))
+                pareto_front.extend(the_rest)
+
+            # Take a random sample of migrants to increase diversity
+            num_to_migrate = min(migration_size, len(pareto_front))
+            migrants = self.rng.sample(pareto_front, k=num_to_migrate)
+            all_migrants.append(migrants)
+
+        # Receive migrants using a ring topology
         for i in range(num_islands):
             src_i = (i - 1) % num_islands
-            src_island = sorted(self.island_hash_to_pop[src_i].values(), key=lambda s: (s.rank, -sum(s.fitness)))
-            for migrant in src_island[:migration_size]:
+            for migrant in all_migrants[src_i]:
                 self._add_to_island_population(migrant, i)
 
     def aggregate_and_finalize_population(self) -> None:

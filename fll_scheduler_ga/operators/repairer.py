@@ -1,4 +1,3 @@
-# fll_scheduler_ga/genetic/repairer.py
 """A repairer for incomplete schedules."""
 
 import logging
@@ -90,8 +89,7 @@ class Repairer:
                 if team.conflicts(event):
                     continue
 
-                team.add_event(event)
-                schedule[event] = team
+                schedule.assign_single(event, team)
                 events.pop(i)
                 break
 
@@ -108,12 +106,10 @@ class Repairer:
                 if team1.identity == team2.identity:
                     continue
 
-                if not self._find_and_populate_match(team1, team2, events, schedule):
+                if self._find_and_populate_match(team1, team2, events, schedule):
+                    teams.pop(j)
+                    partner_found = True
                     break
-
-                teams.pop(j)
-                partner_found = True
-                break
 
             if not partner_found:
                 logger.debug("Could not find a match partner for team %d", team1.identity)
@@ -129,12 +125,7 @@ class Repairer:
             if t2.conflicts(e2):
                 continue
 
-            t1.add_event(e1)
-            t2.add_event(e2)
-            t1.add_opponent(t2)
-            t2.add_opponent(t1)
-            schedule[e1] = t1
-            schedule[e2] = t2
+            schedule.assign_match(e1, e2, t1, t2)
             events.pop(i)
             return True
 

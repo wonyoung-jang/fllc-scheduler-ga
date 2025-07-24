@@ -243,7 +243,8 @@ def _create_ga_instance(
     rng: Random,
 ) -> GA:
     """Create and return a GA instance with the provided configuration."""
-    team_factory = TeamFactory(config, EventConflicts(event_factory).conflicts)
+    event_conflicts = EventConflicts(event_factory)
+    team_factory = TeamFactory(config, event_conflicts.conflicts)
     repairer = Repairer(rng, config, event_factory)
     selections = tuple(build_selections(config_parser, rng, ga_params))
     crossovers = tuple(build_crossovers(config_parser, team_factory, event_factory, rng))

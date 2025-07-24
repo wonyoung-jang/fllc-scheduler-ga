@@ -39,12 +39,7 @@ class TeamFactory:
 
         """
         return {
-            i.identity: Team(
-                info=i,
-                round_types=self.config.round_requirements.copy(),
-                event_conflict_map=self.conflicts,
-            )
-            for i in self.base_teams_info
+            i.identity: Team(i, self.config.round_requirements.copy(), self.conflicts) for i in self.base_teams_info
         }
 
 
@@ -54,7 +49,7 @@ class Team:
 
     info: TeamInfo
     round_types: dict[RoundType, int]
-    event_conflict_map: dict[int, set[int]]
+    event_conflicts: dict[int, set[int]]
     identity: int = field(init=False, repr=False)
     fitness: tuple[float, ...] = field(init=False, repr=False)
     events: list[Event] = field(default_factory=list)
@@ -118,7 +113,7 @@ class Team:
         if new_event.identity in event_ids:
             return True
 
-        if not (potential_conflicts := self.event_conflict_map.get(new_event.identity)):
+        if not (potential_conflicts := self.event_conflicts.get(new_event.identity)):
             return False
 
         return any(existing_event_id in potential_conflicts for existing_event_id in event_ids)

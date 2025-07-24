@@ -106,3 +106,17 @@ class Schedule:
     def get_team(self, team_id: int) -> Team:
         """Get a team object by its identity."""
         return self.teams[team_id]
+
+    def assign_single(self, event: Event, team: Team) -> None:
+        """Assign a single-team event to a team."""
+        team.add_event(event)
+        self[event] = team
+
+    def assign_match(self, event1: Event, event2: Event, team1: Team, team2: Team) -> None:
+        """Assign a match event to two teams."""
+        team1.add_event(event1)
+        team2.add_event(event2)
+        team1.add_opponent(team2)
+        team2.add_opponent(team1)
+        self[event1] = team1
+        self[event2] = team2

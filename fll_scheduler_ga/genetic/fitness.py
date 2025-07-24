@@ -3,13 +3,12 @@
 import logging
 from dataclasses import dataclass, field
 from enum import StrEnum
-from functools import cache
 
 from ..config.benchmark import FitnessBenchmark
 from ..config.config import TournamentConfig
 from .schedule import Schedule
 
-logger: logging.Logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class HardConstraints(StrEnum):
@@ -98,11 +97,5 @@ class FitnessEvaluator:
                 bt_total += t_bt
                 tc_total += t_tc
                 ov_total += t_ov
-            return tuple(get_average(total, num_teams) for total in (bt_total, tc_total, ov_total))
+            return tuple(total / num_teams for total in (bt_total, tc_total, ov_total))
         return 1, 1, 1
-
-
-@cache
-def get_average(sum_score: float, count: int) -> float:
-    """Get the average of a sum_score and count."""
-    return sum_score / count if count else 0

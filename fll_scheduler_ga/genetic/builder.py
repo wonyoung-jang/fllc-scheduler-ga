@@ -47,22 +47,14 @@ class ScheduleBuilder:
         teams = (t for t in self.teams if t.needs_round(rt))
 
         for event, team in zip(events, teams, strict=False):
-            team.add_event(event)
-            schedule[event] = team
+            schedule.assign_single(event, team)
 
     def _build_matches(self, schedule: Schedule, rt: RoundType, events: list[Event]) -> None:
         """Book all events for a specific round type."""
-        teams = self.teams
         match_events = ((e, e.paired_event) for e in events if e.location.side == 1)
 
         for side1, side2 in match_events:
-            available = (t for t in teams if t.needs_round(rt) and not t.conflicts(side1))
+            available = (t for t in self.teams if t.needs_round(rt) and not t.conflicts(side1))
             if not (team1 := next(available, None)) or not (team2 := next(available, None)):
                 continue
-
-            team1.add_event(side1)
-            team2.add_event(side2)
-            team1.add_opponent(team2)
-            team2.add_opponent(team1)
-            schedule[side1] = team1
-            schedule[side2] = team2
+            schedule.assign_match(side1, side2, team1, team2)
