@@ -80,9 +80,15 @@ class GA:
                 self.logger,
                 self.evaluator,
                 self.repairer,
+                self.builder,
+                self.nsga3,
             )
             for i in range(1, self.ga_params.num_islands + 1)
         ]
+
+    def __len__(self) -> int:
+        """Return the number of individuals in the population."""
+        return sum(len(i) for i in self.islands)
 
     def set_seed_file(self, file_path: str | Path | None) -> None:
         """Set the file path for loading a seed population."""
@@ -145,30 +151,26 @@ class GA:
 
     def initialize_population(self) -> None:
         """Initialize the population for each island."""
-        seeded_population = []
-        if self._seed_file and self._seed_file.exists():
-            seeded_population = self.retrieve_seed_population()
-
-        if seeded_population:
+        if self._seed_file and self._seed_file.exists() and (seeded_population := self.retrieve_seed_population()):
+            seeded_population.sort(key=lambda s: (s.rank, -sum(s.fitness)))
             for i, schedule in enumerate(seeded_population):
                 island_idx = i % self.ga_params.num_islands
                 self.islands[island_idx].add_to_population(schedule)
 
+        self.logger.info("Initializing %d islands...", self.ga_params.num_islands)
         for i in range(self.ga_params.num_islands):
             self.islands[i].initialize()
-
-        self.update_fitness_history()
 
     def retrieve_seed_population(self) -> Population | None:
         """Load and integrate a population from a seed file."""
         self.logger.info("Loading seed population from: %s", self._seed_file)
         try:
             with shelve.open(self._seed_file) as shelf:
-                shelf_config: TournamentConfig = shelf.get("config")
-                if self.config.num_teams != shelf_config.num_teams or self.config.rounds != shelf_config.rounds:
-                    self.logger.warning(
-                        "Seed file configuration does not match current configuration. Using current config."
-                    )
+                seed_config: TournamentConfig = shelf.get("config", None)
+                num_teams_changed = self.config.num_teams != seed_config.num_teams
+                config_changed = self.config.rounds != seed_config.rounds
+                if num_teams_changed or config_changed:
+                    self.logger.warning("Seed population does not match current config. Using current...")
                     return None
                 return shelf.get("population", [])
         except (OSError, KeyError, EOFError, Exception):
@@ -178,41 +180,53 @@ class GA:
         """Perform main evolution loop: generations and migrations."""
         num_islands = self.ga_params.num_islands
         migration_size = self.ga_params.migration_size
+        migration_interval = self.ga_params.migration_interval
+        offspring_ratio = self._offspring_ratio
+        mutation_ratio = self._mutation_ratio
+
         for generation in range(self.ga_params.generations):
             for i in range(num_islands):
                 ratios = self.islands[i].evolve()
-                self._offspring_ratio.update(ratios["offspring"])
-                self._mutation_ratio.update(ratios["mutation"])
+                offspring_ratio.update(ratios["offspring"])
+                mutation_ratio.update(ratios["mutation"])
 
             self.update_fitness_history()
             self._notify_on_generation_end(generation)
 
-            if num_islands > 1 and migration_size > 0 and (generation + 1) % self.ga_params.migration_interval == 0:
-                self.migrate(num_islands)
+            if num_islands <= 1 or migration_size <= 0:
+                continue
 
-    def migrate(self, num_islands: int) -> None:
+            if (generation + 1) % migration_interval == 0:
+                self.migrate(num_islands, migration_size)
+
+    def migrate(self, num_islands: int, migration_size: int) -> None:
         """Migrate the best individuals between islands using a ring topology."""
-        all_migrants = (self.islands[i].get_migrants() for i in range(num_islands))
+        all_migrants = (island.get_migrants(migration_size) for island in self.islands)
 
         for i, migrants in enumerate(all_migrants):
-            dest_i = (i - 1) % num_islands
+            dest_i = (i + 1) % num_islands
             self.islands[dest_i].receive_migrants(migrants)
 
     def finalize(self) -> None:
         """Aggregate islands and run a final selection to produce the final population."""
-        unique_pop = list({ind for island in self.islands for ind in island.population})
-
-        for ind in unique_pop:
-            if ind.fitness is None:
-                ind.fitness = self.evaluator.evaluate(ind)
+        unique_pop = list({ind for island in self.islands for ind in island.finalize_island()})
 
         self.logger.info(
-            "Aggregated %d islands into a population of %d unique individuals for final selection.",
+            "Finalized %d islands with population of %d unique individuals.",
             len(self.islands),
             len(unique_pop),
         )
 
-        self.population = sorted(unique_pop, key=lambda s: (s.rank, -sum(s.fitness)))
+        self.population = sorted(
+            self.nsga3.select(
+                unique_pop,
+                pop_size=len(unique_pop),
+            ),
+            key=lambda s: (
+                s.rank,
+                -sum(s.fitness),
+            ),
+        )
 
     def _notify_on_start(self) -> None:
         """Notify observers when the genetic algorithm run starts."""
@@ -234,30 +248,30 @@ class GA:
         """Notify observers when the genetic algorithm run is finished."""
         o_success = self._offspring_ratio["success"]
         o_total = o_success + self._offspring_ratio["failure"]
-        o_success_percentage = o_success / o_total if o_total > 0 else 0.0
+        o_percent = o_success / o_total if o_total > 0 else 0.0
 
         m_success = self._mutation_ratio["success"]
         m_total = m_success + self._mutation_ratio["failure"]
-        m_success_percentage = m_success / m_total if m_total > 0 else 0.0
+        m_percent = m_success / m_total if m_total > 0 else 0.0
 
         self.logger.info(
             "Offspring success ratio: %s/%s = %s\n\t%s",
             o_success,
             o_total,
-            f"{o_success_percentage:.2%}",
+            f"{o_percent:.2%}",
             self._offspring_ratio,
         )
         self.logger.info(
             "Mutation success ratio: %s/%s = %s\n\t%s",
             m_success,
             m_total,
-            f"{m_success_percentage:.2%}",
+            f"{m_percent:.2%}",
             self._mutation_ratio,
         )
         self.logger.info(
             "Unique/Total individuals: %s/%s",
             len({hash(s) for s in self.population}),
-            len(self.population),
+            self.ga_params.population_size * self.ga_params.num_islands,
         )
         for obs in self.observers:
             obs.on_finish(self.population, self.pareto_front())

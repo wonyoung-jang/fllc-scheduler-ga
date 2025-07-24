@@ -65,8 +65,7 @@ class Schedule:
     def __hash__(self) -> int:
         """Hash is based on the frozenset of (event_id, team_id) pairs."""
         if self._cached_hash is None:
-            canonical_representation = frozenset((event.identity, team_id) for event, team_id in self.schedule.items())
-            self._cached_hash = hash(canonical_representation)
+            self._cached_hash = hash(frozenset(self.schedule.items()))
         return self._cached_hash
 
     def get_matches(self) -> dict[RoundType, list[Match]]:

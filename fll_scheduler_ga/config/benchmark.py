@@ -37,7 +37,7 @@ class FitnessBenchmark:
 
     def run_table_and_opponent_benchmarks(self) -> None:
         """Run the table consistency fitness benchmarking."""
-        logger.info("Running table consistency fitness benchmarking...")
+        logger.info("Running table consistency and opponent variety benchmarks...")
 
         config_map = {r.round_type: r.teams_per_round for r in self.config.rounds}
         logger.debug("Finding events per round type:")
@@ -74,7 +74,7 @@ class FitnessBenchmark:
 
     def run_timeslot_benchmarks(self) -> None:
         """Run the time slot fitness benchmarking."""
-        logger.info("Running time slot fitness benchmarking...")
+        logger.info("Running break time consistency benchmarks...")
         logger.debug("Finding timeslots per round type:")
         timeslots_by_round = defaultdict(list)
         for rt, el in self.event_factory.build().items():

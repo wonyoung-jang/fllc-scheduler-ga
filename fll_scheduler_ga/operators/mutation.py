@@ -140,16 +140,16 @@ class Mutation(ABC):
         is_same_timeslot = event1.timeslot == event2.timeslot
         is_same_location = event1.location == event2.location
 
-        if self.same_timeslot:
+        if self.same_timeslot and not self.same_location:
             return is_same_timeslot and not is_same_location
 
-        if self.same_location:
+        if self.same_location and not self.same_timeslot:
             return is_same_location and not is_same_timeslot
 
-        if not (self.same_timeslot or self.same_location):
-            return not (is_same_timeslot or is_same_location)
+        if not self.same_timeslot and not self.same_location:
+            return not is_same_timeslot and not is_same_location
 
-        return None
+        return False
 
 
 @dataclass(slots=True, frozen=True)
