@@ -1,22 +1,12 @@
 """Genetic algorithm for FLL Scheduler GA."""
 
-import logging
 from collections import Counter
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from random import Random
 
-from ..config.config import TournamentConfig
-from ..data_model.event import EventFactory
-from ..data_model.team import TeamFactory
-from ..operators.crossover import Crossover
-from ..operators.mutation import Mutation
-from ..operators.nsga3 import NSGA3
-from ..operators.repairer import Repairer
-from ..operators.selection import Selection
 from .builder import ScheduleBuilder
-from .fitness import FitnessEvaluator
-from .ga_parameters import GaParameters
+from .ga_context import GaContext
 from .schedule import Population, Schedule
 
 RANDOM_SEED = (1, 2**32 - 1)
@@ -28,19 +18,9 @@ class Island:
     """Genetic algorithm island for the FLL Scheduler GA."""
 
     identity: int
-    ga_params: GaParameters
-    config: TournamentConfig
     rng: Random
-    event_factory: EventFactory
-    team_factory: TeamFactory
-    selections: tuple[Selection]
-    crossovers: tuple[Crossover]
-    mutations: tuple[Mutation]
-    logger: logging.Logger
-    evaluator: FitnessEvaluator
-    repairer: Repairer
     builder: ScheduleBuilder
-    nsga3: NSGA3
+    context: GaContext
 
     population: Population = field(default_factory=list, init=False, repr=False)
     hashes: set[int] = field(default_factory=set, init=False, repr=False)
@@ -64,12 +44,12 @@ class Island:
 
     def initialize(self) -> None:
         """Initialize the population for each island."""
-        pop_size = self.ga_params.population_size
+        pop_size = self.context.ga_params.population_size
         num_to_create = pop_size - len(self.population)
         if num_to_create <= 0:
-            self.logger.info("Initializing island %d with 0 individuals.", self.identity)
+            self.context.logger.info("Initializing island %d with 0 individuals.", self.identity)
             return
-        self.logger.info("Initializing island %d with %d individuals.", self.identity, num_to_create)
+        self.context.logger.info("Initializing island %d with %d individuals.", self.identity, num_to_create)
 
         _randlow, _randhigh = RANDOM_SEED
         seeder = Random(self.rng.randint(_randlow, _randhigh))
@@ -80,22 +60,22 @@ class Island:
             self.builder.rng = Random(seeder.randint(_randlow, _randhigh))
             schedule = self.builder.build()
 
-            if self.repairer.repair(schedule) and self.add_to_population(schedule):
-                schedule.fitness = self.evaluator.evaluate(schedule)
+            if self.context.repairer.repair(schedule) and self.add_to_population(schedule):
+                schedule.fitness = self.context.evaluator.evaluate(schedule)
                 num_created += 1
             elif num_created == 0:
                 # Only increment attempts if no valid schedule was created in total
                 attempts += 1
 
         if num_created < num_to_create:
-            self.logger.warning(
+            self.context.logger.warning(
                 "Island %d: only created %d/%d valid individuals.",
                 self.identity,
                 num_created,
                 num_to_create,
             )
 
-        self.population = self.nsga3.select(self.population)
+        self.population = self.context.nsga3.select(self.population)
         self.hashes = {hash(s) for s in self.population}
 
     def evolve(self) -> dict[str, Counter]:
@@ -104,32 +84,32 @@ class Island:
         if not island_pop:
             return {"offspring": Counter(), "mutation": Counter()}
 
-        num_offspring = self.ga_params.population_size - self.ga_params.elite_size
+        num_offspring = self.context.ga_params.population_size - self.context.ga_params.elite_size
         attempts, max_attempts = 0, num_offspring * 5
         child_count = 0
 
-        crossover_chance = self.ga_params.crossover_chance
-        mutation_chance = self.ga_params.mutation_chance
+        crossover_chance = self.context.ga_params.crossover_chance
+        mutation_chance = self.context.ga_params.mutation_chance
 
         offspring_ratio = Counter()
         mutation_ratio = Counter()
 
         while child_count < num_offspring and attempts < max_attempts:
             attempts += 1
-            parents = tuple(self.rng.choice(self.selections).select(island_pop, num_parents=2))
+            parents = tuple(self.rng.choice(self.context.selections).select(island_pop, num_parents=2))
             if parents[0] == parents[1]:
                 continue
 
             if crossover_chance < self.rng.random():
                 continue
 
-            for child in self.rng.choice(self.crossovers).crossover(parents):
+            for child in self.rng.choice(self.context.crossovers).crossover(parents):
                 if mutation_chance > self.rng.random():
-                    mutation_success = self.rng.choice(self.mutations).mutate(child)
+                    mutation_success = self.rng.choice(self.context.mutations).mutate(child)
                     mutation_ratio["success" if mutation_success else "failure"] += 1
 
-                if self.repairer.repair(child) and self.add_to_population(child):
-                    child.fitness = self.evaluator.evaluate(child)
+                if self.context.repairer.repair(child) and self.add_to_population(child):
+                    child.fitness = self.context.evaluator.evaluate(child)
                     child_count += 1
                     offspring_ratio["success"] += 1
                 else:
@@ -138,7 +118,7 @@ class Island:
                 if child_count >= num_offspring:
                     break
 
-        self.population = self.nsga3.select(self.population)
+        self.population = self.context.nsga3.select(self.population)
         self.hashes = {hash(s) for s in self.population}
 
         return {
@@ -159,12 +139,12 @@ class Island:
         for migrant in migrants:
             self.add_to_population(migrant)
 
-        self.population = self.nsga3.select(self.population)
+        self.population = self.context.nsga3.select(self.population)
         self.hashes = {hash(s) for s in self.population}
 
     def finalize_island(self) -> Iterator[Schedule]:
         """Finalize the island's state after evolution."""
         for s in self.population:
             if s.fitness is None:
-                s.fitness = self.evaluator.evaluate(s)
+                s.fitness = self.context.evaluator.evaluate(s)
             yield s

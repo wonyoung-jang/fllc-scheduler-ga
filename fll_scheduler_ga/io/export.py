@@ -56,10 +56,10 @@ def generate_summary(args: argparse.Namespace, ga: GA) -> None:
         txt_subdir = output_dir / "txt"
         txt_subdir.mkdir(parents=True, exist_ok=True)
         txt_output_path = txt_subdir / f"{name}_summary.txt"
-        generate_summary_report(schedule, ga.evaluator.objectives, txt_output_path)
+        generate_summary_report(schedule, ga.context.evaluator.objectives, txt_output_path)
 
     pareto_summary_path = output_dir / "pareto_summary.csv"
-    generate_pareto_summary(ga.total_population, ga.evaluator, pareto_summary_path)
+    generate_pareto_summary(ga.total_population, ga.context.evaluator, pareto_summary_path)
 
 
 def generate_summary_report(schedule: Schedule, objectives: list[FitnessObjective], path: Path) -> None:

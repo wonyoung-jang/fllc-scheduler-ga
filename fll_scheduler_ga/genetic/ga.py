@@ -1,25 +1,19 @@
 """Genetic algorithm for FLL Scheduler GA."""
 
-import logging
 import shelve
 import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 from random import Random
+from typing import TYPE_CHECKING
 
-from ..config.config import TournamentConfig
-from ..data_model.event import EventFactory
-from ..data_model.team import TeamFactory
+if TYPE_CHECKING:
+    from ..config.config import TournamentConfig
+
 from ..observers.base_observer import GaObserver
-from ..operators.crossover import Crossover
-from ..operators.mutation import Mutation
-from ..operators.nsga3 import NSGA3
-from ..operators.repairer import Repairer
-from ..operators.selection import Selection
 from .builder import ScheduleBuilder
-from .fitness import FitnessEvaluator
-from .ga_parameters import GaParameters
+from .ga_context import GaContext
 from .island import Island
 from .schedule import Population
 
@@ -31,26 +25,13 @@ ATTEMPTS = (0, 50)
 class GA:
     """Genetic algorithm for the FLL Scheduler GA."""
 
-    ga_params: GaParameters
-    config: TournamentConfig
+    context: GaContext
     rng: Random
-    event_factory: EventFactory
-    team_factory: TeamFactory
-    selections: tuple[Selection]
-    crossovers: tuple[Crossover]
-    mutations: tuple[Mutation]
-    logger: logging.Logger
     observers: tuple[GaObserver]
-    evaluator: FitnessEvaluator
-    repairer: Repairer
 
-    builder: ScheduleBuilder = field(init=False, repr=False)
-    nsga3: NSGA3 = field(default=None, init=False, repr=False)
     fitness_history: list[tuple] = field(default_factory=list, init=False, repr=False)
     fitness_improvement_history: list[bool] = field(default_factory=list, init=False, repr=False)
-
     total_population: Population = field(default_factory=list, init=False, repr=False)
-
     islands: list[Island] = field(init=False, repr=False)
 
     _seed_file: Path | None = field(default=None, init=False, repr=False)
@@ -60,34 +41,23 @@ class GA:
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
-        self._expected_population_size = self.ga_params.population_size * self.ga_params.num_islands
+        self._expected_population_size = self.context.ga_params.population_size * self.context.ga_params.num_islands
         seeder = Random(self.rng.randint(*RANDOM_SEED))
-        self.builder = ScheduleBuilder(
-            self.team_factory,
-            self.event_factory,
-            self.config,
+        builder = ScheduleBuilder(
+            self.context.team_factory,
+            self.context.event_factory,
+            self.context.config,
             Random(seeder.randint(*RANDOM_SEED)),
         )
-        self.repairer.rng = Random(seeder.randint(*RANDOM_SEED))
-        self.nsga3 = NSGA3(self.rng, len(self.evaluator.objectives), self.ga_params.population_size)
+        self.context.repairer.rng = Random(seeder.randint(*RANDOM_SEED))
         self.islands = [
             Island(
                 i,
-                self.ga_params,
-                self.config,
-                self.rng,
-                self.event_factory,
-                self.team_factory,
-                self.selections,
-                self.crossovers,
-                self.mutations,
-                self.logger,
-                self.evaluator,
-                self.repairer,
-                self.builder,
-                self.nsga3,
+                Random(seeder.randint(*RANDOM_SEED)),
+                builder,
+                self.context,
             )
-            for i in range(1, self.ga_params.num_islands + 1)
+            for i in range(1, self.context.ga_params.num_islands + 1)
         ]
 
     def __len__(self) -> int:
@@ -113,7 +83,7 @@ class GA:
         avg_fitness_front1 = defaultdict(int)
 
         for p in front:
-            for i, _ in enumerate(self.evaluator.objectives):
+            for i, _ in enumerate(self.context.evaluator.objectives):
                 avg_fitness_front1[i] += p.fitness[i]
 
         return tuple(s / len(front) for s in avg_fitness_front1.values())
@@ -133,43 +103,43 @@ class GA:
 
             # 1/5 generations improved -> reduce mutation chance
             if improved_count < 1:
-                self.ga_params.crossover_chance -= 0.01
-                self.ga_params.mutation_chance -= 0.001
+                self.context.ga_params.crossover_chance -= 0.01
+                self.context.ga_params.mutation_chance -= 0.001
             # More than 1/5 generations improved -> increase mutation chance, converging too early
             elif improved_count > 1:
-                self.ga_params.crossover_chance += 0.01
-                self.ga_params.mutation_chance += 0.001
+                self.context.ga_params.crossover_chance += 0.01
+                self.context.ga_params.mutation_chance += 0.001
 
-        if self.ga_params.crossover_chance <= 0:
-            self.ga_params.crossover_chance = 0.01
+        if self.context.ga_params.crossover_chance <= 0:
+            self.context.ga_params.crossover_chance = 0.01
 
-        if self.ga_params.mutation_chance <= 0:
-            self.ga_params.mutation_chance = 0.001
+        if self.context.ga_params.mutation_chance <= 0:
+            self.context.ga_params.mutation_chance = 0.001
 
         self.fitness_history.append(this_gen_fitness)
 
     def run(self) -> bool:
         """Run the genetic algorithm and return the best schedule found."""
         start_time = time.time()
-        self._notify_on_start(self.ga_params.generations)
+        self._notify_on_start(self.context.ga_params.generations)
 
         try:
             self.initialize_population()
-            if not any(self.islands[i].population for i in range(self.ga_params.num_islands)):
-                self.logger.critical("No valid schedule meeting all hard constraints was found.")
+            if not any(self.islands[i].population for i in range(self.context.ga_params.num_islands)):
+                self.context.logger.critical("No valid schedule meeting all hard constraints was found.")
                 return False
             self.run_epochs()
         except Exception:
-            self.logger.exception("An error occurred during the genetic algorithm run.")
+            self.context.logger.exception("An error occurred during the genetic algorithm run.")
             self.update_fitness_history()
             return False
         except KeyboardInterrupt:
-            self.logger.warning("Genetic algorithm run interrupted by user. Saving...")
+            self.context.logger.warning("Genetic algorithm run interrupted by user. Saving...")
             self.update_fitness_history()
             return True
         finally:
             if start_time:
-                self.logger.info("Total time taken: %.2f seconds", time.time() - start_time)
+                self.context.logger.info("Total time taken: %.2f seconds", time.time() - start_time)
             self.finalize()
             self._notify_on_finish(
                 self._expected_population_size,
@@ -186,34 +156,34 @@ class GA:
         if seed_path and seed_path.exists() and (seed_pop := self.retrieve_seed_population(seed_path)):
             seed_pop.sort(key=lambda s: (s.rank, -sum(s.fitness)))
             for i, schedule in enumerate(seed_pop):
-                island_idx = i % self.ga_params.num_islands
+                island_idx = i % self.context.ga_params.num_islands
                 self.islands[island_idx].add_to_population(schedule)
 
-        self.logger.info("Initializing %d islands...", self.ga_params.num_islands)
-        for i in range(self.ga_params.num_islands):
+        self.context.logger.info("Initializing %d islands...", self.context.ga_params.num_islands)
+        for i in range(self.context.ga_params.num_islands):
             self.islands[i].initialize()
 
     def retrieve_seed_population(self, seed_path: Path) -> Population | None:
         """Load and integrate a population from a seed file."""
-        self.logger.info("Loading seed population from: %s", seed_path)
+        self.context.logger.info("Loading seed population from: %s", seed_path)
         try:
             with shelve.open(seed_path) as shelf:
                 seed_config: TournamentConfig = shelf.get("config", None)
-                num_teams_changed = self.config.num_teams != seed_config.num_teams
-                config_changed = self.config.rounds != seed_config.rounds
+                num_teams_changed = self.context.config.num_teams != seed_config.num_teams
+                config_changed = self.context.config.rounds != seed_config.rounds
                 if num_teams_changed or config_changed:
-                    self.logger.warning("Seed population does not match current config. Using current...")
+                    self.context.logger.warning("Seed population does not match current config. Using current...")
                     return None
                 return shelf.get("population", [])
         except (OSError, KeyError, EOFError, Exception):
-            self.logger.exception("Could not load or parse seed file. Starting with a fresh population.")
+            self.context.logger.exception("Could not load or parse seed file. Starting with a fresh population.")
 
     def run_epochs(self) -> None:
         """Perform main evolution loop: generations and migrations."""
-        num_islands = self.ga_params.num_islands
-        migration_size = self.ga_params.migration_size
-        migration_interval = self.ga_params.migration_interval
-        num_generations = self.ga_params.generations
+        num_islands = self.context.ga_params.num_islands
+        migration_size = self.context.ga_params.migration_size
+        migration_interval = self.context.ga_params.migration_interval
+        num_generations = self.context.ga_params.generations
         offspring_ratio = self._offspring_ratio
         mutation_ratio = self._mutation_ratio
         expected_pop_size = self._expected_population_size
@@ -251,14 +221,14 @@ class GA:
         """Aggregate islands and run a final selection to produce the final population."""
         unique_pop = list({ind for island in self.islands for ind in island.finalize_island()})
 
-        self.logger.info(
+        self.context.logger.info(
             "Finalized %d islands with population of %d unique individuals.",
             len(self.islands),
             len(unique_pop),
         )
 
         self.total_population = sorted(
-            self.nsga3.select(
+            self.context.nsga3.select(
                 unique_pop,
                 population_size=len(unique_pop),
             ),
@@ -302,9 +272,9 @@ class GA:
         m_total = m_success + mutation_ratio["failure"]
         m_percent = f"{m_success / m_total if m_total > 0 else 0.0:.2%}"
 
-        self.logger.info("Offspring success: %s/%s = %s", o_success, o_total, o_percent)
-        self.logger.info("Mutation success: %s/%s = %s", m_success, m_total, m_percent)
-        self.logger.info("Unique/Total individuals: %s/%s", len(pop), expected)
+        self.context.logger.info("Offspring success: %s/%s = %s", o_success, o_total, o_percent)
+        self.context.logger.info("Mutation success: %s/%s = %s", m_success, m_total, m_percent)
+        self.context.logger.info("Unique/Total individuals: %s/%s", len(pop), expected)
 
         for obs in self.observers:
             obs.on_finish(pop, pareto_front)

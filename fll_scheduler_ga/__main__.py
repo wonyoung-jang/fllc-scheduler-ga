@@ -14,12 +14,14 @@ from fll_scheduler_ga.data_model.event import EventConflicts, EventFactory
 from fll_scheduler_ga.data_model.team import TeamFactory
 from fll_scheduler_ga.genetic.fitness import FitnessEvaluator
 from fll_scheduler_ga.genetic.ga import GA, RANDOM_SEED
+from fll_scheduler_ga.genetic.ga_context import GaContext
 from fll_scheduler_ga.genetic.ga_parameters import GaParameters
 from fll_scheduler_ga.io.export import generate_summary
 from fll_scheduler_ga.observers.loggers import LoggingObserver
 from fll_scheduler_ga.observers.progress import TqdmObserver
 from fll_scheduler_ga.operators.crossover import build_crossovers
 from fll_scheduler_ga.operators.mutation import build_mutations
+from fll_scheduler_ga.operators.nsga3 import NSGA3
 from fll_scheduler_ga.operators.repairer import Repairer
 from fll_scheduler_ga.operators.selection import build_selections
 from fll_scheduler_ga.preflight.preflight import run_preflight_checks
@@ -225,9 +227,7 @@ def _build_ga_parameters_from_args(args: argparse.Namespace, config_parser: Conf
         if cli_val := getattr(args, key, None):
             params[key] = cli_val
 
-    ga_params = GaParameters(**params)
-    logger.debug("Using GA parameters: %s", ga_params)
-    return ga_params
+    return GaParameters(**params)
 
 
 def _setup_rng(args: argparse.Namespace, config_parser: ConfigParser) -> Random:
@@ -261,22 +261,27 @@ def _create_ga_instance(
     crossovers = tuple(build_crossovers(operator_config, rng, team_factory, event_factory))
     mutations = tuple(build_mutations(operator_config, rng))
     benchmark = FitnessBenchmark(config, event_factory)
-    return GA(
-        ga_params=ga_params,
+    evaluator = FitnessEvaluator(config, benchmark)
+    context = GaContext(
         config=config,
-        rng=rng,
+        ga_params=ga_params,
         event_factory=event_factory,
         team_factory=team_factory,
+        repairer=repairer,
+        evaluator=evaluator,
+        nsga3=NSGA3(rng, len(evaluator.objectives), ga_params.population_size),
+        logger=logger,
         selections=selections,
         crossovers=crossovers,
         mutations=mutations,
-        logger=logger,
+    )
+    return GA(
+        context=context,
+        rng=rng,
         observers=(
             LoggingObserver(logger),
             TqdmObserver(),
         ),
-        evaluator=FitnessEvaluator(config, benchmark),
-        repairer=repairer,
     )
 
 

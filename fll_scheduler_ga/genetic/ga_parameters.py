@@ -71,6 +71,8 @@ class GaParameters:
             self.migration_size = max(1, self.population_size // 4)
             logger.warning("Migration size is >= population size, defaulting to 25%%.")
 
+        logger.debug("Initialized GaParameters: %s", self)
+
     def __str__(self) -> str:
         """Representation of GA parameters."""
         return (
