@@ -3,22 +3,18 @@
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
-from configparser import ConfigParser
 from dataclasses import dataclass
 from random import Random
 
+from ..config.config import OperatorConfig
 from ..data_model.event import Event
 from ..genetic.schedule import Match, Schedule
 
 logger = logging.getLogger(__name__)
 
 
-def build_mutations(config_parser: ConfigParser, rng: Random) -> Iterator["Mutation"]:
+def build_mutations(operator_config: OperatorConfig, rng: Random) -> Iterator["Mutation"]:
     """Build and return a tuple of mutation operators based on the configuration."""
-    if "genetic.mutation" not in config_parser:
-        msg = "No mutation configuration section '[genetic.mutation]' found."
-        raise ValueError(msg)
-
     variant_map = {
         # SwapMatchMutation variants
         "SwapMatch_CrossTimeLocation": lambda r: SwapMatchMutation(r, same_timeslot=False, same_location=False),
@@ -30,14 +26,11 @@ def build_mutations(config_parser: ConfigParser, rng: Random) -> Iterator["Mutat
         "SwapTeam_SameTime": lambda r: SwapTeamMutation(r, same_timeslot=True, same_location=False),
     }
 
-    config_str = config_parser["genetic.mutation"].get("mutation_types", "")
-    enabled_variants = [v.strip() for v in config_str.split(",") if v.strip()]
-
-    if not enabled_variants:
+    if not operator_config.mutation_types:
         logger.warning("No mutation types enabled in the configuration. Mutation will not occur.")
         return
 
-    for variant_name in enabled_variants:
+    for variant_name in operator_config.mutation_types:
         if variant_name not in variant_map:
             msg = f"Unknown mutation type in config: '{variant_name}'"
             raise ValueError(msg)
@@ -46,7 +39,7 @@ def build_mutations(config_parser: ConfigParser, rng: Random) -> Iterator["Mutat
             yield mutation_factory(rng)
 
 
-@dataclass(slots=True, frozen=True)
+@dataclass(slots=True)
 class Mutation(ABC):
     """Abstract base class for mutation operators in the FLL Scheduler GA."""
 
@@ -152,7 +145,7 @@ class Mutation(ABC):
         return False
 
 
-@dataclass(slots=True, frozen=True)
+@dataclass(slots=True)
 class SwapTeamMutation(Mutation):
     """Mutation operator for swapping single team between two matches."""
 
@@ -216,7 +209,7 @@ class SwapTeamMutation(Mutation):
         return True
 
 
-@dataclass(slots=True, frozen=True)
+@dataclass(slots=True)
 class SwapMatchMutation(Mutation):
     """Base class for mutations that swap the locations of two entire matches."""
 

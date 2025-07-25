@@ -3,7 +3,6 @@
 import random
 from collections import defaultdict
 from dataclasses import dataclass, field
-from functools import cache
 from itertools import combinations
 
 import numpy as np
@@ -206,7 +205,6 @@ class NSGA3:
         return ro
 
 
-@cache
 def dominates(p_fitness: tuple[float] | None, q_fitness: tuple[float] | None) -> bool:
     """Check if schedule p dominates schedule q."""
     if p_fitness is None or q_fitness is None:

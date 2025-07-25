@@ -2,7 +2,7 @@
 
 import re
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 ASCII_OFFSET = 64
 RE_TABLE = re.compile(r"Table ([A-Z])(\d)")
@@ -12,7 +12,7 @@ RE_TABLE = re.compile(r"Table ([A-Z])(\d)")
 class Location(ABC):
     """Data model for a location in the FLL Scheduler GA."""
 
-    identity: int = field(hash=True)
+    identity: int
     teams_per_round: int
 
     @classmethod
@@ -46,11 +46,15 @@ class Room(Location):
 class Table(Location):
     """Data model for a table in the FLL Scheduler GA."""
 
-    side: int = field(hash=True)
+    side: int
 
     def __str__(self) -> str:
         """Represent the Table as a string."""
         return f"{self.__class__.__name__} {chr(ASCII_OFFSET + self.identity)}{self.side}"
+
+    def __hash__(self) -> int:
+        """Hash the Table based on its identity and side."""
+        return hash((self.identity, self.side))
 
     @classmethod
     def from_string(cls, location_str: str, teams_per_round: int) -> "Table | None":

@@ -3,10 +3,10 @@
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator
-from configparser import ConfigParser
 from dataclasses import dataclass, field
 from random import Random
 
+from ..config.config import OperatorConfig
 from ..data_model.event import Event, EventFactory
 from ..data_model.team import TeamFactory
 from ..genetic.schedule import Schedule
@@ -15,16 +15,12 @@ logger = logging.getLogger(__name__)
 
 
 def build_crossovers(
-    config_parser: ConfigParser, team_factory: TeamFactory, event_factory: EventFactory, rng: Random
+    operator_config: OperatorConfig,
+    rng: Random,
+    team_factory: TeamFactory,
+    event_factory: EventFactory,
 ) -> Iterator["Crossover"]:
     """Build and return a tuple of crossover operators based on the configuration."""
-    if "genetic.crossover" not in config_parser:
-        msg = "No crossover configuration found in the provided TournamentConfig."
-        raise ValueError(msg)
-    config_crossover_types = config_parser["genetic.crossover"].get("crossover_types", "").split(",")
-    crossover_types = [ct.strip() for ct in config_crossover_types if ct.strip()]
-    config_crossover_ks = config_parser["genetic.crossover"].get("crossover_ks", "").split(",")
-    crossover_ks = [int(k) for k in config_crossover_ks]
     crossover_classes = {
         "KPoint": KPoint,
         "Scattered": Scattered,
@@ -32,18 +28,18 @@ def build_crossovers(
         "RoundTypeCrossover": RoundTypeCrossover,
         "PartialCrossover": PartialCrossover,
     }
-    for ct in crossover_types:
+    for ct in operator_config.crossover_types:
         if ct not in crossover_classes:
             msg = f"Unknown crossover type: {ct}"
             raise ValueError(msg)
         else:
             crossover_class = crossover_classes[ct]
             if ct == "KPoint":
-                if not crossover_ks:
+                if not operator_config.crossover_ks:
                     msg = "KPoint crossover requires at least one k value."
                     raise ValueError(msg)
-                for _ in range(len(crossover_ks)):
-                    yield crossover_class(team_factory, event_factory, rng, k=crossover_ks.pop(0))
+                for _ in range(len(operator_config.crossover_ks)):
+                    yield crossover_class(team_factory, event_factory, rng, k=operator_config.crossover_ks.pop(0))
             else:
                 yield crossover_class(team_factory, event_factory, rng)
 
@@ -106,7 +102,8 @@ class EventCrossover(Crossover):
 
         """
         p1, p2 = parents
-        yield from (self._produce_child(p1, p2), self._produce_child(p2, p1))
+        yield self._produce_child(p1, p2)
+        yield self._produce_child(p2, p1)
 
     def _produce_child(self, p1: Schedule, p2: Schedule) -> Schedule:
         """Produce a child schedule from two parents.
@@ -138,6 +135,7 @@ class EventCrossover(Crossover):
 
         """
         get_team_from_child = child.get_team
+
         for e1 in events:
             if (e2 := e1.paired_event) and e1.location.side == 1:
                 t1 = get_team_from_child(parent[e1].identity)

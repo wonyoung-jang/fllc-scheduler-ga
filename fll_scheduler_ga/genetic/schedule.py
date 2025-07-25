@@ -3,12 +3,15 @@
 from collections import defaultdict
 from collections.abc import ItemsView, KeysView, ValuesView
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..config.config import RoundType
 from ..data_model.event import Event
 from ..data_model.team import Team, TeamMap
+
+if TYPE_CHECKING:
+    from ..config.config import RoundType
 
 type Population = list[Schedule]
 type Individual = dict[Event, int]
@@ -22,14 +25,14 @@ class Schedule:
     teams: TeamMap = field(default_factory=dict, compare=False)
     schedule: Individual = field(default_factory=dict, compare=False)
     fitness: tuple[float, ...] | None = field(default=None, compare=False)
-    rank: int = field(default=9999, compare=True)
+    rank: int = field(default=10, compare=True)
 
     normalized_fitness: np.ndarray | None = field(default=None, init=False, repr=False, compare=False)
     ref_point_idx: int = field(default=None, init=False, repr=False, compare=False)
     distance_to_ref_point: float = field(default=None, init=False, repr=False, compare=False)
 
     _cached_all_teams: list[Team] = field(default=None, init=False, repr=False, compare=False)
-    _cached_matches: dict[RoundType, list[Match]] = field(default=None, init=False, repr=False, compare=False)
+    _cached_matches: dict["RoundType", list[Match]] = field(default=None, init=False, repr=False, compare=False)
     _cached_hash: int = field(default=None, init=False, repr=False)
 
     def __len__(self) -> int:
@@ -68,7 +71,7 @@ class Schedule:
             self._cached_hash = hash(frozenset(self.schedule.items()))
         return self._cached_hash
 
-    def get_matches(self) -> dict[RoundType, list[Match]]:
+    def get_matches(self) -> dict["RoundType", list[Match]]:
         """Get all matches in the schedule."""
         if self._cached_matches is not None:
             return self._cached_matches

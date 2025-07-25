@@ -43,6 +43,7 @@ class Island:
     nsga3: NSGA3
 
     population: Population = field(default_factory=list, init=False, repr=False)
+    hashes: list[int] = field(default_factory=list, init=False, repr=False)
 
     def __len__(self) -> int:
         """Return the number of individuals in the island's population."""
@@ -54,8 +55,10 @@ class Island:
 
     def add_to_population(self, schedule: Schedule) -> bool:
         """Add a schedule to a specific island's population if it's not a duplicate."""
-        if schedule not in self.population:
+        schedule_hash = hash(schedule)
+        if schedule_hash not in self.hashes:
             self.population.append(schedule)
+            self.hashes.append(schedule_hash)
             return True
         return False
 
@@ -93,6 +96,7 @@ class Island:
             )
 
         self.population = self.nsga3.select(self.population)
+        self.hashes = [hash(s) for s in self.population]
 
     def evolve(self) -> dict[str, Counter]:
         """Perform main evolution loop: generations and migrations."""
@@ -139,6 +143,7 @@ class Island:
                     break
 
         self.population = self.nsga3.select(self.population)
+        self.hashes = [hash(s) for s in self.population]
 
         return {
             "offspring": offspring_ratio,
@@ -147,10 +152,11 @@ class Island:
 
     def get_migrants(self, migration_size: int) -> Iterator[Schedule]:
         """Get the list of migrants from the current island."""
-        pareto_front = self.pareto_front()
-        if len(pareto_front) < migration_size:
+        if self.rng.choice([True, False]):
+            self.population.sort(key=lambda s: (s.rank, self.rng.choice([True, False])))
+            yield from self.population[:migration_size]
+        else:
             yield from self.rng.sample(self.population, k=migration_size)
-        yield from self.rng.sample(pareto_front, k=migration_size)
 
     def receive_migrants(self, migrants: Iterator[Schedule]) -> None:
         """Receive migrants from another island and add them to the current island's population."""
@@ -158,6 +164,7 @@ class Island:
             self.add_to_population(migrant)
 
         self.population = self.nsga3.select(self.population)
+        self.hashes = [hash(s) for s in self.population]
 
     def finalize_island(self) -> Iterator[Schedule]:
         """Finalize the island's state after evolution."""

@@ -8,7 +8,7 @@ from pathlib import Path
 from random import Random
 
 from fll_scheduler_ga.config.benchmark import FitnessBenchmark
-from fll_scheduler_ga.config.config import TournamentConfig, load_tournament_config
+from fll_scheduler_ga.config.config import OperatorConfig, TournamentConfig, load_tournament_config
 from fll_scheduler_ga.data_model.event import EventConflicts, EventFactory
 from fll_scheduler_ga.data_model.team import TeamFactory
 from fll_scheduler_ga.genetic.fitness import FitnessEvaluator
@@ -31,12 +31,12 @@ def setup_environment() -> tuple[argparse.Namespace, GA, TournamentConfig]:
     try:
         args = _create_parser().parse_args()
         _initialize_logging(args)
-        config, parser = load_tournament_config(Path(args.config_file))
+        config, parser, operator_config = load_tournament_config(Path(args.config_file))
         event_factory = EventFactory(config)
         run_preflight_checks(config, event_factory)
         ga_params = _build_ga_parameters_from_args(args, parser)
         rng = _setup_rng(args, parser)
-        ga = _create_ga_instance(config, parser, event_factory, ga_params, rng)
+        ga = _create_ga_instance(config, operator_config, event_factory, ga_params, rng)
         ga.set_seed_file(args.seed_file)
     except (FileNotFoundError, KeyError):
         logger.exception("Error loading configuration")
@@ -237,7 +237,7 @@ def _setup_rng(args: argparse.Namespace, config_parser: ConfigParser) -> Random:
 
 def _create_ga_instance(
     config: TournamentConfig,
-    config_parser: ConfigParser,
+    operator_config: OperatorConfig,
     event_factory: EventFactory,
     ga_params: GaParameters,
     rng: Random,
@@ -246,9 +246,9 @@ def _create_ga_instance(
     event_conflicts = EventConflicts(event_factory)
     team_factory = TeamFactory(config, event_conflicts.conflicts)
     repairer = Repairer(rng, config, event_factory)
-    selections = tuple(build_selections(config_parser, rng, ga_params))
-    crossovers = tuple(build_crossovers(config_parser, team_factory, event_factory, rng))
-    mutations = tuple(build_mutations(config_parser, rng))
+    selections = tuple(build_selections(operator_config, rng, ga_params))
+    crossovers = tuple(build_crossovers(operator_config, rng, team_factory, event_factory))
+    mutations = tuple(build_mutations(operator_config, rng))
     benchmark = FitnessBenchmark(config, event_factory)
     return GA(
         ga_params=ga_params,

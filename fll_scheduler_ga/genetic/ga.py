@@ -117,7 +117,12 @@ class GA:
 
     def update_fitness_history(self) -> None:
         """Update the fitness history with the current generation's fitness."""
-        self.fitness_history.append(self._calculate_this_gen_fitness())
+        this_gen_fitness = self._calculate_this_gen_fitness()
+        if self.fitness_history and self.fitness_history[-1] <= this_gen_fitness:
+            self.ga_params.mutation_chance *= 0.9
+        else:
+            self.ga_params.mutation_chance *= 1.1
+        self.fitness_history.append(this_gen_fitness)
 
     def run(self) -> bool:
         """Run the genetic algorithm and return the best schedule found."""
@@ -130,30 +135,27 @@ class GA:
                 self.logger.critical("No valid schedule meeting all hard constraints was found.")
                 return False
             self.run_epochs()
-            self.finalize()
-            self._notify_on_finish()
         except Exception:
             self.logger.exception("An error occurred during the genetic algorithm run.")
-            self.finalize()
             self.update_fitness_history()
-            self._notify_on_finish()
             return False
         except KeyboardInterrupt:
             self.logger.warning("Genetic algorithm run interrupted by user. Saving...")
-            self.finalize()
             self.update_fitness_history()
-            self._notify_on_finish()
             return True
         finally:
             if start_time:
                 self.logger.info("Total time taken: %.2f seconds", time.time() - start_time)
+            self.finalize()
+            self._notify_on_finish()
         return True
 
     def initialize_population(self) -> None:
         """Initialize the population for each island."""
-        if self._seed_file and self._seed_file.exists() and (seeded_population := self.retrieve_seed_population()):
-            seeded_population.sort(key=lambda s: (s.rank, -sum(s.fitness)))
-            for i, schedule in enumerate(seeded_population):
+        seed_path = self._seed_file
+        if seed_path and seed_path.exists() and (seed_pop := self.retrieve_seed_population(seed_path)):
+            seed_pop.sort(key=lambda s: (s.rank, -sum(s.fitness)))
+            for i, schedule in enumerate(seed_pop):
                 island_idx = i % self.ga_params.num_islands
                 self.islands[island_idx].add_to_population(schedule)
 
@@ -161,11 +163,11 @@ class GA:
         for i in range(self.ga_params.num_islands):
             self.islands[i].initialize()
 
-    def retrieve_seed_population(self) -> Population | None:
+    def retrieve_seed_population(self, seed_path: Path) -> Population | None:
         """Load and integrate a population from a seed file."""
-        self.logger.info("Loading seed population from: %s", self._seed_file)
+        self.logger.info("Loading seed population from: %s", seed_path)
         try:
-            with shelve.open(self._seed_file) as shelf:
+            with shelve.open(seed_path) as shelf:
                 seed_config: TournamentConfig = shelf.get("config", None)
                 num_teams_changed = self.config.num_teams != seed_config.num_teams
                 config_changed = self.config.rounds != seed_config.rounds

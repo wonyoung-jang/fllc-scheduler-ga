@@ -17,7 +17,7 @@ from ..data_model.time import TimeSlot
 from .config import TournamentConfig
 
 logger = logging.getLogger(__name__)
-PENALTY = 1e-16  # Penalty value for penalizing worse scores
+PENALTY = 0.5  # Penalty value for penalizing worse scores
 
 
 @dataclass(slots=True)
@@ -62,11 +62,22 @@ class FitnessBenchmark:
         minimum_score = cache_scorer[total_locations_required]
         diff = maximum_score - minimum_score
 
-        for k, v in cache_scorer.items():
-            self.table[k] = abs((v - minimum_score) / diff) if diff else 1
-            self.opponents[k] = abs((v - maximum_score) / diff) if diff else 1
-            logger.debug("  %s: %.3f", f"{k:<10}", self.table[k])
-            logger.debug("  %s: %.3f", f"{k:<10}", self.opponents[k])
+        for num_loc, raw_score in cache_scorer.items():
+            norm_table_score = abs((raw_score - minimum_score) / diff) if diff else 1
+            table_penalty = PENALTY ** (num_loc - 1)
+            table_score = norm_table_score * table_penalty
+            self.table[num_loc] = table_score
+
+            norm_opponent_score = abs((raw_score - maximum_score) / diff) if diff else 1
+            opponent_penalty = PENALTY ** (total_locations_required - num_loc)
+            opponent_score = norm_opponent_score * opponent_penalty
+            self.opponents[num_loc] = opponent_score
+
+        for k, v in self.table.items():
+            logger.debug("Table score for %d table(s): %.6f", k, v)
+
+        for k, v in self.opponents.items():
+            logger.debug("Opponent score for %d opponent(s): %.6f", k, v)
 
         if not self.table or not self.opponents:
             logger.warning("No valid schedules could be generated.")
@@ -133,10 +144,6 @@ class FitnessBenchmark:
             logger.debug("  Score %f: %d occurrences", score, count)
         avg_score = total / 20
         logger.debug("Average score of top 20: %f", avg_score)
-
-        logger.debug("All unique scores:")
-        for score, count in unique_scores.items():
-            logger.debug("  Score %f: %d occurrences", score, count)
 
     @staticmethod
     def has_overlaps(timeslots: list[TimeSlot]) -> bool:

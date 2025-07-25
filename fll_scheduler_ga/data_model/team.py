@@ -54,6 +54,7 @@ class Team:
     fitness: tuple[float, ...] = field(init=False, repr=False)
     events: list[Event] = field(default_factory=list)
     opponents: list[int] = field(default_factory=list, repr=False)
+    tables: list[int] = field(default_factory=list, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to sort events and time slots."""
@@ -80,11 +81,15 @@ class Team:
         """Unbook a team from an event."""
         self.round_types[event.round_type] += 1
         self.events.remove(event)
+        if event.paired_event:
+            self.tables.remove(event.identity)
 
     def add_event(self, event: Event) -> None:
         """Book a team for an event."""
         self.round_types[event.round_type] -= 1
         self.events.append(event)
+        if event.paired_event:
+            self.tables.append(event.identity)
 
     def switch_opponent(self, old_opponent: "Team", new_opponent: "Team") -> None:
         """Switch the opponent for a given event."""
@@ -124,7 +129,7 @@ class Team:
 
     def table_consistency_key(self) -> int:
         """Get a key for the table consistency cache based on the team's events."""
-        return len({e.location for e in self.events if e.location.teams_per_round == 2})
+        return len(set(self.tables))
 
     def opponent_variety_key(self) -> int:
         """Get a key for the opponent variety cache based on the team's events."""

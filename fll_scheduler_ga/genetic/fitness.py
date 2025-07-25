@@ -3,6 +3,7 @@
 import logging
 from dataclasses import dataclass, field
 from enum import StrEnum
+from math import sqrt
 
 from ..config.benchmark import FitnessBenchmark
 from ..config.config import TournamentConfig
@@ -89,6 +90,11 @@ class FitnessEvaluator:
             bt_total = 0
             tc_total = 0
             ov_total = 0
+
+            bt_list = []
+            tc_list = []
+            ov_list = []
+
             for team in all_teams:
                 t_bt = bt_cache[team.break_time_key()]
                 t_tc = tc_cache[team.table_consistency_key()]
@@ -97,5 +103,41 @@ class FitnessEvaluator:
                 bt_total += t_bt
                 tc_total += t_tc
                 ov_total += t_ov
-            return tuple(total / num_teams for total in (bt_total, tc_total, ov_total))
+                bt_list.append(t_bt)
+                tc_list.append(t_tc)
+                ov_list.append(t_ov)
+
+            mean_bt = bt_total / num_teams
+            mean_tc = tc_total / num_teams
+            mean_ov = ov_total / num_teams
+
+            sum_sq_diff_bt = sum((bt - mean_bt) ** 2 for bt in bt_list)
+            sum_sq_diff_tc = sum((tc - mean_tc) ** 2 for tc in tc_list)
+            sum_sq_diff_ov = sum((ov - mean_ov) ** 2 for ov in ov_list)
+
+            std_dev_bt = sqrt(sum_sq_diff_bt / num_teams)
+            std_dev_tc = sqrt(sum_sq_diff_tc / num_teams)
+            std_dev_ov = sqrt(sum_sq_diff_ov / num_teams)
+
+            coeff_bt = std_dev_bt / mean_bt if mean_bt else 0
+            coeff_tc = std_dev_tc / mean_tc if mean_tc else 0
+            coeff_ov = std_dev_ov / mean_ov if mean_ov else 0
+
+            ratio_bt = 1 / (1 + coeff_bt)
+            ratio_tc = 1 / (1 + coeff_tc)
+            ratio_ov = 1 / (1 + coeff_ov)
+
+            range_bt = max(bt_list) - min(bt_list) if bt_list else 1
+            range_tc = max(tc_list) - min(tc_list) if tc_list else 1
+            range_ov = max(ov_list) - min(ov_list) if ov_list else 1
+
+            range_coeff_bt = 1 / (1 + range_bt)
+            range_coeff_tc = 1 / (1 + range_tc)
+            range_coeff_ov = 1 / (1 + range_ov)
+
+            return (
+                ratio_bt * mean_bt * range_coeff_bt,
+                ratio_tc * mean_tc * range_coeff_tc,
+                ratio_ov * mean_ov * range_coeff_ov,
+            )
         return 1, 1, 1
