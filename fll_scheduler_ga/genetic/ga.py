@@ -47,8 +47,9 @@ class GA:
     builder: ScheduleBuilder = field(init=False, repr=False)
     nsga3: NSGA3 = field(default=None, init=False, repr=False)
     fitness_history: list[tuple] = field(default_factory=list, init=False, repr=False)
-    population: Population = field(default_factory=list, init=False, repr=False)
+    fitness_improvement_history: list[bool] = field(default_factory=list, init=False, repr=False)
 
+    population: Population = field(default_factory=list, init=False, repr=False)
     islands: list[Island] = field(init=False, repr=False)
 
     _seed_file: Path | None = field(default=None, init=False, repr=False)
@@ -118,10 +119,31 @@ class GA:
     def update_fitness_history(self) -> None:
         """Update the fitness history with the current generation's fitness."""
         this_gen_fitness = self._calculate_this_gen_fitness()
+
         if self.fitness_history and self.fitness_history[-1] <= this_gen_fitness:
-            self.ga_params.mutation_chance *= 0.9
+            self.fitness_improvement_history.append(True)
         else:
-            self.ga_params.mutation_chance *= 1.1
+            self.fitness_improvement_history.append(False)
+
+        if len(self.fitness_improvement_history) >= 5:
+            last_five_improvements = self.fitness_improvement_history[-5:]
+            improved_count = last_five_improvements.count(True)
+
+            # 1/5 generations improved -> reduce mutation chance
+            if improved_count < 1:
+                self.ga_params.crossover_chance -= 0.01
+                self.ga_params.mutation_chance -= 0.001
+            # More than 1/5 generations improved -> increase mutation chance, converging too early
+            elif improved_count > 1:
+                self.ga_params.crossover_chance += 0.01
+                self.ga_params.mutation_chance += 0.001
+
+        if self.ga_params.crossover_chance <= 0:
+            self.ga_params.crossover_chance = 0.01
+
+        if self.ga_params.mutation_chance <= 0:
+            self.ga_params.mutation_chance = 0.001
+
         self.fitness_history.append(this_gen_fitness)
 
     def run(self) -> bool:

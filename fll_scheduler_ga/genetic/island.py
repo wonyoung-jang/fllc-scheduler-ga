@@ -43,7 +43,7 @@ class Island:
     nsga3: NSGA3
 
     population: Population = field(default_factory=list, init=False, repr=False)
-    hashes: list[int] = field(default_factory=list, init=False, repr=False)
+    hashes: set[int] = field(default_factory=set, init=False, repr=False)
 
     def __len__(self) -> int:
         """Return the number of individuals in the island's population."""
@@ -58,7 +58,7 @@ class Island:
         schedule_hash = hash(schedule)
         if schedule_hash not in self.hashes:
             self.population.append(schedule)
-            self.hashes.append(schedule_hash)
+            self.hashes.add(schedule_hash)
             return True
         return False
 
@@ -96,7 +96,7 @@ class Island:
             )
 
         self.population = self.nsga3.select(self.population)
-        self.hashes = [hash(s) for s in self.population]
+        self.hashes = {hash(s) for s in self.population}
 
     def evolve(self) -> dict[str, Counter]:
         """Perform main evolution loop: generations and migrations."""
@@ -108,10 +108,6 @@ class Island:
         attempts, max_attempts = 0, num_offspring * 5
         child_count = 0
 
-        repair = self.repairer.repair
-        evaluate = self.evaluator.evaluate
-        choose = self.rng.choice
-        roll = self.rng.random
         crossover_chance = self.ga_params.crossover_chance
         mutation_chance = self.ga_params.mutation_chance
 
@@ -120,20 +116,20 @@ class Island:
 
         while child_count < num_offspring and attempts < max_attempts:
             attempts += 1
-            parents = tuple(choose(self.selections).select(island_pop, num_parents=2))
+            parents = tuple(self.rng.choice(self.selections).select(island_pop, num_parents=2))
             if parents[0] == parents[1]:
                 continue
 
-            if crossover_chance < roll():
+            if crossover_chance < self.rng.random():
                 continue
 
-            for child in choose(self.crossovers).crossover(parents):
-                if mutation_chance > roll():
-                    mutation_success = choose(self.mutations).mutate(child)
+            for child in self.rng.choice(self.crossovers).crossover(parents):
+                if mutation_chance > self.rng.random():
+                    mutation_success = self.rng.choice(self.mutations).mutate(child)
                     mutation_ratio["success" if mutation_success else "failure"] += 1
 
-                if repair(child) and self.add_to_population(child):
-                    child.fitness = evaluate(child)
+                if self.repairer.repair(child) and self.add_to_population(child):
+                    child.fitness = self.evaluator.evaluate(child)
                     child_count += 1
                     offspring_ratio["success"] += 1
                 else:
@@ -143,7 +139,7 @@ class Island:
                     break
 
         self.population = self.nsga3.select(self.population)
-        self.hashes = [hash(s) for s in self.population]
+        self.hashes = {hash(s) for s in self.population}
 
         return {
             "offspring": offspring_ratio,
@@ -164,7 +160,7 @@ class Island:
             self.add_to_population(migrant)
 
         self.population = self.nsga3.select(self.population)
-        self.hashes = [hash(s) for s in self.population]
+        self.hashes = {hash(s) for s in self.population}
 
     def finalize_island(self) -> Iterator[Schedule]:
         """Finalize the island's state after evolution."""

@@ -188,7 +188,7 @@ def _initialize_logging(args: argparse.Namespace) -> None:
     root_logger.addHandler(console_handler)
 
     args_str = "\n".join(f"\t{k} = {v}" for k, v in args.__dict__.items())
-    logger.debug("Starting fll-scheduler-ga application with args:\n%s", args_str)
+    logger.debug("Starting FLLC Scheduler with args:\n%s", args_str)
 
 
 def _build_ga_parameters_from_args(args: argparse.Namespace, config_parser: ConfigParser) -> GaParameters:
@@ -318,7 +318,7 @@ def main() -> None:
             save_population_to_seed_file(ga, config, args.seed_file, front=True)
             generate_summary(args, ga)
 
-    logger.info("fll-scheduler-ga application finished")
+    logger.info("FLLC Scheduler finished")
 
 
 if __name__ == "__main__":
