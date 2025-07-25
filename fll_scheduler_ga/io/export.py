@@ -54,7 +54,7 @@ def generate_summary(args: argparse.Namespace, ga: GA) -> None:
         generate_summary_report(schedule, objectives, txt_output_path)
 
     pareto_summary_path = output_dir / "pareto_summary.csv"
-    generate_pareto_summary(ga.population, ga.evaluator, pareto_summary_path)
+    generate_pareto_summary(ga.total_population, ga.evaluator, pareto_summary_path)
 
 
 def generate_summary_report(schedule: Schedule, objectives: list[FitnessObjective], path: Path) -> None:

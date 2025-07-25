@@ -70,7 +70,7 @@ class Plot:
         save_dir: str | Path | None = None,
     ) -> Any | None:
         """Generate and saves a parallel coordinates plot of the final Pareto front."""
-        if not (pop := self.ga_instance.population):
+        if not (pop := self.ga_instance.total_population):
             logger.warning("Cannot plot an empty Pareto front.")
             return None
 

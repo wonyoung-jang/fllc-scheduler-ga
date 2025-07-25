@@ -49,15 +49,18 @@ class GA:
     fitness_history: list[tuple] = field(default_factory=list, init=False, repr=False)
     fitness_improvement_history: list[bool] = field(default_factory=list, init=False, repr=False)
 
-    population: Population = field(default_factory=list, init=False, repr=False)
+    total_population: Population = field(default_factory=list, init=False, repr=False)
+
     islands: list[Island] = field(init=False, repr=False)
 
     _seed_file: Path | None = field(default=None, init=False, repr=False)
     _offspring_ratio: Counter = field(default_factory=Counter, init=False, repr=False)
     _mutation_ratio: Counter = field(default_factory=Counter, init=False, repr=False)
+    _expected_population_size: int = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
+        self._expected_population_size = self.ga_params.population_size * self.ga_params.num_islands
         seeder = Random(self.rng.randint(*RANDOM_SEED))
         self.builder = ScheduleBuilder(
             self.team_factory,
@@ -98,14 +101,13 @@ class GA:
 
     def pareto_front(self) -> Population:
         """Get the Pareto front for each island in the population."""
-        if not self.population:
+        if not self.total_population:
             return [p for i in self.islands for p in i.pareto_front()]
-        return [p for p in self.population if p.rank == 0]
+        return [p for p in self.total_population if p.rank == 0]
 
     def _calculate_this_gen_fitness(self) -> tuple[float, ...]:
         """Calculate the average fitness of the current generation."""
-        front = self.pareto_front()
-        if not front:
+        if not (front := self.pareto_front()):
             return ()
 
         avg_fitness_front1 = defaultdict(int)
@@ -120,7 +122,7 @@ class GA:
         """Update the fitness history with the current generation's fitness."""
         this_gen_fitness = self._calculate_this_gen_fitness()
 
-        if self.fitness_history and self.fitness_history[-1] <= this_gen_fitness:
+        if self.fitness_history and self.fitness_history[-1] < this_gen_fitness:
             self.fitness_improvement_history.append(True)
         else:
             self.fitness_improvement_history.append(False)
@@ -149,7 +151,7 @@ class GA:
     def run(self) -> bool:
         """Run the genetic algorithm and return the best schedule found."""
         start_time = time.time()
-        self._notify_on_start()
+        self._notify_on_start(self.ga_params.generations)
 
         try:
             self.initialize_population()
@@ -169,7 +171,13 @@ class GA:
             if start_time:
                 self.logger.info("Total time taken: %.2f seconds", time.time() - start_time)
             self.finalize()
-            self._notify_on_finish()
+            self._notify_on_finish(
+                self._expected_population_size,
+                self.total_population,
+                self.pareto_front(),
+                self._mutation_ratio,
+                self._offspring_ratio,
+            )
         return True
 
     def initialize_population(self) -> None:
@@ -205,17 +213,25 @@ class GA:
         num_islands = self.ga_params.num_islands
         migration_size = self.ga_params.migration_size
         migration_interval = self.ga_params.migration_interval
+        num_generations = self.ga_params.generations
         offspring_ratio = self._offspring_ratio
         mutation_ratio = self._mutation_ratio
+        expected_pop_size = self._expected_population_size
 
-        for generation in range(self.ga_params.generations):
+        for generation in range(num_generations):
             for i in range(num_islands):
                 ratios = self.islands[i].evolve()
                 offspring_ratio.update(ratios["offspring"])
                 mutation_ratio.update(ratios["mutation"])
 
             self.update_fitness_history()
-            self._notify_on_generation_end(generation)
+            self._notify_on_generation_end(
+                generation + 1,
+                num_generations,
+                expected_pop_size,
+                self.fitness_history[-1] if self.fitness_history else (),
+                len(self.pareto_front()),
+            )
 
             if num_islands <= 1 or migration_size <= 0:
                 continue
@@ -241,10 +257,10 @@ class GA:
             len(unique_pop),
         )
 
-        self.population = sorted(
+        self.total_population = sorted(
             self.nsga3.select(
                 unique_pop,
-                pop_size=len(unique_pop),
+                population_size=len(unique_pop),
             ),
             key=lambda s: (
                 s.rank,
@@ -252,50 +268,43 @@ class GA:
             ),
         )
 
-    def _notify_on_start(self) -> None:
+    def _notify_on_start(self, num_generations: int) -> None:
         """Notify observers when the genetic algorithm run starts."""
         for obs in self.observers:
-            obs.on_start(self.ga_params.generations)
+            obs.on_start(num_generations)
 
-    def _notify_on_generation_end(self, generation: int) -> None:
+    def _notify_on_generation_end(
+        self,
+        generation: int,
+        num_generations: int,
+        expected: int,
+        fitness: tuple[float, ...],
+        pareto_size: int,
+    ) -> None:
         """Notify observers at the end of a generation."""
         for obs in self.observers:
-            obs.on_generation_end(
-                generation + 1,
-                self.ga_params.generations,
-                self.ga_params.population_size * self.ga_params.num_islands,
-                self.fitness_history[-1] if self.fitness_history else (),
-                len(self.pareto_front()),
-            )
+            obs.on_generation_end(generation, num_generations, expected, fitness, pareto_size)
 
-    def _notify_on_finish(self) -> None:
+    def _notify_on_finish(
+        self,
+        expected: int,
+        pop: Population,
+        pareto_front: Population,
+        mutation_ratio: Counter | None = None,
+        offspring_ratio: Counter | None = None,
+    ) -> None:
         """Notify observers when the genetic algorithm run is finished."""
-        o_success = self._offspring_ratio["success"]
-        o_total = o_success + self._offspring_ratio["failure"]
-        o_percent = o_success / o_total if o_total > 0 else 0.0
+        o_success = offspring_ratio["success"]
+        o_total = o_success + offspring_ratio["failure"]
+        o_percent = f"{o_success / o_total if o_total > 0 else 0.0:.2%}"
 
-        m_success = self._mutation_ratio["success"]
-        m_total = m_success + self._mutation_ratio["failure"]
-        m_percent = m_success / m_total if m_total > 0 else 0.0
+        m_success = mutation_ratio["success"]
+        m_total = m_success + mutation_ratio["failure"]
+        m_percent = f"{m_success / m_total if m_total > 0 else 0.0:.2%}"
 
-        self.logger.info(
-            "Offspring success ratio: %s/%s = %s\n\t%s",
-            o_success,
-            o_total,
-            f"{o_percent:.2%}",
-            self._offspring_ratio,
-        )
-        self.logger.info(
-            "Mutation success ratio: %s/%s = %s\n\t%s",
-            m_success,
-            m_total,
-            f"{m_percent:.2%}",
-            self._mutation_ratio,
-        )
-        self.logger.info(
-            "Unique/Total individuals: %s/%s",
-            len({hash(s) for s in self.population}),
-            self.ga_params.population_size * self.ga_params.num_islands,
-        )
+        self.logger.info("Offspring success: %s/%s = %s", o_success, o_total, o_percent)
+        self.logger.info("Mutation success: %s/%s = %s", m_success, m_total, m_percent)
+        self.logger.info("Unique/Total individuals: %s/%s", len(pop), expected)
+
         for obs in self.observers:
-            obs.on_finish(self.population, self.pareto_front())
+            obs.on_finish(pop, pareto_front)

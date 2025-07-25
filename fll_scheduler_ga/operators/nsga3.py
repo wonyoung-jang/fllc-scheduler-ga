@@ -1,7 +1,7 @@
 """Tools for Non-dominated Sorting Genetic Algorithm III (NSGA-III)."""
 
 import random
-from collections import defaultdict
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from itertools import combinations
 
@@ -28,7 +28,15 @@ class NSGA3:
         """Calculate the number of divisions for reference point generation."""
         p = 1
         while (
-            len(list(combinations(range(p + self.num_objectives - 1), self.num_objectives - 1))) < self.population_size
+            len(
+                list(
+                    combinations(
+                        range(p + self.num_objectives - 1),
+                        self.num_objectives - 1,
+                    )
+                )
+            )
+            < self.population_size
         ):
             p += 1
         return p
@@ -46,48 +54,35 @@ class NSGA3:
             points.append([x / p for x in temp_point])
         return np.array(points)
 
-    def select(self, population: Population, pop_size: int = 0) -> Population:
+    def select(self, population: Population, population_size: int = 0) -> Population:
         """Select the next generation using NSGA-III principles."""
-        if not isinstance(population, list):
-            population = list(population)
-
         self._pop = population
-        self._non_dominated_sort()
-        population_size = pop_size if pop_size else self.population_size
-        fronts = self._get_fronts()
-        last_front_idx = self._determine_last_front(fronts)
+        pop_size = population_size if population_size else self.population_size
+
+        fronts = self._non_dominated_sort()
+        last_front_idx = self._determine_last_front(fronts, pop_size)
 
         next_pop = [p for i in range(last_front_idx) for p in fronts[i]]
-        if len(next_pop) >= population_size:
-            return next_pop[:population_size]
+
+        if len(next_pop) == pop_size:
+            return next_pop
 
         last_front = fronts[last_front_idx]
-        k = population_size - len(next_pop)
-
-        if len(last_front) < k:
-            next_pop.extend(last_front)
-            return next_pop
+        k = pop_size - len(next_pop)
 
         next_pop.extend(self._niching_selection(fronts[: last_front_idx + 1], last_front, k))
         return next_pop
 
-    def _get_fronts(self) -> list[Population]:
-        """Group population into fronts."""
-        fronts = defaultdict(list)
-        for p in self._pop:
-            fronts[p.rank].append(p)
-        return [fronts[i] for i in sorted(fronts.keys())]
-
-    def _determine_last_front(self, fronts: list[Population]) -> int:
+    def _determine_last_front(self, fronts: list[Population], pop_size: int) -> int:
         """Determine which front is the last to be included."""
         count = 0
         for i, front in enumerate(fronts):
             count += len(front)
-            if count >= self.population_size:
+            if count >= pop_size:
                 return i
         return len(fronts) - 1
 
-    def _non_dominated_sort(self) -> None:
+    def _non_dominated_sort(self) -> list[Population]:
         """Perform non-dominated sorting on the population."""
         pop_size = len(self._pop)
         dominates_list = [[] for _ in range(pop_size)]
@@ -125,16 +120,24 @@ class NSGA3:
         for i in range(pop_size):
             self._pop[i].rank = ranks[i]
 
-    def _niching_selection(self, fronts_to_consider: list[Population], last_front: Population, k: int) -> Population:
+        non_dominated_fronts = [[] for _ in range(len(fronts))]
+        for i, front in enumerate(fronts):
+            non_dominated_fronts[i] = [self._pop[j] for j in front]
+
+        return non_dominated_fronts
+
+    def _niching_selection(
+        self, fronts_to_consider: list[Population], last_front: Population, k: int
+    ) -> Iterator[Schedule]:
         """Select k individuals from the last front using a robust niching mechanism."""
         self._normalize_objectives(fronts_to_consider)
         self._associate_and_calculate_distances()
 
         ro = self._count_members_per_ref_point([p for front in fronts_to_consider[:-1] for p in front])
-        selected: list[Schedule] = []
+        selected = 0
         member_pool = last_front[:]
 
-        while len(selected) < k:
+        while selected < k:
             if not member_pool:
                 break
 
@@ -159,11 +162,10 @@ class NSGA3:
                 chosen_member: Schedule = self.rng.choice(member_pool)
                 z_to_increment = chosen_member.ref_point_idx
 
-            selected.append(chosen_member)
+            yield chosen_member
+            selected += 1
             member_pool.remove(chosen_member)
             ro[z_to_increment] += 1
-
-        return selected
 
     def _normalize_objectives(self, fronts: list[Population]) -> None:
         """Normalize objectives for the entire population being considered."""

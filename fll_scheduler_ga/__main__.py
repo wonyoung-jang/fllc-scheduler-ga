@@ -278,7 +278,7 @@ def save_population_to_seed_file(
     ga: GA, config: TournamentConfig, seed_file: str | Path, *, front: bool = False
 ) -> None:
     """Save the final population to a file to be used as a seed for a future run."""
-    population = ga.pareto_front() if front else ga.population
+    population = ga.pareto_front() if front else ga.total_population
 
     if not population:
         logger.warning("No population to save to seed file.")
@@ -314,7 +314,7 @@ def main() -> None:
     except Exception:
         logger.exception("An unhandled error occurred during the GA run. Saving state before exiting.")
     finally:
-        if ga.population:  # only save if a final population exists
+        if ga.total_population:  # only save if a final population exists
             save_population_to_seed_file(ga, config, args.seed_file, front=True)
             generate_summary(args, ga)
 
