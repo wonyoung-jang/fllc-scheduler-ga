@@ -4,6 +4,7 @@ import argparse
 import logging
 import shelve
 from configparser import ConfigParser
+from importlib.metadata import version
 from pathlib import Path
 from random import Random
 
@@ -62,6 +63,11 @@ def _create_parser() -> argparse.ArgumentParser:
     }
     parser = argparse.ArgumentParser(
         description="Generate a tournament schedule using a Genetic Algorithm.",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {version('fll-scheduler-ga')}",
     )
     parser.add_argument(
         "--config_file",
