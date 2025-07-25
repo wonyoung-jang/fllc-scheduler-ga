@@ -24,15 +24,20 @@ def generate_summary(args: argparse.Namespace, ga: GA) -> None:
         plot = Plot(ga)
 
         fitness_plot_path = output_dir / "fitness_vs_generation.png"
-        plot.plot_fitness(save_dir=fitness_plot_path)
+        plot.plot_fitness(
+            title="Average Fitness over Generations",
+            xlabel="Generation",
+            ylabel="Average Fitnesses",
+            save_dir=fitness_plot_path,
+        )
 
         pareto_plot_path = output_dir / "pareto_front.png"
-        plot.plot_pareto_front(save_dir=pareto_plot_path)
+        plot.plot_pareto_front(
+            title="Pareto Front: Trade-offs",
+            save_dir=pareto_plot_path,
+        )
 
-    front = ga.pareto_front()
-    front.sort(key=lambda s: (s.rank, -sum(s.fitness)))
-
-    objectives = ga.evaluator.objectives
+    front = sorted(ga.pareto_front(), key=lambda s: (s.rank, -sum(s.fitness)))
 
     for i, schedule in enumerate(front, start=1):
         name = f"front_{schedule.rank}_schedule_{i}"
@@ -51,7 +56,7 @@ def generate_summary(args: argparse.Namespace, ga: GA) -> None:
         txt_subdir = output_dir / "txt"
         txt_subdir.mkdir(parents=True, exist_ok=True)
         txt_output_path = txt_subdir / f"{name}_summary.txt"
-        generate_summary_report(schedule, objectives, txt_output_path)
+        generate_summary_report(schedule, ga.evaluator.objectives, txt_output_path)
 
     pareto_summary_path = output_dir / "pareto_summary.csv"
     generate_pareto_summary(ga.total_population, ga.evaluator, pareto_summary_path)
