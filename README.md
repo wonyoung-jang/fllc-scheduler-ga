@@ -50,9 +50,9 @@ Create a file named `config.ini` to define your tournament's structure. The conf
 -   `crossover_chance`: The chance of two parent schedules crossover breeding to create an offspring.
 -   `mutation_chance`: The chance for an offspring schedule to mutate.
 -   `seed`: Random seed for reliable output.
--   `genetic.selection`: Configure GA selection.
--   `genetic.crossover`: Configure GA crossover.
--   `genetic.mutation`: Configure GA muatation.
+-   `genetic.operator.selection`: Configure GA selection.
+-   `genetic.operator.crossover`: Configure GA crossover.
+-   `genetic.operator.mutation`: Configure GA muatation.
 
 **Round Parameters:**
 
@@ -104,12 +104,15 @@ selection_size = 4
 crossover_chance = 0.5
 mutation_chance = 0.25
 seed = 999999
+num_islands = 4
+migration_interval = 10
+migration_size = 1
 
-[genetic.selection]
+[genetic.operator.selection]
 ; Available selection types: TournamentSelect, RandomSelect
 selection_types = TournamentSelect, RandomSelect
 
-[genetic.crossover]
+[genetic.operator.crossover]
 ; Available crossover types: 
 ;   - KPoint                (uses crossover_ks to determine split points)
 ;   - Scattered             (swaps random half of events between parents)
@@ -120,7 +123,7 @@ crossover_types = KPoint, Scattered, Uniform, RoundTypeCrossover, PartialCrossov
 ; Split point values for KPoint crossover, does nothing if KPoint is not used
 crossover_ks = 1, 2, 4 
 
-[genetic.mutation]
+[genetic.operator.mutation]
 ; Available mutation types:
 ;   - SwapMatch_CrossTimeLocation (swaps entire matches across different times and locations)
 ;   - SwapMatch_SameLocation      (swaps matches in the same location but at different times)
