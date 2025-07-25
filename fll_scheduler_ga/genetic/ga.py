@@ -91,6 +91,10 @@ class GA:
     def update_fitness_history(self) -> None:
         """Update the fitness history with the current generation's fitness."""
         this_gen_fitness = self._calculate_this_gen_fitness()
+        crossover_low = 0.3
+        crossover_high = 0.9
+        mutation_low = 0.01
+        mutation_high = 0.5
 
         if self.fitness_history and self.fitness_history[-1] < this_gen_fitness:
             self.fitness_improvement_history.append(True)
@@ -103,18 +107,24 @@ class GA:
 
             # 1/5 generations improved -> reduce mutation chance
             if improved_count < 1:
-                self.context.ga_params.crossover_chance -= 0.01
-                self.context.ga_params.mutation_chance -= 0.001
+                self.context.ga_params.crossover_chance = max(
+                    crossover_low,
+                    self.context.ga_params.crossover_chance - 0.1,
+                )
+                self.context.ga_params.mutation_chance = max(
+                    mutation_low,
+                    self.context.ga_params.mutation_chance - 0.01,
+                )
             # More than 1/5 generations improved -> increase mutation chance, converging too early
             elif improved_count > 1:
-                self.context.ga_params.crossover_chance += 0.01
-                self.context.ga_params.mutation_chance += 0.001
-
-        if self.context.ga_params.crossover_chance <= 0:
-            self.context.ga_params.crossover_chance = 0.01
-
-        if self.context.ga_params.mutation_chance <= 0:
-            self.context.ga_params.mutation_chance = 0.001
+                self.context.ga_params.crossover_chance = min(
+                    crossover_high,
+                    self.context.ga_params.crossover_chance + 0.1,
+                )
+                self.context.ga_params.mutation_chance = min(
+                    mutation_high,
+                    self.context.ga_params.mutation_chance + 0.01,
+                )
 
         self.fitness_history.append(this_gen_fitness)
 
