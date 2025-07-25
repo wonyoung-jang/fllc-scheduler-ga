@@ -7,17 +7,19 @@ schedules a team could receive, independent of other teams.
 """
 
 import logging
+import pickle
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
+from hashlib import sha256
 from itertools import combinations, product
 from math import sqrt
+from pathlib import Path
 
 from ..data_model.event import EventFactory
 from ..data_model.time import TimeSlot
 from .config import TournamentConfig
 
 logger = logging.getLogger(__name__)
-PENALTY = 0.5  # Penalty value for penalizing worse scores
 
 
 @dataclass(slots=True)
@@ -26,14 +28,80 @@ class FitnessBenchmark:
 
     config: TournamentConfig
     event_factory: EventFactory
+    cache_dir: Path = field(init=False, repr=False)
+    penalty: float = 0.5  # Penalty value for penalizing worse scores
     timeslots: dict = field(default_factory=dict, init=False, repr=False)
     table: dict = field(default_factory=dict, init=False, repr=False)
     opponents: dict = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to validate run benchmark."""
+        self.cache_dir = Path(".benchmarks_cache/")
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.run_benchmarks()
+
+    def run_benchmarks(self) -> None:
+        """Load benchmarks from cache or run calculations if cache is invalid/missing."""
+        config_hash = self._get_config_hash()
+        cache_file = self.cache_dir / f"benchmark_cache_{config_hash}.pkl"
+
+        try:
+            if cache_file.exists():
+                logger.info("Loading fitness benchmarks from cache: %s", cache_file)
+                self._load_from_cache(cache_file)
+                return
+        except (OSError, pickle.UnpicklingError, EOFError):
+            logger.warning("Could not load cache file. Recalculating benchmarks.")
+            cache_file.unlink(missing_ok=True)
+
+        logger.info("No valid cache found. Calculating and caching new fitness benchmarks...")
         self.run_table_and_opponent_benchmarks()
         self.run_timeslot_benchmarks()
+        self._save_to_cache(cache_file)
+
+    def _load_from_cache(self, path: Path) -> None:
+        """Load benchmark data from a pickle file."""
+        with path.open("rb") as f:
+            cached_data = pickle.load(f)
+            self.timeslots = cached_data["timeslots"]
+            self.table = cached_data["table"]
+            self.opponents = cached_data["opponents"]
+
+    def _save_to_cache(self, path: Path) -> None:
+        """Save benchmark data to a pickle file."""
+        data_to_cache = {
+            "timeslots": self.timeslots,
+            "table": self.table,
+            "opponents": self.opponents,
+        }
+        # Ensure the cache directory exists
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("wb") as f:
+            pickle.dump(data_to_cache, f)
+        logger.info("Fitness benchmarks saved to cache: %s", path)
+
+    def _get_config_hash(self) -> int:
+        """Generate a stable hash for the parts of the config that define the benchmark."""
+        # Canonical representation of rounds
+        round_tuples = tuple(
+            (
+                r.round_type,
+                r.rounds_per_team,
+                r.teams_per_round,
+                r.start_time,
+                r.stop_time,
+                r.duration_minutes,
+                r.num_locations,
+            )
+            for r in sorted(self.config.rounds, key=lambda x: x.start_time)
+        )
+
+        # Canonical representation of requirements
+        req_tuple = tuple(sorted(self.config.round_requirements.items()))
+
+        # Include the penalty in the hash
+        config_representation = (round_tuples, req_tuple, self.penalty)
+        return int(sha256(str(config_representation).encode()).hexdigest(), 16)
 
     def run_table_and_opponent_benchmarks(self) -> None:
         """Run the table consistency fitness benchmarking."""
@@ -64,12 +132,12 @@ class FitnessBenchmark:
 
         for num_loc, raw_score in cache_scorer.items():
             norm_table_score = abs((raw_score - minimum_score) / diff) if diff else 1
-            table_penalty = PENALTY ** (num_loc - 1)
+            table_penalty = self.penalty ** (num_loc - 1)
             table_score = norm_table_score * table_penalty
             self.table[num_loc] = table_score
 
             norm_opponent_score = abs((raw_score - maximum_score) / diff) if diff else 1
-            opponent_penalty = PENALTY ** (total_locations_required - num_loc)
+            opponent_penalty = self.penalty ** (total_locations_required - num_loc)
             opponent_score = norm_opponent_score * opponent_penalty
             self.opponents[num_loc] = opponent_score
 
@@ -111,7 +179,7 @@ class FitnessBenchmark:
             current_combination.sort(key=lambda ts: ts.start)
 
             if not FitnessBenchmark.has_overlaps(current_combination):
-                score = FitnessBenchmark.score_break_time(current_combination, PENALTY)
+                score = FitnessBenchmark.score_break_time(current_combination, self.penalty)
                 valid_scored_schedules.append([score, current_combination])
                 self.timeslots[frozenset(current_combination)] = score
 
