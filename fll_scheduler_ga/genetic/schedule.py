@@ -34,6 +34,7 @@ class Schedule:
     _cached_all_teams: list[Team] = field(default=None, init=False, repr=False, compare=False)
     _cached_matches: dict["RoundType", list[Match]] = field(default=None, init=False, repr=False, compare=False)
     _cached_hash: int = field(default=None, init=False, repr=False)
+    _cached_canonical_representation: tuple[tuple[int, ...], ...] = field(default=None, init=False, repr=False)
 
     def __len__(self) -> int:
         """Return the number of scheduled events."""
@@ -54,6 +55,7 @@ class Schedule:
         self._cached_matches = None
         self._cached_all_teams = None
         self._cached_hash = None
+        self._cached_canonical_representation = None
 
     def __contains__(self, event: Event) -> bool:
         """Check if a specific event is scheduled."""
@@ -63,13 +65,30 @@ class Schedule:
         """Two Schedules are equal if they assign the same teams to the same events."""
         if not isinstance(other, Schedule):
             return NotImplemented
-        return self.schedule == other.schedule
+        return self._get_canonical_representation() == other._get_canonical_representation()
 
     def __hash__(self) -> int:
         """Hash is based on the frozenset of (event_id, team_id) pairs."""
         if self._cached_hash is None:
-            self._cached_hash = hash(frozenset(self.schedule.items()))
+            self._cached_hash = hash(self._get_canonical_representation())
         return self._cached_hash
+
+    def _get_canonical_representation(self) -> tuple[tuple[int, ...], ...]:
+        """Get a canonical representation of the schedule for hashing."""
+        if self._cached_canonical_representation is not None:
+            return self._cached_canonical_representation
+
+        if not self.schedule:
+            return ()
+
+        team_to_event_map = defaultdict(list)
+        for event, team_id in self.schedule.items():
+            team_to_event_map[team_id].append(event.identity)
+
+        sorted_events = [tuple(sorted(events)) for events in team_to_event_map.values()]
+        sorted_events.sort()
+        self._cached_canonical_representation = tuple(sorted_events)
+        return self._cached_canonical_representation
 
     def get_matches(self) -> dict["RoundType", list[Match]]:
         """Get all matches in the schedule."""

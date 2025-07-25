@@ -82,14 +82,14 @@ class Team:
         self.round_types[event.round_type] += 1
         self.events.remove(event)
         if event.paired_event:
-            self.tables.remove(event.identity)
+            self.tables.remove(event.location)
 
     def add_event(self, event: Event) -> None:
         """Book a team for an event."""
         self.round_types[event.round_type] -= 1
         self.events.append(event)
         if event.paired_event:
-            self.tables.append(event.identity)
+            self.tables.append(event.location)
 
     def switch_opponent(self, old_opponent: "Team", new_opponent: "Team") -> None:
         """Switch the opponent for a given event."""

@@ -49,7 +49,7 @@ class GA:
     fitness_history: list[tuple] = field(default_factory=list, init=False, repr=False)
     population: Population = field(default_factory=list, init=False, repr=False)
 
-    islands: list[Island] = field(default_factory=list, init=False, repr=False)
+    islands: list[Island] = field(init=False, repr=False)
 
     _seed_file: Path | None = field(default=None, init=False, repr=False)
     _offspring_ratio: Counter = field(default_factory=Counter, init=False, repr=False)

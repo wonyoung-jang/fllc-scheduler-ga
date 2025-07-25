@@ -68,9 +68,8 @@ class EventFactory:
         """Get a flat list of all Events across all RoundTypes."""
         if not self._cached_flat_list:
             self._cached_flat_list = [e for el in self._cached_events.values() for e in el]
-            self._cached_flat_list.sort(key=lambda e: e.timeslot.start)
             for i, e in enumerate(self._cached_flat_list):
-                e.identity = i + 1
+                e.identity = i
         return self._cached_flat_list
 
     def event_map(self) -> EventMap:

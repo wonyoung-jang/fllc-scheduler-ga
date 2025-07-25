@@ -96,7 +96,7 @@ def _create_parser() -> argparse.ArgumentParser:
         help="Logging level for the console output.",
     )
     parser.add_argument(
-        "--seed",
+        "--rng_seed",
         type=int,
         default=None,
         help="(OPTIONAL) Random seed for reproducibility.",
@@ -137,17 +137,22 @@ def _create_parser() -> argparse.ArgumentParser:
         default=_default_values["no_plotting"],
         help="Disable plotting of results.",
     )
-    parser.add_argument(
+
+    # Seed file parameters
+    seed_group = parser.add_argument_group("Seed File Parameters")
+    seed_group.add_argument(
         "--seed_file",
         type=str,
         default=_default_values["seed_file"],
         help="Path to the seed file for the genetic algorithm.",
     )
-    parser.add_argument(
+    seed_group.add_argument(
         "--flush",
         action="store_true",
         help="Flush the cached population to the seed file at the end of the run.",
     )
+
+    # Island model parameters
     island_group = parser.add_argument_group("Island Model Parameters")
     island_group.add_argument(
         "--num_islands",
@@ -223,12 +228,12 @@ def _setup_rng(args: argparse.Namespace, config_parser: ConfigParser) -> Random:
     """Set up the random number generator."""
     rng_seed = ""
 
-    if args.seed is not None:
-        rng_seed = args.seed
+    if args.rng_seed is not None:
+        rng_seed = args.rng_seed
     elif "genetic" in config_parser and "seed" in config_parser["genetic"]:
         rng_seed = config_parser["genetic"]["seed"].strip()
 
-    if rng_seed == "":
+    if not rng_seed:
         rng_seed = Random().randint(*RANDOM_SEED)
 
     logger.info("Using RNG seed: %d", rng_seed)

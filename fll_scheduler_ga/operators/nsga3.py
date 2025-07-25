@@ -58,8 +58,8 @@ class NSGA3:
         last_front_idx = self._determine_last_front(fronts)
 
         next_pop = [p for i in range(last_front_idx) for p in fronts[i]]
-        if len(next_pop) == population_size:
-            return next_pop
+        if len(next_pop) >= population_size:
+            return next_pop[:population_size]
 
         last_front = fronts[last_front_idx]
         k = population_size - len(next_pop)
