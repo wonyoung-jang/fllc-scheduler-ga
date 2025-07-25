@@ -11,14 +11,12 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..config.config import TournamentConfig
 
+from ..config.constants import RANDOM_SEED_RANGE
 from ..observers.base_observer import GaObserver
 from .builder import ScheduleBuilder
 from .ga_context import GaContext
 from .island import Island
 from .schedule import Population
-
-RANDOM_SEED = (1, 2**32 - 1)
-ATTEMPTS = (0, 50)
 
 
 @dataclass(slots=True)
@@ -42,18 +40,18 @@ class GA:
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
         self._expected_population_size = self.context.ga_params.population_size * self.context.ga_params.num_islands
-        seeder = Random(self.rng.randint(*RANDOM_SEED))
+        seeder = Random(self.rng.randint(*RANDOM_SEED_RANGE))
         builder = ScheduleBuilder(
             self.context.team_factory,
             self.context.event_factory,
             self.context.config,
-            Random(seeder.randint(*RANDOM_SEED)),
+            Random(seeder.randint(*RANDOM_SEED_RANGE)),
         )
-        self.context.repairer.rng = Random(seeder.randint(*RANDOM_SEED))
+        self.context.repairer.rng = Random(seeder.randint(*RANDOM_SEED_RANGE))
         self.islands = [
             Island(
                 i,
-                Random(seeder.randint(*RANDOM_SEED)),
+                Random(seeder.randint(*RANDOM_SEED_RANGE)),
                 builder,
                 self.context,
             )

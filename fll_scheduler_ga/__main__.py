@@ -13,7 +13,7 @@ from fll_scheduler_ga.config.config import OperatorConfig, TournamentConfig, loa
 from fll_scheduler_ga.data_model.event import EventConflicts, EventFactory
 from fll_scheduler_ga.data_model.team import TeamFactory
 from fll_scheduler_ga.genetic.fitness import FitnessEvaluator
-from fll_scheduler_ga.genetic.ga import GA, RANDOM_SEED
+from fll_scheduler_ga.genetic.ga import GA, RANDOM_SEED_RANGE
 from fll_scheduler_ga.genetic.ga_context import GaContext
 from fll_scheduler_ga.genetic.ga_parameters import GaParameters
 from fll_scheduler_ga.io.export import generate_summary
@@ -240,7 +240,7 @@ def _setup_rng(args: argparse.Namespace, config_parser: ConfigParser) -> Random:
         rng_seed = config_parser["genetic"]["seed"].strip()
 
     if not rng_seed:
-        rng_seed = Random().randint(*RANDOM_SEED)
+        rng_seed = Random().randint(*RANDOM_SEED_RANGE)
 
     logger.info("Using RNG seed: %d", rng_seed)
     return Random(rng_seed)

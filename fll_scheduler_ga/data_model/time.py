@@ -3,8 +3,6 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-HHMM_FMT = "%H:%M"
-
 
 @dataclass(slots=True, frozen=True)
 class TimeSlot:

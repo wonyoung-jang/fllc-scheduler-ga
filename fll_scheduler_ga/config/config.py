@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from ..data_model.time import HHMM_FMT
+from ..config.constants import HHMM_FMT
 
 logger = logging.getLogger(__name__)
 

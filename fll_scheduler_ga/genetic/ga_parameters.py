@@ -16,7 +16,6 @@ class GaParameters:
     selection_size: int = 16
     crossover_chance: float = 0.5
     mutation_chance: float = 0.05
-
     num_islands: int = 10
     migration_interval: int = 10
     migration_size: int = 2

@@ -18,6 +18,7 @@ from pathlib import Path
 from ..data_model.event import EventFactory
 from ..data_model.time import TimeSlot
 from .config import TournamentConfig
+from .constants import FITNESS_PENALTY
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ class FitnessBenchmark:
     config: TournamentConfig
     event_factory: EventFactory
     cache_dir: Path = field(init=False, repr=False)
-    penalty: float = 0.5  # Penalty value for penalizing worse scores
+    penalty: float = FITNESS_PENALTY
     timeslots: dict = field(default_factory=dict, init=False, repr=False)
     table: dict = field(default_factory=dict, init=False, repr=False)
     opponents: dict = field(default_factory=dict, init=False, repr=False)

@@ -6,8 +6,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from ..config.config import Round, RoundType, TournamentConfig
+from ..config.constants import HHMM_FMT
 from .location import Room, Table, get_location_type
-from .time import HHMM_FMT, TimeSlot
+from .time import TimeSlot
 
 logger = logging.getLogger(__name__)
 

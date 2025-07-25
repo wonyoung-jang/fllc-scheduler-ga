@@ -4,8 +4,9 @@ import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-ASCII_OFFSET = 64
-RE_TABLE = re.compile(r"Table ([A-Z])(\d)")
+from ..config.constants import ASCII_OFFSET
+
+_RE_TABLE = re.compile(r"Table ([A-Z])(\d)")
 
 
 @dataclass(slots=True, frozen=True)
@@ -59,7 +60,7 @@ class Table(Location):
     @classmethod
     def from_string(cls, location_str: str, teams_per_round: int) -> "Table | None":
         """Attempt to parse a table from a string."""
-        match = RE_TABLE.match(location_str)
+        match = _RE_TABLE.match(location_str)
         if match:
             table_char, side = match.groups()
             table_id = ord(table_char) - ASCII_OFFSET

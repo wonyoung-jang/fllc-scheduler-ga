@@ -5,12 +5,10 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from random import Random
 
+from ..config.constants import ATTEMPTS_RANGE, RANDOM_SEED_RANGE
 from .builder import ScheduleBuilder
 from .ga_context import GaContext
 from .schedule import Population, Schedule
-
-RANDOM_SEED = (1, 2**32 - 1)
-ATTEMPTS = (0, 50)
 
 
 @dataclass(slots=True)
@@ -51,9 +49,9 @@ class Island:
             return
         self.context.logger.info("Initializing island %d with %d individuals.", self.identity, num_to_create)
 
-        _randlow, _randhigh = RANDOM_SEED
+        _randlow, _randhigh = RANDOM_SEED_RANGE
         seeder = Random(self.rng.randint(_randlow, _randhigh))
-        attempts, max_attempts = ATTEMPTS
+        attempts, max_attempts = ATTEMPTS_RANGE
         num_created = 0
 
         while len(self.population) < pop_size and attempts < max_attempts:
