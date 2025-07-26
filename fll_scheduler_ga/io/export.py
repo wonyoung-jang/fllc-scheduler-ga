@@ -108,10 +108,13 @@ def generate_pareto_summary(front: list[Schedule], evaluator: FitnessEvaluator, 
 
 def get_exporter(path: Path) -> Exporter:
     """Get the appropriate exporter based on the file extension."""
-    exporter = {
+    exporter_map = {
         ".csv": CsvExporter,
         ".html": HtmlExporter,
-    }.get(path.suffix.lower(), None)
+    }
+
+    exporter = exporter_map.get(path.suffix.lower(), None)
+
     if exporter is None:
         logger.warning("No exporter found for file extension %s. Defaulting to CSV.", path.suffix)
         return CsvExporter()
