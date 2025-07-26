@@ -64,40 +64,46 @@ def generate_summary(args: argparse.Namespace, ga: GA) -> None:
 
 def generate_summary_report(schedule: Schedule, objectives: list[FitnessObjective], path: Path) -> None:
     """Generate a text summary report for a single schedule."""
-    with path.open("w", encoding="utf-8") as f:
-        f.write(f"--- FLL Scheduler GA Summary Report (ID: {id(schedule)} | Hash: {hash(schedule)}) ---\n\n")
-        f.write("Objective Scores:\n")
+    try:
+        with path.open("w", encoding="utf-8") as f:
+            f.write(f"--- FLL Scheduler GA Summary Report (ID: {id(schedule)} | Hash: {hash(schedule)}) ---\n\n")
+            f.write("Objective Scores:\n")
 
-        for name, score in zip(objectives, schedule.fitness, strict=False):
-            f.write(f"  - {name}: {score:.6f}\n")
+            for name, score in zip(objectives, schedule.fitness, strict=False):
+                f.write(f"  - {name}: {score:.6f}\n")
 
-        f.write(f"  - Total: {sum(schedule.fitness):.6f}\n")
-        f.write(f"  - Average: {sum(schedule.fitness) / len(schedule.fitness):.6f}\n\n")
+            f.write(f"  - Total: {sum(schedule.fitness):.6f}\n")
+            f.write(f"  - Average: {sum(schedule.fitness) / len(schedule.fitness):.6f}\n\n")
 
-        f.write("Teams in Schedule (sorted by fitness):\n")
-        for t in sorted(schedule.all_teams(), key=lambda x: x.fitness[0]):
-            fitness_str = ", ".join(f"{score:.4f}" for score in t.fitness)
-            f.write(f"Team {t.identity:<3} | Fitness: {fitness_str} | ({sum(t.fitness):.4f})\n")
+            f.write("Teams in Schedule (sorted by fitness):\n")
+            for t in sorted(schedule.all_teams(), key=lambda x: x.fitness[0]):
+                fitness_str = ", ".join(f"{score:.4f}" for score in t.fitness)
+                f.write(f"Team {t.identity:<3} | Fitness: {fitness_str} | ({sum(t.fitness):.4f})\n")
+    except OSError:
+        logger.exception("Failed to write summary report to file %s", path)
 
 
 def generate_pareto_summary(front: list[Schedule], evaluator: FitnessEvaluator, path: Path) -> None:
     """Generate a summary of the Pareto front."""
     schedule_enum_digits = len(str(len(front)))
     front.sort(key=lambda s: (s.rank, -sum(s.fitness)))
-    with path.open("w", encoding="utf-8") as f:
-        f.write("Schedule, ID, Hash, Rank, ")
+    try:
+        with path.open("w", encoding="utf-8") as f:
+            f.write("Schedule, ID, Hash, Rank, ")
 
-        for name in evaluator.objectives:
-            f.write(f"{name}, ")
+            for name in evaluator.objectives:
+                f.write(f"{name}, ")
 
-        f.write("Sum\n")
-        for i, schedule in enumerate(front, start=1):
-            f.write(f"{i:0{schedule_enum_digits}}, {id(schedule)}, {hash(schedule)}, {schedule.rank}, ")
+            f.write("Sum\n")
+            for i, schedule in enumerate(front, start=1):
+                f.write(f"{i:0{schedule_enum_digits}}, {id(schedule)}, {hash(schedule)}, {schedule.rank}, ")
 
-            for score in schedule.fitness:
-                f.write(f"{score:.4f}, ")
+                for score in schedule.fitness:
+                    f.write(f"{score:.4f}, ")
 
-            f.write(f"{sum(schedule.fitness):.4f}\n")
+                f.write(f"{sum(schedule.fitness):.4f}\n")
+    except OSError:
+        logger.exception("Failed to write Pareto summary to file %s", path)
 
 
 def get_exporter(path: Path) -> Exporter:

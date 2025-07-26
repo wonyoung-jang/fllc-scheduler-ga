@@ -62,11 +62,14 @@ class FitnessBenchmark:
 
     def _load_from_cache(self, path: Path) -> None:
         """Load benchmark data from a pickle file."""
-        with path.open("rb") as f:
-            cached_data = pickle.load(f)
-            self.timeslots = cached_data["timeslots"]
-            self.table = cached_data["table"]
-            self.opponents = cached_data["opponents"]
+        try:
+            with path.open("rb") as f:
+                cached_data = pickle.load(f)
+                self.timeslots = cached_data["timeslots"]
+                self.table = cached_data["table"]
+                self.opponents = cached_data["opponents"]
+        except (OSError, pickle.UnpicklingError, EOFError):
+            logger.exception("Failed to load fitness benchmarks from cache.")
 
     def _save_to_cache(self, path: Path) -> None:
         """Save benchmark data to a pickle file."""
@@ -77,9 +80,13 @@ class FitnessBenchmark:
         }
         # Ensure the cache directory exists
         path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("wb") as f:
-            pickle.dump(data_to_cache, f)
-        logger.info("Fitness benchmarks saved to cache: %s", path)
+
+        try:
+            with path.open("wb") as f:
+                pickle.dump(data_to_cache, f)
+            logger.info("Fitness benchmarks saved to cache: %s", path)
+        except (OSError, pickle.PicklingError, EOFError):
+            logger.exception("Failed to save fitness benchmarks to cache.")
 
     def _get_config_hash(self) -> int:
         """Generate a stable hash for the parts of the config that define the benchmark."""
