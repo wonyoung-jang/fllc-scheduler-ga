@@ -10,6 +10,7 @@ import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass
+from enum import StrEnum
 from random import Random
 
 from ..config.config import OperatorConfig
@@ -19,24 +20,31 @@ from ..genetic.schedule import Population, Schedule
 logger = logging.getLogger(__name__)
 
 
-def build_selections(operator_config: OperatorConfig, rng: Random, ga_params: GaParameters) -> Iterator["Selection"]:
+class SelectionKeys(StrEnum):
+    """Enum for selection operator keys."""
+
+    TOURNAMENT_SELECT = "TournamentSelect"
+    RANDOM_SELECT = "RandomSelect"
+
+
+def build_selections(o_config: OperatorConfig, rng: Random, ga_params: GaParameters) -> Iterator["Selection"]:
     """Build and return a tuple of selection operators based on the configuration."""
     variant_map = {
-        "TournamentSelect": lambda r: TournamentSelect(r, tournament_size=ga_params.selection_size),
-        "RandomSelect": lambda r: RandomSelect(r),
+        SelectionKeys.TOURNAMENT_SELECT: lambda: TournamentSelect(rng, ga_params.selection_size),
+        SelectionKeys.RANDOM_SELECT: lambda: RandomSelect(rng),
     }
 
-    if not operator_config.selection_types:
+    if not o_config.selection_types:
         logger.warning("No selection types enabled in the configuration. Selection will not occur.")
         return
 
-    for variant_name in operator_config.selection_types:
+    for variant_name in o_config.selection_types:
         if variant_name not in variant_map:
             msg = f"Unknown selection type in config: '{variant_name}'"
             raise ValueError(msg)
         else:
             selection_factory = variant_map[variant_name]
-            yield selection_factory(rng)
+            yield selection_factory()
 
 
 @dataclass(slots=True)

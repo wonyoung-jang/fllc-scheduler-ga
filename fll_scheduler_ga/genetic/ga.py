@@ -89,10 +89,13 @@ class GA:
     def update_fitness_history(self) -> None:
         """Update the fitness history with the current generation's fitness."""
         this_gen_fitness = self._calculate_this_gen_fitness()
+        crossover_base = 0.5
         crossover_low = 0.3
         crossover_high = 0.9
+        mutation_base = 0.05
         mutation_low = 0.01
         mutation_high = 0.5
+        epsilon = 0.82
 
         if self.fitness_history and self.fitness_history[-1] < this_gen_fitness:
             self.fitness_improvement_history.append(True)
@@ -103,25 +106,43 @@ class GA:
             last_five_improvements = self.fitness_improvement_history[-5:]
             improved_count = last_five_improvements.count(True)
 
-            # 1/5 generations improved -> reduce mutation chance
+            # Less than 1/5 generations improved -> decrease operator chance / exploit
             if improved_count < 1:
                 self.context.ga_params.crossover_chance = max(
                     crossover_low,
-                    self.context.ga_params.crossover_chance - 0.1,
+                    self.context.ga_params.crossover_chance * epsilon,
                 )
                 self.context.ga_params.mutation_chance = max(
                     mutation_low,
-                    self.context.ga_params.mutation_chance - 0.01,
+                    self.context.ga_params.mutation_chance * epsilon,
                 )
-            # More than 1/5 generations improved -> increase mutation chance, converging too early
+                self.context.logger.debug(
+                    "Reduced crossover chance to %.2f and mutation chance to %.2f",
+                    self.context.ga_params.crossover_chance,
+                    self.context.ga_params.mutation_chance,
+                )
+            # More than 1/5 generations improved -> increase operator chance / explore
             elif improved_count > 1:
                 self.context.ga_params.crossover_chance = min(
                     crossover_high,
-                    self.context.ga_params.crossover_chance + 0.1,
+                    self.context.ga_params.crossover_chance / epsilon,
                 )
                 self.context.ga_params.mutation_chance = min(
                     mutation_high,
-                    self.context.ga_params.mutation_chance + 0.01,
+                    self.context.ga_params.mutation_chance / epsilon,
+                )
+                self.context.logger.debug(
+                    "Increased crossover chance to %.2f and mutation chance to %.2f",
+                    self.context.ga_params.crossover_chance,
+                    self.context.ga_params.mutation_chance,
+                )
+            else:
+                self.context.ga_params.crossover_chance = crossover_base
+                self.context.ga_params.mutation_chance = mutation_base
+                self.context.logger.debug(
+                    "No change in crossover or mutation chance, current values: %.2f, %.2f",
+                    self.context.ga_params.crossover_chance,
+                    self.context.ga_params.mutation_chance,
                 )
 
         self.fitness_history.append(this_gen_fitness)
@@ -149,13 +170,7 @@ class GA:
             if start_time:
                 self.context.logger.info("Total time taken: %.2f seconds", time.time() - start_time)
             self.finalize()
-            self._notify_on_finish(
-                self._expected_population_size,
-                self.total_population,
-                self.pareto_front(),
-                self._mutation_ratio,
-                self._offspring_ratio,
-            )
+            self._notify_on_finish(self.total_population, self.pareto_front())
         return True
 
     def initialize_population(self) -> None:
@@ -246,6 +261,23 @@ class GA:
             ),
         )
 
+        # Log final statistics
+        o_success = self._offspring_ratio["success"]
+        o_total = o_success + self._offspring_ratio["failure"]
+        o_percent = f"{o_success / o_total if o_total > 0 else 0.0:.2%}"
+
+        m_success = self._mutation_ratio["success"]
+        m_total = m_success + self._mutation_ratio["failure"]
+        m_percent = f"{m_success / m_total if m_total > 0 else 0.0:.2%}"
+
+        self.context.logger.info("Offspring success: %s/%s = %s", o_success, o_total, o_percent)
+        self.context.logger.info("Mutation success: %s/%s = %s", m_success, m_total, m_percent)
+        self.context.logger.info(
+            "Unique/Total individuals: %s/%s",
+            len(self.total_population),
+            self._expected_population_size,
+        )
+
     def _notify_on_start(self, num_generations: int) -> None:
         """Notify observers when the genetic algorithm run starts."""
         for obs in self.observers:
@@ -263,26 +295,7 @@ class GA:
         for obs in self.observers:
             obs.on_generation_end(generation, num_generations, expected, fitness, pareto_size)
 
-    def _notify_on_finish(
-        self,
-        expected: int,
-        pop: Population,
-        pareto_front: Population,
-        mutation_ratio: Counter | None = None,
-        offspring_ratio: Counter | None = None,
-    ) -> None:
+    def _notify_on_finish(self, pop: Population, pareto_front: Population) -> None:
         """Notify observers when the genetic algorithm run is finished."""
-        o_success = offspring_ratio["success"]
-        o_total = o_success + offspring_ratio["failure"]
-        o_percent = f"{o_success / o_total if o_total > 0 else 0.0:.2%}"
-
-        m_success = mutation_ratio["success"]
-        m_total = m_success + mutation_ratio["failure"]
-        m_percent = f"{m_success / m_total if m_total > 0 else 0.0:.2%}"
-
-        self.context.logger.info("Offspring success: %s/%s = %s", o_success, o_total, o_percent)
-        self.context.logger.info("Mutation success: %s/%s = %s", m_success, m_total, m_percent)
-        self.context.logger.info("Unique/Total individuals: %s/%s", len(pop), expected)
-
         for obs in self.observers:
             obs.on_finish(pop, pareto_front)

@@ -34,6 +34,9 @@ class FitnessEvaluator:
     config: TournamentConfig
     benchmark: FitnessBenchmark
     objectives: list[FitnessObjective] = field(default_factory=list, init=False)
+    _bt_cache: dict[str, float] = field(default=None, init=False, repr=False)
+    _tc_cache: dict[str, float] = field(default=None, init=False, repr=False)
+    _ov_cache: dict[str, float] = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the configuration."""
@@ -44,6 +47,9 @@ class FitnessEvaluator:
                 FitnessObjective.OPPONENT_VARIETY,
             ]
         )
+        self._bt_cache = self.benchmark.timeslots
+        self._tc_cache = self.benchmark.table
+        self._ov_cache = self.benchmark.opponents
 
     def check(self, schedule: Schedule) -> bool:
         """Check if the schedule meets hard constraints.
@@ -80,10 +86,6 @@ class FitnessEvaluator:
 
         num_teams = len(all_teams)
 
-        bt_cache = self.benchmark.timeslots
-        tc_cache = self.benchmark.table
-        ov_cache = self.benchmark.opponents
-
         bt_total = 0
         tc_total = 0
         ov_total = 0
@@ -95,9 +97,9 @@ class FitnessEvaluator:
         score_lists = [bt_list, tc_list, ov_list]
 
         for team in all_teams:
-            t_bt = bt_cache[team.break_time_key()]
-            t_tc = tc_cache[team.table_consistency_key()]
-            t_ov = ov_cache[team.opponent_variety_key()]
+            t_bt = self._bt_cache[team.break_time_key()]
+            t_tc = self._tc_cache[team.table_consistency_key()]
+            t_ov = self._ov_cache[team.opponent_variety_key()]
 
             team.fitness = (t_bt, t_tc, t_ov)
 

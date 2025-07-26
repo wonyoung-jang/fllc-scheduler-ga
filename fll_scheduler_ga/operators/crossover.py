@@ -4,6 +4,7 @@ import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
+from enum import StrEnum
 from random import Random
 
 from ..config.config import OperatorConfig
@@ -14,34 +15,49 @@ from ..genetic.schedule import Schedule
 logger = logging.getLogger(__name__)
 
 
+class CrossoverKeys(StrEnum):
+    """Enum for crossover operator keys."""
+
+    K_POINT = "KPoint"
+    SCATTERED = "Scattered"
+    UNIFORM = "Uniform"
+    ROUND_TYPE_CROSSOVER = "RoundTypeCrossover"
+    PARTIAL_CROSSOVER = "PartialCrossover"
+
+
 def build_crossovers(
-    operator_config: OperatorConfig,
+    o_config: OperatorConfig,
     rng: Random,
     team_factory: TeamFactory,
     event_factory: EventFactory,
 ) -> Iterator["Crossover"]:
     """Build and return a tuple of crossover operators based on the configuration."""
-    crossover_classes = {
-        "KPoint": KPoint,
-        "Scattered": Scattered,
-        "Uniform": Uniform,
-        "RoundTypeCrossover": RoundTypeCrossover,
-        "PartialCrossover": PartialCrossover,
+    variant_map = {
+        CrossoverKeys.K_POINT: lambda k: KPoint(team_factory, event_factory, rng, k=k),
+        CrossoverKeys.SCATTERED: lambda: Scattered(team_factory, event_factory, rng),
+        CrossoverKeys.UNIFORM: lambda: Uniform(team_factory, event_factory, rng),
+        CrossoverKeys.ROUND_TYPE_CROSSOVER: lambda: RoundTypeCrossover(team_factory, event_factory, rng),
+        CrossoverKeys.PARTIAL_CROSSOVER: lambda: PartialCrossover(team_factory, event_factory, rng),
     }
-    for ct in operator_config.crossover_types:
-        if ct not in crossover_classes:
-            msg = f"Unknown crossover type: {ct}"
+
+    if not o_config.crossover_types:
+        logger.warning("No crossover types enabled in the configuration. Crossover will not occur.")
+        return
+
+    for variant_name in o_config.crossover_types:
+        if variant_name not in variant_map:
+            msg = f"Unknown crossover type in config: {variant_name}"
             raise ValueError(msg)
         else:
-            crossover_class = crossover_classes[ct]
-            if ct == "KPoint":
-                if not operator_config.crossover_ks:
-                    msg = "KPoint crossover requires at least one k value."
-                    raise ValueError(msg)
-                for _ in range(len(operator_config.crossover_ks)):
-                    yield crossover_class(team_factory, event_factory, rng, k=operator_config.crossover_ks.pop(0))
+            crossover_factory = variant_map[variant_name]
+            if variant_name == CrossoverKeys.K_POINT:
+                for k in o_config.crossover_ks:
+                    if k <= 0:
+                        msg = f"Invalid crossover k value: {k}. Must be greater than 0."
+                        raise ValueError(msg)
+                    yield crossover_factory(k)
             else:
-                yield crossover_class(team_factory, event_factory, rng)
+                yield crossover_factory()
 
 
 @dataclass(slots=True)

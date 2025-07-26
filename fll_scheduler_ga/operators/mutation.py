@@ -4,6 +4,7 @@ import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass
+from enum import StrEnum
 from random import Random
 
 from ..config.config import OperatorConfig
@@ -13,30 +14,72 @@ from ..genetic.schedule import Match, Schedule
 logger = logging.getLogger(__name__)
 
 
-def build_mutations(operator_config: OperatorConfig, rng: Random) -> Iterator["Mutation"]:
+class MutationKeys(StrEnum):
+    """Enum for mutation operator keys."""
+
+    SWAP_MATCH_CROSS_TIME_LOCATION = "SwapMatch_CrossTimeLocation"
+    SWAP_MATCH_SAME_LOCATION = "SwapMatch_SameLocation"
+    SWAP_MATCH_SAME_TIME = "SwapMatch_SameTime"
+    SWAP_TEAM_CROSS_TIME_LOCATION = "SwapTeam_CrossTimeLocation"
+    SWAP_TEAM_SAME_LOCATION = "SwapTeam_SameLocation"
+    SWAP_TEAM_SAME_TIME = "SwapTeam_SameTime"
+    SWAP_TABLE_SIDE = "SwapTableSide"
+
+
+def build_mutations(o_config: OperatorConfig, rng: Random) -> Iterator["Mutation"]:
     """Build and return a tuple of mutation operators based on the configuration."""
     variant_map = {
         # SwapMatchMutation variants
-        "SwapMatch_CrossTimeLocation": lambda r: SwapMatchMutation(r, same_timeslot=False, same_location=False),
-        "SwapMatch_SameLocation": lambda r: SwapMatchMutation(r, same_timeslot=False, same_location=True),
-        "SwapMatch_SameTime": lambda r: SwapMatchMutation(r, same_timeslot=True, same_location=False),
+        MutationKeys.SWAP_MATCH_CROSS_TIME_LOCATION: lambda: SwapMatchMutation(
+            rng,
+            same_timeslot=False,
+            same_location=False,
+        ),
+        MutationKeys.SWAP_MATCH_SAME_LOCATION: lambda: SwapMatchMutation(
+            rng,
+            same_timeslot=False,
+            same_location=True,
+        ),
+        MutationKeys.SWAP_MATCH_SAME_TIME: lambda: SwapMatchMutation(
+            rng,
+            same_timeslot=True,
+            same_location=False,
+        ),
         # SwapTeamMutation variants
-        "SwapTeam_CrossTimeLocation": lambda r: SwapTeamMutation(r, same_timeslot=False, same_location=False),
-        "SwapTeam_SameLocation": lambda r: SwapTeamMutation(r, same_timeslot=False, same_location=True),
-        "SwapTeam_SameTime": lambda r: SwapTeamMutation(r, same_timeslot=True, same_location=False),
+        MutationKeys.SWAP_TEAM_CROSS_TIME_LOCATION: lambda: SwapTeamMutation(
+            rng,
+            same_timeslot=False,
+            same_location=False,
+        ),
+        MutationKeys.SWAP_TEAM_SAME_LOCATION: lambda: SwapTeamMutation(
+            rng,
+            same_timeslot=False,
+            same_location=True,
+        ),
+        MutationKeys.SWAP_TEAM_SAME_TIME: lambda: SwapTeamMutation(
+            rng,
+            same_timeslot=True,
+            same_location=False,
+        ),
+        # SwapTableSideMutation variant
+        MutationKeys.SWAP_TABLE_SIDE: lambda: SwapTableSideMutation(
+            rng,
+            same_timeslot=True,
+            same_location=True,
+        ),
     }
 
-    if not operator_config.mutation_types:
+    if not o_config.mutation_types:
         logger.warning("No mutation types enabled in the configuration. Mutation will not occur.")
         return
 
-    for variant_name in operator_config.mutation_types:
+    for variant_name in o_config.mutation_types:
         if variant_name not in variant_map:
             msg = f"Unknown mutation type in config: '{variant_name}'"
             raise ValueError(msg)
         else:
             mutation_factory = variant_map[variant_name]
-            yield mutation_factory(rng)
+            yield mutation_factory()
 
 
 @dataclass(slots=True)
@@ -46,20 +89,6 @@ class Mutation(ABC):
     rng: Random
     same_timeslot: bool = False
     same_location: bool = False
-
-    @abstractmethod
-    def mutate(self, child: Schedule) -> bool:
-        """Mutate a child schedule to introduce genetic diversity.
-
-        Args:
-            child (Schedule): The schedule to mutate.
-
-        Returns:
-            bool: True if mutation was successful, False otherwise.
-
-        """
-        msg = "Mutate method must be implemented by subclasses."
-        raise NotImplementedError(msg)
 
     @abstractmethod
     def get_swap_candidates(self, child: Schedule) -> tuple[Match | None]:
@@ -74,6 +103,20 @@ class Mutation(ABC):
 
         """
         msg = "get_swap_candidates method must be implemented by subclasses."
+        raise NotImplementedError(msg)
+
+    @abstractmethod
+    def mutate(self, child: Schedule) -> bool:
+        """Mutate a child schedule to introduce genetic diversity.
+
+        Args:
+            child (Schedule): The schedule to mutate.
+
+        Returns:
+            bool: True if mutation was successful, False otherwise.
+
+        """
+        msg = "Mutate method must be implemented by subclasses."
         raise NotImplementedError(msg)
 
     def get_match_pool(self, child: Schedule) -> Iterator[Match]:
@@ -111,10 +154,10 @@ class Mutation(ABC):
             if (match2_data := next(match_pool, None)) is None:
                 return
 
-            event1a = match1_data[0]
-            event2a = match2_data[0]
+            e1a = match1_data[0]
+            e2a = match2_data[0]
 
-            if not self._validate_swap(event1a, event2a):
+            if not self._validate_swap(e1a, e2a):
                 continue
 
             yield match1_data, match2_data
@@ -142,6 +185,9 @@ class Mutation(ABC):
         if not self.same_timeslot and not self.same_location:
             return not is_same_timeslot and not is_same_location
 
+        if self.same_timeslot and self.same_location:
+            return is_same_timeslot and is_same_location
+
         return False
 
 
@@ -161,16 +207,12 @@ class SwapTeamMutation(Mutation):
 
         """
         for match1_data, match2_data in self.yield_swap_candidates(child):
-            event1a, _, team1a, team1b = match1_data
-            event2a, _, team2a, team2b = match2_data
+            e1a, _, t1a, t1b = match1_data
+            e2a, _, t2a, t2b = match2_data
 
-            match1_team_ids = {team1a.identity, team1b.identity}
-            match2_team_ids = {team2a.identity, team2b.identity}
+            match_team_ids = {t1a.identity, t1b.identity, t2a.identity, t2b.identity}
 
-            if match1_team_ids.intersection(match2_team_ids):
-                continue
-
-            if team1a.conflicts(event2a) or team2a.conflicts(event1a):
+            if len(match_team_ids) < 4 or t1a.conflicts(e2a) or t2a.conflicts(e1a):
                 continue
 
             return match1_data, match2_data
@@ -192,19 +234,19 @@ class SwapTeamMutation(Mutation):
         if not match1_data:
             return False
 
-        event1a, _, team1a, team1b = match1_data
-        event2a, _, team2a, team2b = match2_data
+        e1a, _, t1a, t1b = match1_data
+        e2a, _, t2a, t2b = match2_data
 
-        team1a.switch_opponent(team1b, team2b)
-        team1b.switch_opponent(team1a, team2a)
-        team2a.switch_opponent(team2b, team1b)
-        team2b.switch_opponent(team2a, team1a)
+        t1a.switch_opponent(t1b, t2b)
+        t1b.switch_opponent(t1a, t2a)
+        t2a.switch_opponent(t2b, t1b)
+        t2b.switch_opponent(t2a, t1a)
 
-        team1a.switch_event(event1a, event2a)
-        team2a.switch_event(event2a, event1a)
+        t1a.switch_event(e1a, e2a)
+        t2a.switch_event(e2a, e1a)
 
-        child[event1a] = team2a
-        child[event2a] = team1a
+        child[e1a] = t2a
+        child[e2a] = t1a
 
         return True
 
@@ -224,15 +266,10 @@ class SwapMatchMutation(Mutation):
 
         """
         for match1_data, match2_data in self.yield_swap_candidates(child):
-            event1a, event1b, team1a, team1b = match1_data
-            event2a, event2b, team2a, team2b = match2_data
+            e1a, e1b, t1a, t1b = match1_data
+            e2a, e2b, t2a, t2b = match2_data
 
-            if (
-                team1a.conflicts(event2a)
-                or team1b.conflicts(event2b)
-                or team2a.conflicts(event1a)
-                or team2b.conflicts(event1b)
-            ):
+            if t1a.conflicts(e2a) or t1b.conflicts(e2b) or t2a.conflicts(e1a) or t2b.conflicts(e1b):
                 continue
 
             return match1_data, match2_data
@@ -254,17 +291,55 @@ class SwapMatchMutation(Mutation):
         if not match1_data:
             return False
 
-        event1a, event1b, team1a, team1b = match1_data
-        event2a, event2b, team2a, team2b = match2_data
+        e1a, e1b, t1a, t1b = match1_data
+        e2a, e2b, t2a, t2b = match2_data
 
-        team1a.switch_event(event1a, event2a)
-        team1b.switch_event(event1b, event2b)
-        team2a.switch_event(event2a, event1a)
-        team2b.switch_event(event2b, event1b)
+        t1a.switch_event(e1a, e2a)
+        t1b.switch_event(e1b, e2b)
+        t2a.switch_event(e2a, e1a)
+        t2b.switch_event(e2b, e1b)
 
-        child[event1a] = team2a
-        child[event1b] = team2b
-        child[event2a] = team1a
-        child[event2b] = team1b
+        child[e1a] = t2a
+        child[e1b] = t2b
+        child[e2a] = t1a
+        child[e2b] = t1b
 
+        return True
+
+
+class SwapTableSideMutation(Mutation):
+    """Mutation operator for swapping the sides of two tables in a match."""
+
+    def get_swap_candidates(self, child: Schedule) -> Match | None:
+        """Get two matches to swap in the child schedule.
+
+        Args:
+            child (Schedule): The schedule to analyze.
+
+        Returns:
+            Match | None: A tuple containing two matches to swap, or None if no valid candidates are found.
+
+        """
+        return self.rng.choice(next(self.yield_swap_candidates(child), (None, None)))
+
+    def mutate(self, child: Schedule) -> bool:
+        """Swap the sides of two tables in a match.
+
+        Args:
+            child (Schedule): The schedule to mutate.
+
+        Returns:
+            bool: True if the mutation was successful, False otherwise.
+
+        """
+        match_data = self.get_swap_candidates(child)
+
+        if not match_data:
+            return False
+
+        e1a, e1b, t1a, t1b = match_data
+        t1a.switch_event(e1a, e1b)
+        t1b.switch_event(e1b, e1a)
+        child[e1a] = t1b
+        child[e1b] = t1a
         return True
