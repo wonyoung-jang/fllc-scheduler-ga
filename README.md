@@ -17,6 +17,7 @@ FLL-C Scheduler NSGA-III uses a multi-objective optimization non-dominated sorti
 This project requires Python 3.13+ and the following packages:
 
 -   `matplotlib`
+-   `numpy`
 -   `pandas`
 -   `tqdm`
 
