@@ -37,6 +37,7 @@ class FitnessEvaluator:
     _bt_cache: dict[str, float] = field(default=None, init=False, repr=False)
     _tc_cache: dict[str, float] = field(default=None, init=False, repr=False)
     _ov_cache: dict[str, float] = field(default=None, init=False, repr=False)
+    _fitness_cache: dict[int, tuple[float, ...]] = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the configuration."""
@@ -84,6 +85,10 @@ class FitnessEvaluator:
         if not self.check(schedule) or not (all_teams := schedule.all_teams()):
             return None
 
+        schedule_hash = hash(schedule)
+        if schedule_hash in self._fitness_cache:
+            return self._fitness_cache[schedule_hash]
+
         num_teams = len(all_teams)
 
         bt_total = 0
@@ -111,16 +116,11 @@ class FitnessEvaluator:
             tc_list.append(t_tc)
             ov_list.append(t_ov)
 
+        totals = (bt_total, tc_total, ov_total)
+
         # Metric 1: Averages of scores across all teams
         # The higher, the better
-        means = [
-            totals / num_teams if num_teams else 1
-            for totals in (
-                bt_total,
-                tc_total,
-                ov_total,
-            )
-        ]
+        means = [total / num_teams if num_teams else 1 for total in totals]
 
         # Metric 2: Coefficient of Variation (CV) for each score, how much variation relative to mean
         # The lower, the better
@@ -148,7 +148,7 @@ class FitnessEvaluator:
         _ranges = (max(lst) - min(lst) if lst else 1 for lst in score_lists)
         range_coeffs = (1 / (1 + range_val) if range_val else 1 for range_val in _ranges)
 
-        return tuple(
+        self._fitness_cache[schedule_hash] = tuple(
             mean * ratio * range_coeff
             for mean, ratio, range_coeff in zip(
                 means,
@@ -157,3 +157,4 @@ class FitnessEvaluator:
                 strict=True,
             )
         )
+        return self._fitness_cache[schedule_hash]
