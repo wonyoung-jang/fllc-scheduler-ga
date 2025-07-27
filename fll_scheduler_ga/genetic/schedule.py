@@ -149,8 +149,14 @@ class Schedule:
         if self._cached_normalized_teams is None:
             len_teams = len(self.teams)
             self._cached_normalized_teams = {}
-            for count, (_, team) in enumerate(sorted(self.items(), key=lambda i: (i[0].identity)), start=1):
+            count = 1
+            for _, team in sorted(self.items(), key=lambda i: (i[0].identity)):
+                if team in self._cached_normalized_teams:
+                    continue
+
                 self._cached_normalized_teams[team] = count
                 if count == len_teams:
                     break
+                count += 1
+
         return self._cached_normalized_teams
