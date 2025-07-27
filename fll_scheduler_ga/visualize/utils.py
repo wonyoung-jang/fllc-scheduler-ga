@@ -64,7 +64,7 @@ def finalize(fig: Figure, save_dir: str | Path | None, default_name: str) -> Any
         if path.is_dir():
             path = path / default_name
         try:
-            fig.savefig(path, dpi=300, bbox_inches="tight")
+            fig.savefig(path, dpi=300)
             logger.info("Saved plot: %s", path)
         except Exception:
             logger.exception("Error saving plot to %s", path)

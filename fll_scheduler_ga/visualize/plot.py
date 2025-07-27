@@ -68,3 +68,7 @@ class Plot:
                 title=title,
                 save_dir=Path(save_dir).with_name(scatter_name) if save_dir else None,
             )
+        else:
+            logger.warning(
+                "Cannot plot Pareto scatter for %d objectives. Only 2D and 3D plots are supported.", len(objectives)
+            )

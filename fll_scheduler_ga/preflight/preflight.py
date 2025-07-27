@@ -105,8 +105,8 @@ def _check_location_time_overlaps(config: TournamentConfig, event_factory: Event
                     msg = (
                         f"Configuration conflict: Round '{r_config.round_type}' and '{existing_r_type}' "
                         f"are scheduled in the same location ({location_key[0].__name__} {location_key[1]}) "
-                        f"at overlapping times ({event.timeslot.start_str}-{event.timeslot.stop_str} and "
-                        f"{existing_ts.start_str}-{existing_ts.stop_str})."
+                        f"at overlapping times ({event.timeslot} and "
+                        f"{existing_ts})."
                     )
                     raise ValueError(msg)
             booked_slots[location_key].append((event.timeslot, r_config.round_type))
