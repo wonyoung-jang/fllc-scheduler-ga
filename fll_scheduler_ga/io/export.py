@@ -5,7 +5,7 @@ import csv
 import logging
 from pathlib import Path
 
-from ..genetic.fitness import FitnessEvaluator, FitnessObjective
+from ..genetic.fitness import FitnessObjective
 from ..genetic.ga import GA
 from ..genetic.schedule import Schedule
 from ..visualize.plot import Plot
@@ -59,35 +59,56 @@ def generate_summary(args: argparse.Namespace, ga: GA) -> None:
         generate_summary_report(schedule, ga.context.evaluator.objectives, txt_output_path)
 
     pareto_summary_path = output_dir / "pareto_summary.csv"
-    generate_pareto_summary(ga.total_population, ga.context.evaluator, pareto_summary_path)
+    generate_pareto_summary(ga.total_population, ga.context.evaluator.objectives, pareto_summary_path)
 
 
 def generate_summary_report(schedule: Schedule, objectives: list[FitnessObjective], path: Path) -> None:
     """Generate a text summary report for a single schedule."""
+    len_objectives = [len(name) for name in objectives]
+    max_len_obj = max(len_objectives, default=0) + 1
+
     try:
         with path.open("w", encoding="utf-8") as f:
             f.write(f"--- FLL Scheduler GA Summary Report (ID: {id(schedule)} | Hash: {hash(schedule)}) ---\n\n")
             f.write("Objective Scores:\n")
 
             for name, score in zip(objectives, schedule.fitness, strict=False):
-                f.write(f"  - {name}: {score:.6f}\n")
+                f.write(f"  - {name:<{max_len_obj}}: {score:.6f}\n")
 
-            f.write(f"  - Total: {sum(schedule.fitness):.6f}\n")
-            f.write(f"  - Average: {sum(schedule.fitness) / len(schedule.fitness):.6f}\n\n")
+            f.write("\n")
+            f.write(f"{'Total':<{max_len_obj}}: {sum(schedule.fitness):.6f}\n")
+            f.write(f"{'Average':<{max_len_obj}}: {sum(schedule.fitness) / len(schedule.fitness):.6f}\n\n")
 
-            f.write("Teams in Schedule (sorted by fitness):\n")
+            all_teams = schedule.all_teams()
+            total_fitnesses = [sum(t.fitness) for t in all_teams]
+            max_team_f = max(total_fitnesses)
+            min_team_f = min(total_fitnesses)
+
+            f.write("Team fitnesses (sorted by total fitness descending):\n\n")
+
+            f.write(f"Max     : {max_team_f:.6f}\n")
+            f.write(f"Min     : {min_team_f:.6f}\n")
+            f.write(f"Range   : {max_team_f - min_team_f:.6f}\n")
+            f.write(f"Average : {sum(total_fitnesses) / len(total_fitnesses):.6f}\n\n")
 
             normalized_teams = schedule.normalize_teams()
 
-            for t in sorted(schedule.all_teams(), key=lambda x: x.fitness[0]):
-                fitness_str = ", ".join(f"{score:.4f}" for score in t.fitness)
+            objectives_header = (f"{name:<{len_objectives[i] + 1}}" for i, name in enumerate(objectives))
+            objectives_header_str = "|".join(objectives_header)
+            header = f"{'Team':<5}|{objectives_header_str}|Sum\n"
+            f.write(header)
+            f.write("-" * len(header) + "\n")
+
+            for t in sorted(all_teams, key=lambda x: -sum(x.fitness)):
+                fitness_row = (f"{score:<{len_objectives[i] + 1}.4f}" for i, score in enumerate(t.fitness))
+                fitness_str = "|".join(fitness_row)
                 team_id = normalized_teams.get(t.identity)
-                f.write(f"Team {team_id:<3} | Fitness: {fitness_str} | ({sum(t.fitness):.4f})\n")
+                f.write(f"{team_id:<5}|{fitness_str}|{sum(t.fitness):.4f}\n")
     except OSError:
         logger.exception("Failed to write summary report to file %s", path)
 
 
-def generate_pareto_summary(front: list[Schedule], evaluator: FitnessEvaluator, path: Path) -> None:
+def generate_pareto_summary(front: list[Schedule], objectives: list[FitnessObjective], path: Path) -> None:
     """Generate a summary of the Pareto front."""
     schedule_enum_digits = len(str(len(front)))
     front.sort(key=lambda s: (s.rank, -sum(s.fitness)))
@@ -95,7 +116,7 @@ def generate_pareto_summary(front: list[Schedule], evaluator: FitnessEvaluator, 
         with path.open("w", encoding="utf-8") as f:
             f.write("Schedule, ID, Hash, Rank, ")
 
-            for name in evaluator.objectives:
+            for name in objectives:
                 f.write(f"{name}, ")
 
             f.write("Sum\n")
