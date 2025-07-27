@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ..genetic.fitness import FitnessEvaluator, FitnessObjective
 from ..genetic.ga import GA
-from ..genetic.schedule import Individual, Schedule
+from ..genetic.schedule import Schedule
 from ..visualize.plot import Plot
 from .base_exporter import Exporter, GridBasedExporter
 
@@ -76,9 +76,13 @@ def generate_summary_report(schedule: Schedule, objectives: list[FitnessObjectiv
             f.write(f"  - Average: {sum(schedule.fitness) / len(schedule.fitness):.6f}\n\n")
 
             f.write("Teams in Schedule (sorted by fitness):\n")
+
+            normalized_teams = schedule.normalize_teams()
+
             for t in sorted(schedule.all_teams(), key=lambda x: x.fitness[0]):
                 fitness_str = ", ".join(f"{score:.4f}" for score in t.fitness)
-                f.write(f"Team {t.identity:<3} | Fitness: {fitness_str} | ({sum(t.fitness):.4f})\n")
+                team_id = normalized_teams.get(t.identity)
+                f.write(f"Team {team_id:<3} | Fitness: {fitness_str} | ({sum(t.fitness):.4f})\n")
     except OSError:
         logger.exception("Failed to write summary report to file %s", path)
 
@@ -124,7 +128,7 @@ def get_exporter(path: Path) -> Exporter:
 class CsvExporter(GridBasedExporter):
     """Exporter for schedules in CSV format."""
 
-    def export(self, schedule: Individual, filename: str) -> None:
+    def export(self, schedule: Schedule, filename: str) -> None:
         """Export the given schedule to a CSV file.
 
         Args:
@@ -151,7 +155,7 @@ class CsvExporter(GridBasedExporter):
         except OSError:
             logger.exception("Failed to write schedule to file %s", filename)
 
-    def render_grid(self, title: str, schedule: Individual) -> list[str]:
+    def render_grid(self, title: str, schedule: Schedule) -> list[str]:
         """Write a single schedule grid to a CSV writer."""
         rows = []
         rows.append([title])
@@ -179,7 +183,7 @@ class CsvExporter(GridBasedExporter):
 class HtmlExporter(GridBasedExporter):
     """Exporter for schedules in HTML format."""
 
-    def export(self, schedule: Individual, filename: str) -> None:
+    def export(self, schedule: Schedule, filename: str) -> None:
         """Export the schedule to a self-contained HTML file with CSS."""
         if not schedule:
             logger.warning("Cannot export an empty schedule.")
@@ -245,7 +249,7 @@ class HtmlExporter(GridBasedExporter):
         except OSError:
             logger.exception("Failed to write schedule to file")
 
-    def render_grid(self, title: str, schedule: Individual) -> list[str]:
+    def render_grid(self, title: str, schedule: Schedule) -> list[str]:
         """Render a single schedule grid as an HTML table."""
         if not schedule:
             return [f"<h2>{title}</h2><p>No events scheduled.</p>"]

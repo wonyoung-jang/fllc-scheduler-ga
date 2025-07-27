@@ -32,6 +32,7 @@ class Schedule:
     distance_to_ref_point: float = field(default=None, init=False, repr=False, compare=False)
 
     _cached_all_teams: list[Team] = field(default=None, init=False, repr=False, compare=False)
+    _cached_normalized_teams: dict[int, int] = field(default=None, init=False, repr=False, compare=False)
     _cached_matches: dict["RoundType", list[Match]] = field(default=None, init=False, repr=False, compare=False)
     _cached_hash: int = field(default=None, init=False, repr=False)
     _cached_canonical_representation: tuple[tuple[int, ...], ...] = field(default=None, init=False, repr=False)
@@ -52,8 +53,9 @@ class Schedule:
     def __setitem__(self, event: Event, team: Team) -> None:
         """Assign a team to a specific event."""
         self.schedule[event] = team.identity
-        self._cached_matches = None
         self._cached_all_teams = None
+        self._cached_normalized_teams = None
+        self._cached_matches = None
         self._cached_hash = None
         self._cached_canonical_representation = None
 
@@ -106,12 +108,6 @@ class Schedule:
 
         return self._cached_matches
 
-    def all_teams(self) -> list[Team]:
-        """Return a list of all teams in the schedule."""
-        if self._cached_all_teams is None:
-            self._cached_all_teams = list(self.teams.values())
-        return self._cached_all_teams
-
     def keys(self) -> KeysView[Event]:
         """Return an iterator over the events (keys)."""
         return self.schedule.keys()
@@ -123,10 +119,6 @@ class Schedule:
     def items(self) -> ItemsView[Event, Team]:
         """Return an iterator over the (event, team/match) pairs."""
         return self.schedule.items()
-
-    def get_team(self, team_id: int) -> Team:
-        """Get a team object by its identity."""
-        return self.teams[team_id]
 
     def assign_single(self, event: Event, team: Team) -> None:
         """Assign a single-team event to a team."""
@@ -141,3 +133,24 @@ class Schedule:
         team2.add_opponent(team1)
         self[event1] = team1
         self[event2] = team2
+
+    def all_teams(self) -> list[Team]:
+        """Return a list of all teams in the schedule."""
+        if self._cached_all_teams is None:
+            self._cached_all_teams = list(self.teams.values())
+        return self._cached_all_teams
+
+    def get_team(self, team_id: int) -> Team:
+        """Get a team object by its identity."""
+        return self.teams[team_id]
+
+    def normalize_teams(self) -> dict[int, int]:
+        """Normalize the schedule by reassigning team identities."""
+        if self._cached_normalized_teams is None:
+            len_teams = len(self.teams)
+            self._cached_normalized_teams = {}
+            for count, (_, team) in enumerate(sorted(self.items(), key=lambda i: (i[0].identity)), start=1):
+                self._cached_normalized_teams[team] = count
+                if count == len_teams:
+                    break
+        return self._cached_normalized_teams
