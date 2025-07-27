@@ -3,15 +3,12 @@
 from collections import defaultdict
 from collections.abc import ItemsView, KeysView, ValuesView
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
 
 import numpy as np
 
+from ..config.config import RoundType
 from ..data_model.event import Event
 from ..data_model.team import Team, TeamMap
-
-if TYPE_CHECKING:
-    from ..config.config import RoundType
 
 type Population = list[Schedule]
 type Individual = dict[Event, int]
@@ -33,7 +30,7 @@ class Schedule:
 
     _cached_all_teams: list[Team] = field(default=None, init=False, repr=False, compare=False)
     _cached_normalized_teams: dict[int, int] = field(default=None, init=False, repr=False, compare=False)
-    _cached_matches: dict["RoundType", list[Match]] = field(default=None, init=False, repr=False, compare=False)
+    _cached_matches: dict[RoundType, list[Match]] = field(default=None, init=False, repr=False, compare=False)
     _cached_hash: int = field(default=None, init=False, repr=False)
     _cached_canonical_representation: tuple[tuple[int, ...], ...] = field(default=None, init=False, repr=False)
 

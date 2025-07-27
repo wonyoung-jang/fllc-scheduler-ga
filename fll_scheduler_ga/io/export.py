@@ -5,9 +5,10 @@ import csv
 import logging
 from pathlib import Path
 
+from ..config.config import RoundType
 from ..genetic.fitness import FitnessObjective
 from ..genetic.ga import GA
-from ..genetic.schedule import Schedule
+from ..genetic.schedule import Individual, Schedule
 from ..visualize.plot import Plot
 from .base_exporter import Exporter, GridBasedExporter
 
@@ -149,33 +150,6 @@ def get_exporter(path: Path) -> Exporter:
 class CsvExporter(GridBasedExporter):
     """Exporter for schedules in CSV format."""
 
-    def export(self, schedule: Schedule, filename: str) -> None:
-        """Export the given schedule to a CSV file.
-
-        Args:
-            schedule (Individual): A mapping of Event to Team, representing the schedule.
-            filename (str): The name of the file to write the schedule to.
-
-        """
-        if not schedule:
-            logger.warning("Cannot export an empty schedule.")
-            return
-
-        filename = Path(filename) if isinstance(filename, str) else filename
-
-        schedule_type = self._group_by_type(schedule)
-
-        csv_parts = []
-        for rt, values in schedule_type.items():
-            csv_parts.extend(self.render_grid(rt, values))
-
-        try:
-            with filename.open("w", newline="", encoding="utf-8") as csvfile:
-                csv.writer(csvfile).writerows(csv_parts)
-            logger.debug("Schedule successfully exported to %s", filename)
-        except OSError:
-            logger.exception("Failed to write schedule to file %s", filename)
-
     def render_grid(self, title: str, schedule: Schedule) -> list[str]:
         """Write a single schedule grid to a CSV writer."""
         rows = []
@@ -200,18 +174,45 @@ class CsvExporter(GridBasedExporter):
         rows.append([])
         return rows
 
+    def write_to_file(self, schedule_by_type: dict[RoundType, Individual], filename: Path) -> None:
+        """Write the schedule to a file."""
+        csv_parts = []
+        for rt, values in schedule_by_type.items():
+            csv_parts.extend(self.render_grid(rt, values))
+
+        with filename.open("w", newline="", encoding="utf-8") as csvfile:
+            csv.writer(csvfile).writerows(csv_parts)
+
 
 class HtmlExporter(GridBasedExporter):
     """Exporter for schedules in HTML format."""
 
-    def export(self, schedule: Schedule, filename: str) -> None:
-        """Export the schedule to a self-contained HTML file with CSS."""
+    def render_grid(self, title: str, schedule: Schedule) -> list[str]:
+        """Render a single schedule grid as an HTML table."""
         if not schedule:
-            logger.warning("Cannot export an empty schedule.")
-            return
+            return [f"<h2>{title}</h2><p>No events scheduled.</p>"]
 
-        filename = Path(filename) if isinstance(filename, str) else filename
+        timeslots, locations, grid_lookup = self._build_grid_data(schedule)
 
+        html = [f"<h2>{title}</h2>", "<table>", "<thead>", "<tr><th>Time</th>"]
+        for location in locations:
+            html.extend(f"<th>{location!s}</th>")
+        html.extend(["</tr>", "</thead>", "<tbody>"])
+
+        for time_slot in timeslots:
+            html.append(f"<tr><td>{time_slot.start_str}</td>")
+            for location in locations:
+                team = grid_lookup.get((time_slot, location))
+                if isinstance(team, int):
+                    html.append(f"<td>{team}</td>")
+                else:
+                    html.append("<td></td>")
+            html.append("</tr>")
+        html.append("</tbody></table>")
+        return html
+
+    def write_to_file(self, schedule_by_type: dict[RoundType, Individual], filename: Path) -> None:
+        """Write the schedule to a file."""
         html_parts = [
             """
             <!DOCTYPE html>
@@ -256,40 +257,10 @@ class HtmlExporter(GridBasedExporter):
             """
         ]
 
-        schedule_by_type = self._group_by_type(schedule)
-
         for rt, values in schedule_by_type.items():
             html_parts.extend(self.render_grid(rt, values))
 
         html_parts.append("</body></html>")
 
-        try:
-            with filename.open("w", encoding="utf-8") as f:
-                f.write("".join(html_parts))
-            logger.debug("Schedule successfully exported to %s", filename)
-        except OSError:
-            logger.exception("Failed to write schedule to file")
-
-    def render_grid(self, title: str, schedule: Schedule) -> list[str]:
-        """Render a single schedule grid as an HTML table."""
-        if not schedule:
-            return [f"<h2>{title}</h2><p>No events scheduled.</p>"]
-
-        timeslots, locations, grid_lookup = self._build_grid_data(schedule)
-
-        html = [f"<h2>{title}</h2>", "<table>", "<thead>", "<tr><th>Time</th>"]
-        for location in locations:
-            html.extend(f"<th>{location!s}</th>")
-        html.extend(["</tr>", "</thead>", "<tbody>"])
-
-        for time_slot in timeslots:
-            html.append(f"<tr><td>{time_slot.start_str}</td>")
-            for location in locations:
-                team = grid_lookup.get((time_slot, location))
-                if isinstance(team, int):
-                    html.append(f"<td>{team}</td>")
-                else:
-                    html.append("<td></td>")
-            html.append("</tr>")
-        html.append("</tbody></table>")
-        return html
+        with filename.open("w", encoding="utf-8") as f:
+            f.write("".join(html_parts))

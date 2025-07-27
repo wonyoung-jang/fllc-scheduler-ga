@@ -1,6 +1,8 @@
 """Base class for exporting schedules."""
 
+import logging
 from abc import ABC, abstractmethod
+from pathlib import Path
 
 from ..config.config import RoundType
 from ..data_model.location import Location
@@ -8,17 +10,25 @@ from ..data_model.team import Team
 from ..data_model.time import TimeSlot
 from ..genetic.schedule import Individual, Schedule
 
+logger = logging.getLogger(__name__)
+
 
 class Exporter(ABC):
     """Abstract base class for exporting schedules."""
 
-    @abstractmethod
-    def export(self, schedule: Schedule, filename: str) -> None:
+    def export(self, schedule: Schedule, filename: Path) -> None:
         """Export the schedule to a given filename."""
+        if not schedule:
+            logger.warning("Cannot export an empty schedule.")
+            return
 
-    @abstractmethod
-    def render_grid(self, title: str, schedule: Schedule) -> list[str]:
-        """Render a schedule grid for a specific round type."""
+        schedule_by_type = self._group_by_type(schedule)
+
+        try:
+            self.write_to_file(schedule_by_type, filename)
+            logger.debug("Schedule successfully exported to %s", filename)
+        except OSError:
+            logger.exception("Failed to export schedule to %s", filename)
 
     def _group_by_type(self, schedule: Schedule) -> dict[RoundType, Individual]:
         """Group the schedule by round type."""
@@ -28,6 +38,14 @@ class Exporter(ABC):
             grouped.setdefault(event.round_type, {})
             grouped[event.round_type][event] = normalized_teams.get(team)
         return grouped
+
+    @abstractmethod
+    def write_to_file(self, schedule_by_type: dict[RoundType, Individual], filename: Path) -> None:
+        """Write the schedule to a file."""
+
+    @abstractmethod
+    def render_grid(self, title: str, schedule: Schedule) -> list[str]:
+        """Render a schedule grid for a specific round type."""
 
 
 class GridBasedExporter(Exporter):

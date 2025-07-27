@@ -30,7 +30,7 @@ class GA:
     fitness_history: list[tuple] = field(default_factory=list, init=False, repr=False)
     fitness_improvement_history: list[bool] = field(default_factory=list, init=False, repr=False)
     total_population: Population = field(default_factory=list, init=False, repr=False)
-    islands: list[Island] = field(init=False, repr=False)
+    islands: list[Island] = field(default_factory=list, init=False, repr=False)
 
     _seed_file: Path | None = field(default=None, init=False, repr=False)
     _offspring_ratio: Counter = field(default_factory=Counter, init=False, repr=False)
@@ -48,7 +48,7 @@ class GA:
             Random(seeder.randint(*RANDOM_SEED_RANGE)),
         )
         self.context.repairer.rng = Random(seeder.randint(*RANDOM_SEED_RANGE))
-        self.islands = [
+        self.islands.extend(
             Island(
                 i,
                 Random(seeder.randint(*RANDOM_SEED_RANGE)),
@@ -56,7 +56,7 @@ class GA:
                 self.context,
             )
             for i in range(1, self.context.ga_params.num_islands + 1)
-        ]
+        )
 
     def __len__(self) -> int:
         """Return the number of individuals in the population."""
@@ -181,7 +181,7 @@ class GA:
     def initialize_population(self) -> None:
         """Initialize the population for each island."""
         seed_path = self._seed_file
-        if seed_path and seed_path.exists() and (seed_pop := self.retrieve_seed_population(seed_path)):
+        if seed_path and seed_path.exists() and (seed_pop := self.retrieve_seed_population()):
             seed_pop.sort(key=lambda s: (s.rank, -sum(s.fitness)))
             for i, schedule in enumerate(seed_pop):
                 island_idx = i % self.context.ga_params.num_islands
@@ -191,11 +191,11 @@ class GA:
         for i in range(self.context.ga_params.num_islands):
             self.islands[i].initialize()
 
-    def retrieve_seed_population(self, seed_path: Path) -> Population | None:
+    def retrieve_seed_population(self) -> Population | None:
         """Load and integrate a population from a seed file."""
-        self.context.logger.info("Loading seed population from: %s", seed_path)
+        self.context.logger.info("Loading seed population from: %s", self._seed_file)
         try:
-            with shelve.open(seed_path) as shelf:
+            with shelve.open(self._seed_file) as shelf:
                 seed_config: TournamentConfig = shelf.get("config", None)
                 num_teams_changed = self.context.config.num_teams != seed_config.num_teams
                 config_changed = self.context.config.rounds != seed_config.rounds
