@@ -99,23 +99,24 @@ class Repairer:
             logger.debug("Odd number of teams (%d) for match assignment, one team will be left out.", len(teams))
 
         while len(teams) >= 2:
-            team1 = teams.pop(0)
-            partner_found = False
-
-            for j, team2 in enumerate(teams):
-                if team1.identity == team2.identity:
+            t1 = teams.pop(0)
+            partner_idx = -1
+            for i, t2 in enumerate(teams):
+                if t1.identity == t2.identity:
                     continue
 
-                if self._find_and_populate_match(team1, team2, events, schedule):
-                    teams.pop(j)
-                    partner_found = True
+                if self._find_and_populate_match(t1, t2, events, schedule):
+                    partner_idx = i
                     break
 
-            if not partner_found:
-                logger.debug("Could not find a match partner for team %d", team1.identity)
+            if partner_idx != -1:
+                teams.pop(partner_idx)
+            else:
+                logger.debug("Could not find a match partner for team %d", t1.identity)
 
     def _find_and_populate_match(self, t1: Team, t2: Team, events: list[Event], schedule: Schedule) -> bool:
         """Find an open match slot for two teams and populate it."""
+        event_idx = -1
         for i, e1 in enumerate(events):
             if t1.conflicts(e1):
                 continue
@@ -126,7 +127,10 @@ class Repairer:
                 continue
 
             schedule.assign_match(e1, e2, t1, t2)
-            events.pop(i)
-            return True
+            event_idx = i
+            break
 
+        if event_idx != -1:
+            events.pop(event_idx)
+            return True
         return False
