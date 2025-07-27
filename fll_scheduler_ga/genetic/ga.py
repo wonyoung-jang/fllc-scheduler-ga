@@ -86,9 +86,8 @@ class GA:
 
         return tuple(s / len(front) for s in avg_fitness_front1.values())
 
-    def update_fitness_history(self) -> None:
-        """Update the fitness history with the current generation's fitness."""
-        this_gen_fitness = self._calculate_this_gen_fitness()
+    def adapt_operator_probabilities(self) -> None:
+        """Adapt the operator probabilities based on the fitness history."""
         crossover_base = 0.5
         crossover_low = 0.3
         crossover_high = 0.9
@@ -97,17 +96,12 @@ class GA:
         mutation_high = 0.5
         epsilon = 0.82
 
-        if self.fitness_history and self.fitness_history[-1] < this_gen_fitness:
-            self.fitness_improvement_history.append(True)
-        else:
-            self.fitness_improvement_history.append(False)
-
-        if len(self.fitness_improvement_history) >= 5:
-            last_five_improvements = self.fitness_improvement_history[-5:]
+        if len(self.fitness_improvement_history) >= 10:
+            last_five_improvements = self.fitness_improvement_history[-10:]
             improved_count = last_five_improvements.count(True)
 
             # Less than 1/5 generations improved -> decrease operator chance / exploit
-            if improved_count < 1:
+            if improved_count < 2:
                 self.context.ga_params.crossover_chance = max(
                     crossover_low,
                     self.context.ga_params.crossover_chance * epsilon,
@@ -122,7 +116,7 @@ class GA:
                     self.context.ga_params.mutation_chance,
                 )
             # More than 1/5 generations improved -> increase operator chance / explore
-            elif improved_count > 1:
+            elif improved_count > 2:
                 self.context.ga_params.crossover_chance = min(
                     crossover_high,
                     self.context.ga_params.crossover_chance / epsilon,
@@ -144,6 +138,17 @@ class GA:
                     self.context.ga_params.crossover_chance,
                     self.context.ga_params.mutation_chance,
                 )
+
+    def update_fitness_history(self) -> None:
+        """Update the fitness history with the current generation's fitness."""
+        this_gen_fitness = self._calculate_this_gen_fitness()
+
+        if self.fitness_history and self.fitness_history[-1] < this_gen_fitness:
+            self.fitness_improvement_history.append(True)
+        else:
+            self.fitness_improvement_history.append(False)
+
+        self.adapt_operator_probabilities()
 
         self.fitness_history.append(this_gen_fitness)
 
@@ -250,16 +255,8 @@ class GA:
             len(unique_pop),
         )
 
-        self.total_population = sorted(
-            self.context.nsga3.select(
-                unique_pop,
-                population_size=len(unique_pop),
-            ),
-            key=lambda s: (
-                s.rank,
-                -sum(s.fitness),
-            ),
-        )
+        self.total_population, _ = self.context.nsga3.select(unique_pop, population_size=len(unique_pop))
+        self.total_population.sort(key=lambda s: (s.rank, -sum(s.fitness)))
 
         # Log final statistics
         o_success = self._offspring_ratio["success"]

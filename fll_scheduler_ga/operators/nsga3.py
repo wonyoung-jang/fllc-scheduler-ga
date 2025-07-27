@@ -23,75 +23,63 @@ class NSGA3:
 
     def __post_init__(self) -> None:
         """Post-initialization to generate reference points."""
-        self.ref_points = self.generate_reference_points()
+        self._generate_reference_points()
 
-    def get_num_divisions(self) -> int:
+    def _get_num_divisions(self) -> int:
         """Calculate the number of divisions for reference point generation."""
         p = 1
-        while (
-            len(
-                list(
-                    combinations(
-                        range(p + self.num_objectives - 1),
-                        self.num_objectives - 1,
-                    )
-                )
-            )
-            < self.population_size
-        ):
+        m = self.num_objectives
+        while len(list(combinations(range(p + m - 1), m - 1))) < self.population_size:
             p += 1
         return p
 
-    def generate_reference_points(self) -> np.ndarray:
+    def _generate_reference_points(self) -> None:
         """Generate a set of structured reference points."""
-        p = self.get_num_divisions()
+        p = self._get_num_divisions()
+        m = self.num_objectives
         points = []
-        for c in combinations(range(p + self.num_objectives - 1), self.num_objectives - 1):
-            temp_point = [c[0] - 0]
-            for i in range(1, self.num_objectives - 1):
-                diff = c[i] - c[i - 1]
-                temp_point.append(diff)
-            temp_point.append(p + self.num_objectives - 1 - c[-1] - 1)
-            points.append([x / p for x in temp_point])
-        return np.array(points)
+        for c in combinations(range(p + m - 1), m - 1):
+            coords = []
+            prev = -1
+            for idx in c:
+                coords.append(idx - prev - 1)
+                prev = idx
+            coords.append(p + m - 1 - c[-1] - 1)
+            points.append([x / p for x in coords])
 
-    def select(self, population: Population, population_size: int = 0) -> Population:
+        self.ref_points = np.array(points)
+
+    def select(self, population: Population, population_size: int = 0) -> tuple[Population, set[int]]:
         """Select the next generation using NSGA-III principles."""
         self._pop = population
-        pop_size = population_size if population_size else self.population_size
+        pop_size = population_size or self.population_size
 
         fronts = self._non_dominated_sort()
-        last_front_idx = self._determine_last_front(fronts, pop_size)
+        last_idx = self._get_last_front_idx(fronts, pop_size)
+        selected = [p for i in range(last_idx) for p in fronts[i]]
+        last_front = fronts[last_idx]
+        k = pop_size - len(selected)
 
-        next_pop = [p for i in range(last_front_idx) for p in fronts[i]]
+        selected.extend(self._niching(fronts, last_front, k))
+        return selected, {hash(p) for p in selected}
 
-        if len(next_pop) == pop_size:
-            return next_pop
-
-        last_front = fronts[last_front_idx]
-        k = pop_size - len(next_pop)
-
-        next_pop.extend(self._niching_selection(fronts[: last_front_idx + 1], last_front, k))
-        return next_pop
-
-    def _determine_last_front(self, fronts: list[Population], pop_size: int) -> int:
+    def _get_last_front_idx(self, fronts: list[Population], pop_size: int) -> int:
         """Determine which front is the last to be included."""
-        count = 0
+        total = 0
         for i, front in enumerate(fronts):
-            count += len(front)
-            if count >= pop_size:
+            total += len(front)
+            if total >= pop_size:
                 return i
         return len(fronts) - 1
 
     def _non_dominated_sort(self) -> list[Population]:
         """Perform non-dominated sorting on the population."""
-        pop_size = len(self._pop)
-        dominates_list = [[] for _ in range(pop_size)]
-        dominated_counts = [0] * pop_size
-        ranks = [-1] * pop_size
+        size = len(self._pop)
+        dominates_list = [[] for _ in range(size)]
+        dominated_counts = [0] * size
         fronts = [[]]
 
-        for i, j in combinations(range(pop_size), 2):
+        for i, j in combinations(range(size), 2):
             p, q = self._pop[i], self._pop[j]
             if dominates(p.fitness, q.fitness):
                 dominates_list[i].append(j)
@@ -100,120 +88,114 @@ class NSGA3:
                 dominates_list[j].append(i)
                 dominated_counts[i] += 1
 
-        for i in range(pop_size):
+        for i in range(size):
             if dominated_counts[i] == 0:
-                ranks[i] = 0
                 fronts[0].append(i)
 
-        current_front_idx = 0
-        while current_front_idx < len(fronts) and fronts[current_front_idx]:
+        curr = 0
+        while curr < len(fronts) and fronts[curr]:
             next_front = []
-            for i in fronts[current_front_idx]:
+            for i in fronts[curr]:
                 for j in dominates_list[i]:
                     dominated_counts[j] -= 1
                     if dominated_counts[j] == 0:
-                        ranks[j] = current_front_idx + 1
                         next_front.append(j)
             if next_front:
                 fronts.append(next_front)
-            current_front_idx += 1
+            curr += 1
 
-        for i in range(pop_size):
-            self._pop[i].rank = ranks[i]
+        for rank, front in enumerate(fronts):
+            for i in front:
+                self._pop[i].rank = rank
 
-        non_dominated_fronts = [[] for _ in range(len(fronts))]
-        for i, front in enumerate(fronts):
-            non_dominated_fronts[i] = [self._pop[j] for j in front]
+        return [[self._pop[i] for i in front] for front in fronts]
 
-        return non_dominated_fronts
+    def _niching(self, fronts: list[Population], last_front: Population, k: int) -> Iterator[Schedule]:
+        """Select k individuals from the last front using a niching mechanism."""
+        all_schedules = [p for front in fronts for p in front]
+        self._normalize(all_schedules, fronts[-1])
+        self._associate(all_schedules)
 
-    def _niching_selection(self, fronts: list[Population], last_front: Population, k: int) -> Iterator[Schedule]:
-        """Select k individuals from the last front using a robust niching mechanism."""
-        self._normalize_objectives(fronts)
-        self._associate_and_calculate_distances()
-
-        ro = self._count_members_per_ref_point([p for front in fronts[:-1] for p in front])
+        counts: list[int] = self._count(fronts[:-1])
+        pool = last_front[:]
         selected = 0
-        member_pool = last_front[:]
 
-        while selected < k:
-            if not member_pool:
-                break
+        while selected < k and pool:
+            picked = False
+            min_count = min(counts)
+            dirs = [i for i, c in enumerate(counts) if c == min_count]
+            for d in self.rng.sample(dirs, k=len(dirs)):
+                if not (cluster := [p for p in pool if p.ref_point_idx == d]):
+                    continue
 
-            min_ro_val = min(ro)
-            potential_z_indices = [i for i, val in enumerate(ro) if val == min_ro_val]
-            self.rng.shuffle(potential_z_indices)
+                if counts[d] == 0:
+                    pick = min(cluster, key=lambda p: p.distance_to_ref_point)
+                else:
+                    pick = self.rng.choice(cluster)
 
-            chosen_member = None
-            z_to_increment = -1
+                picked = True
+                pool.remove(pick)
+                counts[d] += 1
+                selected += 1
+                yield pick
 
-            for z_idx in potential_z_indices:
-                associated_members = [p for p in member_pool if p.ref_point_idx == z_idx]
-                if associated_members:
-                    if ro[z_idx] == 0:
-                        chosen_member = min(associated_members, key=lambda p: p.distance_to_ref_point)
-                    else:
-                        chosen_member = self.rng.choice(associated_members)
-                    z_to_increment = z_idx
+                if selected >= k:
                     break
 
-            if chosen_member is None:
-                chosen_member: Schedule = self.rng.choice(member_pool)
-                z_to_increment = chosen_member.ref_point_idx
+            if not picked and pool:
+                pick = self.rng.choice(pool)
+                counts[pick.ref_point_idx] += 1
+                pool.remove(pick)
+                selected += 1
+                yield pick
 
-            yield chosen_member
-            selected += 1
-            member_pool.remove(chosen_member)
-            ro[z_to_increment] += 1
-
-    def _normalize_objectives(self, fronts: list[Population]) -> None:
+    def _normalize(self, pop: list[Schedule], last_front: Population) -> None:
         """Normalize objectives for the entire population being considered."""
-        population = [p for front in fronts for p in front]
-        if not population or not any(p.fitness for p in population):
-            return
+        all_fitnesses = [p.fitness for p in pop]
+        all_fitnesses_last = [p.fitness for p in last_front]
 
-        obj_values = np.array([p.fitness for p in population])
-        ideal_point = np.min(obj_values, axis=0)
-        max_values = np.max(obj_values, axis=0)
+        fits = np.array(all_fitnesses)
+        fits_last = np.array(all_fitnesses_last)
 
         # Calculate nadir point by taking the max from each objective across the last front considered
-        last_front_pop = [p for front in fronts for p in front if p.rank == fronts[-1][0].rank]
-        nadir_point = np.max(np.array([p.fitness for p in last_front_pop]), axis=0) if last_front_pop else max_values
+        ideal = fits.min(axis=0)
+        nadir = fits_last.max(axis=0) if last_front else fits.max(axis=0)
 
-        range_vals = nadir_point - ideal_point
-        range_vals[range_vals < 1e-6] = 1e-6  # Avoid division by zero
+        span = nadir - ideal
+        span[span == 0] = 1
 
-        normalized = (obj_values - ideal_point) / range_vals
+        for p, fit in zip(pop, fits, strict=True):
+            p.normalized_fitness = (fit - ideal) / span
 
-        for p, norm_fit in zip(population, normalized, strict=False):
-            p.normalized_fitness = norm_fit
-
-    def _associate_and_calculate_distances(self) -> None:
+    def _associate(self, pop: list[Schedule]) -> None:
         """Associate individuals with the nearest reference points and store distances."""
-        for p in self._pop:
-            if p.normalized_fitness is None:
+        for p in pop:
+            if (nf := getattr(p, "normalized_fitness", None)) is None:
                 continue
-            distances = np.sum((p.normalized_fitness - self.ref_points) ** 2, axis=1)
-            p.ref_point_idx = np.argmin(distances)
-            p.distance_to_ref_point = distances[p.ref_point_idx]
+            dists = np.sum((nf - self.ref_points) ** 2, axis=1)
+            idx = int(np.argmin(dists))
+            p.ref_point_idx = idx
+            p.distance_to_ref_point = dists[idx]
 
-    def _count_members_per_ref_point(self, population: Population) -> list[int]:
+    def _count(self, fronts: list[Population]) -> list[int]:
         """Count how many individuals are associated with each reference point."""
-        ro = [0] * len(self.ref_points)
-        for p in population:
-            if p.ref_point_idx is not None:
-                ro[p.ref_point_idx] += 1
-        return ro
+        counts = [0] * len(self.ref_points)
+        for front in fronts:
+            for p in front:
+                if (idx := getattr(p, "ref_point_idx", None)) is None:
+                    continue
+                counts[idx] += 1
+        return counts
 
 
 @functools.lru_cache
-def dominates(p_fitness: tuple[float] | None, q_fitness: tuple[float] | None) -> bool:
+def dominates(p_fit: tuple[float] | None, q_fit: tuple[float] | None) -> bool:
     """Check if schedule p dominates schedule q."""
-    if p_fitness is None or q_fitness is None:
+    if p_fit is None or q_fit is None:
         return False
 
     better_in_any = False
-    for ps, qs in zip(p_fitness, q_fitness, strict=True):
+    for ps, qs in zip(p_fit, q_fit, strict=True):
         if ps < qs:
             return False
         if ps > qs:

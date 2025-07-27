@@ -73,8 +73,7 @@ class Island:
                 num_to_create,
             )
 
-        self.population = self.context.nsga3.select(self.population)
-        self.hashes = {hash(s) for s in self.population}
+        self.population, self.hashes = self.context.nsga3.select(self.population, population_size=pop_size)
 
     def evolve(self) -> dict[str, Counter]:
         """Perform main evolution loop: generations and migrations."""
@@ -85,10 +84,6 @@ class Island:
         num_offspring = self.context.ga_params.population_size - self.context.ga_params.elite_size
         attempts, max_attempts = 0, num_offspring * 5
         child_count = 0
-
-        crossover_chance = self.context.ga_params.crossover_chance
-        mutation_chance = self.context.ga_params.mutation_chance
-
         offspring_ratio = Counter()
         mutation_ratio = Counter()
 
@@ -98,11 +93,11 @@ class Island:
             if parents[0] == parents[1]:
                 continue
 
-            if crossover_chance < self.rng.random():
+            if self.context.ga_params.crossover_chance < self.rng.random():
                 continue
 
             for child in self.rng.choice(self.context.crossovers).crossover(parents):
-                if mutation_chance > self.rng.random():
+                if self.context.ga_params.mutation_chance > self.rng.random():
                     mutation_success = self.rng.choice(self.context.mutations).mutate(child)
                     mutation_ratio["success" if mutation_success else "failure"] += 1
 
@@ -116,8 +111,9 @@ class Island:
                 if child_count >= num_offspring:
                     break
 
-        self.population = self.context.nsga3.select(self.population)
-        self.hashes = {hash(s) for s in self.population}
+        self.population, self.hashes = self.context.nsga3.select(
+            self.population, population_size=self.context.ga_params.population_size
+        )
 
         return {
             "offspring": offspring_ratio,
@@ -137,8 +133,9 @@ class Island:
         for migrant in migrants:
             self.add_to_population(migrant)
 
-        self.population = self.context.nsga3.select(self.population)
-        self.hashes = {hash(s) for s in self.population}
+        self.population, self.hashes = self.context.nsga3.select(
+            self.population, population_size=self.context.ga_params.population_size
+        )
 
     def finalize_island(self) -> Iterator[Schedule]:
         """Finalize the island's state after evolution."""
