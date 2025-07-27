@@ -66,10 +66,9 @@ def handle_seed_file(
         csv_import = CsvImporter(schedule_csv_path, config, event_factory)
         if import_fitness := ga_context.evaluator.evaluate(csv_import.schedule):
             csv_import.schedule.fitness = import_fitness
-            filename = schedule_csv_path.stem
             parent_dir = schedule_csv_path.parent
             parent_dir.mkdir(parents=True, exist_ok=True)
-            report_path = parent_dir / f"{filename}_report.txt"
+            report_path = parent_dir / "report.txt"
             generate_summary_report(
                 csv_import.schedule,
                 ga_context.evaluator.objectives,
