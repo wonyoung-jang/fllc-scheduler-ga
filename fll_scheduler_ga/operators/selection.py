@@ -10,28 +10,21 @@ import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass
-from enum import StrEnum
 from random import Random
 
 from ..config.config import OperatorConfig
+from ..config.constants import SelectionOps
 from ..genetic.ga_parameters import GaParameters
 from ..genetic.schedule import Population, Schedule
 
 logger = logging.getLogger(__name__)
 
 
-class SelectionKeys(StrEnum):
-    """Enum for selection operator keys."""
-
-    TOURNAMENT_SELECT = "TournamentSelect"
-    RANDOM_SELECT = "RandomSelect"
-
-
 def build_selections(o_config: OperatorConfig, rng: Random, ga_params: GaParameters) -> Iterator["Selection"]:
     """Build and return a tuple of selection operators based on the configuration."""
     variant_map = {
-        SelectionKeys.TOURNAMENT_SELECT: lambda: TournamentSelect(rng, ga_params.selection_size),
-        SelectionKeys.RANDOM_SELECT: lambda: RandomSelect(rng),
+        SelectionOps.TOURNAMENT_SELECT: lambda: TournamentSelect(rng, ga_params.selection_size),
+        SelectionOps.RANDOM_SELECT: lambda: RandomSelect(rng),
     }
 
     if not o_config.selection_types:

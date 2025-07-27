@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from ..config.constants import HHMM_FMT
+from ..config.constants import HHMM_FMT, CrossoverOps, MutationOps, SelectionOps
 
 logger = logging.getLogger(__name__)
 
@@ -160,10 +160,10 @@ def parse_rounds(parser: ConfigParser) -> tuple[list[Round], dict[RoundType, int
 class OperatorConfig:
     """Configuration for the genetic algorithm operators."""
 
-    selection_types: list[str]
-    crossover_types: list[str]
+    selection_types: list[SelectionOps | str]
+    crossover_types: list[CrossoverOps | str]
     crossover_ks: list[int]
-    mutation_types: list[str]
+    mutation_types: list[MutationOps | str]
 
 
 def parse_operator_config(parser: ConfigParser) -> OperatorConfig:
@@ -176,41 +176,66 @@ def parse_operator_config(parser: ConfigParser) -> OperatorConfig:
         OperatorConfig: The parsed operator configuration.
 
     """
-    if "genetic.operator.selection" not in parser:
-        msg = "No selection configuration section '[genetic.operator.selection]' found."
-        raise ValueError(msg)
+    selection_types = [
+        s.strip()
+        for s in parser.get("genetic.operator.selection", "selection_types", fallback="").split(",")
+        if s.strip()
+    ]
 
-    parser_selections = parser["genetic.operator.selection"].get("selection_types", "")
-    selection_types = [s.strip() for s in parser_selections.split(",") if s.strip()]
+    crossover_types = [
+        c.strip()
+        for c in parser.get("genetic.operator.crossover", "crossover_types", fallback="").split(",")
+        if c.strip()
+    ]
+
+    crossover_ks = [
+        int(k.strip())
+        for k in parser.get("genetic.operator.crossover", "crossover_ks", fallback="").split(",")
+        if k.strip()
+    ]
+
+    mutation_types = [
+        m.strip()
+        for m in parser.get("genetic.operator.mutation", "mutation_types", fallback="").split(",")
+        if m.strip()
+    ]
 
     if not selection_types:
-        logger.warning("No selection types enabled in the configuration. Selection will not occur.")
-        return None
-
-    if "genetic.operator.crossover" not in parser:
-        msg = "No crossover configuration section '[genetic.operator.crossover]' found."
-        raise ValueError(msg)
-
-    parser_crossovers = parser["genetic.operator.crossover"].get("crossover_types", "")
-    crossover_types = [c.strip() for c in parser_crossovers.split(",") if c.strip()]
+        selection_types = [
+            SelectionOps.TOURNAMENT_SELECT,
+            SelectionOps.RANDOM_SELECT,
+        ]
+        logger.warning("No selection types enabled in the configuration. Using defaults: %s", selection_types)
 
     if not crossover_types:
-        logger.warning("No crossover types enabled in the configuration. Crossover will not occur.")
-        return None
+        crossover_types = [
+            CrossoverOps.K_POINT,
+            CrossoverOps.SCATTERED,
+            CrossoverOps.UNIFORM,
+            CrossoverOps.ROUND_TYPE_CROSSOVER,
+            CrossoverOps.PARTIAL_CROSSOVER,
+        ]
+        logger.warning("No crossover types enabled in the configuration. Using defaults: %s", crossover_types)
 
-    parser_crossover_ks = parser["genetic.operator.crossover"].get("crossover_ks", "")
-    crossover_ks = [int(k) for k in parser_crossover_ks.split(",") if k.strip()]
-
-    if "genetic.operator.mutation" not in parser:
-        msg = "No mutation configuration section '[genetic.operator.mutation]' found."
-        raise ValueError(msg)
-
-    parser_mutations = parser["genetic.operator.mutation"].get("mutation_types", "")
-    mutation_types = [m.strip() for m in parser_mutations.split(",") if m.strip()]
+    if not crossover_ks:
+        crossover_ks = [
+            1,
+            2,
+            3,
+        ]
+        logger.warning("No crossover ks values provided in the configuration. Using defaults: %s", crossover_ks)
 
     if not mutation_types:
-        logger.warning("No mutation types enabled in the configuration. Mutation will not occur.")
-        return None
+        mutation_types = [
+            MutationOps.SWAP_MATCH_CROSS_TIME_LOCATION,
+            MutationOps.SWAP_MATCH_SAME_LOCATION,
+            MutationOps.SWAP_MATCH_SAME_TIME,
+            MutationOps.SWAP_TEAM_CROSS_TIME_LOCATION,
+            MutationOps.SWAP_TEAM_SAME_LOCATION,
+            MutationOps.SWAP_TEAM_SAME_TIME,
+            MutationOps.SWAP_TABLE_SIDE,
+        ]
+        logger.warning("No mutation types enabled in the configuration. Using defaults: %s", mutation_types)
 
     return OperatorConfig(
         selection_types,

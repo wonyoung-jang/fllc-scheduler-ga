@@ -4,25 +4,15 @@ import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
-from enum import StrEnum
 from random import Random
 
 from ..config.config import OperatorConfig
+from ..config.constants import CrossoverOps
 from ..data_model.event import Event, EventFactory
 from ..data_model.team import TeamFactory
 from ..genetic.schedule import Schedule
 
 logger = logging.getLogger(__name__)
-
-
-class CrossoverKeys(StrEnum):
-    """Enum for crossover operator keys."""
-
-    K_POINT = "KPoint"
-    SCATTERED = "Scattered"
-    UNIFORM = "Uniform"
-    ROUND_TYPE_CROSSOVER = "RoundTypeCrossover"
-    PARTIAL_CROSSOVER = "PartialCrossover"
 
 
 def build_crossovers(
@@ -33,11 +23,11 @@ def build_crossovers(
 ) -> Iterator["Crossover"]:
     """Build and return a tuple of crossover operators based on the configuration."""
     variant_map = {
-        CrossoverKeys.K_POINT: lambda k: KPoint(team_factory, event_factory, rng, k=k),
-        CrossoverKeys.SCATTERED: lambda: Scattered(team_factory, event_factory, rng),
-        CrossoverKeys.UNIFORM: lambda: Uniform(team_factory, event_factory, rng),
-        CrossoverKeys.ROUND_TYPE_CROSSOVER: lambda: RoundTypeCrossover(team_factory, event_factory, rng),
-        CrossoverKeys.PARTIAL_CROSSOVER: lambda: PartialCrossover(team_factory, event_factory, rng),
+        CrossoverOps.K_POINT: lambda k: KPoint(team_factory, event_factory, rng, k=k),
+        CrossoverOps.SCATTERED: lambda: Scattered(team_factory, event_factory, rng),
+        CrossoverOps.UNIFORM: lambda: Uniform(team_factory, event_factory, rng),
+        CrossoverOps.ROUND_TYPE_CROSSOVER: lambda: RoundTypeCrossover(team_factory, event_factory, rng),
+        CrossoverOps.PARTIAL_CROSSOVER: lambda: PartialCrossover(team_factory, event_factory, rng),
     }
 
     if not o_config.crossover_types:
@@ -50,7 +40,7 @@ def build_crossovers(
             raise ValueError(msg)
         else:
             crossover_factory = variant_map[variant_name]
-            if variant_name == CrossoverKeys.K_POINT:
+            if variant_name == CrossoverOps.K_POINT:
                 for k in o_config.crossover_ks:
                     if k <= 0:
                         msg = f"Invalid crossover k value: {k}. Must be greater than 0."

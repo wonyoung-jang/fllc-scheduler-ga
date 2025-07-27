@@ -4,65 +4,53 @@ import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass
-from enum import StrEnum
 from random import Random
 
 from ..config.config import OperatorConfig
+from ..config.constants import MutationOps
 from ..data_model.event import Event
 from ..genetic.schedule import Match, Schedule
 
 logger = logging.getLogger(__name__)
 
 
-class MutationKeys(StrEnum):
-    """Enum for mutation operator keys."""
-
-    SWAP_MATCH_CROSS_TIME_LOCATION = "SwapMatch_CrossTimeLocation"
-    SWAP_MATCH_SAME_LOCATION = "SwapMatch_SameLocation"
-    SWAP_MATCH_SAME_TIME = "SwapMatch_SameTime"
-    SWAP_TEAM_CROSS_TIME_LOCATION = "SwapTeam_CrossTimeLocation"
-    SWAP_TEAM_SAME_LOCATION = "SwapTeam_SameLocation"
-    SWAP_TEAM_SAME_TIME = "SwapTeam_SameTime"
-    SWAP_TABLE_SIDE = "SwapTableSide"
-
-
 def build_mutations(o_config: OperatorConfig, rng: Random) -> Iterator["Mutation"]:
     """Build and return a tuple of mutation operators based on the configuration."""
     variant_map = {
         # SwapMatchMutation variants
-        MutationKeys.SWAP_MATCH_CROSS_TIME_LOCATION: lambda: SwapMatchMutation(
+        MutationOps.SWAP_MATCH_CROSS_TIME_LOCATION: lambda: SwapMatchMutation(
             rng,
             same_timeslot=False,
             same_location=False,
         ),
-        MutationKeys.SWAP_MATCH_SAME_LOCATION: lambda: SwapMatchMutation(
+        MutationOps.SWAP_MATCH_SAME_LOCATION: lambda: SwapMatchMutation(
             rng,
             same_timeslot=False,
             same_location=True,
         ),
-        MutationKeys.SWAP_MATCH_SAME_TIME: lambda: SwapMatchMutation(
+        MutationOps.SWAP_MATCH_SAME_TIME: lambda: SwapMatchMutation(
             rng,
             same_timeslot=True,
             same_location=False,
         ),
         # SwapTeamMutation variants
-        MutationKeys.SWAP_TEAM_CROSS_TIME_LOCATION: lambda: SwapTeamMutation(
+        MutationOps.SWAP_TEAM_CROSS_TIME_LOCATION: lambda: SwapTeamMutation(
             rng,
             same_timeslot=False,
             same_location=False,
         ),
-        MutationKeys.SWAP_TEAM_SAME_LOCATION: lambda: SwapTeamMutation(
+        MutationOps.SWAP_TEAM_SAME_LOCATION: lambda: SwapTeamMutation(
             rng,
             same_timeslot=False,
             same_location=True,
         ),
-        MutationKeys.SWAP_TEAM_SAME_TIME: lambda: SwapTeamMutation(
+        MutationOps.SWAP_TEAM_SAME_TIME: lambda: SwapTeamMutation(
             rng,
             same_timeslot=True,
             same_location=False,
         ),
         # SwapTableSideMutation variant
-        MutationKeys.SWAP_TABLE_SIDE: lambda: SwapTableSideMutation(
+        MutationOps.SWAP_TABLE_SIDE: lambda: SwapTableSideMutation(
             rng,
             same_timeslot=True,
             same_location=True,

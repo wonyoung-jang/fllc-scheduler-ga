@@ -72,39 +72,6 @@ class Schedule:
             self._cached_hash = hash(self._get_canonical_representation())
         return self._cached_hash
 
-    def _get_canonical_representation(self) -> tuple[tuple[int, ...], ...]:
-        """Get a canonical representation of the schedule for hashing."""
-        if self._cached_canonical_representation is not None:
-            return self._cached_canonical_representation
-
-        if not self.schedule:
-            return ()
-
-        team_to_event_map = defaultdict(list)
-        for event, team_id in self.schedule.items():
-            team_to_event_map[team_id].append(event.identity)
-
-        sorted_events = [tuple(sorted(events)) for events in team_to_event_map.values()]
-        sorted_events.sort()
-        self._cached_canonical_representation = tuple(sorted_events)
-        return self._cached_canonical_representation
-
-    def get_matches(self) -> dict["RoundType", list[Match]]:
-        """Get all matches in the schedule."""
-        if self._cached_matches is not None:
-            return self._cached_matches
-
-        self._cached_matches = defaultdict(list)
-        for event1, t1 in self.schedule.items():
-            if not (event2 := event1.paired_event) or event1.location.side != 1:
-                continue
-
-            rt = event1.round_type
-            if t2 := self.schedule[event2]:
-                self._cached_matches[rt].append((event1, event2, self.teams[t1], self.teams[t2]))
-
-        return self._cached_matches
-
     def keys(self) -> KeysView[Event]:
         """Return an iterator over the events (keys)."""
         return self.schedule.keys()
@@ -131,15 +98,43 @@ class Schedule:
         self[event1] = team1
         self[event2] = team2
 
+    def get_team(self, team_id: int) -> Team:
+        """Get a team object by its identity."""
+        return self.teams[team_id]
+
     def all_teams(self) -> list[Team]:
         """Return a list of all teams in the schedule."""
         if self._cached_all_teams is None:
             self._cached_all_teams = list(self.teams.values())
         return self._cached_all_teams
 
-    def get_team(self, team_id: int) -> Team:
-        """Get a team object by its identity."""
-        return self.teams[team_id]
+    def _get_canonical_representation(self) -> tuple[tuple[int, ...], ...]:
+        """Get a canonical representation of the schedule for hashing."""
+        if self._cached_canonical_representation is None:
+            if not self.schedule:
+                return ()
+
+            team_to_event_map = defaultdict(list)
+            for event, team_id in self.schedule.items():
+                team_to_event_map[team_id].append(event.identity)
+
+            sorted_events = [tuple(sorted(events)) for events in team_to_event_map.values()]
+            sorted_events.sort()
+            self._cached_canonical_representation = tuple(sorted_events)
+        return self._cached_canonical_representation
+
+    def get_matches(self) -> dict[RoundType, list[Match]]:
+        """Get all matches in the schedule."""
+        if self._cached_matches is None:
+            self._cached_matches = defaultdict(list)
+            for event1, t1 in self.schedule.items():
+                if not (event2 := event1.paired_event) or event1.location.side != 1:
+                    continue
+
+                rt = event1.round_type
+                if t2 := self.schedule[event2]:
+                    self._cached_matches[rt].append((event1, event2, self.teams[t1], self.teams[t2]))
+        return self._cached_matches
 
     def normalize_teams(self) -> dict[int, int]:
         """Normalize the schedule by reassigning team identities."""
@@ -155,5 +150,4 @@ class Schedule:
                 if count == len_teams:
                     break
                 count += 1
-
         return self._cached_normalized_teams

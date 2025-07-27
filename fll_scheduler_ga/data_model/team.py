@@ -114,7 +114,7 @@ class Team:
             bool: True if there is a conflict, False otherwise.
 
         """
-        event_ids = {e.identity for e in self.events}
+        event_ids = self.existing_event_ids()
         if new_event.identity in event_ids:
             return True
 
@@ -122,6 +122,10 @@ class Team:
             return False
 
         return any(existing_event_id in potential_conflicts for existing_event_id in event_ids)
+
+    def existing_event_ids(self) -> set[int]:
+        """Get a set of existing event IDs for the team."""
+        return {e.identity for e in self.events}
 
     def break_time_key(self) -> frozenset[int]:
         """Get a key for the break time cache based on the team's events."""
