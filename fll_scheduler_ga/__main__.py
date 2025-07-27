@@ -16,7 +16,8 @@ from fll_scheduler_ga.genetic.fitness import FitnessEvaluator
 from fll_scheduler_ga.genetic.ga import GA, RANDOM_SEED_RANGE
 from fll_scheduler_ga.genetic.ga_context import GaContext
 from fll_scheduler_ga.genetic.ga_parameters import GaParameters
-from fll_scheduler_ga.io.export import generate_summary
+from fll_scheduler_ga.io.export import generate_summary, generate_summary_report
+from fll_scheduler_ga.io.importer import CsvImporter
 from fll_scheduler_ga.observers.loggers import LoggingObserver
 from fll_scheduler_ga.observers.progress import TqdmObserver
 from fll_scheduler_ga.operators.crossover import build_crossovers
@@ -39,12 +40,52 @@ def setup_environment() -> tuple[argparse.Namespace, GA, TournamentConfig]:
         run_preflight_checks(config, event_factory)
         ga_params = _build_ga_parameters_from_args(args, parser)
         rng = _setup_rng(args, parser)
-        ga = _create_ga_instance(config, operator_config, event_factory, ga_params, rng)
+        ga_context = _create_ga_context(config, operator_config, event_factory, ga_params, rng)
+        handle_seed_file(args, config, event_factory, ga_context)
+        ga = _create_ga_instance(ga_context, rng)
         ga.set_seed_file(args.seed_file)
     except (FileNotFoundError, KeyError):
         logger.exception("Error loading configuration")
     else:
         return args, ga, config
+
+
+def handle_seed_file(
+    args: argparse.Namespace,
+    config: TournamentConfig,
+    event_factory: EventFactory,
+    ga_context: GaContext,
+) -> None:
+    """Handle the seed file for the genetic algorithm."""
+    seed_path = Path(args.seed_file).resolve()
+    if args.flush and seed_path.exists():
+        seed_path.unlink()
+
+    if args.import_file:
+        schedule_csv_path = Path(args.import_file).resolve()
+        csv_import = CsvImporter(schedule_csv_path, config, event_factory)
+        if import_fitness := ga_context.evaluator.evaluate(csv_import.schedule):
+            csv_import.schedule.fitness = import_fitness
+            filename = schedule_csv_path.stem
+            parent_dir = schedule_csv_path.parent
+            parent_dir.mkdir(parents=True, exist_ok=True)
+            report_path = parent_dir / f"{filename}_report.txt"
+            generate_summary_report(
+                csv_import.schedule,
+                ga_context.evaluator.objectives,
+                report_path,
+            )
+
+        if args.add_import_to_population:
+            try:
+                with shelve.open(seed_path) as shelf:
+                    population = shelf.get("population", [])
+                    if csv_import.schedule not in population:
+                        population.append(csv_import.schedule)
+                    shelf["population"] = population
+                    shelf["config"] = config
+            except Exception:
+                logger.exception("Error loading seed file")
 
 
 def _create_parser() -> argparse.ArgumentParser:
@@ -177,6 +218,19 @@ def _create_parser() -> argparse.ArgumentParser:
         type=int,
         help="(OPTIONAL) Number of individuals to migrate.",
     )
+
+    # Schedule importer parameters
+    import_group = parser.add_argument_group("Schedule Importer Parameters")
+    import_group.add_argument(
+        "--import_file",
+        type=str,
+        help="(OPTIONAL) Path to a CSV file to import a schedule.",
+    )
+    import_group.add_argument(
+        "--add_import_to_population",
+        action="store_true",
+        help="(OPTIONAL) Add imported schedule to the initial population.",
+    )
     return parser
 
 
@@ -246,14 +300,14 @@ def _setup_rng(args: argparse.Namespace, config_parser: ConfigParser) -> Random:
     return Random(rng_seed)
 
 
-def _create_ga_instance(
+def _create_ga_context(
     config: TournamentConfig,
     operator_config: OperatorConfig,
     event_factory: EventFactory,
     ga_params: GaParameters,
     rng: Random,
-) -> GA:
-    """Create and return a GA instance with the provided configuration."""
+) -> GaContext:
+    """Create and return a GaContext with the provided configuration."""
     event_conflicts = EventConflicts(event_factory)
     team_factory = TeamFactory(config, event_conflicts.conflicts)
     repairer = Repairer(rng, config, event_factory)
@@ -262,7 +316,7 @@ def _create_ga_instance(
     mutations = tuple(build_mutations(operator_config, rng))
     benchmark = FitnessBenchmark(config, event_factory)
     evaluator = FitnessEvaluator(config, benchmark)
-    context = GaContext(
+    return GaContext(
         config=config,
         ga_params=ga_params,
         event_factory=event_factory,
@@ -275,6 +329,10 @@ def _create_ga_instance(
         crossovers=crossovers,
         mutations=mutations,
     )
+
+
+def _create_ga_instance(context: GaContext, rng: Random) -> GA:
+    """Create and return a GA instance with the provided configuration."""
     return GA(
         context=context,
         rng=rng,
@@ -286,7 +344,11 @@ def _create_ga_instance(
 
 
 def save_population_to_seed_file(
-    ga: GA, config: TournamentConfig, seed_file: str | Path, *, front: bool = False
+    ga: GA,
+    config: TournamentConfig,
+    seed_file: str | Path,
+    *,
+    front: bool = False,
 ) -> None:
     """Save the final population to a file to be used as a seed for a future run."""
     population = ga.pareto_front() if front else ga.total_population
@@ -315,10 +377,6 @@ def main() -> None:
     args, ga, config = env
 
     try:
-        if args.flush:
-            path = Path(args.seed_file)
-            if path.exists():
-                path.unlink()
         ga.run()
     except KeyboardInterrupt:
         logger.warning("Run interrupted by user. Saving final population and results before exiting.")
