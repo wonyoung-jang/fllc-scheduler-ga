@@ -96,6 +96,7 @@ class FitnessBenchmark:
                 r.round_type,
                 r.rounds_per_team,
                 r.teams_per_round,
+                frozenset(r.times),
                 r.start_time,
                 r.stop_time,
                 r.duration_minutes,

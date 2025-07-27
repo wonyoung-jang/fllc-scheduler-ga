@@ -37,7 +37,6 @@ class FitnessEvaluator:
     _bt_cache: dict[str, float] = field(default=None, init=False, repr=False)
     _tc_cache: dict[str, float] = field(default=None, init=False, repr=False)
     _ov_cache: dict[str, float] = field(default=None, init=False, repr=False)
-    _fitness_cache: dict[int, tuple[float, ...]] = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the configuration."""
@@ -84,10 +83,6 @@ class FitnessEvaluator:
         """
         if not self.check(schedule) or not (all_teams := schedule.all_teams()):
             return None
-
-        schedule_hash = hash(schedule)
-        if schedule_hash in self._fitness_cache:
-            return self._fitness_cache[schedule_hash]
 
         num_teams = len(all_teams)
 
@@ -148,7 +143,7 @@ class FitnessEvaluator:
         _ranges = (max(lst) - min(lst) if lst else 1 for lst in score_lists)
         range_coeffs = (1 / (1 + range_val) if range_val else 1 for range_val in _ranges)
 
-        self._fitness_cache[schedule_hash] = tuple(
+        return tuple(
             mean * ratio * range_coeff
             for mean, ratio, range_coeff in zip(
                 means,
@@ -157,4 +152,3 @@ class FitnessEvaluator:
                 strict=True,
             )
         )
-        return self._fitness_cache[schedule_hash]

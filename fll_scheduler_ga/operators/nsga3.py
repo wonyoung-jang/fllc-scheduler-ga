@@ -1,5 +1,6 @@
 """Tools for Non-dominated Sorting Genetic Algorithm III (NSGA-III)."""
 
+import functools
 import random
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -126,14 +127,12 @@ class NSGA3:
 
         return non_dominated_fronts
 
-    def _niching_selection(
-        self, fronts_to_consider: list[Population], last_front: Population, k: int
-    ) -> Iterator[Schedule]:
+    def _niching_selection(self, fronts: list[Population], last_front: Population, k: int) -> Iterator[Schedule]:
         """Select k individuals from the last front using a robust niching mechanism."""
-        self._normalize_objectives(fronts_to_consider)
+        self._normalize_objectives(fronts)
         self._associate_and_calculate_distances()
 
-        ro = self._count_members_per_ref_point([p for front in fronts_to_consider[:-1] for p in front])
+        ro = self._count_members_per_ref_point([p for front in fronts[:-1] for p in front])
         selected = 0
         member_pool = last_front[:]
 
@@ -207,6 +206,7 @@ class NSGA3:
         return ro
 
 
+@functools.lru_cache
 def dominates(p_fitness: tuple[float] | None, q_fitness: tuple[float] | None) -> bool:
     """Check if schedule p dominates schedule q."""
     if p_fitness is None or q_fitness is None:

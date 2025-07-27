@@ -21,6 +21,7 @@ class Round:
     round_type: RoundType
     rounds_per_team: int
     teams_per_round: int
+    times: list[datetime]
     start_time: datetime
     stop_time: datetime
     duration_minutes: timedelta
@@ -34,6 +35,9 @@ class Round:
 
     def get_num_slots(self) -> int:
         """Get the number of slots available for this round."""
+        if self.times:
+            return len(self.times)
+
         total_num_teams = self.num_teams * self.rounds_per_team
         slots_per_timeslot = self.num_locations * self.teams_per_round
 
@@ -127,11 +131,16 @@ def parse_rounds(parser: ConfigParser) -> tuple[list[Round], dict[RoundType, int
         if stop_time := parser[section].get("stop_time", ""):
             stop_time = datetime.strptime(stop_time, HHMM_FMT).replace(tzinfo=UTC)
 
+        if times := parser[section].get("times", []):
+            times = [datetime.strptime(t.strip(), HHMM_FMT).replace(tzinfo=UTC) for t in times.split(",")]
+            start_time = times[0] if times else start_time
+
         parsed_rounds.append(
             Round(
                 r_type,
                 r_per_team,
                 parser[section].getint("teams_per_round"),
+                times,
                 start_time,
                 stop_time,
                 timedelta(minutes=parser[section].getint("duration_minutes")),

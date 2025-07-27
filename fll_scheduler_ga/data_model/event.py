@@ -1,7 +1,7 @@
 """Event data model for FLL scheduling."""
 
 import logging
-from collections.abc import Generator
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -79,7 +79,7 @@ class EventFactory:
             self._cached_eventmap = {e.identity: e for e in self.flat_list()}
         return self._cached_eventmap
 
-    def create_events(self, r: Round) -> Generator[Event]:
+    def create_events(self, r: Round) -> Iterator[Event]:
         """Generate all possible Events for a given Round configuration.
 
         Args:
@@ -90,6 +90,7 @@ class EventFactory:
 
         """
         start = r.start_time
+        times = r.times
         teams_per_round = r.teams_per_round
         round_type = r.round_type
         num_slots = r.num_slots
@@ -97,25 +98,31 @@ class EventFactory:
         duration_minutes = r.duration_minutes
         location_type = get_location_type(teams_per_round)
 
-        for _ in range(num_slots):
-            stop = start + duration_minutes
-            time_cache_key = (start, stop)
+        if times:
+            start = times[0]
 
+        for i in range(num_slots):
+            if not times:
+                stop = start + duration_minutes
+            elif i + 1 < len(times):
+                stop = times[i + 1]
+            elif i + 1 == len(times):
+                stop += duration_minutes
+
+            time_cache_key = (start, stop)
             timeslot = self._cached_timeslots.setdefault(
                 time_cache_key,
                 TimeSlot(start, stop, start.strftime(HHMM_FMT), stop.strftime(HHMM_FMT)),
             )
-
             start = stop
-
-            for i in range(1, num_locations + 1):
+            for j in range(1, num_locations + 1):
                 params = {
-                    "identity": i,
+                    "identity": j,
                     "teams_per_round": teams_per_round,
                 }
                 if hasattr(location_type, "side"):
-                    cache_key1 = (i, teams_per_round, 1)
-                    cache_key2 = (i, teams_per_round, 2)
+                    cache_key1 = (j, teams_per_round, 1)
+                    cache_key2 = (j, teams_per_round, 2)
                     side1_loc = self._cached_locations.setdefault(cache_key1, location_type(**params, side=1))
                     side2_loc = self._cached_locations.setdefault(cache_key2, location_type(**params, side=2))
                     event1 = Event(0, round_type, timeslot, side1_loc)
@@ -125,7 +132,7 @@ class EventFactory:
                     yield event1
                     yield event2
                 else:
-                    cache_key = (i, teams_per_round)
+                    cache_key = (j, teams_per_round)
                     location = self._cached_locations.setdefault(cache_key, location_type(**params))
                     yield Event(0, round_type, timeslot, location)
 

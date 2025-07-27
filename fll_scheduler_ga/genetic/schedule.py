@@ -24,7 +24,7 @@ class Schedule:
 
     teams: TeamMap = field(default_factory=dict, compare=False)
     schedule: Individual = field(default_factory=dict, compare=False)
-    fitness: tuple[float, ...] | None = field(default=None, compare=False)
+    fitness: tuple[float, ...] | None = field(default=(0, 0, 0), compare=False)
     rank: int = field(default=10, compare=True)
 
     normalized_fitness: np.ndarray | None = field(default=None, init=False, repr=False, compare=False)
