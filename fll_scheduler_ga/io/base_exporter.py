@@ -23,9 +23,17 @@ class Exporter(ABC):
     def _group_by_type(self, schedule: Individual) -> dict[RoundType, Individual]:
         """Group the schedule by round type."""
         grouped = {}
-        for event, team in sorted(schedule.items(), key=lambda item: (item[0].timeslot.start)):
+        unique_teams = len(set(schedule.values()))
+        count = 0
+        normalized_teams = {}
+        for count, (_, team) in enumerate(sorted(schedule.items(), key=lambda item: (item[0].identity)), start=1):
+            normalized_teams[team] = count
+            if count == unique_teams:
+                break
+
+        for event, team in sorted(schedule.items(), key=lambda item: (item[0].identity)):
             grouped.setdefault(event.round_type, {})
-            grouped[event.round_type][event] = team
+            grouped[event.round_type][event] = normalized_teams.get(team)
         return grouped
 
 
@@ -39,6 +47,10 @@ class GridBasedExporter(Exporter):
         grid_lookup = {(e.timeslot, e.location): team for e, team in schedule.items()}
         timeslots = sorted({i[0] for i in grid_lookup}, key=lambda ts: ts.start)
         locations = sorted(
-            {i[1] for i in grid_lookup}, key=lambda loc: (loc.identity, loc.side if hasattr(loc, "side") else 0)
+            {i[1] for i in grid_lookup},
+            key=lambda loc: (
+                loc.identity,
+                loc.side if hasattr(loc, "side") else 0,
+            ),
         )
         return timeslots, locations, grid_lookup
