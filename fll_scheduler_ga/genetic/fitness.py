@@ -61,10 +61,12 @@ class FitnessEvaluator:
             bool: True if the schedule meets all hard constraints, False otherwise.
 
         """
+        # Check if the schedule is empty
         if not schedule:
             logger.debug("%s: %s", HardConstraints.SCHEDULE_EXISTENCE, "Schedule is empty")
             return False
 
+        # Check if all events are scheduled
         if len(schedule) < self.config.total_slots:
             logger.debug("%s: %s", HardConstraints.ALL_EVENTS_SCHEDULED, "Not all events are scheduled")
             return False
@@ -78,7 +80,17 @@ class FitnessEvaluator:
             schedule (Schedule): The schedule to evaluate.
 
         Returns:
-            tuple[float, ...] | None: A tuple of fitness scores for each objective,
+            tuple[float, ...] | None:
+                A tuple of fitness scores for each objective or None if the schedule does not meet hard constraints.
+
+            Objectives:
+                - (bt) Break Time: Break time consistency across all teams.
+                - (tc) Table Consistency: Table consistency across all teams.
+                - (ov) Opponent Variety: Opponent variety across all teams.
+            Metrics:
+                - Mean: Average score across all teams for each objective.
+                - Coefficient of Variation: Variation relative to the mean for each objective.
+                - Range: Difference between the maximum and minimum scores for each objective.
 
         """
         if not self.check(schedule) or not (all_teams := schedule.all_teams()):

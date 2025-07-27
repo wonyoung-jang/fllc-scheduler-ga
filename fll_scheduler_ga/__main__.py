@@ -231,6 +231,7 @@ def _create_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="(OPTIONAL) Add imported schedule to the initial population.",
     )
+
     return parser
 
 
@@ -265,6 +266,11 @@ def _build_ga_parameters_from_args(args: argparse.Namespace, config_parser: Conf
 
     """
     config_genetic = config_parser["genetic"] if config_parser.has_section("genetic") else {}
+
+    if not config_genetic:
+        msg = "No 'genetic' section found in the configuration file. Using default values."
+        raise KeyError(msg)
+
     params = {
         "population_size": config_genetic.getint("population_size", 16),
         "generations": config_genetic.getint("generations", 128),
