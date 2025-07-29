@@ -40,7 +40,7 @@ def _check_total_capacity(config: TournamentConfig) -> None:
 
     available = defaultdict(int)
     for r_config in config.rounds:
-        available[r_config.round_type] += r_config.num_slots * r_config.num_locations
+        available[r_config.round_type] += r_config.get_num_slots() * r_config.num_locations
 
     for r_type, req_count in required.items():
         if req_count > available[r_type]:
@@ -64,7 +64,7 @@ def _check_per_team_feasibility(config: TournamentConfig) -> None:
     all_slots = []
     for r_config in config.rounds:
         start_dt = r_config.start_time
-        for i in range(r_config.num_slots):
+        for i in range(r_config.get_num_slots()):
             slot_start = start_dt + (i * r_config.duration_minutes)
             all_slots.append(slot_start)
 

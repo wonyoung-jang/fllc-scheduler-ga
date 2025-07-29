@@ -140,15 +140,8 @@ class FitnessBenchmark:
         diff = maximum_score - minimum_score
 
         for num_loc, raw_score in cache_scorer.items():
-            norm_table_score = abs((raw_score - minimum_score) / diff) if diff else 1
-            table_penalty = self.penalty ** (num_loc - 1)
-            table_score = norm_table_score * table_penalty
-            self.table[num_loc] = table_score
-
-            norm_opponent_score = abs((raw_score - maximum_score) / diff) if diff else 1
-            opponent_penalty = self.penalty ** (total_locations_required - num_loc)
-            opponent_score = norm_opponent_score * opponent_penalty
-            self.opponents[num_loc] = opponent_score
+            self.table[num_loc] = abs((raw_score - minimum_score) / diff) if diff else 1
+            self.opponents[num_loc] = abs((raw_score - maximum_score) / diff) if diff else 1
 
         for k, v in self.table.items():
             logger.debug("Table score for %d table(s): %.6f", k, v)

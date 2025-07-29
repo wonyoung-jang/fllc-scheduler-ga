@@ -5,6 +5,7 @@ from logging import getLogger
 
 from ..config.config import RoundType, TournamentConfig
 from ..data_model.event import Event
+from .time import TimeSlot
 
 logger = getLogger(__name__)
 
@@ -52,7 +53,8 @@ class Team:
     event_conflicts: dict[int, set[int]]
     identity: int = field(init=False, repr=False)
     fitness: tuple[float, ...] = field(init=False, repr=False)
-    events: list[Event] = field(default_factory=list)
+    events: list[int] = field(default_factory=list, repr=False)
+    timeslots: list[TimeSlot] = field(default_factory=list, repr=False)
     opponents: list[int] = field(default_factory=list, repr=False)
     tables: list[int] = field(default_factory=list, repr=False)
 
@@ -80,14 +82,16 @@ class Team:
     def remove_event(self, event: Event) -> None:
         """Unbook a team from an event."""
         self.round_types[event.round_type] += 1
-        self.events.remove(event)
+        self.events.remove(event.identity)
+        self.timeslots.remove(event.timeslot)
         if event.paired_event:
             self.tables.remove(event.location)
 
     def add_event(self, event: Event) -> None:
         """Book a team for an event."""
         self.round_types[event.round_type] -= 1
-        self.events.append(event)
+        self.events.append(event.identity)
+        self.timeslots.append(event.timeslot)
         if event.paired_event:
             self.tables.append(event.location)
 
@@ -114,22 +118,17 @@ class Team:
             bool: True if there is a conflict, False otherwise.
 
         """
-        event_ids = self.existing_event_ids()
-        if new_event.identity in event_ids:
+        if new_event.identity in self.events:
             return True
 
         if not (potential_conflicts := self.event_conflicts.get(new_event.identity)):
             return False
 
-        return any(existing_event_id in potential_conflicts for existing_event_id in event_ids)
-
-    def existing_event_ids(self) -> set[int]:
-        """Get a set of existing event IDs for the team."""
-        return {e.identity for e in self.events}
+        return any(existing_event_id in potential_conflicts for existing_event_id in self.events)
 
     def break_time_key(self) -> frozenset[int]:
         """Get a key for the break time cache based on the team's events."""
-        return frozenset(e.timeslot for e in self.events)
+        return frozenset(self.timeslots)
 
     def table_consistency_key(self) -> int:
         """Get a key for the table consistency cache based on the team's events."""

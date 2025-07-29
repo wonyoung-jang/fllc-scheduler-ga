@@ -61,7 +61,8 @@ class NSGA3:
         k = pop_size - len(selected)
 
         selected.extend(self._niching(fronts, last_front, k))
-        return selected, {hash(p) for p in selected}
+        selected_hashes = {hash(p) for p in selected}
+        return selected, selected_hashes
 
     def _get_last_front_idx(self, fronts: list[Population], pop_size: int) -> int:
         """Determine which front is the last to be included."""
@@ -188,7 +189,7 @@ class NSGA3:
         return counts
 
 
-@functools.lru_cache
+@functools.cache
 def dominates(p_fit: tuple[float] | None, q_fit: tuple[float] | None) -> bool:
     """Check if schedule p dominates schedule q."""
     if p_fit is None or q_fit is None:

@@ -1,12 +1,9 @@
 """Location data model for FLL Scheduler GA."""
 
-import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from ..config.constants import ASCII_OFFSET
-
-_RE_TABLE = re.compile(r"Table ([A-Z])(\d)")
+from ..config.constants import ASCII_OFFSET, RE_TABLE
 
 
 @dataclass(slots=True, frozen=True)
@@ -60,7 +57,7 @@ class Table(Location):
     @classmethod
     def from_string(cls, location_str: str, teams_per_round: int) -> "Table | None":
         """Attempt to parse a table from a string."""
-        match = _RE_TABLE.match(location_str)
+        match = RE_TABLE.match(location_str)
         if match:
             table_char, side = match.groups()
             table_id = ord(table_char) - ASCII_OFFSET

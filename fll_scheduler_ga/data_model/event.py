@@ -93,7 +93,7 @@ class EventFactory:
         times = r.times
         teams_per_round = r.teams_per_round
         round_type = r.round_type
-        num_slots = r.num_slots
+        num_slots = r.get_num_slots()
         num_locations = r.num_locations
         duration_minutes = r.duration_minutes
         location_type = get_location_type(teams_per_round)
@@ -143,12 +143,10 @@ class EventConflicts:
 
     event_factory: EventFactory
     conflicts: dict[int, set[int]] = field(default_factory=dict, init=False, repr=False)
-    available: dict[int, set[int]] = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to create the event availability map."""
-        events = sorted(self.event_factory.flat_list(), key=lambda e: e.identity)
-        self.available = {e.identity: set() for e in events}
+        events = self.event_factory.flat_list()
         self.conflicts = {e.identity: set() for e in events}
 
         for event in events:
@@ -159,11 +157,6 @@ class EventConflicts:
 
                 if event.timeslot.overlaps(other.timeslot):
                     self.conflicts[event.identity].add(other.identity)
-                else:
-                    self.available[event.identity].add(other.identity)
 
         for k, v in self.conflicts.items():
             logger.debug("Event %d conflicts with %d other events: %s", k, len(v), v)
-
-        for k, v in self.available.items():
-            logger.debug("Event %d has %d available events: %s", k, len(v), v)

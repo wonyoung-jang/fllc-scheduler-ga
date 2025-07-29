@@ -1,12 +1,14 @@
 """Module to hold constants for the FLL Scheduler GA."""
 
+import re
 from enum import StrEnum
 
+ASCII_OFFSET = 64
 ATTEMPTS_RANGE = (0, 50)
-RANDOM_SEED_RANGE = (1, 2**32 - 1)
 FITNESS_PENALTY = 0.5
 HHMM_FMT = "%H:%M"
-ASCII_OFFSET = 64
+RANDOM_SEED_RANGE = (1, 2**32 - 1)
+RE_TABLE = re.compile(r"Table ([A-Z])(\d)")
 
 
 class SelectionOps(StrEnum):
