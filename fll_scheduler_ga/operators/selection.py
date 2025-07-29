@@ -12,9 +12,9 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from random import Random
 
-from ..config.config import OperatorConfig
 from ..config.constants import SelectionOps
-from ..genetic.ga_parameters import GaParameters
+from ..config.ga_operators_config import OperatorConfig
+from ..config.ga_parameters import GaParameters
 from ..genetic.schedule import Population, Schedule
 
 logger = logging.getLogger(__name__)

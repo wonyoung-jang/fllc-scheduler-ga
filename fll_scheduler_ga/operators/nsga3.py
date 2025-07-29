@@ -1,6 +1,5 @@
 """Tools for Non-dominated Sorting Genetic Algorithm III (NSGA-III)."""
 
-import functools
 import random
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -82,10 +81,10 @@ class NSGA3:
 
         for i, j in combinations(range(size), 2):
             p, q = self._pop[i], self._pop[j]
-            if dominates(p.fitness, q.fitness):
+            if self._dominates(p.fitness, q.fitness):
                 dominates_list[i].append(j)
                 dominated_counts[j] += 1
-            elif dominates(q.fitness, p.fitness):
+            elif self._dominates(q.fitness, p.fitness):
                 dominates_list[j].append(i)
                 dominated_counts[i] += 1
 
@@ -188,17 +187,15 @@ class NSGA3:
                 counts[idx] += 1
         return counts
 
-
-@functools.cache
-def dominates(p_fit: tuple[float] | None, q_fit: tuple[float] | None) -> bool:
-    """Check if schedule p dominates schedule q."""
-    if p_fit is None or q_fit is None:
-        return False
-
-    better_in_any = False
-    for ps, qs in zip(p_fit, q_fit, strict=True):
-        if ps < qs:
+    def _dominates(self, p_fit: tuple[float] | None, q_fit: tuple[float] | None) -> bool:
+        """Check if schedule p dominates schedule q."""
+        if p_fit is None or q_fit is None:
             return False
-        if ps > qs:
-            better_in_any = True
-    return better_in_any
+
+        better_in_any = False
+        for ps, qs in zip(p_fit, q_fit, strict=True):
+            if ps < qs:
+                return False
+            if ps > qs:
+                better_in_any = True
+        return better_in_any

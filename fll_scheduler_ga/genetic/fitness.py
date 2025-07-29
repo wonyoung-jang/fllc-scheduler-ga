@@ -1,6 +1,5 @@
 """Fitness evaluator for the FLL Scheduler GA."""
 
-import functools
 import logging
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -107,8 +106,6 @@ class FitnessEvaluator:
         tc_list = []
         ov_list = []
 
-        score_lists = [bt_list, tc_list, ov_list]
-
         for team in all_teams:
             t_bt = self._bt_cache[team.break_time_key()]
             t_tc = self._tc_cache[team.table_consistency_key()]
@@ -124,69 +121,25 @@ class FitnessEvaluator:
             tc_list.append(t_tc)
             ov_list.append(t_ov)
 
+        score_lists = (bt_list, tc_list, ov_list)
         totals = (bt_total, tc_total, ov_total)
 
         # Metric 1: Averages of scores across all teams
         # The higher, the better
-        means = [calc_mean(total, num_teams) for total in totals]
+        means = [total / num_teams if num_teams else 0 for total in totals]
 
         # Metric 2: Coefficient of Variation (CV) for each score, how much variation relative to mean
         # The lower, the better
-        _sum_sq_diffs = (
-            sum(calc_sum_sq_diffs(x, mean) for x in lst) for lst, mean in zip(score_lists, means, strict=True)
-        )
-        _std_devs = (calc_std_dev(sum_sq_diff, num_teams) for sum_sq_diff in _sum_sq_diffs)
-        _coeff_of_vars = (calc_coeff_of_var(std_dev, mean) for std_dev, mean in zip(_std_devs, means, strict=True))
-        ratios = (calc_inversion(coeff) for coeff in _coeff_of_vars)
+        _sum_sq_diffs = (sum((x - mean) ** 2 for x in lst) for lst, mean in zip(score_lists, means, strict=True))
+        _std_devs = (sqrt(sum_sq_diff / num_teams) if num_teams else 0 for sum_sq_diff in _sum_sq_diffs)
+        _coeff_of_vars = (std_dev / mean if mean else 0 for std_dev, mean in zip(_std_devs, means, strict=True))
+        ratios = (1 / (1 + coeff) if coeff else 1 for coeff in _coeff_of_vars)
 
         # Metric 3: Range of scores for each objective (max - min)
         # The lower, the better
-        _ranges = (calc_range(min(lst), max(lst)) if lst else 1 for lst in score_lists)
-        range_coeffs = (calc_inversion(range_val) for range_val in _ranges)
+        _ranges = (max(lst) - min(lst) if lst else 1 for lst in score_lists)
+        range_coeffs = (1 / (1 + range_val) if range_val else 1 for range_val in _ranges)
 
         return tuple(
-            calc_score(mean, ratio, range_coeff)
-            for mean, ratio, range_coeff in zip(means, ratios, range_coeffs, strict=True)
+            mean * ratio * range_coeff for mean, ratio, range_coeff in zip(means, ratios, range_coeffs, strict=True)
         )
-
-
-@functools.cache
-def calc_mean(total: float, count: int) -> float:
-    """Calculate the mean of a total and count."""
-    return total / count if count else 0
-
-
-@functools.cache
-def calc_sum_sq_diffs(x: float, mean: float) -> float:
-    """Calculate the sum of squared differences."""
-    return (x - mean) ** 2
-
-
-@functools.cache
-def calc_std_dev(sum_sq_diff: float, count: int) -> float:
-    """Calculate the standard deviation."""
-    return sqrt(sum_sq_diff / count) if count else 0
-
-
-@functools.cache
-def calc_coeff_of_var(std_dev: float, mean: float) -> float:
-    """Calculate the coefficient of variation."""
-    return std_dev / mean if mean else 0
-
-
-@functools.cache
-def calc_range(min_val: float, max_val: float) -> float:
-    """Calculate the range coefficient for a value."""
-    return max_val - min_val if max_val > min_val else 1
-
-
-@functools.cache
-def calc_inversion(val: float) -> float:
-    """Calculate the inversion of a value."""
-    return 1 / (1 + val) if val else 1
-
-
-@functools.cache
-def calc_score(mean: float, ratio: float, range_coeff: float) -> float:
-    """Calculate the final score based on mean, ratio, and range coefficient."""
-    return mean * ratio * range_coeff

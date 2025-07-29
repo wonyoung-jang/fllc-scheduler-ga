@@ -6,8 +6,8 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from random import Random
 
-from ..config.config import OperatorConfig
 from ..config.constants import CrossoverOps
+from ..config.ga_operators_config import OperatorConfig
 from ..data_model.event import Event, EventFactory
 from ..data_model.team import TeamFactory
 from ..genetic.schedule import Schedule

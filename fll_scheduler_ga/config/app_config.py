@@ -9,9 +9,10 @@ from pathlib import Path
 from random import Random
 
 from ..data_model.event import Round
-from ..genetic.ga_parameters import GaParameters
-from .config import OperatorConfig, RoundType, TournamentConfig
+from .config import RoundType, TournamentConfig
 from .constants import HHMM_FMT, RANDOM_SEED_RANGE, CrossoverOps, MutationOps, SelectionOps
+from .ga_operators_config import OperatorConfig
+from .ga_parameters import GaParameters
 
 logger = logging.getLogger(__name__)
 

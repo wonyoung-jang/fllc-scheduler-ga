@@ -6,8 +6,8 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from random import Random
 
-from ..config.config import OperatorConfig
 from ..config.constants import MutationOps
+from ..config.ga_operators_config import OperatorConfig
 from ..data_model.event import Event
 from ..genetic.schedule import Match, Schedule
 
