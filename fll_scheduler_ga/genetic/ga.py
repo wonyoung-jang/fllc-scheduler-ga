@@ -183,9 +183,9 @@ class GA:
         seed_path = self._seed_file
         if seed_path and seed_path.exists() and (seed_pop := self.retrieve_seed_population()):
             seed_pop.sort(key=lambda s: (s.rank, -sum(s.fitness)))
-            for i, schedule in enumerate(seed_pop):
-                island_idx = i % self.context.ga_params.num_islands
-                self.islands[island_idx].add_to_population(schedule)
+            for spi, schedule in enumerate(seed_pop):
+                i = spi % self.context.ga_params.num_islands
+                self.islands[i].add_to_population(schedule)
 
         self.context.logger.info("Initializing %d islands...", self.context.ga_params.num_islands)
         for i in range(self.context.ga_params.num_islands):
@@ -208,34 +208,27 @@ class GA:
 
     def run_epochs(self) -> None:
         """Perform main evolution loop: generations and migrations."""
-        num_islands = self.context.ga_params.num_islands
-        migration_size = self.context.ga_params.migration_size
-        migration_interval = self.context.ga_params.migration_interval
-        num_generations = self.context.ga_params.generations
-        offspring_ratio = self._offspring_ratio
-        mutation_ratio = self._mutation_ratio
-        expected_pop_size = self._expected_population_size
-
-        for generation in range(num_generations):
-            for i in range(num_islands):
+        _ga_params = self.context.ga_params
+        for generation in range(_ga_params.generations):
+            for i in range(_ga_params.num_islands):
                 ratios = self.islands[i].evolve()
-                offspring_ratio.update(ratios["offspring"])
-                mutation_ratio.update(ratios["mutation"])
+                self._offspring_ratio.update(ratios["offspring"])
+                self._mutation_ratio.update(ratios["mutation"])
 
             self.update_fitness_history()
             self._notify_on_generation_end(
                 generation + 1,
-                num_generations,
-                expected_pop_size,
+                _ga_params.generations,
+                self._expected_population_size,
                 self.fitness_history[-1] if self.fitness_history else (),
                 len(self.pareto_front()),
             )
 
-            if num_islands <= 1 or migration_size <= 0:
+            if _ga_params.num_islands <= 1 or _ga_params.migration_size <= 0:
                 continue
 
-            if (generation + 1) % migration_interval == 0:
-                self.migrate(num_islands, migration_size)
+            if (generation + 1) % _ga_params.migration_interval == 0:
+                self.migrate(_ga_params.num_islands, _ga_params.migration_size)
 
     def migrate(self, num_islands: int, migration_size: int) -> None:
         """Migrate the best individuals between islands using a ring topology."""

@@ -111,16 +111,8 @@ class Schedule:
     def _get_canonical_representation(self) -> tuple[tuple[int, ...], ...]:
         """Get a canonical representation of the schedule for hashing."""
         if self._cached_canonical_representation is None:
-            if not self.schedule:
-                return ()
-
-            team_to_event_map = defaultdict(list)
-            for event, team_id in self.schedule.items():
-                team_to_event_map[team_id].append(event.identity)
-
-            sorted_events = [tuple(sorted(events)) for events in team_to_event_map.values()]
-            sorted_events.sort()
-            self._cached_canonical_representation = tuple(sorted_events)
+            sorted_team_events = [tuple(sorted(t.events)) for t in self.teams.values()]
+            self._cached_canonical_representation = tuple(sorted(sorted_team_events))
         return self._cached_canonical_representation
 
     def get_matches(self) -> dict[RoundType, list[Match]]:

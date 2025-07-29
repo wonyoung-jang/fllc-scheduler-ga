@@ -2,19 +2,17 @@
 
 import logging
 import math
-from configparser import ConfigParser
-from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
-from pathlib import Path
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 
-from ..config.constants import HHMM_FMT, CrossoverOps, MutationOps, SelectionOps
+from ..config.constants import CrossoverOps, MutationOps, SelectionOps
 
 logger = logging.getLogger(__name__)
 
 type RoundType = str
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True)
 class Round:
     """Representation of a round in the FLL tournament."""
 
@@ -27,11 +25,6 @@ class Round:
     duration_minutes: timedelta
     num_locations: int
     num_teams: int
-    num_slots: int = field(init=False)
-
-    def __post_init__(self) -> None:
-        """Post-initialization to calculate the number of slots."""
-        self.num_slots = self.get_num_slots()
 
     def get_num_slots(self) -> int:
         """Get the number of slots available for this round."""
@@ -79,84 +72,7 @@ class TournamentConfig:
         )
 
 
-def get_config_parser(path: Path | None = None) -> ConfigParser:
-    """Get a ConfigParser instance for the given config file path.
-
-    Args:
-        path (Path | None): Path to the configuration file.
-
-    Returns:
-        ConfigParser: The configured ConfigParser instance.
-
-    """
-    if path is None:
-        try:
-            path = Path("fll_scheduler_ga/config.ini").resolve()
-        except FileNotFoundError:
-            logger.exception("Configuration file not found. Please provide a valid path.")
-
-    parser = ConfigParser(inline_comment_prefixes=("#", ";"))
-    parser.read(path)
-    logger.debug("Configuration file loaded from %s", path)
-    return parser
-
-
-def parse_rounds(parser: ConfigParser) -> tuple[list[Round], dict[RoundType, int], int]:
-    """Parse and return a list of Round objects from the configuration.
-
-    Args:
-        parser (ConfigParser): The ConfigParser instance with tournament configuration.
-
-    Returns:
-        list[Round]: A list of Round objects parsed from the configuration.
-        dict[RoundType, int]: A dictionary mapping round types to the number of rounds per team.
-        int: The total number of teams in the tournament.
-
-    """
-    num_teams = parser["DEFAULT"].getint("num_teams")
-    parsed_rounds: list[Round] = []
-    round_reqs = {}
-
-    for section in parser.sections():
-        if not section.startswith("round"):
-            continue
-
-        r_type = parser[section].get("round_type")
-        r_per_team = parser[section].getint("rounds_per_team")
-        round_reqs[r_type] = r_per_team
-
-        if start_time := parser[section].get("start_time", ""):
-            start_time = datetime.strptime(start_time, HHMM_FMT).replace(tzinfo=UTC)
-
-        if stop_time := parser[section].get("stop_time", ""):
-            stop_time = datetime.strptime(stop_time, HHMM_FMT).replace(tzinfo=UTC)
-
-        if times := parser[section].get("times", []):
-            times = [datetime.strptime(t.strip(), HHMM_FMT).replace(tzinfo=UTC) for t in times.split(",")]
-            start_time = times[0] if times else start_time
-
-        parsed_rounds.append(
-            Round(
-                r_type,
-                r_per_team,
-                parser[section].getint("teams_per_round"),
-                times,
-                start_time,
-                stop_time,
-                timedelta(minutes=parser[section].getint("duration_minutes")),
-                parser[section].getint("num_locations"),
-                num_teams,
-            )
-        )
-
-    if not parsed_rounds:
-        msg = "No rounds defined in the configuration file."
-        raise ValueError(msg)
-
-    return parsed_rounds, round_reqs, num_teams
-
-
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True)
 class OperatorConfig:
     """Configuration for the genetic algorithm operators."""
 
@@ -165,112 +81,17 @@ class OperatorConfig:
     crossover_ks: list[int]
     mutation_types: list[MutationOps | str]
 
+    def __str__(self) -> str:
+        """Represent the OperatorConfig."""
+        selections_str = f"{'\n    - '.join(str(s) for s in self.selection_types)}"
+        crossovers_str = f"{'\n    - '.join(str(c) for c in self.crossover_types)}"
+        crossover_ks_str = f"{'\n    - '.join(str(k) for k in self.crossover_ks)}"
+        mutations_str = f"{'\n    - '.join(str(m) for m in self.mutation_types)}"
 
-def parse_operator_config(parser: ConfigParser) -> OperatorConfig:
-    """Parse and return the operator configuration from the provided ConfigParser.
-
-    Args:
-        parser (ConfigParser): The ConfigParser instance with operator configuration.
-
-    Returns:
-        OperatorConfig: The parsed operator configuration.
-
-    """
-    selection_types = [
-        s.strip()
-        for s in parser.get("genetic.operator.selection", "selection_types", fallback="").split(",")
-        if s.strip()
-    ]
-
-    crossover_types = [
-        c.strip()
-        for c in parser.get("genetic.operator.crossover", "crossover_types", fallback="").split(",")
-        if c.strip()
-    ]
-
-    crossover_ks = [
-        int(k.strip())
-        for k in parser.get("genetic.operator.crossover", "crossover_ks", fallback="").split(",")
-        if k.strip()
-    ]
-
-    mutation_types = [
-        m.strip()
-        for m in parser.get("genetic.operator.mutation", "mutation_types", fallback="").split(",")
-        if m.strip()
-    ]
-
-    if not selection_types:
-        selection_types = [
-            SelectionOps.TOURNAMENT_SELECT,
-            SelectionOps.RANDOM_SELECT,
-        ]
-        logger.warning("No selection types enabled in the configuration. Using defaults: %s", selection_types)
-
-    if not crossover_types:
-        crossover_types = [
-            CrossoverOps.K_POINT,
-            CrossoverOps.SCATTERED,
-            CrossoverOps.UNIFORM,
-            CrossoverOps.ROUND_TYPE_CROSSOVER,
-            CrossoverOps.PARTIAL_CROSSOVER,
-        ]
-        logger.warning("No crossover types enabled in the configuration. Using defaults: %s", crossover_types)
-
-    if not crossover_ks:
-        crossover_ks = [
-            1,
-            2,
-            3,
-        ]
-        logger.warning("No crossover ks values provided in the configuration. Using defaults: %s", crossover_ks)
-
-    if not mutation_types:
-        mutation_types = [
-            MutationOps.SWAP_MATCH_CROSS_TIME_LOCATION,
-            MutationOps.SWAP_MATCH_SAME_LOCATION,
-            MutationOps.SWAP_MATCH_SAME_TIME,
-            MutationOps.SWAP_TEAM_CROSS_TIME_LOCATION,
-            MutationOps.SWAP_TEAM_SAME_LOCATION,
-            MutationOps.SWAP_TEAM_SAME_TIME,
-            MutationOps.SWAP_TABLE_SIDE,
-        ]
-        logger.warning("No mutation types enabled in the configuration. Using defaults: %s", mutation_types)
-
-    return OperatorConfig(
-        selection_types,
-        crossover_types,
-        crossover_ks,
-        mutation_types,
-    )
-
-
-def load_tournament_config(path: Path | None = None) -> tuple[TournamentConfig, ConfigParser, OperatorConfig]:
-    """Load, parse, and return the tournament configuration.
-
-    Args:
-        path (Path | None): The path to the configuration file.
-
-    Returns:
-        TournamentConfig: The parsed tournament configuration.
-        ConfigParser: The ConfigParser instance used to read the configuration.
-
-    """
-    parser = get_config_parser(path)
-    parsed_rounds, round_reqs, num_teams = parse_rounds(parser)
-    operator_config = parse_operator_config(parser)
-    all_rounds_per_team = [r.rounds_per_team for r in parsed_rounds]
-    total_slots = sum(num_teams * rpt for rpt in all_rounds_per_team)
-    unique_opponents_possible = 1 <= max(all_rounds_per_team) <= num_teams - 1
-
-    config = TournamentConfig(
-        num_teams,
-        parsed_rounds,
-        round_reqs,
-        total_slots,
-        unique_opponents_possible,
-    )
-
-    logger.debug("Loaded tournament configuration: %s", config)
-
-    return config, parser, operator_config
+        return (
+            "OperatorConfig:\n"
+            f"  Selection Types:\n    - {selections_str}\n"
+            f"  Crossover Types:\n    - {crossovers_str}\n"
+            f"  Crossover K-values:\n    - {crossover_ks_str}\n"
+            f"  Mutation Types:\n    - {mutations_str}"
+        )
