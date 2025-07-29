@@ -2,7 +2,7 @@
 
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from random import Random
 
@@ -83,15 +83,15 @@ class EventCrossover(Crossover):
     """Abstract base class for crossover operators in the FLL Scheduler GA."""
 
     @abstractmethod
-    def get_genes(self, p1: Schedule, p2: Schedule) -> tuple[Iterable[Event], Iterable[Event]]:
+    def get_genes(self, p1: Schedule, p2: Schedule) -> Iterator[Iterator[Event]]:
         """Get the genes for the crossover.
 
         Args:
             p1 (Schedule): First parent schedule.
             p2 (Schedule): Second parent schedule.
 
-        Returns:
-            tuple[Iterable[Event], Iterable[Event]]: Genes from both parents.
+        Yields:
+            Iterator[Event]: Genes from each parents.
 
         """
         msg = "Subclasses must implement this method."
@@ -123,21 +123,19 @@ class EventCrossover(Crossover):
 
         """
         child = Schedule(self.team_factory.build())
-        p1_genes, p2_genes = self.get_genes(p1, p2)
-        self._transfer_genes(child, p1, p1_genes, first=True)
-        self._transfer_genes(child, p2, p2_genes)
+        parent_genes = self.get_genes(p1, p2)
+        self._transfer_genes(child, p1, next(parent_genes), first=True)
+        self._transfer_genes(child, p2, next(parent_genes), first=False)
         return child
 
-    def _transfer_genes(
-        self, child: Schedule, parent: Schedule, events: Iterable[Event], *, first: bool = False
-    ) -> None:
+    def _transfer_genes(self, child: Schedule, parent: Schedule, events: Iterator[Event], *, first: bool) -> None:
         """Populate the child individual from parent genes.
 
         Args:
             child (Schedule): The child schedule to populate.
             parent (Schedule): The parent schedule to copy genes from.
             events (Iterable[Event]): The events to copy.
-            first (bool, optional): Whether this is the first parent. Defaults to False.
+            first (bool, optional): Whether this is the first parent.
 
         """
         get_team_from_child = child.get_team
@@ -172,17 +170,8 @@ class KPoint(EventCrossover):
             msg = "k must be between 1 and the number of events."
             raise ValueError(msg)
 
-    def get_genes(self, p1: Schedule, p2: Schedule) -> tuple[Iterable[Event], ...]:
-        """Get the genes for the crossover.
-
-        Args:
-            p1 (Schedule): First parent schedule.
-            p2 (Schedule): Second parent schedule.
-
-        Returns:
-            tuple[Iterable[Event], ...]: Genes from both parents.
-
-        """
+    def get_genes(self, p1: Schedule, p2: Schedule) -> Iterator[Iterator[Event]]:
+        """Get the genes for KPoint crossover."""
         evts = self.events
         ne = len(evts)
         indices = sorted(self.rng.sample(range(1, ne), self.k))
@@ -195,9 +184,8 @@ class KPoint(EventCrossover):
 
         genes.append(evts[start:])
         ng = len(genes)
-        p1_genes = (genes[i][x] for i in range(ng) if i % 2 == 0 for x in range(len(genes[i])) if genes[i][x] in p1)
-        p2_genes = (genes[i][x] for i in range(ng) if i % 2 == 1 for x in range(len(genes[i])) if genes[i][x] in p2)
-        return p1_genes, p2_genes
+        yield (genes[i][x] for i in range(ng) if i % 2 == 0 for x in range(len(genes[i])) if genes[i][x] in p1)
+        yield (genes[i][x] for i in range(ng) if i % 2 == 1 for x in range(len(genes[i])) if genes[i][x] in p2)
 
 
 @dataclass(slots=True)
@@ -207,24 +195,14 @@ class Scattered(EventCrossover):
     Shuffled indices split parent 50/50.
     """
 
-    def get_genes(self, p1: Schedule, p2: Schedule) -> tuple[Iterable[Event], ...]:
-        """Get the genes for the crossover.
-
-        Args:
-            p1 (Schedule): First parent schedule.
-            p2 (Schedule): Second parent schedule.
-
-        Returns:
-            tuple[Iterable[Event], ...]: Genes from both parents.
-
-        """
+    def get_genes(self, p1: Schedule, p2: Schedule) -> Iterator[Iterator[Event]]:
+        """Get the genes for Scattered crossover."""
         evts = self.events
         ne = len(evts)
         mid = ne // 2
         indices = self.rng.sample(range(ne), ne)
-        p1_genes = (evts[i] for i in indices[:mid] if evts[i] in p1)
-        p2_genes = (evts[i] for i in indices[mid:] if evts[i] in p2)
-        return p1_genes, p2_genes
+        yield (evts[i] for i in indices[:mid] if evts[i] in p1)
+        yield (evts[i] for i in indices[mid:] if evts[i] in p2)
 
 
 @dataclass(slots=True)
@@ -234,23 +212,13 @@ class Uniform(EventCrossover):
     Each gene is chosen from either parent by flipping a coin for each gene.
     """
 
-    def get_genes(self, p1: Schedule, p2: Schedule) -> tuple[Iterable[Event], ...]:
-        """Get the genes for the crossover.
-
-        Args:
-            p1 (Schedule): First parent schedule.
-            p2 (Schedule): Second parent schedule.
-
-        Returns:
-            tuple[Iterable[Event], ...]: Genes from both parents.
-
-        """
+    def get_genes(self, p1: Schedule, p2: Schedule) -> Iterator[Iterator[Event]]:
+        """Get the genes for Uniform crossover."""
         evts = self.events
         ne = len(evts)
         indices = [1 if self.rng.choice([True, False]) else 2 for _ in range(ne)]
-        p1_genes = (evts[i] for i in range(ne) if indices[i] == 1 and evts[i] in p1)
-        p2_genes = (evts[i] for i in range(ne) if indices[i] == 2 and evts[i] in p2)
-        return p1_genes, p2_genes
+        yield (evts[i] for i in range(ne) if indices[i] == 1 and evts[i] in p1)
+        yield (evts[i] for i in range(ne) if indices[i] == 2 and evts[i] in p2)
 
 
 @dataclass(slots=True)
@@ -260,23 +228,13 @@ class RoundTypeCrossover(EventCrossover):
     Each gene is chosen based on the round type of the event.
     """
 
-    def get_genes(self, p1: Schedule, p2: Schedule) -> tuple[Iterable[Event], ...]:
-        """Get the genes for the crossover.
-
-        Args:
-            p1 (Schedule): First parent schedule.
-            p2 (Schedule): Second parent schedule.
-
-        Returns:
-            tuple[Iterable[Event], ...]: Genes from both parents.
-
-        """
+    def get_genes(self, p1: Schedule, p2: Schedule) -> Iterator[Iterator[Event]]:
+        """Get the genes for RoundType crossover."""
         evts = self.events
         teams = p1.all_teams()
         rt = list(teams[0].round_types.keys())
-        p1_genes = (e for e in evts for i, r in enumerate(rt) if e.round_type == r and i % 2 != 0 and e in p1)
-        p2_genes = (e for e in evts for i, r in enumerate(rt) if e.round_type == r and i % 2 == 0 and e in p2)
-        return p1_genes, p2_genes
+        yield (e for e in evts for i, r in enumerate(rt) if e.round_type == r and i % 2 != 0 and e in p1)
+        yield (e for e in evts for i, r in enumerate(rt) if e.round_type == r and i % 2 == 0 and e in p2)
 
 
 @dataclass(slots=True)
@@ -286,21 +244,11 @@ class PartialCrossover(EventCrossover):
     This operator takes a random subset of events from each parent.
     """
 
-    def get_genes(self, p1: Schedule, p2: Schedule) -> tuple[Iterable[Event], ...]:
-        """Get the genes for the crossover.
-
-        Args:
-            p1 (Schedule): First parent schedule.
-            p2 (Schedule): Second parent schedule.
-
-        Returns:
-            tuple[Iterable[Event], ...]: Genes from both parents.
-
-        """
+    def get_genes(self, p1: Schedule, p2: Schedule) -> Iterator[Iterator[Event]]:
+        """Get the genes for Partial crossover."""
         evts = self.events
         ne = len(evts)
         thirds = sorted(self.rng.sample(range(1, ne), 3))
         indices = self.rng.sample(range(ne), ne)
-        p1_genes = (evts[i] for i in indices[: thirds[0]] if evts[i] in p1)
-        p2_genes = (evts[i] for i in indices[thirds[2] :] if evts[i] in p2)
-        return p1_genes, p2_genes
+        yield (evts[i] for i in indices[: thirds[0]] if evts[i] in p1)
+        yield (evts[i] for i in indices[thirds[2] :] if evts[i] in p2)

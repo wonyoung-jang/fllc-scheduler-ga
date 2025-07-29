@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 from logging import getLogger
+from typing import ClassVar
 
 from ..config.config import RoundType, TournamentConfig
 from ..data_model.event import Event
@@ -25,7 +26,6 @@ class TeamFactory:
     """Factory class to create Team instances."""
 
     config: TournamentConfig
-    conflicts: dict[int, set[int]]
     base_teams_info: frozenset[TeamInfo] = field(init=False)
 
     def __post_init__(self) -> None:
@@ -39,9 +39,7 @@ class TeamFactory:
             TeamMap: A mapping of team identities to Team instances.
 
         """
-        return {
-            i.identity: Team(i, self.config.round_requirements.copy(), self.conflicts) for i in self.base_teams_info
-        }
+        return {i.identity: Team(i, self.config.round_requirements.copy()) for i in self.base_teams_info}
 
 
 @dataclass(slots=True)
@@ -50,13 +48,14 @@ class Team:
 
     info: TeamInfo
     round_types: dict[RoundType, int]
-    event_conflicts: dict[int, set[int]]
     identity: int = field(init=False, repr=False)
     fitness: tuple[float, ...] = field(init=False, repr=False)
     events: list[int] = field(default_factory=list, repr=False)
     timeslots: list[TimeSlot] = field(default_factory=list, repr=False)
     opponents: list[int] = field(default_factory=list, repr=False)
     tables: list[int] = field(default_factory=list, repr=False)
+
+    event_conflicts: ClassVar[dict[int, set[int]]]
 
     def __post_init__(self) -> None:
         """Post-initialization to sort events and time slots."""

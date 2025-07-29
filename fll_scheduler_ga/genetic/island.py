@@ -122,10 +122,8 @@ class Island:
 
     def get_migrants(self, migration_size: int) -> Iterator[Schedule]:
         """Get the list of migrants from the current island."""
-        if self.rng.choice([True, False]):
-            yield from sorted(self.population, key=lambda s: (s.rank, -sum(s.fitness)))[:migration_size]
-        else:
-            yield from self.rng.sample(self.population, k=migration_size)
+        # yield from sorted(self.population, key=lambda s: (s.rank, -sum(s.fitness)))[:migration_size]
+        yield from self.rng.sample(self.population, k=migration_size)
 
     def receive_migrants(self, migrants: Iterator[Schedule]) -> None:
         """Receive migrants from another island and add them to the current island's population."""

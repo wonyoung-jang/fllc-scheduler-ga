@@ -10,7 +10,7 @@ from random import Random
 from fll_scheduler_ga.config.app_config import AppConfig, create_app_config
 from fll_scheduler_ga.config.benchmark import FitnessBenchmark
 from fll_scheduler_ga.data_model.event import EventConflicts, EventFactory
-from fll_scheduler_ga.data_model.team import TeamFactory
+from fll_scheduler_ga.data_model.team import Team, TeamFactory
 from fll_scheduler_ga.genetic.fitness import (
     FitnessEvaluator,
 )
@@ -270,14 +270,16 @@ def create_ga_context(app_config: AppConfig) -> GaContext:
 
     event_factory = EventFactory(app_config.tournament)
     event_conflicts = EventConflicts(event_factory)
-    team_factory = TeamFactory(config, event_conflicts.conflicts)
+    Team.event_conflicts = event_conflicts.conflicts
+    team_factory = TeamFactory(config)
     repairer = Repairer(rng, config, event_factory)
     selections = tuple(build_selections(operators, rng, ga_params))
     crossovers = tuple(build_crossovers(operators, rng, team_factory, event_factory))
     mutations = tuple(build_mutations(operators, rng))
     benchmark = FitnessBenchmark(config, event_factory)
     evaluator = FitnessEvaluator(config, benchmark)
-    nsga3 = NSGA3(rng, len(evaluator.objectives), ga_params.population_size)
+    total_size = ga_params.population_size * ga_params.num_islands
+    nsga3 = NSGA3(rng, len(evaluator.objectives), total_size)
     return GaContext(
         config=config,
         ga_params=ga_params,

@@ -89,16 +89,16 @@ class GA:
     def adapt_operator_probabilities(self) -> None:
         """Adapt the operator probabilities based on the fitness history."""
         crossover_base = 0.5
-        crossover_low = 0.3
-        crossover_high = 0.9
+        crossover_low = 0.1
+        crossover_high = 1.0
         mutation_base = 0.05
         mutation_low = 0.01
-        mutation_high = 0.5
+        mutation_high = 1.0
         epsilon = 0.82
 
         if len(self.fitness_improvement_history) >= 10:
             last_five_improvements = self.fitness_improvement_history[-10:]
-            improved_count = last_five_improvements.count(True)
+            improved_count = last_five_improvements.count(1)
 
             # Less than 1/5 generations improved -> decrease operator chance / exploit
             if improved_count < 2:
@@ -143,10 +143,13 @@ class GA:
         """Update the fitness history with the current generation's fitness."""
         this_gen_fitness = self._calculate_this_gen_fitness()
 
-        if self.fitness_history and self.fitness_history[-1] < this_gen_fitness:
-            self.fitness_improvement_history.append(True)
-        else:
-            self.fitness_improvement_history.append(False)
+        if self.fitness_history:
+            if self.fitness_history[-1] < this_gen_fitness:
+                self.fitness_improvement_history.append(1)
+            elif self.fitness_history[-1] > this_gen_fitness:
+                self.fitness_improvement_history.append(-1)
+            else:
+                self.fitness_improvement_history.append(0)
 
         self.adapt_operator_probabilities()
 
@@ -172,8 +175,7 @@ class GA:
             self.update_fitness_history()
             return True
         finally:
-            if start_time:
-                self.context.logger.info("Total time taken: %.2f seconds", time.time() - start_time)
+            self.context.logger.info("Total time taken: %.2f seconds", time.time() - start_time)
             self.finalize()
             self._notify_on_finish(self.total_population, self.pareto_front())
         return True
