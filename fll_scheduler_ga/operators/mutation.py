@@ -184,16 +184,7 @@ class SwapTeamMutation(Mutation):
     """Mutation operator for swapping single team between two matches."""
 
     def get_swap_candidates(self, child: Schedule) -> tuple[Match | None]:
-        """Get two matches to swap in the child schedule.
-
-        Args:
-            child (Schedule): The schedule to analyze.
-
-        Returns:
-            tuple[Match | None]: A tuple containing two matches to swap,
-            or None if no valid candidates are found.
-
-        """
+        """Get two matches to swap in the child schedule."""
         for match1_data, match2_data in self.yield_swap_candidates(child):
             e1a, _, t1a, t1b = match1_data
             e2a, _, t2a, t2b = match2_data
@@ -208,15 +199,7 @@ class SwapTeamMutation(Mutation):
         return None, None
 
     def mutate(self, child: Schedule) -> bool:
-        """Swap one team from two different matches.
-
-        Args:
-            child (Schedule): The schedule to mutate.
-
-        Returns:
-            bool: True if the mutation was successful, False otherwise.
-
-        """
+        """Swap one team from two different matches."""
         match1_data, match2_data = self.get_swap_candidates(child)
 
         if not match1_data:
@@ -244,15 +227,7 @@ class SwapMatchMutation(Mutation):
     """Base class for mutations that swap the locations of two entire matches."""
 
     def get_swap_candidates(self, child: Schedule) -> tuple[Match | None]:
-        """Get two matches to swap in the child schedule.
-
-        Args:
-            child (Schedule): The schedule to analyze.
-
-        Returns:
-            tuple[Match | None]: A tuple containing two matches to swap,
-
-        """
+        """Get two matches to swap in the child schedule."""
         for match1_data, match2_data in self.yield_swap_candidates(child):
             e1a, e1b, t1a, t1b = match1_data
             e2a, e2b, t2a, t2b = match2_data
@@ -265,15 +240,7 @@ class SwapMatchMutation(Mutation):
         return None, None
 
     def mutate(self, child: Schedule) -> bool:
-        """Swap two entire matches.
-
-        Args:
-            child (Schedule): The schedule to mutate.
-
-        Returns:
-            bool: True if the mutation was successful, False otherwise.
-
-        """
+        """Swap two entire matches."""
         match1_data, match2_data = self.get_swap_candidates(child)
 
         if not match1_data:
@@ -299,27 +266,11 @@ class SwapTableSideMutation(Mutation):
     """Mutation operator for swapping the sides of two tables in a match."""
 
     def get_swap_candidates(self, child: Schedule) -> Match | None:
-        """Get two matches to swap in the child schedule.
-
-        Args:
-            child (Schedule): The schedule to analyze.
-
-        Returns:
-            Match | None: A tuple containing two matches to swap, or None if no valid candidates are found.
-
-        """
+        """Get two matches to swap in the child schedule."""
         return self.rng.choice(next(self.yield_swap_candidates(child), (None, None)))
 
     def mutate(self, child: Schedule) -> bool:
-        """Swap the sides of two tables in a match.
-
-        Args:
-            child (Schedule): The schedule to mutate.
-
-        Returns:
-            bool: True if the mutation was successful, False otherwise.
-
-        """
+        """Swap the sides of two tables in a match."""
         match_data = self.get_swap_candidates(child)
 
         if not match_data:

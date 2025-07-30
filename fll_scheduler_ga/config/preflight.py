@@ -3,8 +3,8 @@
 import logging
 from collections import defaultdict
 
-from ..config.config import TournamentConfig
 from ..data_model.event import EventFactory
+from .config import TournamentConfig
 
 logger = logging.getLogger(__name__)
 

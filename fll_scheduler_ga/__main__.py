@@ -9,6 +9,7 @@ from random import Random
 
 from fll_scheduler_ga.config.app_config import AppConfig, create_app_config
 from fll_scheduler_ga.config.benchmark import FitnessBenchmark
+from fll_scheduler_ga.config.preflight import run_preflight_checks
 from fll_scheduler_ga.data_model.event import EventConflicts, EventFactory
 from fll_scheduler_ga.data_model.team import Team, TeamFactory
 from fll_scheduler_ga.genetic.fitness import (
@@ -25,7 +26,6 @@ from fll_scheduler_ga.operators.mutation import build_mutations
 from fll_scheduler_ga.operators.nsga3 import NSGA3
 from fll_scheduler_ga.operators.repairer import Repairer
 from fll_scheduler_ga.operators.selection import build_selections
-from fll_scheduler_ga.preflight.preflight import run_preflight_checks
 
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,7 @@
 """Fitness evaluator for the FLL Scheduler GA."""
 
 import logging
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from enum import StrEnum
 from math import sqrt
@@ -8,6 +9,7 @@ from typing import Any
 
 from ..config.benchmark import FitnessBenchmark
 from ..config.config import TournamentConfig
+from ..data_model.team import Team
 from .schedule import Schedule
 
 logger = logging.getLogger(__name__)
@@ -97,9 +99,18 @@ class FitnessEvaluator:
                 - Range: Difference between the maximum and minimum scores for each objective.
 
         """
-        if not self.check(schedule) or not (all_teams := schedule.all_teams()):
+        if not self.check(schedule):
             return None
 
+        scores = self.aggregate_team_fitnesses(schedule.all_teams())
+        mean_scores = self.get_mean_scores(scores)
+        var_scores = self.get_variation_scores(scores, mean_scores)
+        range_scores = self.get_range_scores(scores)
+
+        return tuple(m * v * r for m, v, r in zip(mean_scores, var_scores, range_scores, strict=True))
+
+    def aggregate_team_fitnesses(self, all_teams: list[Team]) -> tuple[list[float], ...]:
+        """Aggregate fitness scores for all teams in the schedule."""
         bt_list = []
         tc_list = []
         ov_list = []
@@ -124,25 +135,21 @@ class FitnessEvaluator:
             tc_list.append(t_tc)
             ov_list.append(t_ov)
 
-        score_lists = (bt_list, tc_list, ov_list)
+        return bt_list, tc_list, ov_list
 
-        # Metric 1: Averages of scores across all teams
-        # The higher, the better
-        totals = (sum(lst) for lst in score_lists)
-        means = tuple(total / self.config.num_teams for total in totals)
+    def get_mean_scores(self, scores: tuple[list[float], ...]) -> tuple[float, ...]:
+        """Calculate the mean scores for each objective."""
+        totals = (sum(lst) for lst in scores)
+        return tuple(total / self.config.num_teams for total in totals)
 
-        # Metric 2: Coefficient of Variation (CV) for each score, how much variation relative to mean
-        # The lower, the better
-        _sum_sq_diffs = (sum((x - mean) ** 2 for x in lst) for lst, mean in zip(score_lists, means, strict=True))
+    def get_variation_scores(self, scores: tuple[list[float], ...], means: tuple[float, ...]) -> Iterator[float]:
+        """Calculate the coefficient of variation for each objective."""
+        _sum_sq_diffs = (sum((x - mean) ** 2 for x in lst) for lst, mean in zip(scores, means, strict=True))
         _std_devs = (sqrt(sum_sq_diff / self.config.num_teams) for sum_sq_diff in _sum_sq_diffs)
         _coeff_of_vars = (std_dev / mean if mean else 0 for std_dev, mean in zip(_std_devs, means, strict=True))
-        ratios = (1 / (1 + coeff) if coeff else 1 for coeff in _coeff_of_vars)
+        yield from (1 / (1 + coeff) if coeff else 1 for coeff in _coeff_of_vars)
 
-        # Metric 3: Range of scores for each objective (max - min)
-        # The lower, the better
-        _ranges = (max(lst) - min(lst) if lst else 1 for lst in score_lists)
-        range_coeffs = (1 / (1 + range_val) if range_val else 1 for range_val in _ranges)
-
-        return tuple(
-            mean * ratio * range_coeff for mean, ratio, range_coeff in zip(means, ratios, range_coeffs, strict=True)
-        )
+    def get_range_scores(self, scores: tuple[list[float], ...]) -> Iterator[float]:
+        """Calculate the range of scores for each objective."""
+        _ranges = (max(lst) - min(lst) if lst else 1 for lst in scores)
+        yield from (1 / (1 + range_val) if range_val else 1 for range_val in _ranges)

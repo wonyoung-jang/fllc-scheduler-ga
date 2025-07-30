@@ -77,32 +77,44 @@ class Island:
 
     def evolve(self) -> dict[str, Counter]:
         """Perform main evolution loop: generations and migrations."""
-        island_pop = self.population
-        if not island_pop:
-            return {"offspring": Counter(), "mutation": Counter()}
-
-        num_offspring = self.context.ga_params.population_size - self.context.ga_params.elite_size
-        attempts, max_attempts = 0, num_offspring * 5
-        child_count = 0
         offspring_ratio = Counter()
         mutation_ratio = Counter()
 
+        if not (island_pop := self.population):
+            return {
+                "offspring": offspring_ratio,
+                "mutation": mutation_ratio,
+            }
+
+        _context = self.context
+        _ga_params = _context.ga_params
+        num_offspring = _ga_params.population_size - _ga_params.elite_size
+        attempts, max_attempts = 0, num_offspring * 5
+        child_count = 0
+
         while child_count < num_offspring and attempts < max_attempts:
             attempts += 1
-            parents = tuple(self.rng.choice(self.context.selections).select(island_pop, num_parents=2))
+            selection_op = self.rng.choice(_context.selections)
+            parents = tuple(selection_op.select(island_pop, num_parents=2))
             if parents[0] == parents[1]:
                 continue
 
-            if self.context.ga_params.crossover_chance < self.rng.random():
+            if _ga_params.crossover_chance <= self.rng.random():
                 continue
 
-            for child in self.rng.choice(self.context.crossovers).crossover(parents):
-                if self.context.ga_params.mutation_chance > self.rng.random():
-                    mutation_success = self.rng.choice(self.context.mutations).mutate(child)
+            crossover_op = self.rng.choice(_context.crossovers)
+            for child in crossover_op.crossover(parents):
+                mutation_ops = self.rng.sample(_context.mutations, k=len(_context.mutations))
+                for i, mutation_op in enumerate(mutation_ops, start=1):
+                    mutation_chance = _ga_params.mutation_chance**i
+                    if mutation_chance <= self.rng.random():
+                        continue
+
+                    mutation_success = mutation_op.mutate(child)
                     mutation_ratio["success" if mutation_success else "failure"] += 1
 
-                if self.context.repairer.repair(child) and self.add_to_population(child):
-                    child.fitness = self.context.evaluator.evaluate(child)
+                if _context.repairer.repair(child) and self.add_to_population(child):
+                    child.fitness = _context.evaluator.evaluate(child)
                     child_count += 1
                     offspring_ratio["success"] += 1
                 else:
@@ -111,8 +123,8 @@ class Island:
                 if child_count >= num_offspring:
                     break
 
-        self.population, self.hashes = self.context.nsga3.select(
-            self.population, population_size=self.context.ga_params.population_size
+        self.population, self.hashes = _context.nsga3.select(
+            self.population, population_size=_ga_params.population_size
         )
 
         return {
@@ -121,8 +133,7 @@ class Island:
         }
 
     def get_migrants(self, migration_size: int) -> Iterator[Schedule]:
-        """Get the list of migrants from the current island."""
-        # yield from sorted(self.population, key=lambda s: (s.rank, -sum(s.fitness)))[:migration_size]
+        """Randomly yield migrants from population."""
         yield from self.rng.sample(self.population, k=migration_size)
 
     def receive_migrants(self, migrants: Iterator[Schedule]) -> None:

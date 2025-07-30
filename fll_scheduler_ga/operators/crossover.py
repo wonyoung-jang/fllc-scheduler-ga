@@ -231,8 +231,7 @@ class RoundTypeCrossover(EventCrossover):
     def get_genes(self, p1: Schedule, p2: Schedule) -> Iterator[Iterator[Event]]:
         """Get the genes for RoundType crossover."""
         evts = self.events
-        teams = p1.all_teams()
-        rt = list(teams[0].round_types.keys())
+        rt = list(self.event_factory.config.round_requirements.keys())
         yield (e for e in evts for i, r in enumerate(rt) if e.round_type == r and i % 2 != 0 and e in p1)
         yield (e for e in evts for i, r in enumerate(rt) if e.round_type == r and i % 2 == 0 and e in p2)
 
