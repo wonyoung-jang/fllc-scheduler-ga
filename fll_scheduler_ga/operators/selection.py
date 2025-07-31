@@ -12,26 +12,25 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from random import Random
 
+from ..config.app_config import AppConfig
 from ..config.constants import SelectionOps
-from ..config.ga_operators_config import OperatorConfig
-from ..config.ga_parameters import GaParameters
 from ..genetic.schedule import Population, Schedule
 
 logger = logging.getLogger(__name__)
 
 
-def build_selections(o_config: OperatorConfig, rng: Random, ga_params: GaParameters) -> Iterator["Selection"]:
+def build_selections(app_config: AppConfig) -> Iterator["Selection"]:
     """Build and return a tuple of selection operators based on the configuration."""
     variant_map = {
-        SelectionOps.TOURNAMENT_SELECT: lambda: TournamentSelect(rng, ga_params.selection_size),
-        SelectionOps.RANDOM_SELECT: lambda: RandomSelect(rng),
+        SelectionOps.TOURNAMENT_SELECT: lambda: TournamentSelect(app_config.rng, app_config.ga_params.selection_size),
+        SelectionOps.RANDOM_SELECT: lambda: RandomSelect(app_config.rng),
     }
 
-    if not o_config.selection_types:
+    if not app_config.operators.selection_types:
         logger.warning("No selection types enabled in the configuration. Selection will not occur.")
         return
 
-    for variant_name in o_config.selection_types:
+    for variant_name in app_config.operators.selection_types:
         if variant_name not in variant_map:
             msg = f"Unknown selection type in config: '{variant_name}'"
             raise ValueError(msg)

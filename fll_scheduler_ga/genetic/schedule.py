@@ -131,7 +131,6 @@ class Schedule:
     def normalize_teams(self) -> dict[int, int]:
         """Normalize the schedule by reassigning team identities."""
         if self._cached_normalized_teams is None:
-            len_teams = len(self.teams)
             self._cached_normalized_teams = {}
             count = 1
             for _, team in sorted(self.items(), key=lambda i: (i[0].identity)):
@@ -139,7 +138,7 @@ class Schedule:
                     continue
 
                 self._cached_normalized_teams[team] = count
-                if count == len_teams:
+                if count == len(self.teams):
                     break
                 count += 1
         return self._cached_normalized_teams

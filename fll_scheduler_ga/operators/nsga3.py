@@ -50,18 +50,14 @@ class NSGA3:
 
     def select(self, population: Population, population_size: int = 0) -> tuple[Population, set[int]]:
         """Select the next generation using NSGA-III principles."""
-        self._pop = population
         pop_size = population_size or self.population_size
-
-        fronts = self._non_dominated_sort()
+        fronts = self._non_dominated_sort(population)
         last_idx = self._get_last_front_idx(fronts, pop_size)
-        selected = [p for i in range(last_idx) for p in fronts[i]]
         last_front = fronts[last_idx]
+        selected = [p for i in range(last_idx) for p in fronts[i]]
         k = pop_size - len(selected)
-
         selected.extend(self._niching(fronts, last_front, k))
-        selected_hashes = {hash(p) for p in selected}
-        return selected, selected_hashes
+        return selected, {hash(p) for p in selected}
 
     def _get_last_front_idx(self, fronts: list[Population], pop_size: int) -> int:
         """Determine which front is the last to be included."""
@@ -72,15 +68,15 @@ class NSGA3:
                 return i
         return len(fronts) - 1
 
-    def _non_dominated_sort(self) -> list[Population]:
+    def _non_dominated_sort(self, population: Population) -> list[Population]:
         """Perform non-dominated sorting on the population."""
-        size = len(self._pop)
+        size = len(population)
         dominates_list = [[] for _ in range(size)]
         dominated_counts = [0] * size
         fronts = [[]]
 
         for i, j in combinations(range(size), 2):
-            p, q = self._pop[i], self._pop[j]
+            p, q = population[i], population[j]
             if self._dominates(p.fitness, q.fitness):
                 dominates_list[i].append(j)
                 dominated_counts[j] += 1
@@ -106,9 +102,9 @@ class NSGA3:
 
         for rank, front in enumerate(fronts):
             for i in front:
-                self._pop[i].rank = rank
+                population[i].rank = rank
 
-        return [[self._pop[i] for i in front] for front in fronts]
+        return [[population[i] for i in front] for front in fronts]
 
     def _niching(self, fronts: list[Population], last_front: Population, k: int) -> Iterator[Schedule]:
         """Select k individuals from the last front using a niching mechanism."""
@@ -162,7 +158,7 @@ class NSGA3:
         nadir = fits_last.max(axis=0) if last_front else fits.max(axis=0)
 
         span = nadir - ideal
-        span[span == 0] = 1
+        span[span <= 1e-6] = 1e-6
 
         for p, fit in zip(pop, fits, strict=True):
             p.normalized_fitness = (fit - ideal) / span

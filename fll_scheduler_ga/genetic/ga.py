@@ -1,11 +1,11 @@
 """Genetic algorithm for FLL Scheduler GA."""
 
-import shelve
-import time
+import pickle
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 from random import Random
+from time import time
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -73,7 +73,7 @@ class GA:
             return [p for i in self.islands for p in i.pareto_front()]
         return [p for p in self.total_population if p.rank == 0]
 
-    def _calculate_this_gen_fitness(self) -> tuple[float, ...]:
+    def _get_this_gen_fitness(self) -> tuple[float, ...]:
         """Calculate the average fitness of the current generation."""
         if not (front := self.pareto_front()):
             return ()
@@ -85,6 +85,10 @@ class GA:
                 avg_fitness_front1[i] += p.fitness[i]
 
         return tuple(s / len(front) for s in avg_fitness_front1.values())
+
+    def _get_last_gen_fitness(self) -> tuple[float, ...]:
+        """Get the fitness of the last generation."""
+        return self.fitness_history[-1] if self.fitness_history else ()
 
     def adapt_operator_probabilities(self) -> None:
         """Adapt the operator probabilities based on the fitness history."""
@@ -141,12 +145,13 @@ class GA:
 
     def update_fitness_history(self) -> None:
         """Update the fitness history with the current generation's fitness."""
-        this_gen_fitness = self._calculate_this_gen_fitness()
+        this_gen_fitness = self._get_this_gen_fitness()
+        last_gen_fitness = self._get_last_gen_fitness()
 
         if self.fitness_history:
-            if self.fitness_history[-1] < this_gen_fitness:
+            if last_gen_fitness < this_gen_fitness:
                 self.fitness_improvement_history.append(1)
-            elif self.fitness_history[-1] > this_gen_fitness:
+            elif last_gen_fitness > this_gen_fitness:
                 self.fitness_improvement_history.append(-1)
             else:
                 self.fitness_improvement_history.append(0)
@@ -157,7 +162,7 @@ class GA:
 
     def run(self) -> bool:
         """Run the genetic algorithm and return the best schedule found."""
-        start_time = time.time()
+        start_time = time()
         self._notify_on_start(self.context.ga_params.generations)
 
         try:
@@ -175,7 +180,7 @@ class GA:
             self.update_fitness_history()
             return True
         finally:
-            self.context.logger.info("Total time taken: %.2f seconds", time.time() - start_time)
+            self.context.logger.info("Total time taken: %.2f seconds", time() - start_time)
             self.finalize()
             self._notify_on_finish(self.total_population, self.pareto_front())
         return True
@@ -197,16 +202,19 @@ class GA:
         """Load and integrate a population from a seed file."""
         self.context.logger.info("Loading seed population from: %s", self._seed_file)
         try:
-            with shelve.open(self._seed_file) as shelf:
-                seed_config: TournamentConfig = shelf.get("config", None)
+            with self._seed_file.open("rb") as f:
+                seed_data = pickle.load(f)
+                seed_config: TournamentConfig = seed_data["config"]
                 num_teams_changed = self.context.config.num_teams != seed_config.num_teams
                 config_changed = self.context.config.rounds != seed_config.rounds
                 if num_teams_changed or config_changed:
                     self.context.logger.warning("Seed population does not match current config. Using current...")
                     return None
-                return shelf.get("population", [])
-        except (OSError, KeyError, EOFError, Exception):
+                return seed_data["population"]
+        except (OSError, pickle.PicklingError):
             self.context.logger.exception("Could not load or parse seed file. Starting with a fresh population.")
+        except EOFError:
+            self.context.logger.debug("Pickle file is empty")
 
     def run_epochs(self) -> None:
         """Perform main evolution loop: generations and migrations."""

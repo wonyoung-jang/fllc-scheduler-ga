@@ -78,7 +78,7 @@ class FitnessBenchmark:
             "table": self.table,
             "opponents": self.opponents,
         }
-        # Ensure the cache directory exists
+
         path.parent.mkdir(parents=True, exist_ok=True)
 
         try:

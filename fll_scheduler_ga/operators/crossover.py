@@ -6,8 +6,8 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from random import Random
 
+from ..config.app_config import AppConfig
 from ..config.constants import CrossoverOps
-from ..config.ga_operators_config import OperatorConfig
 from ..data_model.event import Event, EventFactory
 from ..data_model.team import TeamFactory
 from ..genetic.schedule import Schedule
@@ -16,32 +16,29 @@ logger = logging.getLogger(__name__)
 
 
 def build_crossovers(
-    o_config: OperatorConfig,
-    rng: Random,
-    team_factory: TeamFactory,
-    event_factory: EventFactory,
+    app_config: AppConfig, team_factory: TeamFactory, event_factory: EventFactory
 ) -> Iterator["Crossover"]:
     """Build and return a tuple of crossover operators based on the configuration."""
     variant_map = {
-        CrossoverOps.K_POINT: lambda k: KPoint(team_factory, event_factory, rng, k=k),
-        CrossoverOps.SCATTERED: lambda: Scattered(team_factory, event_factory, rng),
-        CrossoverOps.UNIFORM: lambda: Uniform(team_factory, event_factory, rng),
-        CrossoverOps.ROUND_TYPE_CROSSOVER: lambda: RoundTypeCrossover(team_factory, event_factory, rng),
-        CrossoverOps.PARTIAL_CROSSOVER: lambda: PartialCrossover(team_factory, event_factory, rng),
+        CrossoverOps.K_POINT: lambda k: KPoint(team_factory, event_factory, app_config.rng, k=k),
+        CrossoverOps.SCATTERED: lambda: Scattered(team_factory, event_factory, app_config.rng),
+        CrossoverOps.UNIFORM: lambda: Uniform(team_factory, event_factory, app_config.rng),
+        CrossoverOps.ROUND_TYPE_CROSSOVER: lambda: RoundTypeCrossover(team_factory, event_factory, app_config.rng),
+        CrossoverOps.PARTIAL_CROSSOVER: lambda: PartialCrossover(team_factory, event_factory, app_config.rng),
     }
 
-    if not o_config.crossover_types:
+    if not app_config.operators.crossover_types:
         logger.warning("No crossover types enabled in the configuration. Crossover will not occur.")
         return
 
-    for variant_name in o_config.crossover_types:
+    for variant_name in app_config.operators.crossover_types:
         if variant_name not in variant_map:
             msg = f"Unknown crossover type in config: {variant_name}"
             raise ValueError(msg)
         else:
             crossover_factory = variant_map[variant_name]
             if variant_name == CrossoverOps.K_POINT:
-                for k in o_config.crossover_ks:
+                for k in app_config.operators.crossover_ks:
                     if k <= 0:
                         msg = f"Invalid crossover k value: {k}. Must be greater than 0."
                         raise ValueError(msg)
@@ -123,38 +120,41 @@ class EventCrossover(Crossover):
 
         """
         child = Schedule(self.team_factory.build())
-        parent_genes = self.get_genes(p1, p2)
-        self._transfer_genes(child, p1, next(parent_genes), first=True)
-        self._transfer_genes(child, p2, next(parent_genes), first=False)
+        p1_genes, p2_genes = self.get_genes(p1, p2)
+        self._transfer_genes_from_parent1(child, p1, p1_genes)
+        self._transfer_genes_from_parent2(child, p2, p2_genes)
         return child
 
-    def _transfer_genes(self, child: Schedule, parent: Schedule, events: Iterator[Event], *, first: bool) -> None:
-        """Populate the child individual from parent genes.
-
-        Args:
-            child (Schedule): The child schedule to populate.
-            parent (Schedule): The parent schedule to copy genes from.
-            events (Iterable[Event]): The events to copy.
-            first (bool, optional): Whether this is the first parent.
-
-        """
+    def _transfer_genes_from_parent1(self, child: Schedule, parent: Schedule, events: Iterator[Event]) -> None:
+        """Transfer genes from the first parent. Fewer checks needed."""
         get_team_from_child = child.get_team
-
         for e1 in events:
+            t1 = get_team_from_child(parent[e1].identity)
             if (e2 := e1.paired_event) and e1.location.side == 1:
-                t1 = get_team_from_child(parent[e1].identity)
                 t2 = get_team_from_child(parent[e2].identity)
-                if first or (
-                    t1.needs_round(e1.round_type)
-                    and t2.needs_round(e2.round_type)
-                    and not t1.conflicts(e1)
-                    and not t2.conflicts(e2)
-                ):
-                    child.assign_match(e1, e2, t1, t2)
+                child.assign_match(e1, e2, t1, t2)
             elif e2 is None:
-                team = get_team_from_child(parent[e1].identity)
-                if first or (team.needs_round(e1.round_type) and not team.conflicts(e1)):
-                    child.assign_single(e1, team)
+                child.assign_single(e1, t1)
+
+    def _transfer_genes_from_parent2(self, child: Schedule, parent: Schedule, events: Iterator[Event]) -> None:
+        """Transfer genes from the second parent."""
+        get_team_from_child = child.get_team
+        for e1 in events:
+            t1 = get_team_from_child(parent[e1].identity)
+            if (e2 := e1.paired_event) and e1.location.side == 1:
+                t2 = get_team_from_child(parent[e2].identity)
+                if (
+                    not t1.needs_round(e1.round_type)
+                    or not t2.needs_round(e2.round_type)
+                    or t1.conflicts(e1)
+                    or t2.conflicts(e2)
+                ):
+                    continue
+                child.assign_match(e1, e2, t1, t2)
+            elif e2 is None:
+                if not t1.needs_round(e1.round_type) or t1.conflicts(e1):
+                    continue
+                child.assign_single(e1, t1)
 
 
 @dataclass(slots=True)

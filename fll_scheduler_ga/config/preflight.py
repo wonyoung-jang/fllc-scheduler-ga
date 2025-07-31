@@ -33,46 +33,42 @@ def _check_round_definitions(config: TournamentConfig) -> None:
 
 def _check_total_capacity(config: TournamentConfig) -> None:
     """Check for total available vs. required event slots."""
-    required = defaultdict(int)
-    for r_config in config.rounds:
-        num_teams_for_round = config.num_teams * r_config.rounds_per_team
-        required[r_config.round_type] += num_teams_for_round / r_config.teams_per_round
+    required = {}
+    available = {}
+    for r in config.rounds:
+        required[r.round_type] = (config.num_teams * r.rounds_per_team) / r.teams_per_round
+        available[r.round_type] = r.get_num_slots() * r.num_locations
 
-    available = defaultdict(int)
-    for r_config in config.rounds:
-        available[r_config.round_type] += r_config.get_num_slots() * r_config.num_locations
-
-    for r_type, req_count in required.items():
-        if req_count > available[r_type]:
+    for rt, count in required.items():
+        if count > available[rt]:
             msg = (
-                f"Capacity impossible for Round '{r_type}':\n"
-                f"  - Required team-events: {req_count}\n"
-                f"  - Total available team-event slots: {available[r_type]}\n"
+                f"Capacity impossible for Round '{rt}':\n"
+                f"  - Required team-events: {count}\n"
+                f"  - Total available team-event slots: {available[rt]}\n"
                 f"  - Suggestion: Increase duration, locations, or start/end times for this round."
             )
             raise ValueError(msg)
-        logger.debug("Check passed: Capacity sufficient for Round '%s' - %d/%d.", r_type, req_count, available[r_type])
+        logger.debug("Check passed: Capacity sufficient for Round '%s' - %d/%d.", rt, count, available[rt])
     logger.debug("Check passed: Overall capacity is sufficient.")
 
 
 def _check_per_team_feasibility(config: TournamentConfig) -> None:
     """Check if a single team has enough time slots in the day for all its events."""
-    all_times = [t for r in config.rounds for t in [r.start_time]]
-    if not all_times:
+    if not [t for r in config.rounds for t in [r.start_time]]:
         return
 
     all_slots = []
-    for r_config in config.rounds:
-        start_dt = r_config.start_time
-        for i in range(r_config.get_num_slots()):
-            slot_start = start_dt + (i * r_config.duration_minutes)
+    for r in config.rounds:
+        start_dt = r.start_time
+        for i in range(r.get_num_slots()):
+            slot_start = start_dt + (i * r.duration_minutes)
             all_slots.append(slot_start)
 
-        if r_config.stop_time:
-            stop_dt = r_config.stop_time
-            if all_slots[-1] + r_config.duration_minutes > stop_dt:
+        if r.stop_time:
+            stop_dt = r.stop_time
+            if all_slots[-1] + r.duration_minutes > stop_dt:
                 msg = (
-                    f"Round '{r_config.round_type}' exceeds configured stop time.\n"
+                    f"Round '{r.round_type}' exceeds configured stop time.\n"
                     f"  - Last slot starts at {all_slots[-1]} but should not exceed {stop_dt}."
                 )
                 raise ValueError(msg)
@@ -97,17 +93,17 @@ def _check_location_time_overlaps(config: TournamentConfig, event_factory: Event
     """Check if different round types are scheduled in the same locations at the same time."""
     booked_slots = defaultdict(list)
 
-    for r_config in config.rounds:
-        for event in event_factory.create_events(r_config):
-            location_key = (type(event.location), event.location)
-            for existing_ts, existing_r_type in booked_slots.get(location_key, []):
-                if event.timeslot.overlaps(existing_ts):
+    for r in config.rounds:
+        for e in event_factory.create_events(r):
+            loc_key = (type(e.location), e.location)
+            for existing_ts, existing_rt in booked_slots.get(loc_key, []):
+                if e.timeslot.overlaps(existing_ts):
                     msg = (
-                        f"Configuration conflict: Round '{r_config.round_type}' and '{existing_r_type}' "
-                        f"are scheduled in the same location ({location_key[0].__name__} {location_key[1]}) "
-                        f"at overlapping times ({event.timeslot} and "
+                        f"Configuration conflict: Round '{r.round_type}' and '{existing_rt}' "
+                        f"are scheduled in the same location ({loc_key[0].__name__} {loc_key[1]}) "
+                        f"at overlapping times ({e.timeslot} and "
                         f"{existing_ts})."
                     )
                     raise ValueError(msg)
-            booked_slots[location_key].append((event.timeslot, r_config.round_type))
+            booked_slots[loc_key].append((e.timeslot, r.round_type))
     logger.debug("Check passed: No location/time overlaps found.")

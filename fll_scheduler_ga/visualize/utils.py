@@ -45,6 +45,7 @@ def plot_pareto_scatter(front: Population, objectives: list[str], title: str, sa
     elif len(objectives) == 3:
         fig = plt.figure(figsize=(10, 8))
         ax = fig.add_subplot(111, projection="3d")
+        ax.set_box_aspect([1, 1, 1])
         ax.view_init(azim=45, elev=40)
         x_obj, y_obj, z_obj = objectives
         ax.scatter(dataframe[x_obj], dataframe[y_obj], dataframe[z_obj], c=ranks, cmap="viridis", s=60)

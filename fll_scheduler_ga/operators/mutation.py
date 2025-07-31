@@ -6,62 +6,62 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from random import Random
 
+from ..config.app_config import AppConfig
 from ..config.constants import MutationOps
-from ..config.ga_operators_config import OperatorConfig
 from ..data_model.event import Event
 from ..genetic.schedule import Match, Schedule
 
 logger = logging.getLogger(__name__)
 
 
-def build_mutations(o_config: OperatorConfig, rng: Random) -> Iterator["Mutation"]:
+def build_mutations(app_config: AppConfig) -> Iterator["Mutation"]:
     """Build and return a tuple of mutation operators based on the configuration."""
     variant_map = {
         # SwapMatchMutation variants
         MutationOps.SWAP_MATCH_CROSS_TIME_LOCATION: lambda: SwapMatchMutation(
-            rng,
+            app_config.rng,
             same_timeslot=False,
             same_location=False,
         ),
         MutationOps.SWAP_MATCH_SAME_LOCATION: lambda: SwapMatchMutation(
-            rng,
+            app_config.rng,
             same_timeslot=False,
             same_location=True,
         ),
         MutationOps.SWAP_MATCH_SAME_TIME: lambda: SwapMatchMutation(
-            rng,
+            app_config.rng,
             same_timeslot=True,
             same_location=False,
         ),
         # SwapTeamMutation variants
         MutationOps.SWAP_TEAM_CROSS_TIME_LOCATION: lambda: SwapTeamMutation(
-            rng,
+            app_config.rng,
             same_timeslot=False,
             same_location=False,
         ),
         MutationOps.SWAP_TEAM_SAME_LOCATION: lambda: SwapTeamMutation(
-            rng,
+            app_config.rng,
             same_timeslot=False,
             same_location=True,
         ),
         MutationOps.SWAP_TEAM_SAME_TIME: lambda: SwapTeamMutation(
-            rng,
+            app_config.rng,
             same_timeslot=True,
             same_location=False,
         ),
         # SwapTableSideMutation variant
         MutationOps.SWAP_TABLE_SIDE: lambda: SwapTableSideMutation(
-            rng,
+            app_config.rng,
             same_timeslot=True,
             same_location=True,
         ),
     }
 
-    if not o_config.mutation_types:
+    if not app_config.operators.mutation_types:
         logger.warning("No mutation types enabled in the configuration. Mutation will not occur.")
         return
 
-    for variant_name in o_config.mutation_types:
+    for variant_name in app_config.operators.mutation_types:
         if variant_name not in variant_map:
             msg = f"Unknown mutation type in config: '{variant_name}'"
             raise ValueError(msg)

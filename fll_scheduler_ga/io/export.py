@@ -1,8 +1,8 @@
 """Module for exporting schedules to different formats."""
 
-import argparse
-import csv
-import logging
+from argparse import Namespace
+from csv import writer
+from logging import getLogger
 from pathlib import Path
 
 from ..config.config import RoundType
@@ -12,17 +12,17 @@ from ..genetic.schedule import Individual, Schedule
 from ..visualize.plot import Plot
 from .base_exporter import Exporter, GridBasedExporter
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
-def generate_summary(args: argparse.Namespace, ga: GA) -> None:
+def generate_summary(args: Namespace, ga: GA) -> None:
     """Run the fll-scheduler-ga application and generate summary reports."""
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     logger.info("Output directory: %s", output_dir)
 
     if not args.no_plotting:
-        plot = Plot(ga)
+        plot = Plot(ga, ga.context.evaluator.objectives)
 
         fitness_plot_path = output_dir / "fitness_vs_generation.png"
         plot.plot_fitness(
@@ -181,7 +181,7 @@ class CsvExporter(GridBasedExporter):
             csv_parts.extend(self.render_grid(rt, values))
 
         with filename.open("w", newline="", encoding="utf-8") as csvfile:
-            csv.writer(csvfile).writerows(csv_parts)
+            writer(csvfile).writerows(csv_parts)
 
 
 class HtmlExporter(GridBasedExporter):

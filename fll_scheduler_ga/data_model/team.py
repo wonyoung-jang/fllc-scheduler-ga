@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from logging import getLogger
 from typing import ClassVar
 
-from ..config.config import RoundType, TournamentConfig
+from ..config.config import RoundType
 from ..data_model.event import Event
 from .time import TimeSlot
 
@@ -25,12 +25,8 @@ class TeamInfo:
 class TeamFactory:
     """Factory class to create Team instances."""
 
-    config: TournamentConfig
-    base_teams_info: frozenset[TeamInfo] = field(init=False)
-
-    def __post_init__(self) -> None:
-        """Post-initialization to validate the base team information."""
-        self.base_teams_info = frozenset(TeamInfo(i) for i in range(1, self.config.num_teams + 1))
+    round_requirements: dict[RoundType, int]
+    base_teams_info: frozenset[TeamInfo]
 
     def build(self) -> TeamMap:
         """Create a mapping of team identities to Team instances.
@@ -39,7 +35,14 @@ class TeamFactory:
             TeamMap: A mapping of team identities to Team instances.
 
         """
-        return {i.identity: Team(i, self.config.round_requirements.copy()) for i in self.base_teams_info}
+        return {
+            info.identity: Team(
+                info=info,
+                identity=info.identity,
+                round_types=self.round_requirements.copy(),
+            )
+            for info in self.base_teams_info
+        }
 
 
 @dataclass(slots=True)
@@ -47,8 +50,8 @@ class Team:
     """Data model for a team in the FLL Scheduler GA."""
 
     info: TeamInfo
+    identity: int
     round_types: dict[RoundType, int]
-    identity: int = field(init=False, repr=False)
     fitness: tuple[float, ...] = field(init=False, repr=False)
     events: list[int] = field(default_factory=list, repr=False)
     timeslots: list[TimeSlot] = field(default_factory=list, repr=False)
@@ -56,10 +59,6 @@ class Team:
     tables: list[int] = field(default_factory=list, repr=False)
 
     event_conflicts: ClassVar[dict[int, set[int]]]
-
-    def __post_init__(self) -> None:
-        """Post-initialization to sort events and time slots."""
-        self.identity = self.info.identity
 
     def __hash__(self) -> int:
         """Hash function for the team based on its identity."""

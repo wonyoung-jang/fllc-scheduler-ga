@@ -1,6 +1,7 @@
 """Event data model for FLL scheduling."""
 
 import logging
+from collections import defaultdict
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -147,16 +148,14 @@ class EventConflicts:
     def __post_init__(self) -> None:
         """Post-initialization to create the event availability map."""
         events = self.event_factory.flat_list()
-        self.conflicts = {e.identity: set() for e in events}
+        self.conflicts = defaultdict(set)
 
-        for event in events:
+        for i, event in enumerate(events):
             logger.debug("Event %d: %s", event.identity, event)
-            for other in events:
-                if other.identity == event.identity:
-                    continue
-
+            for other in events[i + 1 :]:
                 if event.timeslot.overlaps(other.timeslot):
                     self.conflicts[event.identity].add(other.identity)
+                    self.conflicts[other.identity].add(event.identity)
 
         for k, v in self.conflicts.items():
             logger.debug("Event %d conflicts with %d other events: %s", k, len(v), v)

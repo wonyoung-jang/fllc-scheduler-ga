@@ -1,9 +1,9 @@
 """Main entry point for the fll-scheduler-ga package."""
 
-import argparse
-import logging
-import shelve
+import pickle
+from argparse import ArgumentParser, Namespace
 from importlib.metadata import version
+from logging import DEBUG, FileHandler, Formatter, StreamHandler, getLogger
 from pathlib import Path
 from random import Random
 
@@ -11,26 +11,21 @@ from fll_scheduler_ga.config.app_config import AppConfig, create_app_config
 from fll_scheduler_ga.config.benchmark import FitnessBenchmark
 from fll_scheduler_ga.config.preflight import run_preflight_checks
 from fll_scheduler_ga.data_model.event import EventConflicts, EventFactory
-from fll_scheduler_ga.data_model.team import Team, TeamFactory
-from fll_scheduler_ga.genetic.fitness import (
-    FitnessEvaluator,
-)
+from fll_scheduler_ga.data_model.team import Team, TeamFactory, TeamInfo
+from fll_scheduler_ga.genetic.fitness import FitnessEvaluator
 from fll_scheduler_ga.genetic.ga import GA
 from fll_scheduler_ga.genetic.ga_context import GaContext
 from fll_scheduler_ga.io.export import generate_summary, generate_summary_report
 from fll_scheduler_ga.io.importer import CsvImporter
 from fll_scheduler_ga.observers.loggers import LoggingObserver
 from fll_scheduler_ga.observers.progress import TqdmObserver
-from fll_scheduler_ga.operators.crossover import build_crossovers
-from fll_scheduler_ga.operators.mutation import build_mutations
 from fll_scheduler_ga.operators.nsga3 import NSGA3
 from fll_scheduler_ga.operators.repairer import Repairer
-from fll_scheduler_ga.operators.selection import build_selections
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
-def setup_environment() -> tuple[argparse.Namespace, GA]:
+def setup_environment() -> tuple[Namespace, GA]:
     """Set up the environment for the application."""
     args = create_parser().parse_args()
     initialize_logging(args)
@@ -50,12 +45,14 @@ def setup_environment() -> tuple[argparse.Namespace, GA]:
         return args, ga
 
 
-def handle_seed_file(args: argparse.Namespace, ga_context: GaContext) -> None:
+def handle_seed_file(args: Namespace, ga_context: GaContext) -> None:
     """Handle the seed file for the genetic algorithm."""
     config = ga_context.config
-    seed_path = Path(args.seed_file).resolve()
-    if args.flush and seed_path.exists():
-        seed_path.unlink()
+    path = Path(args.seed_file).resolve()
+
+    if args.flush and path.exists():
+        path.unlink(missing_ok=True)
+    path.touch(exist_ok=True)
 
     if args.import_file:
         schedule_csv_path = Path(args.import_file).resolve()
@@ -72,22 +69,37 @@ def handle_seed_file(args: argparse.Namespace, ga_context: GaContext) -> None:
             )
 
         if args.add_import_to_population:
+            population = []
             try:
-                with shelve.open(seed_path) as shelf:
-                    population = shelf.get("population", [])
-                    if csv_import.schedule not in population:
-                        population.append(csv_import.schedule)
-                    shelf["population"] = population
-                    shelf["config"] = config
-            except Exception:
+                with path.open("rb") as f:
+                    seed_data = pickle.load(f)
+                    population.extend(seed_data.get("population", []))
+            except (OSError, pickle.PicklingError):
                 logger.exception("Error loading seed file")
+            except EOFError:
+                logger.debug("Pickle file is empty")
+
+            if csv_import.schedule not in population:
+                population.append(csv_import.schedule)
+
+            try:
+                with path.open("wb") as f:
+                    data_to_cache = {
+                        "population": population,
+                        "config": ga_context.config,
+                    }
+                    pickle.dump(data_to_cache, f)
+            except (OSError, pickle.PicklingError):
+                logger.exception("Error loading seed file")
+            except EOFError:
+                logger.debug("Pickle file is empty")
 
 
-def create_parser() -> argparse.ArgumentParser:
+def create_parser() -> ArgumentParser:
     """Create the argument parser for the application.
 
     Returns:
-        argparse.ArgumentParser: Configured argument parser.
+        ArgumentParser: Configured argument parser.
 
     """
     _default_values = {
@@ -97,9 +109,10 @@ def create_parser() -> argparse.ArgumentParser:
         "loglevel_file": "DEBUG",
         "loglevel_console": "INFO",
         "no_plotting": False,
-        "seed_file": "fllc_genetic",
+        "seed_file": "fllc_genetic.pkl",
+        "front_only": True,
     }
-    parser = argparse.ArgumentParser(
+    parser = ArgumentParser(
         description="Generate a tournament schedule using a Genetic Algorithm.",
     )
 
@@ -120,7 +133,7 @@ def create_parser() -> argparse.ArgumentParser:
         "--rng_seed",
         type=int,
         default=None,
-        help="(OPTIONAL) Random seed for reproducibility.",
+        help="Random seed for reproducibility.",
     )
 
     # Output parameters
@@ -166,32 +179,32 @@ def create_parser() -> argparse.ArgumentParser:
     genetic_group.add_argument(
         "--population_size",
         type=int,
-        help="(OPTIONAL) Population size for the GA.",
+        help="Population size for the GA.",
     )
     genetic_group.add_argument(
         "--generations",
         type=int,
-        help="(OPTIONAL) Number of generations to run.",
+        help="Number of generations to run.",
     )
     genetic_group.add_argument(
         "--elite_size",
         type=int,
-        help="(OPTIONAL) Number of elite individuals.",
+        help="Number of elite individuals.",
     )
     genetic_group.add_argument(
         "--selection_size",
         type=int,
-        help="(OPTIONAL) Size of parent selection.",
+        help="Size of parent selection.",
     )
     genetic_group.add_argument(
         "--crossover_chance",
         type=float,
-        help="(OPTIONAL) Chance of crossover (0.0 to 1.0).",
+        help="Chance of crossover (0.0 to 1.0).",
     )
     genetic_group.add_argument(
         "--mutation_chance",
         type=float,
-        help="(OPTIONAL) Mutation chance (0.0 to 1.0).",
+        help="Mutation chance (0.0 to 1.0).",
     )
 
     # Seed file parameters
@@ -207,23 +220,29 @@ def create_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Flush the cached population to the seed file at the end of the run.",
     )
+    seed_group.add_argument(
+        "--front_only",
+        action="store_true",
+        default=_default_values["front_only"],
+        help="Whether to save only the pareto front to the seed file. (default: True)",
+    )
 
     # Island model parameters
     island_group = parser.add_argument_group("Island Model Parameters")
     island_group.add_argument(
         "--num_islands",
         type=int,
-        help="(OPTIONAL) Number of islands for the GA (enables island model if > 1).",
+        help="Number of islands for the GA (enables island model if > 1).",
     )
     island_group.add_argument(
         "--migration_interval",
         type=int,
-        help="(OPTIONAL) Generations between island migrations.",
+        help="Generations between island migrations.",
     )
     island_group.add_argument(
         "--migration_size",
         type=int,
-        help="(OPTIONAL) Number of individuals to migrate.",
+        help="Number of individuals to migrate.",
     )
 
     # Schedule importer parameters
@@ -231,29 +250,35 @@ def create_parser() -> argparse.ArgumentParser:
     import_group.add_argument(
         "--import_file",
         type=str,
-        help="(OPTIONAL) Path to a CSV file to import a schedule.",
+        help="Path to a CSV file to import a schedule.",
     )
     import_group.add_argument(
         "--add_import_to_population",
         action="store_true",
-        help="(OPTIONAL) Add imported schedule to the initial population.",
+        help="Add imported schedule to the initial population.",
     )
 
     return parser
 
 
-def initialize_logging(args: argparse.Namespace) -> None:
+def initialize_logging(args: Namespace) -> None:
     """Initialize logging for the application."""
-    file_handler = logging.FileHandler(args.log_file, mode="w", encoding="utf-8")
+    file_fmt = Formatter("[%(asctime)s] %(levelname)s[%(name)s] %(message)s")
+    file_handler = FileHandler(
+        filename=args.log_file,
+        mode="w",
+        encoding="utf-8",
+    )
     file_handler.setLevel(args.loglevel_file)
-    file_handler.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s[%(name)s] %(message)s"))
+    file_handler.setFormatter(file_fmt)
 
-    console_handler = logging.StreamHandler()
+    console_fmt = Formatter("%(levelname)s[%(name)s] %(message)s")
+    console_handler = StreamHandler()
     console_handler.setLevel(args.loglevel_console)
-    console_handler.setFormatter(logging.Formatter("%(levelname)s[%(name)s] %(message)s"))
+    console_handler.setFormatter(console_fmt)
 
-    root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG)
+    root_logger = getLogger()
+    root_logger.setLevel(DEBUG)
     root_logger.addHandler(file_handler)
     root_logger.addHandler(console_handler)
 
@@ -263,35 +288,28 @@ def initialize_logging(args: argparse.Namespace) -> None:
 
 def create_ga_context(app_config: AppConfig) -> GaContext:
     """Create and return a GaContext with the provided configuration."""
-    config = app_config.tournament
-    operators = app_config.operators
-    ga_params = app_config.ga_params
-    rng = app_config.rng
-
+    base_team_info = frozenset(TeamInfo(i) for i in range(1, app_config.tournament.num_teams + 1))
+    team_factory = TeamFactory(app_config.tournament.round_requirements, base_team_info)
     event_factory = EventFactory(app_config.tournament)
     event_conflicts = EventConflicts(event_factory)
     Team.event_conflicts = event_conflicts.conflicts
-    team_factory = TeamFactory(config)
-    repairer = Repairer(rng, config, event_factory)
-    selections = tuple(build_selections(operators, rng, ga_params))
-    crossovers = tuple(build_crossovers(operators, rng, team_factory, event_factory))
-    mutations = tuple(build_mutations(operators, rng))
-    benchmark = FitnessBenchmark(config, event_factory)
-    evaluator = FitnessEvaluator(config, benchmark)
-    total_size = ga_params.population_size * ga_params.num_islands
-    nsga3 = NSGA3(rng, len(evaluator.objectives), total_size)
+
+    repairer = Repairer(app_config.rng, app_config.tournament, event_factory)
+    benchmark = FitnessBenchmark(app_config.tournament, event_factory)
+    evaluator = FitnessEvaluator(app_config.tournament, benchmark)
+
+    num_objectives = len(evaluator.objectives)
+    population_size = app_config.ga_params.population_size * app_config.ga_params.num_islands
+    nsga3 = NSGA3(app_config.rng, num_objectives, population_size)
+
     return GaContext(
-        config=config,
-        ga_params=ga_params,
+        app_config=app_config,
         event_factory=event_factory,
         team_factory=team_factory,
         repairer=repairer,
         evaluator=evaluator,
-        nsga3=nsga3,
         logger=logger,
-        selections=selections,
-        crossovers=crossovers,
-        mutations=mutations,
+        nsga3=nsga3,
     )
 
 
@@ -315,13 +333,17 @@ def save_population_to_seed_file(ga: GA, seed_file: str | Path, *, front: bool =
         logger.warning("No population to save to seed file.")
         return
 
+    data_to_cache = {
+        "population": population,
+        "config": ga.context.config,
+    }
+
     path = Path(seed_file)
     logger.info("Saving final population of size %d to seed file: %s", len(population), path)
     try:
-        with shelve.open(path) as shelf:
-            shelf["population"] = population
-            shelf["config"] = ga.context.config
-    except OSError:
+        with path.open("wb") as f:
+            pickle.dump(data_to_cache, f)
+    except (OSError, pickle.PicklingError, EOFError):
         logger.exception("Error saving population to seed file: %s", path)
 
 
@@ -342,7 +364,7 @@ def main() -> None:
         logger.exception("An unhandled error occurred during the GA run. Saving state before exiting.")
     finally:
         if ga.total_population:  # only save if a final population exists
-            save_population_to_seed_file(ga, args.seed_file, front=True)
+            save_population_to_seed_file(ga, args.seed_file, front=args.front_only)
             generate_summary(args, ga)
 
     logger.info("FLLC Scheduler finished")

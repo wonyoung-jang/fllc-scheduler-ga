@@ -1,11 +1,11 @@
 """Configuration for the tournament scheduler GA."""
 
-import logging
-import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from logging import getLogger
+from math import ceil
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 type RoundType = str
 
@@ -35,7 +35,7 @@ class Round:
         if slots_per_timeslot == 0:
             return 0
 
-        minimum_slots = math.ceil(total_num_teams / slots_per_timeslot)
+        minimum_slots = ceil(total_num_teams / slots_per_timeslot)
 
         if self.stop_time:
             total_available = self.stop_time - self.start_time
