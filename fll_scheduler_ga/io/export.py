@@ -73,7 +73,7 @@ def generate_summary_report(schedule: Schedule, objectives: list[FitnessObjectiv
             f.write(f"--- FLL Scheduler GA Summary Report (ID: {id(schedule)} | Hash: {hash(schedule)}) ---\n\n")
             f.write("Objective Scores:\n")
 
-            for name, score in zip(objectives, schedule.fitness, strict=False):
+            for name, score in zip(objectives, schedule.fitness, strict=True):
                 f.write(f"  - {name:<{max_len_obj}}: {score:.6f}\n")
 
             f.write("\n")

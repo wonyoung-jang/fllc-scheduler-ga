@@ -300,6 +300,7 @@ def create_ga_context(app_config: AppConfig) -> GaContext:
 
     num_objectives = len(evaluator.objectives)
     pop_size_ref_points = app_config.ga_params.population_size * app_config.ga_params.num_islands
+    pop_size_ref_points = max(pop_size_ref_points, 100)
     nsga3 = NSGA3(app_config.rng, num_objectives, pop_size_ref_points)
 
     return GaContext(

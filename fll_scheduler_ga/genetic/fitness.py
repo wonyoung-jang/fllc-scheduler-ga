@@ -121,13 +121,13 @@ class FitnessEvaluator:
             ov_key = team.opponent_variety_key()
 
             if (t_bt := self.hit_bt_cache.get(bt_key)) is None:
-                t_bt = self.hit_bt_cache.setdefault(bt_key, self._bt_cache.pop(bt_key))
+                t_bt = self.hit_bt_cache.setdefault(bt_key, self._bt_cache.get(bt_key, 0))
 
             if (t_tc := self.hit_tc_cache.get(tc_key)) is None:
-                t_tc = self.hit_tc_cache.setdefault(tc_key, self._tc_cache.pop(tc_key))
+                t_tc = self.hit_tc_cache.setdefault(tc_key, self._tc_cache.get(tc_key, 0))
 
             if (t_ov := self.hit_ov_cache.get(ov_key)) is None:
-                t_ov = self.hit_ov_cache.setdefault(ov_key, self._ov_cache.pop(ov_key))
+                t_ov = self.hit_ov_cache.setdefault(ov_key, self._ov_cache.get(ov_key, 0))
 
             team.fitness = (t_bt, t_tc, t_ov)
 
@@ -151,5 +151,28 @@ class FitnessEvaluator:
 
     def get_range_scores(self, scores: tuple[list[float], ...]) -> Iterator[float]:
         """Calculate the range of scores for each objective."""
-        _ranges = (max(lst) - min(lst) if lst else 1 for lst in scores)
+        _ranges = (self._get_weighted_range(lst) if lst else 1 for lst in scores)
         yield from (1 / (1 + range_val) if range_val else 1 for range_val in _ranges)
+
+    def _get_weighted_range(self, lst: list[float]) -> float:
+        if not lst:
+            return 0
+        max_val = max(lst)
+        min_val = min(lst)
+        max_count = lst.count(max_val)
+        min_count = lst.count(min_val)
+        if max_count + min_count != len(lst):
+            return max_val - min_val
+        max_val *= max_count / len(lst)
+        min_val *= min_count / len(lst)
+        return abs(max_val - min_val)
+
+    def _get_weighted_max_score(self, lst: list[float]) -> float:
+        max_val = max(lst)
+        max_ratio = lst.count(max_val) / len(lst)
+        return max_val * max_ratio if max_ratio else 0
+
+    def _get_weighted_min_score(self, lst: list[float]) -> float:
+        min_val = min(lst)
+        min_ratio = lst.count(min_val) / len(lst)
+        return min_val * min_ratio if min_ratio else 0

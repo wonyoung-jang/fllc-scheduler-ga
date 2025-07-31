@@ -89,6 +89,8 @@ class GA:
     def adapt_operator_probabilities(self) -> None:
         """Adapt the operator probabilities based on the fitness history."""
         epsilon = 0.82
+        c_chance = self.context.ga_params.crossover_chance
+        m_chance = self.context.ga_params.mutation_chance
         len_improvements = len(self.fitness_improvement_history)
 
         if len_improvements >= 10:
@@ -97,14 +99,8 @@ class GA:
 
             # Less than 1/5 generations improved -> decrease operator chance / exploit
             if improved_count < 2:
-                self.context.ga_params.crossover_chance = max(
-                    0.0001,
-                    self.context.ga_params.crossover_chance * epsilon,
-                )
-                self.context.ga_params.mutation_chance = max(
-                    0.0001,
-                    self.context.ga_params.mutation_chance * epsilon,
-                )
+                self.context.ga_params.crossover_chance = max(0.0001, c_chance * epsilon)
+                self.context.ga_params.mutation_chance = max(0.0001, m_chance * epsilon)
                 self.context.logger.debug(
                     "Reduced crossover chance to %.2f and mutation chance to %.2f",
                     self.context.ga_params.crossover_chance,
@@ -112,14 +108,8 @@ class GA:
                 )
             # More than 1/5 generations improved -> increase operator chance / explore
             elif improved_count > 2:
-                self.context.ga_params.crossover_chance = min(
-                    0.9999,
-                    self.context.ga_params.crossover_chance / epsilon,
-                )
-                self.context.ga_params.mutation_chance = min(
-                    0.9999,
-                    self.context.ga_params.mutation_chance / epsilon,
-                )
+                self.context.ga_params.crossover_chance = min(0.9999, c_chance / epsilon)
+                self.context.ga_params.mutation_chance = min(0.9999, m_chance / epsilon)
                 self.context.logger.debug(
                     "Increased crossover chance to %.2f and mutation chance to %.2f",
                     self.context.ga_params.crossover_chance,

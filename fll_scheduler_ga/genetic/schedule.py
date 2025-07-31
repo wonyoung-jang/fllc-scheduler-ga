@@ -50,11 +50,7 @@ class Schedule:
     def __setitem__(self, event: Event, team: Team) -> None:
         """Assign a team to a specific event."""
         self.schedule[event] = team.identity
-        self._cached_all_teams = None
-        self._cached_normalized_teams = None
-        self._cached_matches = None
-        self._cached_hash = None
-        self._cached_canonical_representation = None
+        self._clear_cache()
 
     def __contains__(self, event: Event) -> bool:
         """Check if a specific event is scheduled."""
@@ -71,6 +67,14 @@ class Schedule:
         if self._cached_hash is None:
             self._cached_hash = hash(self._get_canonical_representation())
         return self._cached_hash
+
+    def _clear_cache(self) -> None:
+        """Clear cached values to ensure fresh calculations."""
+        self._cached_all_teams = None
+        self._cached_normalized_teams = None
+        self._cached_matches = None
+        self._cached_hash = None
+        self._cached_canonical_representation = None
 
     def keys(self) -> KeysView[Event]:
         """Return an iterator over the events (keys)."""
@@ -108,11 +112,11 @@ class Schedule:
             self._cached_all_teams = list(self.teams.values())
         return self._cached_all_teams
 
-    def _get_canonical_representation(self) -> tuple[tuple[int, ...], ...]:
+    def _get_canonical_representation(self) -> frozenset[frozenset[int]]:
         """Get a canonical representation of the schedule for hashing."""
         if self._cached_canonical_representation is None:
-            sorted_team_events = [tuple(sorted(t.events)) for t in self.teams.values()]
-            self._cached_canonical_representation = tuple(sorted(sorted_team_events))
+            team_events = (frozenset(t.events) for t in self.teams.values())
+            self._cached_canonical_representation = frozenset(team_events)
         return self._cached_canonical_representation
 
     def get_matches(self) -> dict[RoundType, list[Match]]:

@@ -1,12 +1,12 @@
---- FLL Scheduler GA Summary Report (ID: 2318952229568 | Hash: 4171091985064846469) ---
+--- FLL Scheduler GA Summary Report (ID: 2956300341952 | Hash: 2289693990984329790) ---
 
 Objective Scores:
   - BreakTime        : 0.369664
   - TableConsistency : 0.086886
-  - OpponentVariety  : 0.689948
+  - OpponentVariety  : 0.525550
 
-Total            : 1.146498
-Average          : 0.382166
+Total            : 0.982100
+Average          : 0.327367
 
 Team fitnesses (sorted by total fitness descending):
 
