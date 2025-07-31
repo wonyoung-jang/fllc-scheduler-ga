@@ -161,10 +161,12 @@ class FitnessEvaluator:
         min_val = min(lst)
         max_count = lst.count(max_val)
         min_count = lst.count(min_val)
-        if max_count + min_count != len(lst):
-            return max_val - min_val
-        max_val *= max_count / len(lst)
-        min_val *= min_count / len(lst)
+        if max_count == 1 or min_count == 1:
+            return abs(max_val - min_val)
+        max_ratio = max_count / len(lst)
+        min_ratio = min_count / len(lst)
+        max_val *= max_ratio
+        min_val *= min_ratio
         return abs(max_val - min_val)
 
     def _get_weighted_max_score(self, lst: list[float]) -> float:
