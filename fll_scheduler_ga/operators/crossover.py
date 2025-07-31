@@ -19,19 +19,20 @@ def build_crossovers(
     app_config: AppConfig, team_factory: TeamFactory, event_factory: EventFactory
 ) -> Iterator["Crossover"]:
     """Build and return a tuple of crossover operators based on the configuration."""
+    rng = app_config.rng
     variant_map = {
-        CrossoverOps.K_POINT: lambda k: KPoint(team_factory, event_factory, app_config.rng, k=k),
-        CrossoverOps.SCATTERED: lambda: Scattered(team_factory, event_factory, app_config.rng),
-        CrossoverOps.UNIFORM: lambda: Uniform(team_factory, event_factory, app_config.rng),
-        CrossoverOps.ROUND_TYPE_CROSSOVER: lambda: RoundTypeCrossover(team_factory, event_factory, app_config.rng),
-        CrossoverOps.PARTIAL_CROSSOVER: lambda: PartialCrossover(team_factory, event_factory, app_config.rng),
+        CrossoverOps.K_POINT: lambda k: KPoint(team_factory, event_factory, rng, k=k),
+        CrossoverOps.SCATTERED: lambda: Scattered(team_factory, event_factory, rng),
+        CrossoverOps.UNIFORM: lambda: Uniform(team_factory, event_factory, rng),
+        CrossoverOps.ROUND_TYPE_CROSSOVER: lambda: RoundTypeCrossover(team_factory, event_factory, rng),
+        CrossoverOps.PARTIAL_CROSSOVER: lambda: PartialCrossover(team_factory, event_factory, rng),
     }
 
-    if not app_config.operators.crossover_types:
+    if not (crossover_types := app_config.operators.crossover_types):
         logger.warning("No crossover types enabled in the configuration. Crossover will not occur.")
         return
 
-    for variant_name in app_config.operators.crossover_types:
+    for variant_name in crossover_types:
         if variant_name not in variant_map:
             msg = f"Unknown crossover type in config: {variant_name}"
             raise ValueError(msg)
@@ -61,14 +62,14 @@ class Crossover(ABC):
         self.events = self.event_factory.flat_list()
 
     @abstractmethod
-    def crossover(self, parents: list[Schedule]) -> list[Schedule]:
+    def crossover(self, parents: tuple[Schedule]) -> Iterator[Schedule]:
         """Crossover two parents to produce a child.
 
         Args:
-            parents (list[Schedule]): List of parent schedules.
+            parents (tuple[Schedule]): List of parent schedules.
 
-        Returns:
-            list[Schedule]: The child schedule produced from the crossover, or None if unsuccessful.
+        Yields:
+            Schedule: The child schedule produced from the crossover.
 
         """
         msg = "Subclasses must implement this method."
@@ -94,16 +95,8 @@ class EventCrossover(Crossover):
         msg = "Subclasses must implement this method."
         raise NotImplementedError(msg)
 
-    def crossover(self, parents: list[Schedule]) -> Iterator[Schedule]:
-        """Crossover two parents to produce a child.
-
-        Args:
-            parents (list[Schedule]): List of parent schedules.
-
-        Yields:
-            Schedule: The child schedule produced from the crossover.
-
-        """
+    def crossover(self, parents: tuple[Schedule]) -> Iterator[Schedule]:
+        """Crossover two parents to produce a child."""
         p1, p2 = parents
         yield self._produce_child(p1, p2)
         yield self._produce_child(p2, p1)

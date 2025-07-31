@@ -38,15 +38,21 @@ class Plot:
         if not (history := self.ga_instance.fitness_history):
             logger.error("Cannot plot fitness. No generation history was recorded.")
             return
-        history_df = pd.DataFrame(data=history, columns=self.objectives)
+
         fig, ax = plt.subplots(figsize=(12, 7))
+        avg_objs = (sum(fh) / len(self.objectives) for fh in history)
+        history = tuple([*fh, avg_obj] for fh, avg_obj in zip(history, avg_objs, strict=True))
+        columns = [f.name for f in self.objectives] + ["Avg"]
+        history_df = pd.DataFrame(data=history, columns=columns)
         history_df.plot(kind="line", ax=ax, linewidth=2.5, alpha=0.8)
         x = np.arange(len(history_df))
+
         for col in history_df.columns:
             y = history_df[col].to_numpy()
             z = np.polyfit(x, y, 3)
             p = np.poly1d(z)
             ax.plot(x, p(x), linestyle="--", linewidth=0.5, label=f"{col} Trend (^3)")
+
         ax.set(title=title, xlabel=xlabel, ylabel=ylabel)
         ax.legend(title="Objectives", fontsize=10)
 

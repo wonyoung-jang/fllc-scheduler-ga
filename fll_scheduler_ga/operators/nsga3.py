@@ -4,10 +4,13 @@ import random
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from itertools import combinations
+from logging import getLogger
 
 import numpy as np
 
 from ..genetic.schedule import Population, Schedule
+
+logger = getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -47,8 +50,9 @@ class NSGA3:
             points.append([x / p for x in coords])
 
         self.ref_points = np.array(points)
+        logger.debug("Generated %d reference points:\n%s", len(self.ref_points), self.ref_points)
 
-    def select(self, population: Population, population_size: int = 0) -> tuple[Population, set[int]]:
+    def select(self, population: Population, population_size: int = 0) -> dict[int, Schedule]:
         """Select the next generation using NSGA-III principles."""
         pop_size = population_size or self.population_size
         fronts = self._non_dominated_sort(population)
@@ -57,7 +61,7 @@ class NSGA3:
         selected = [p for i in range(last_idx) for p in fronts[i]]
         k = pop_size - len(selected)
         selected.extend(self._niching(fronts, last_front, k))
-        return selected, {hash(p) for p in selected}
+        return {hash(p): p for p in selected}
 
     def _get_last_front_idx(self, fronts: list[Population], pop_size: int) -> int:
         """Determine which front is the last to be included."""
@@ -113,37 +117,37 @@ class NSGA3:
         self._associate(all_schedules)
 
         counts: list[int] = self._count(fronts[:-1])
-        pool = last_front[:]
+        pool = dict(enumerate(last_front[:]))
         selected = 0
 
         while selected < k and pool:
             picked = False
             min_count = min(counts)
-            dirs = [i for i, c in enumerate(counts) if c == min_count]
-            for d in self.rng.sample(dirs, k=len(dirs)):
-                if not (cluster := [p for p in pool if p.ref_point_idx == d]):
+            dirs = (i for i, c in enumerate(counts) if c == min_count)
+            for d in dirs:
+                if not (cluster := [(i, p) for i, p in pool.items() if p.ref_point_idx == d]):
                     continue
 
                 if counts[d] == 0:
-                    pick = min(cluster, key=lambda p: p.distance_to_ref_point)
+                    pi, pick = min(cluster, key=lambda p: p[1].distance_to_ref_point)
                 else:
-                    pick = self.rng.choice(cluster)
+                    pi, pick = self.rng.choice(cluster)
 
                 picked = True
-                pool.remove(pick)
                 counts[d] += 1
                 selected += 1
                 yield pick
+                del pool[pi]
 
                 if selected >= k:
                     break
 
             if not picked and pool:
-                pick = self.rng.choice(pool)
+                pi, pick = self.rng.choice(list(pool.items()))
                 counts[pick.ref_point_idx] += 1
-                pool.remove(pick)
                 selected += 1
                 yield pick
+                del pool[pi]
 
     def _normalize(self, pop: list[Schedule], last_front: Population) -> None:
         """Normalize objectives for the entire population being considered."""
@@ -166,21 +170,19 @@ class NSGA3:
     def _associate(self, pop: list[Schedule]) -> None:
         """Associate individuals with the nearest reference points and store distances."""
         for p in pop:
-            if (nf := getattr(p, "normalized_fitness", None)) is None:
-                continue
-            dists = np.sum((nf - self.ref_points) ** 2, axis=1)
-            idx = int(np.argmin(dists))
-            p.ref_point_idx = idx
-            p.distance_to_ref_point = dists[idx]
+            if (nf := p.normalized_fitness) is not None:
+                dists = np.sum((nf - self.ref_points) ** 2, axis=1)
+                idx = np.argmin(dists)
+                p.ref_point_idx = idx
+                p.distance_to_ref_point = dists[idx]
 
     def _count(self, fronts: list[Population]) -> list[int]:
         """Count how many individuals are associated with each reference point."""
         counts = [0] * len(self.ref_points)
         for front in fronts:
             for p in front:
-                if (idx := getattr(p, "ref_point_idx", None)) is None:
-                    continue
-                counts[idx] += 1
+                if (idx := p.ref_point_idx) is not None:
+                    counts[idx] += 1
         return counts
 
     def _dominates(self, p_fit: tuple[float] | None, q_fit: tuple[float] | None) -> bool:

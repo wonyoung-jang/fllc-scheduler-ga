@@ -1,7 +1,7 @@
 """Genetic algorithm for FLL Scheduler GA."""
 
 import pickle
-from collections import Counter, defaultdict
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from random import Random
@@ -36,9 +36,13 @@ class GA:
     _offspring_ratio: Counter = field(default_factory=Counter, init=False, repr=False)
     _mutation_ratio: Counter = field(default_factory=Counter, init=False, repr=False)
     _expected_population_size: int = field(init=False, repr=False)
+    _c_base: float = field(init=False, repr=False)
+    _m_base: float = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
+        self._c_base = self.context.ga_params.crossover_chance
+        self._m_base = self.context.ga_params.mutation_chance
         self._expected_population_size = self.context.ga_params.population_size * self.context.ga_params.num_islands
         seeder = Random(self.rng.randint(*RANDOM_SEED_RANGE))
         builder = ScheduleBuilder(
@@ -75,16 +79,8 @@ class GA:
 
     def _get_this_gen_fitness(self) -> tuple[float, ...]:
         """Calculate the average fitness of the current generation."""
-        if not (front := self.pareto_front()):
-            return ()
-
-        avg_fitness_front1 = defaultdict(int)
-
-        for p in front:
-            for i, _ in enumerate(self.context.evaluator.objectives):
-                avg_fitness_front1[i] += p.fitness[i]
-
-        return tuple(s / len(front) for s in avg_fitness_front1.values())
+        island_last_gens = [i.get_last_gen_fitness() for i in self.islands]
+        return tuple(sum(s) / len(island_last_gens) for s in zip(*island_last_gens, strict=True))
 
     def _get_last_gen_fitness(self) -> tuple[float, ...]:
         """Get the fitness of the last generation."""
@@ -92,26 +88,21 @@ class GA:
 
     def adapt_operator_probabilities(self) -> None:
         """Adapt the operator probabilities based on the fitness history."""
-        crossover_base = 0.5
-        crossover_low = 0.1
-        crossover_high = 1.0
-        mutation_base = 0.05
-        mutation_low = 0.01
-        mutation_high = 1.0
         epsilon = 0.82
+        len_improvements = len(self.fitness_improvement_history)
 
-        if len(self.fitness_improvement_history) >= 10:
-            last_five_improvements = self.fitness_improvement_history[-10:]
-            improved_count = last_five_improvements.count(1)
+        if len_improvements >= 10:
+            last_improvements = self.fitness_improvement_history[-10:]
+            improved_count = last_improvements.count(1)
 
             # Less than 1/5 generations improved -> decrease operator chance / exploit
             if improved_count < 2:
                 self.context.ga_params.crossover_chance = max(
-                    crossover_low,
+                    0.0001,
                     self.context.ga_params.crossover_chance * epsilon,
                 )
                 self.context.ga_params.mutation_chance = max(
-                    mutation_low,
+                    0.0001,
                     self.context.ga_params.mutation_chance * epsilon,
                 )
                 self.context.logger.debug(
@@ -122,11 +113,11 @@ class GA:
             # More than 1/5 generations improved -> increase operator chance / explore
             elif improved_count > 2:
                 self.context.ga_params.crossover_chance = min(
-                    crossover_high,
+                    0.9999,
                     self.context.ga_params.crossover_chance / epsilon,
                 )
                 self.context.ga_params.mutation_chance = min(
-                    mutation_high,
+                    0.9999,
                     self.context.ga_params.mutation_chance / epsilon,
                 )
                 self.context.logger.debug(
@@ -135,8 +126,8 @@ class GA:
                     self.context.ga_params.mutation_chance,
                 )
             else:
-                self.context.ga_params.crossover_chance = crossover_base
-                self.context.ga_params.mutation_chance = mutation_base
+                self.context.ga_params.crossover_chance = self._c_base
+                self.context.ga_params.mutation_chance = self._m_base
                 self.context.logger.debug(
                     "No change in crossover or mutation chance, current values: %.2f, %.2f",
                     self.context.ga_params.crossover_chance,
@@ -157,7 +148,6 @@ class GA:
                 self.fitness_improvement_history.append(0)
 
         self.adapt_operator_probabilities()
-
         self.fitness_history.append(this_gen_fitness)
 
     def run(self) -> bool:
@@ -167,7 +157,7 @@ class GA:
 
         try:
             self.initialize_population()
-            if not any(self.islands[i].population for i in range(self.context.ga_params.num_islands)):
+            if not any(self.islands[i].selected for i in range(self.context.ga_params.num_islands)):
                 self.context.logger.critical("No valid schedule meeting all hard constraints was found.")
                 return False
             self.run_epochs()
@@ -242,9 +232,9 @@ class GA:
 
     def migrate(self, num_islands: int, migration_size: int) -> None:
         """Migrate the best individuals between islands using a ring topology."""
-        all_migrants = (island.get_migrants(migration_size) for island in self.islands)
+        all_migrants = ((i, island.get_migrants(migration_size)) for i, island in enumerate(self.islands))
 
-        for i, migrants in enumerate(all_migrants):
+        for i, migrants in all_migrants:
             dest_i = (i + 1) % num_islands
             self.islands[dest_i].receive_migrants(migrants)
 
@@ -258,7 +248,7 @@ class GA:
             len(unique_pop),
         )
 
-        self.total_population, _ = self.context.nsga3.select(unique_pop, population_size=len(unique_pop))
+        self.total_population = list(self.context.nsga3.select(unique_pop, population_size=len(unique_pop)).values())
         self.total_population.sort(key=lambda s: (s.rank, -sum(s.fitness)))
 
         # Log final statistics

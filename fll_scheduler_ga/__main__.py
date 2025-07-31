@@ -299,8 +299,8 @@ def create_ga_context(app_config: AppConfig) -> GaContext:
     evaluator = FitnessEvaluator(app_config.tournament, benchmark)
 
     num_objectives = len(evaluator.objectives)
-    population_size = app_config.ga_params.population_size * app_config.ga_params.num_islands
-    nsga3 = NSGA3(app_config.rng, num_objectives, population_size)
+    pop_size_ref_points = app_config.ga_params.population_size * app_config.ga_params.num_islands
+    nsga3 = NSGA3(app_config.rng, num_objectives, pop_size_ref_points)
 
     return GaContext(
         app_config=app_config,
