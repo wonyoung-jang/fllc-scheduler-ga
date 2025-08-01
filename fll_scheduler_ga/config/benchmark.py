@@ -249,7 +249,6 @@ class FitnessBenchmark:
 
         # Calculate standard deviation to measure consistency
         sum_sq_diff = sum((b - mean_break) ** 2 for b in breaks_in_minutes)
-        zeros = breaks_in_minutes.count(0)
         std_dev = sqrt(sum_sq_diff / n)
 
         # Use coefficient of variation (std_dev / mean) to normalize.
@@ -257,5 +256,6 @@ class FitnessBenchmark:
         # The score is inverted so that a lower coefficient gives a higher score.
         coefficient = std_dev / mean_break
         ratio = 1 / (1 + coefficient)
+        zeros = breaks_in_minutes.count(0)
         b_penalty = penalty**zeros
         return ratio * b_penalty

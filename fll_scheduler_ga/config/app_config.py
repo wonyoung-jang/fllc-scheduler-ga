@@ -46,7 +46,22 @@ def load_tournament_config(parser: ConfigParser) -> TournamentConfig:
     all_rounds_per_team = [r.rounds_per_team for r in parsed_rounds]
     total_slots = sum(num_teams * rpt for rpt in all_rounds_per_team)
     unique_opponents_possible = 1 <= max(all_rounds_per_team) <= num_teams - 1
-    return TournamentConfig(num_teams, parsed_rounds, round_reqs, total_slots, unique_opponents_possible)
+    weight_mean = parser.get("DEFAULT", "weight_mean", fallback="3")
+    weight_variation = parser.get("DEFAULT", "weight_variation", fallback="1")
+    weight_range = parser.get("DEFAULT", "weight_range", fallback="1")
+    weight_floats = tuple(max(0, float(w)) for w in (weight_mean, weight_variation, weight_range))
+    weight_sum = sum(w for w in weight_floats)
+    weights = tuple(w / weight_sum for w in weight_floats)
+    config = TournamentConfig(
+        num_teams,
+        parsed_rounds,
+        round_reqs,
+        total_slots,
+        unique_opponents_possible,
+        weights,
+    )
+    logger.debug("Tournament configuration loaded: %s", config)
+    return config
 
 
 def load_operator_config(parser: ConfigParser) -> OperatorConfig:

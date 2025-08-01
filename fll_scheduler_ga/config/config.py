@@ -54,6 +54,7 @@ class TournamentConfig:
     round_requirements: dict[RoundType, int]
     total_slots: int
     unique_opponents_possible: bool
+    weights: tuple[float, float, float]
 
     def __str__(self) -> str:
         """Represent the TournamentConfig."""
@@ -66,5 +67,6 @@ class TournamentConfig:
             f"\tRound Types: {rounds_str}\n"
             f"\tRound Requirements: {round_reqs_str}\n"
             f"\tTotal Slots: {self.total_slots}\n"
-            f"\tUnique Opponents Possible: {self.unique_opponents_possible}"
+            f"\tUnique Opponents Possible: {self.unique_opponents_possible}\n"
+            f"\tWeights: {self.weights}"
         )
