@@ -2,6 +2,8 @@
 
 FLL-C Scheduler NSGA-III uses a multi-objective optimization non-dominated sorting genetic algorithm (NSGA-III) to generate tournament schedules for FIRST LEGO League Challenge.
 
+## [Click here for a run through of a comparison with a real FLLC schedule](/REAL_LIFE_EXAMPLES.md)
+
 ## Features
 
 -   **Multi-Objective Optimization:** Creates schedules that balance break time distribution, opponent variety, and table consistency.
