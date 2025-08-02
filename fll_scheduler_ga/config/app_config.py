@@ -52,7 +52,7 @@ def load_tournament_config(parser: ConfigParser) -> TournamentConfig:
     weight_floats = tuple(max(0, float(w)) for w in (weight_mean, weight_variation, weight_range))
     weight_sum = sum(w for w in weight_floats)
     weights = tuple(w / weight_sum for w in weight_floats)
-    config = TournamentConfig(
+    return TournamentConfig(
         num_teams,
         parsed_rounds,
         round_reqs,
@@ -60,8 +60,6 @@ def load_tournament_config(parser: ConfigParser) -> TournamentConfig:
         unique_opponents_possible,
         weights,
     )
-    logger.debug("Tournament configuration loaded: %s", config)
-    return config
 
 
 def load_operator_config(parser: ConfigParser) -> OperatorConfig:
@@ -74,19 +72,15 @@ def load_operator_config(parser: ConfigParser) -> OperatorConfig:
         OperatorConfig: The parsed operator configuration.
 
     """
-    selection_types = _parse_operator_types(parser, "genetic.operator.selection", "selection_types", "")
-    crossover_types = _parse_operator_types(parser, "genetic.operator.crossover", "crossover_types", "")
-    crossover_ks = _parse_operator_types(parser, "genetic.operator.crossover", "crossover_ks", "", "int")
-    mutation_types = _parse_operator_types(parser, "genetic.operator.mutation", "mutation_types", "")
+    if parser.has_option("genetic.operator.selection", "selection_types"):
+        selection_types = _parse_operator_types(parser, "genetic.operator.selection", "selection_types", "")
+    else:
+        selection_types = [SelectionOps.TOURNAMENT_SELECT, SelectionOps.RANDOM_SELECT]
+        logger.warning("%s not found in config. Using defaults: %s", "selection_types", selection_types)
 
-    if not selection_types:
-        selection_types = [
-            SelectionOps.TOURNAMENT_SELECT,
-            SelectionOps.RANDOM_SELECT,
-        ]
-        logger.warning("No selection types enabled in the configuration. Using defaults: %s", selection_types)
-
-    if not crossover_types:
+    if parser.has_option("genetic.operator.crossover", "crossover_types"):
+        crossover_types = _parse_operator_types(parser, "genetic.operator.crossover", "crossover_types", "")
+    else:
         crossover_types = [
             CrossoverOps.K_POINT,
             CrossoverOps.SCATTERED,
@@ -94,17 +88,17 @@ def load_operator_config(parser: ConfigParser) -> OperatorConfig:
             CrossoverOps.ROUND_TYPE_CROSSOVER,
             CrossoverOps.PARTIAL_CROSSOVER,
         ]
-        logger.warning("No crossover types enabled in the configuration. Using defaults: %s", crossover_types)
+        logger.warning("%s not found in config. Using defaults: %s", "crossover_types", crossover_types)
 
-    if not crossover_ks:
-        crossover_ks = [
-            1,
-            2,
-            3,
-        ]
-        logger.warning("No crossover ks values provided in the configuration. Using defaults: %s", crossover_ks)
+    if parser.has_option("genetic.operator.crossover", "crossover_ks"):
+        crossover_ks = _parse_operator_types(parser, "genetic.operator.crossover", "crossover_ks", "", "int")
+    else:
+        crossover_ks = [1, 2, 3]
+        logger.warning("%s not found in config. Using defaults: %s", "crossover_ks", crossover_ks)
 
-    if not mutation_types:
+    if parser.has_option("genetic.operator.mutation", "mutation_types"):
+        mutation_types = _parse_operator_types(parser, "genetic.operator.mutation", "mutation_types", "")
+    else:
         mutation_types = [
             MutationOps.SWAP_MATCH_CROSS_TIME_LOCATION,
             MutationOps.SWAP_MATCH_SAME_LOCATION,
@@ -114,7 +108,7 @@ def load_operator_config(parser: ConfigParser) -> OperatorConfig:
             MutationOps.SWAP_TEAM_SAME_TIME,
             MutationOps.SWAP_TABLE_SIDE,
         ]
-        logger.warning("No mutation types enabled in the configuration. Using defaults: %s", mutation_types)
+        logger.warning("%s not found in config. Using defaults: %s", "mutation_types", mutation_types)
 
     return OperatorConfig(selection_types, crossover_types, crossover_ks, mutation_types)
 
@@ -213,23 +207,25 @@ def _parse_rounds(parser: ConfigParser) -> tuple[list[Round], dict[RoundType, in
         if not section.startswith("round"):
             continue
 
-        round_type = parser[section].get("round_type")
-        rounds_per_team = parser[section].getint("rounds_per_team")
+        p_section = parser[section]
+        round_type = p_section.get("round_type")
+        rounds_per_team = p_section.getint("rounds_per_team")
         round_reqs[round_type] = rounds_per_team
 
-        if start_time := parser[section].get("start_time", ""):
+        if start_time := p_section.get("start_time", ""):
             start_time = datetime.strptime(start_time, HHMM_FMT).replace(tzinfo=UTC)
 
-        if stop_time := parser[section].get("stop_time", ""):
+        if stop_time := p_section.get("stop_time", ""):
             stop_time = datetime.strptime(stop_time, HHMM_FMT).replace(tzinfo=UTC)
 
-        if times := parser[section].get("times", []):
+        if times := p_section.get("times", []):
             times = [datetime.strptime(t.strip(), HHMM_FMT).replace(tzinfo=UTC) for t in times.split(",")]
             start_time = times[0] if times else start_time
 
-        teams_per_round = parser[section].getint("teams_per_round")
-        duration_minutes = timedelta(minutes=parser[section].getint("duration_minutes"))
-        num_locations = parser[section].getint("num_locations")
+        teams_per_round = p_section.getint("teams_per_round")
+        duration_minutes = p_section.getint("duration_minutes")
+        duration_minutes = timedelta(minutes=duration_minutes)
+        num_locations = p_section.getint("num_locations")
 
         rounds.append(
             Round(

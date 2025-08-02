@@ -2,7 +2,7 @@
 
 import logging
 import random
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from ..config.config import RoundType, TournamentConfig
 from ..data_model.event import Event, EventFactory
@@ -20,7 +20,6 @@ class ScheduleBuilder:
     event_factory: EventFactory
     config: TournamentConfig
     rng: random.Random
-    teams: list[Team] = field(init=False, repr=False)
 
     def build(self) -> Schedule | None:
         """Construct and return the final schedule."""
@@ -29,32 +28,28 @@ class ScheduleBuilder:
             self.rng.shuffle(e)
 
         schedule = Schedule(self.team_factory.build())
-        self.teams = schedule.all_teams()
-        self.rng.shuffle(self.teams)
+        teams = schedule.all_teams()
+        teams = self.rng.sample(teams, k=len(teams))
 
         for r in self.config.rounds:
             rt = r.round_type
             evts = events.get(rt, [])
             if r.teams_per_round == r.rounds_per_team == 1:
-                self._build_singles(schedule, rt, evts)
+                self._build_singles(schedule, rt, evts, teams)
             else:
-                self._build_matches(schedule, rt, evts)
+                self._build_matches(schedule, rt, evts, teams)
 
         return schedule
 
-    def _build_singles(self, schedule: Schedule, rt: RoundType, events: list[Event]) -> None:
+    def _build_singles(self, schedule: Schedule, rt: RoundType, events: list[Event], teams: list[Team]) -> None:
         """Book all judging events for a specific round type."""
-        teams = (t for t in self.teams if t.needs_round(rt))
-
-        for event, team in zip(events, teams, strict=False):
+        for event, team in zip(events, (t for t in teams if t.needs_round(rt)), strict=False):
             schedule.assign_single(event, team)
 
-    def _build_matches(self, schedule: Schedule, rt: RoundType, events: list[Event]) -> None:
+    def _build_matches(self, schedule: Schedule, rt: RoundType, events: list[Event], teams: list[Team]) -> None:
         """Book all events for a specific round type."""
-        match_events = ((e, e.paired_event) for e in events if e.location.side == 1)
-
-        for side1, side2 in match_events:
-            available = (t for t in self.teams if t.needs_round(rt) and not t.conflicts(side1))
-            if not (team1 := next(available, None)) or not (team2 := next(available, None)):
+        for side1, side2 in ((e, e.paired_event) for e in events if e.location.side == 1):
+            available = (t for t in teams if t.needs_round(rt) and not t.conflicts(side1))
+            if (team1 := next(available, None)) is None or (team2 := next(available, None)) is None:
                 continue
             schedule.assign_match(side1, side2, team1, team2)

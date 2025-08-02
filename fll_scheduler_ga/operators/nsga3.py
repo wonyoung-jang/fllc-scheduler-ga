@@ -71,15 +71,15 @@ class NSGA3:
                 return i
         return len(fronts) - 1
 
-    def _non_dominated_sort(self, population: Population) -> list[Population]:
+    def _non_dominated_sort(self, pop: Population) -> list[Population]:
         """Perform non-dominated sorting on the population."""
-        size = len(population)
+        size = len(pop)
         dominates_list = [[] for _ in range(size)]
         dominated_counts = [0] * size
         fronts = [[]]
 
         for i, j in combinations(range(size), 2):
-            p_fit, q_fit = population[i].fitness, population[j].fitness
+            p_fit, q_fit = pop[i].fitness, pop[j].fitness
             if self._dominates(p_fit, q_fit):
                 dominates_list[i].append(j)
                 dominated_counts[j] += 1
@@ -97,15 +97,17 @@ class NSGA3:
                     dominated_counts[j] -= 1
                     if dominated_counts[j] == 0:
                         next_front.append(j)
+
             if next_front:
                 fronts.append(next_front)
+
             curr += 1
 
         for rank_i, front in enumerate(fronts):
             for i in front:
-                population[i].rank = rank_i
+                pop[i].rank = rank_i
 
-        return [[population[i] for i in front] for front in fronts]
+        return [[pop[i] for i in front] for front in fronts]
 
     def _niching(self, fronts: list[Population], last_front: Population, k: int) -> Iterator[Schedule]:
         """Select k individuals from the last front using a niching mechanism."""

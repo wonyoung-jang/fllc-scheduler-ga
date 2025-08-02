@@ -54,7 +54,7 @@ def _check_total_capacity(config: TournamentConfig) -> None:
 
 def _check_per_team_feasibility(config: TournamentConfig) -> None:
     """Check if a single team has enough time slots in the day for all its events."""
-    if not [t for r in config.rounds for t in [r.start_time]]:
+    if not [r.start_time for r in config.rounds]:
         return
 
     all_slots = []

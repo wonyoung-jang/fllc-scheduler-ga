@@ -46,16 +46,15 @@ class Island:
 
     def update_fitness_history(self) -> None:
         """Update the fitness history with the current generation's fitness."""
-        this_gen_fitness = self._get_this_gen_fitness()
-        self.fitness_history.append(this_gen_fitness)
+        self.fitness_history.append(self._get_this_gen_fitness())
 
     def pareto_front(self) -> Population:
         """Get the Pareto front for each island in the population."""
         return [p for p in self.selected.values() if p.rank == 0]
 
-    def add_to_population(self, schedule: Schedule, schedule_hash: int | None = None) -> bool:
+    def add_to_population(self, schedule: Schedule, s_hash: int | None = None) -> bool:
         """Add a schedule to a specific island's population if it's not a duplicate."""
-        schedule_hash = hash(schedule) if schedule_hash is None else schedule_hash
+        schedule_hash = hash(schedule) if s_hash is None else s_hash
         if schedule_hash not in self.selected:
             self.selected[schedule_hash] = schedule
             return True

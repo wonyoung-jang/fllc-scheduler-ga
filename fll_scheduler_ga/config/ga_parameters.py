@@ -70,7 +70,7 @@ class GaParameters:
             self.migration_size = max(1, self.population_size // 4)
             logger.warning("Migration size is >= population size, defaulting to 25%%.")
 
-        logger.debug("Initialized GaParameters: %s", self)
+        logger.debug("Initialized genetic algorithm parameters: %s", self)
 
     def __str__(self) -> str:
         """Representation of GA parameters."""
@@ -84,5 +84,5 @@ class GaParameters:
             f"\tMutation Chance: {self.mutation_chance:.2f}\n"
             f"\tNumber of Islands: {self.num_islands}\n"
             f"\tMigration Interval: {self.migration_interval}\n"
-            f"\tMigration Size: {self.migration_size}\n"
+            f"\tMigration Size: {self.migration_size}"
         )

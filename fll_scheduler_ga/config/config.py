@@ -56,6 +56,10 @@ class TournamentConfig:
     unique_opponents_possible: bool
     weights: tuple[float, float, float]
 
+    def __post_init__(self) -> None:
+        """Post-initialization to validate the configuration."""
+        logger.debug("Tournament configuration loaded: %s", self)
+
     def __str__(self) -> str:
         """Represent the TournamentConfig."""
         rounds_str = ", ".join(f"{r.round_type}" for r in sorted(self.rounds, key=lambda x: x.start_time))

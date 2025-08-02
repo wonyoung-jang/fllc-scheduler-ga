@@ -57,28 +57,24 @@ class Repairer:
         open_events = defaultdict(list)
         unbooked = self.set_of_events.difference(schedule.keys())
 
-        for e in unbooked:
+        for e in self.rng.sample(list(unbooked), k=len(unbooked)):
             if (e.paired_event and e.location.side == 1) or e.paired_event is None:
-                key = (e.round_type, self.rt_teams_needed[e.round_type])
+                rt = e.round_type
+                key = (rt, self.rt_teams_needed[rt])
                 open_events[key].append(e)
-
-        for events in open_events.values():
-            self.rng.shuffle(events)
 
         return open_events
 
     def _get_team_needs(self, schedule: Schedule) -> dict[tuple[str, int], list[Team]]:
         """Determine which teams need which types of rounds."""
         needs_by_rt = defaultdict(list)
+        teams = schedule.all_teams()
 
-        for team in schedule.all_teams():
+        for team in self.rng.sample(teams, k=len(teams)):
             for rt, num_needed in team.round_types.items():
                 if num_needed > 0:
                     key = (rt, self.rt_teams_needed[rt])
                     needs_by_rt[key].extend([team] * num_needed)
-
-        for teams in needs_by_rt.values():
-            self.rng.shuffle(teams)
 
         return needs_by_rt
 

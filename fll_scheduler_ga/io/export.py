@@ -24,18 +24,16 @@ def generate_summary(args: Namespace, ga: GA) -> None:
     if not args.no_plotting:
         plot = Plot(ga, ga.context.evaluator.objectives)
 
-        fitness_plot_path = output_dir / "fitness_vs_generation.png"
         plot.plot_fitness(
             title="Average Fitness over Generations",
             xlabel="Generation",
             ylabel="Average Fitnesses",
-            save_dir=fitness_plot_path,
+            save_dir=output_dir / "fitness_vs_generation.png",
         )
 
-        pareto_plot_path = output_dir / "pareto_front.png"
         plot.plot_pareto_front(
             title="Pareto Front: Trade-offs",
-            save_dir=pareto_plot_path,
+            save_dir=output_dir / "pareto_front.png",
         )
 
     front = sorted(ga.pareto_front(), key=lambda s: (s.rank, -sum(s.fitness)))
