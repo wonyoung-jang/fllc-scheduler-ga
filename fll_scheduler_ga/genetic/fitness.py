@@ -1,6 +1,7 @@
 """Fitness evaluator for the FLL Scheduler GA."""
 
 import logging
+from collections import defaultdict
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -106,10 +107,10 @@ class FitnessEvaluator:
         mean_scores = self.get_mean_scores(scores)
         var_scores = self.get_variation_scores(scores, mean_scores)
         range_scores = self.get_range_scores(scores)
-        w_m, w_v, w_r = self.config.weights
+        mn_w, vr_w, rn_w = self.config.weights
 
         return tuple(
-            (m * w_m) + (v * w_v) + (r * w_r)
+            (m * mn_w) + (v * vr_w) + (r * rn_w)
             for m, v, r in zip(
                 mean_scores,
                 var_scores,
@@ -120,31 +121,30 @@ class FitnessEvaluator:
 
     def aggregate_team_fitnesses(self, all_teams: list[Team]) -> tuple[list[float], ...]:
         """Aggregate fitness scores for all teams in the schedule."""
-        bt_list = []
-        tc_list = []
-        ov_list = []
+        scores = defaultdict(list)
 
-        for team in all_teams:
-            bt_key = team.break_time_key()
-            tc_key = team.table_consistency_key()
-            ov_key = team.opponent_variety_key()
+        for t, bt_key, tc_key, ov_key in self._yield_team_info(all_teams):
+            if (bt_s := self.hit_bt_cache.get(bt_key)) is None:
+                bt_s = self.hit_bt_cache.setdefault(bt_key, self._bt_cache.pop(bt_key))
 
-            if (t_bt := self.hit_bt_cache.get(bt_key)) is None:
-                t_bt = self.hit_bt_cache.setdefault(bt_key, self._bt_cache.pop(bt_key))
+            if (tc_s := self.hit_tc_cache.get(tc_key)) is None:
+                tc_s = self.hit_tc_cache.setdefault(tc_key, self._tc_cache.pop(tc_key))
 
-            if (t_tc := self.hit_tc_cache.get(tc_key)) is None:
-                t_tc = self.hit_tc_cache.setdefault(tc_key, self._tc_cache.pop(tc_key))
+            if (ov_s := self.hit_ov_cache.get(ov_key)) is None:
+                ov_s = self.hit_ov_cache.setdefault(ov_key, self._ov_cache.pop(ov_key))
 
-            if (t_ov := self.hit_ov_cache.get(ov_key)) is None:
-                t_ov = self.hit_ov_cache.setdefault(ov_key, self._ov_cache.pop(ov_key))
+            scores[FitnessObjective.BREAK_TIME].append(bt_s)
+            scores[FitnessObjective.TABLE_CONSISTENCY].append(tc_s)
+            scores[FitnessObjective.OPPONENT_VARIETY].append(ov_s)
 
-            team.fitness = (t_bt, t_tc, t_ov)
+            t.fitness = (bt_s, tc_s, ov_s)
 
-            bt_list.append(t_bt)
-            tc_list.append(t_tc)
-            ov_list.append(t_ov)
+        return scores.values()
 
-        return bt_list, tc_list, ov_list
+    def _yield_team_info(self, all_teams: list[Team]) -> Iterator[tuple[Team, frozenset[int], int, int]]:
+        """Yield keys for break time, table consistency, and opponent variety for each team."""
+        for t in all_teams:
+            yield t, t.break_time_key(), t.table_consistency_key(), t.opponent_variety_key()
 
     def get_mean_scores(self, scores: tuple[list[float], ...]) -> tuple[float, ...]:
         """Calculate the mean scores for each objective."""

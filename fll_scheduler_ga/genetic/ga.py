@@ -130,9 +130,9 @@ class GA:
         last_gen_fitness = self._get_last_gen_fitness()
 
         if self.fitness_history:
-            if last_gen_fitness < this_gen_fitness:
+            if sum(last_gen_fitness) < sum(this_gen_fitness):
                 self.fitness_improvement_history.append(1)
-            elif last_gen_fitness > this_gen_fitness:
+            elif sum(last_gen_fitness) > sum(this_gen_fitness):
                 self.fitness_improvement_history.append(-1)
             else:
                 self.fitness_improvement_history.append(0)

@@ -62,13 +62,7 @@ class TournamentSelect(Selection):
         """Select individuals using NSGA-III tournament selection."""
         for _ in range(num_parents):
             tournament_contenders = self.rng.sample(population, k=min(self.tournament_size, len(population)))
-            winner = tournament_contenders[0]
-            for contender in tournament_contenders[1:]:
-                if contender.rank < winner.rank:
-                    winner = contender
-                if contender.rank == winner.rank and self.rng.choice([True, False]):
-                    winner = contender
-            yield winner
+            yield min(tournament_contenders, key=lambda p: (p.rank, self.rng.choice([True, False])))
 
 
 @dataclass(slots=True)

@@ -21,7 +21,6 @@ class NSGA3:
     num_objectives: int
     population_size: int
     ref_points: np.ndarray = field(init=False, repr=False)
-    _pop: Population = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to generate reference points."""
@@ -80,19 +79,17 @@ class NSGA3:
         fronts = [[]]
 
         for i, j in combinations(range(size), 2):
-            p, q = population[i], population[j]
-            if self._dominates(p.fitness, q.fitness):
+            p_fit, q_fit = population[i].fitness, population[j].fitness
+            if self._dominates(p_fit, q_fit):
                 dominates_list[i].append(j)
                 dominated_counts[j] += 1
-            elif self._dominates(q.fitness, p.fitness):
+            elif self._dominates(q_fit, p_fit):
                 dominates_list[j].append(i)
                 dominated_counts[i] += 1
 
-        for i in range(size):
-            if dominated_counts[i] == 0:
-                fronts[0].append(i)
-
         curr = 0
+        fronts[curr] = [i for i in range(size) if dominated_counts[i] == 0]
+
         while curr < len(fronts) and fronts[curr]:
             next_front = []
             for i in fronts[curr]:
@@ -104,9 +101,9 @@ class NSGA3:
                 fronts.append(next_front)
             curr += 1
 
-        for rank, front in enumerate(fronts):
+        for rank_i, front in enumerate(fronts):
             for i in front:
-                population[i].rank = rank
+                population[i].rank = rank_i
 
         return [[population[i] for i in front] for front in fronts]
 
@@ -115,39 +112,32 @@ class NSGA3:
         all_schedules = [p for front in fronts for p in front]
         self._normalize(all_schedules, fronts[-1])
         self._associate(all_schedules)
-
-        counts: list[int] = self._count(fronts[:-1])
-        pool = dict(enumerate(last_front[:]))
+        counts = self._count(p.ref_point_idx for fr in fronts[:-1] for p in fr if p.ref_point_idx is not None)
+        pool = dict(enumerate(last_front))
         selected = 0
 
         while selected < k and pool:
             picked = False
             min_count = min(counts)
-            dirs = (i for i, c in enumerate(counts) if c == min_count)
-            for d in dirs:
-                if not (cluster := [(i, p) for i, p in pool.items() if p.ref_point_idx == d]):
+            for d in (di for di, c in enumerate(counts) if c == min_count):
+                if not (clst := [(i, p) for i, p in pool.items() if p.ref_point_idx == d]):
                     continue
-
-                if counts[d] == 0:
-                    pi, pick = min(cluster, key=lambda p: p[1].distance_to_ref_point)
-                else:
-                    pi, pick = self.rng.choice(cluster)
-
-                picked = True
+                pi, _ = min(clst, key=lambda p: p[1].distance_to_ref_point) if counts[d] == 0 else self.rng.choice(clst)
                 counts[d] += 1
                 selected += 1
-                yield pick
-                del pool[pi]
+                picked = True
+
+                yield pool.pop(pi)
 
                 if selected >= k:
                     break
 
             if not picked and pool:
-                pi, pick = self.rng.choice(list(pool.items()))
+                pi = self.rng.choice(list(pool.keys()))
+                pick = pool.pop(pi)
                 counts[pick.ref_point_idx] += 1
                 selected += 1
                 yield pick
-                del pool[pi]
 
     def _normalize(self, pop: list[Schedule], last_front: Population) -> None:
         """Normalize objectives for the entire population being considered."""
@@ -169,27 +159,25 @@ class NSGA3:
 
     def _associate(self, pop: list[Schedule]) -> None:
         """Associate individuals with the nearest reference points and store distances."""
+        _ref_points = self.ref_points
         for p in pop:
-            if (nf := p.normalized_fitness) is not None:
-                dists = np.sum((nf - self.ref_points) ** 2, axis=1)
-                idx = np.argmin(dists)
-                p.ref_point_idx = idx
-                p.distance_to_ref_point = dists[idx]
+            if p.normalized_fitness is None:
+                continue
 
-    def _count(self, fronts: list[Population]) -> list[int]:
+            dists = np.sum((p.normalized_fitness - _ref_points) ** 2, axis=1)
+            idx = np.argmin(dists)
+            p.ref_point_idx = idx
+            p.distance_to_ref_point = dists[idx]
+
+    def _count(self, idx_to_count: Iterator[int]) -> list[int]:
         """Count how many individuals are associated with each reference point."""
         counts = [0] * len(self.ref_points)
-        for front in fronts:
-            for p in front:
-                if (idx := p.ref_point_idx) is not None:
-                    counts[idx] += 1
+        for idx in idx_to_count:
+            counts[idx] += 1
         return counts
 
     def _dominates(self, p_fit: tuple[float] | None, q_fit: tuple[float] | None) -> bool:
         """Check if schedule p dominates schedule q."""
-        if p_fit is None or q_fit is None:
-            return False
-
         better_in_any = False
         for ps, qs in zip(p_fit, q_fit, strict=True):
             if ps < qs:
