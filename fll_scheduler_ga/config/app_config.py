@@ -133,13 +133,13 @@ def load_ga_parameters(args: argparse.Namespace, config_parser: ConfigParser) ->
     params = {
         "population_size": config_genetic.getint("population_size", 16),
         "generations": config_genetic.getint("generations", 128),
-        "elite_size": config_genetic.getint("elite_size", 2),
-        "selection_size": config_genetic.getint("selection_size", 4),
+        "offspring_size": config_genetic.getint("offspring_size", 12),
+        "selection_size": config_genetic.getint("selection_size", 6),
         "crossover_chance": config_genetic.getfloat("crossover_chance", 0.5),
-        "mutation_chance": config_genetic.getfloat("mutation_chance", 0.05),
+        "mutation_chance": config_genetic.getfloat("mutation_chance", 0.5),
         "num_islands": config_genetic.getint("num_islands", 10),
         "migration_interval": config_genetic.getint("migration_interval", 10),
-        "migration_size": config_genetic.getint("migration_size", 2),
+        "migration_size": config_genetic.getint("migration_size", 4),
     }
 
     for key in params:

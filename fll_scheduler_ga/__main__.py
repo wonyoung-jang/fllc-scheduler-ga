@@ -187,9 +187,9 @@ def create_parser() -> ArgumentParser:
         help="Number of generations to run.",
     )
     genetic_group.add_argument(
-        "--elite_size",
+        "--offspring_size",
         type=int,
-        help="Number of elite individuals.",
+        help="Number of offspring individuals per generation.",
     )
     genetic_group.add_argument(
         "--selection_size",

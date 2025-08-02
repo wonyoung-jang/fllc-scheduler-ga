@@ -46,7 +46,7 @@ Create a file named `config.ini` to define your tournament's structure. The conf
 
 -   `population_size`: The population size (number of schedules) for each generation.
 -   `generations`: The number of generations to run.
--   `elite_size`: The number of the best schedules to include in the next generation.
+-   `offspring_size`: The number of offspring schedules to produce each generation.
 -   `selection_size`: The number of schedules that compete to be selected to evolve into the next generation.
 -   `crossover_chance`: The chance of two parent schedules crossover breeding to create an offspring.
 -   `mutation_chance`: The chance for an offspring schedule to mutate.
@@ -118,15 +118,15 @@ num_locations = 4  ; i.e., 4 competition tables (A, B, C, D)
 
 [genetic]
 population_size = 16
-generations = 128
-elite_size = 2
-selection_size = 4
+generations = 512
+offspring_size = 12
+selection_size = 6
 crossover_chance = 0.5
-mutation_chance = 0.25
-seed = 999999
-num_islands = 4
+mutation_chance = 0.5
+seed = ; Optional seed for random number generation, leave empty for random seed, or input an integer value
+num_islands = 10
 migration_interval = 10
-migration_size = 1
+migration_size = 4
 
 [genetic.operator.selection]
 ; Available selection types: TournamentSelect, RandomSelect

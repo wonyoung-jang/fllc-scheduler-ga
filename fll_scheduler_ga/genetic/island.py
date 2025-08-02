@@ -108,11 +108,10 @@ class Island:
 
         _context = self.context
         _ga_params = _context.ga_params
-        num_offspring = _ga_params.population_size - _ga_params.elite_size
-        attempts, max_attempts = 0, num_offspring * 5
+        attempts, max_attempts = ATTEMPTS_RANGE
         child_count = 0
 
-        while child_count < num_offspring and attempts < max_attempts:
+        while child_count < _ga_params.offspring_size and attempts < max_attempts:
             attempts += 1
             selection_op = self.rng.choice(_context.selections)
             parents = tuple(selection_op.select(island_pop, num_parents=2))
@@ -140,7 +139,7 @@ class Island:
                 else:
                     offspring_ratio["failure"] += 1
 
-                if child_count >= num_offspring:
+                if child_count >= _ga_params.offspring_size:
                     break
 
         self.selected = self.context.nsga3.select(

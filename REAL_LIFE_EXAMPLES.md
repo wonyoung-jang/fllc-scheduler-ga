@@ -58,6 +58,9 @@ From this, I derived a config (only showing the round section): `fllc_2022-2023/
 ```ini
 [DEFAULT]
 num_teams = 42
+weight_mean = 3
+weight_variation = 1
+weight_range = 1
 
 [round.judging]
 round_type = Judging
@@ -87,14 +90,14 @@ num_locations = 4
 [genetic]
 population_size = 12
 generations = 512
-elite_size = 2
-selection_size = 4
+offspring_size = 6
+selection_size = 8
 crossover_chance = 0.5
-mutation_chance = 0.01
-seed =                      
+mutation_chance = 0.05
+seed =
 num_islands = 5
 migration_interval = 10
-migration_size = 3
+migration_size = 4
 
 [genetic.operator.selection]
 selection_types = TournamentSelect, RandomSelect
@@ -128,94 +131,88 @@ First, the report summary: `fllc_2022-2023/report.txt`
 
 ```txt
 Objective Scores:
-  - BreakTime        : 0.397854
-  - TableConsistency : 0.015200
-  - OpponentVariety  : 0.499652
+  - BreakTime        : 0.740190
+  - TableConsistency : 0.405961
+  - OpponentVariety  : 0.923514
 
-Total            : 0.912706
-Average          : 0.304235
+Total            : 2.069664
+Average          : 0.689888
 
 Team fitnesses (sorted by total fitness descending):
 
-Max     : 2.131207
-Min     : 0.970362
-Range   : 1.160846
-Average : 1.593379
+Max     : 2.377574
+Min     : 1.574058
+Range   : 0.803516
+Average : 1.933225
 
 Team |BreakTime |TableConsistency |OpponentVariety |Sum
 --------------------------------------------------------
-49   |0.7585    |0.3727           |1.0000          |2.1312
-47   |0.8411    |0.0307           |1.0000          |1.8718
-46   |0.7221    |0.1235           |1.0000          |1.8455
-51   |0.7907    |0.0000           |1.0000          |1.7907
-38   |0.6575    |0.1235           |1.0000          |1.7810
-52   |0.7196    |0.0307           |1.0000          |1.7503
-25   |0.6240    |0.1235           |1.0000          |1.7475
-45   |0.6186    |0.1235           |1.0000          |1.7421
-37   |0.6928    |0.0307           |1.0000          |1.7235
-11   |0.5870    |0.1235           |1.0000          |1.7105
-48   |0.6791    |0.0307           |1.0000          |1.7098
-17   |0.5815    |0.1235           |1.0000          |1.7050
-23   |0.5763    |0.1235           |1.0000          |1.6998
-34   |0.5658    |0.1235           |1.0000          |1.6893
-44   |0.6392    |0.0307           |1.0000          |1.6699
-50   |0.6262    |0.0307           |1.0000          |1.6569
-30   |0.6244    |0.0307           |1.0000          |1.6551
-42   |0.6153    |0.0307           |1.0000          |1.6460
-39   |0.6019    |0.0307           |1.0000          |1.6326
-27   |0.6309    |0.0000           |1.0000          |1.6309
-41   |0.5796    |0.0307           |1.0000          |1.6103
-28   |0.5772    |0.0307           |1.0000          |1.6078
-7    |0.5771    |0.0307           |1.0000          |1.6078
-16   |0.5738    |0.0307           |1.0000          |1.6045
-2    |0.5687    |0.0307           |1.0000          |1.5994
-43   |0.5676    |0.0307           |1.0000          |1.5983
-40   |0.5671    |0.0307           |1.0000          |1.5978
-24   |0.5950    |0.0000           |1.0000          |1.5950
-12   |0.5603    |0.0307           |1.0000          |1.5910
-29   |0.5579    |0.0307           |1.0000          |1.5886
-10   |0.5517    |0.0307           |1.0000          |1.5823
-4    |0.5436    |0.0307           |1.0000          |1.5742
-8    |0.5410    |0.0307           |1.0000          |1.5717
-36   |0.5406    |0.0307           |1.0000          |1.5712
-6    |0.5711    |0.0000           |1.0000          |1.5711
-20   |0.5377    |0.0307           |1.0000          |1.5683
-5    |0.5351    |0.0307           |1.0000          |1.5658
-13   |0.5348    |0.0307           |1.0000          |1.5655
-9    |0.5347    |0.0307           |1.0000          |1.5654
-14   |0.5644    |0.0000           |1.0000          |1.5644
-1    |0.5337    |0.0307           |1.0000          |1.5643
-19   |0.5320    |0.0307           |1.0000          |1.5627
-3    |0.5282    |0.0307           |1.0000          |1.5589
-26   |0.5565    |0.0000           |1.0000          |1.5565
-18   |0.5070    |0.0307           |1.0000          |1.5377
-35   |0.5348    |0.0000           |1.0000          |1.5348
-15   |0.5185    |0.0000           |1.0000          |1.5185
-33   |0.5098    |0.0000           |1.0000          |1.5098
-31   |0.5582    |0.1235           |0.3773          |1.0589
-22   |0.6032    |0.0307           |0.3773          |1.0112
-21   |0.6051    |0.0000           |0.3773          |0.9824
-32   |0.5624    |0.0307           |0.3773          |0.9704
+18   |0.6333    |0.7442           |1.0000          |2.3776
+36   |0.8797    |0.4924           |1.0000          |2.3721
+8    |0.7971    |0.4924           |1.0000          |2.2895
+9    |0.7701    |0.4924           |1.0000          |2.2624
+20   |0.7420    |0.4924           |1.0000          |2.2343
+19   |0.7366    |0.4924           |1.0000          |2.2290
+6    |0.7123    |0.4924           |1.0000          |2.2047
+41   |0.6765    |0.4924           |1.0000          |2.1688
+35   |0.6711    |0.4924           |1.0000          |2.1635
+10   |0.6673    |0.4924           |1.0000          |2.1597
+31   |0.6480    |0.4924           |1.0000          |2.1403
+42   |0.6268    |0.4924           |1.0000          |2.1192
+15   |0.7699    |0.2443           |1.0000          |2.0142
+40   |0.7624    |0.2443           |1.0000          |2.0067
+7    |0.7530    |0.2443           |1.0000          |1.9973
+39   |0.7390    |0.2443           |1.0000          |1.9833
+37   |0.6962    |0.2443           |1.0000          |1.9405
+29   |0.6803    |0.2443           |1.0000          |1.9246
+13   |0.6740    |0.2443           |1.0000          |1.9183
+14   |0.6626    |0.2443           |1.0000          |1.9069
+2    |0.6317    |0.4924           |0.7557          |1.8797
+17   |0.6307    |0.2443           |1.0000          |1.8750
+25   |0.6214    |0.2443           |1.0000          |1.8657
+28   |0.6191    |0.2443           |1.0000          |1.8634
+26   |0.6056    |0.4924           |0.7557          |1.8537
+27   |0.5933    |0.4924           |0.7557          |1.8413
+3    |0.5893    |0.2443           |1.0000          |1.8336
+24   |0.5802    |0.2443           |1.0000          |1.8245
+21   |0.5721    |0.2443           |1.0000          |1.8164
+38   |0.8014    |0.0000           |1.0000          |1.8014
+22   |0.5542    |0.2443           |1.0000          |1.7985
+33   |0.7705    |0.2443           |0.7557          |1.7705
+5    |0.7529    |0.0000           |1.0000          |1.7529
+16   |0.7420    |0.0000           |1.0000          |1.7420
+34   |0.7276    |0.2443           |0.7557          |1.7276
+11   |0.7147    |0.0000           |1.0000          |1.7147
+30   |0.6945    |0.0000           |1.0000          |1.6945
+1    |0.6839    |0.2443           |0.7557          |1.6839
+32   |0.6688    |0.0000           |1.0000          |1.6688
+12   |0.6163    |0.0000           |1.0000          |1.6163
+4    |0.5837    |0.0000           |1.0000          |1.5837
+23   |0.5741    |0.0000           |1.0000          |1.5741
 ```
 
-With the current configuration, this run takes my machine 28 seconds to complete. Here is the report for the schedule in the Pareto front with the highest total fitness (only showing the aggregated parts on top):
+With the current configuration, this run takes my machine 26 seconds to complete. Here is the report for the schedule in the Pareto front with the highest total fitness (only showing the aggregated parts on top):
 
 ```txt
 Objective Scores:
-  - BreakTime        : 0.455408
-  - TableConsistency : 0.062034
+  - BreakTime        : 0.655576
+  - TableConsistency : 0.576032
   - OpponentVariety  : 1.000000
 
-Total            : 1.517442
-Average          : 0.505814
+Total            : 2.231608
+Average          : 0.743869
 
 Team fitnesses (sorted by total fitness descending):
 
-Max     : 2.096146
-Min     : 1.547761
-Range   : 0.548385
-Average : 1.767262
+Max     : 2.235375
+Min     : 1.720911
+Range   : 0.514464
+Average : 2.014649
 ```
+
+![512 generations Fitness over generations](/assets/2022-2023/after_512_generations/fitness_vs_generation.png)
+
+![512 generations Scatter](/assets/2022-2023/after_512_generations/pareto_scatter_3d.png)
 
 There is improvement from the imported schedule on almost every objective except for BreakTime.
 
@@ -226,39 +223,106 @@ uv run fll_scheduler_ga `
 --config_file .\real_life_examples\fllc_2022-2023\config.ini
 ```
 
-Now we can see improvements in every objective:
+Now we can see improvements in every objective, but still doesn't beat our original schedule in break time consistency:
+
+*Run 2 (18s)*
 
 ```txt
 Objective Scores:
-  - BreakTime        : 0.499260
-  - TableConsistency : 0.132480
+  - BreakTime        : 0.730126
+  - TableConsistency : 0.620243
   - OpponentVariety  : 1.000000
 
-Total            : 1.631740
-Average          : 0.543913
+Total            : 2.350369
+Average          : 0.783456
 
 Team fitnesses (sorted by total fitness descending):
 
-Max     : 2.079923
-Min     : 1.673971
-Range   : 0.405952
-Average : 1.886831
+Max     : 2.461994
+Min     : 1.779742
+Range   : 0.682252
+Average : 2.165525
 ```
-
-Normally, genetic algorithms and schedulers are left running for much longer than the ~56 seconds of runtime we spent here, and we would have seen even better results had we done that, but I hope this shows how this program can be useful for anybody hosting an event!
-
-The following are the plotting images, which shows the algorithm is converging on optimal solutions, and also shows the algorithm is not close to converging after 1024 generations.
-
-### 2022-2023 plot images
-
-#### Average Fitness over Generations
-
-![512 generations Fitness over generations](/assets/2022-2023/after_512_generations/fitness_vs_generation.png)
 
 ![1024 generations Fitness over generations](/assets/2022-2023/after_1024_generations/fitness_vs_generation.png)
 
-#### 3D Scatter Plot
-
-![512 generations Scatter](/assets/2022-2023/after_512_generations/pareto_scatter_3d.png)
-
 ![1024 generations Scatter](/assets/2022-2023/after_1024_generations/pareto_scatter_3d.png)
+
+Running it a third time gives us improvements in every objective from our original:
+
+*Run 3 (19s)*
+
+```txt
+Objective Scores:
+  - BreakTime        : 0.752177
+  - TableConsistency : 0.685561
+  - OpponentVariety  : 1.000000
+
+Total            : 2.437737
+Average          : 0.812579
+
+Team fitnesses (sorted by total fitness descending):
+
+Max     : 2.471839
+Min     : 2.073668
+Range   : 0.398171
+Average : 2.252159
+```
+
+![1536 generations Fitness over generations](/assets/2022-2023/after_1536_generations/fitness_vs_generation.png)
+
+![1536 generations Scatter](/assets/2022-2023/after_1536_generations/pareto_scatter_3d.png)
+
+Normally, genetic algorithms and schedulers are left running for much longer than the 63 seconds of runtime we spent here, and we would have seen even better results had we done that, but I hope this shows how this program can be useful for anybody hosting an event!
+
+Below each result are images for a plot of fitness in each objective over generations, and a scatter plot of each generated schedule. These show two things: 
+
+1. The algorithm is converging on a "front" (indicated by the line of purple points in the scatter plot)
+2. The algorithm isn't close to "fully" converging after 1536 generations
+
+And just for fun, here is the schedule CSV for the most fit of the front from the last run:
+
+```csv
+Judging
+Time,Room 1,Room 2,Room 3,Room 4,Room 5,Room 6,Room 7
+08:00,1,2,3,4,5,6,7
+08:45,8,9,10,11,12,13,14
+09:30,15,16,17,18,19,20,21
+10:15,22,23,24,25,26,27,28
+11:00,29,30,31,32,33,34,35
+11:45,36,37,38,39,40,41,42
+
+Practice
+Time,Table A1,Table A2,Table B1,Table B2,Table C1,Table C2,Table D1,Table D2
+09:00,29,30,32,31,33,34,35,28
+09:15,36,24,41,26,1,27,42,25
+09:30,,,23,40,,,38,7
+09:45,22,2,12,8,29,6,37,39
+10:00,4,31,,,32,34,35,14
+10:15,3,9,10,39,36,13,30,33
+10:30,15,11,41,40,,,42,21
+10:45,,,17,5,19,20,,
+11:00,38,10,18,4,1,6,37,16
+11:15,3,2,9,12,28,7,25,14
+11:30,22,24,23,26,11,13,8,21
+11:45,15,17,16,19,18,20,5,27
+
+Table
+Time,Table A1,Table A2,Table B1,Table B2,Table C1,Table C2,Table D1,Table D2
+13:30,23,10,18,12,34,15,25,21
+13:41,22,31,16,3,30,6,5,33
+13:52,24,13,37,19,32,14,38,28
+14:03,1,9,39,5,29,15,35,33
+14:14,20,26,27,4,36,41,22,3
+14:25,38,37,2,23,17,7,42,13
+14:36,40,34,14,39,35,8,6,25
+14:47,29,11,18,36,41,7,32,12
+14:58,15,2,16,1,21,4,30,20
+15:09,24,34,9,19,18,27,37,13
+15:20,42,26,10,40,33,8,32,21
+15:31,1,2,17,31,11,14,6,22
+15:42,23,42,29,7,28,41,,
+15:53,4,10,9,5,35,20,25,16
+16:04,36,30,39,40,17,27,26,3
+16:15,24,11,12,31,19,38,8,28
+```
