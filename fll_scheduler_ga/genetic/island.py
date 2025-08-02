@@ -115,29 +115,38 @@ class Island:
             attempts += 1
             selection_op = self.rng.choice(_context.selections)
             parents = tuple(selection_op.select(island_pop, num_parents=2))
-            if parents[0] == parents[1]:
-                continue
 
-            if _ga_params.crossover_chance <= self.rng.random():
-                continue
+            offspring: dict[int, Schedule] = {}
+            if _context.crossovers and _ga_params.crossover_chance > self.rng.random():
+                crossover_op = self.rng.choice(_context.crossovers)
 
-            crossover_op = self.rng.choice(_context.crossovers)
-            for child in crossover_op.crossover(parents):
-                mutation_ops = self.rng.sample(_context.mutations, k=len(_context.mutations))
-                for i, mutation_op in enumerate(mutation_ops, start=1):
-                    mutation_chance = _ga_params.mutation_chance**i
-                    if mutation_chance <= self.rng.random():
-                        continue
+                for child in crossover_op.crossover(parents):
+                    if _context.repairer.repair(child):
+                        child.fitness = _context.evaluator.evaluate(child)
+                        offspring[hash(child)] = child
+            else:
+                offspring = {hash(p): p for p in parents}
 
-                    mutation_success = mutation_op.mutate(child)
-                    mutation_ratio["success" if mutation_success else "failure"] += 1
+            for child in offspring.values():
+                if _context.mutations:
+                    mutation_ops = self.rng.sample(_context.mutations, k=len(_context.mutations))
 
-                if _context.repairer.repair(child) and self.add_to_population(child):
+                    for i, mutation_op in enumerate(mutation_ops, start=1):
+                        mutation_chance = _ga_params.mutation_chance**i
+
+                        if mutation_chance <= self.rng.random():
+                            continue
+
+                        mutation_ratio["success" if mutation_op.mutate(child) else "failure"] += 1
+
+                offspring_success = False
+
+                if self.add_to_population(child, s_hash=hash(child)):
                     child.fitness = _context.evaluator.evaluate(child)
                     child_count += 1
-                    offspring_ratio["success"] += 1
-                else:
-                    offspring_ratio["failure"] += 1
+                    offspring_success = True
+
+                offspring_ratio["success" if offspring_success else "failure"] += 1
 
                 if child_count >= _ga_params.offspring_size:
                     break
