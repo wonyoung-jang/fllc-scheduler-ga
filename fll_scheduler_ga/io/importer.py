@@ -13,9 +13,9 @@ from ..config.config import Round, RoundType, TournamentConfig
 from ..config.constants import HHMM_FMT
 from ..data_model.event import Event, EventFactory
 from ..data_model.location import get_location_type_from_string
+from ..data_model.schedule import Schedule
 from ..data_model.team import TeamFactory, TeamInfo
 from ..data_model.time import TimeSlot
-from ..genetic.schedule import Schedule
 
 logger = logging.getLogger(__name__)
 
@@ -59,8 +59,8 @@ class CsvImporter:
 
     def _initialize_caches(self) -> None:
         """Initialize caches for round configurations and event mappings."""
-        self._round_configs = {r.round_type: r for r in self.config.rounds}
-        self._rtl_map = {(e.round_type, e.timeslot, e.location): e for e in self.event_factory.flat_list()}
+        self._round_configs = {r.roundtype: r for r in self.config.rounds}
+        self._rtl_map = {(e.roundtype, e.timeslot, e.location): e for e in self.event_factory.flat_list()}
 
     def import_schedule(self) -> None:
         """Import schedule from the CSV file."""
@@ -194,8 +194,8 @@ class CsvImporter:
                 if not e2:
                     continue
 
-                e1.paired_event = e2
-                e2.paired_event = e1
+                e1.paired = e2
+                e2.paired = e1
 
                 if e1 in self.schedule and e2 in self.schedule:
                     team1 = self.schedule[e1]

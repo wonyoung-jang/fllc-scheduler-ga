@@ -10,8 +10,8 @@ from typing import Any
 
 from ..config.benchmark import FitnessBenchmark
 from ..config.config import TournamentConfig
+from ..data_model.schedule import Schedule
 from ..data_model.team import Team
-from .schedule import Schedule
 
 logger = logging.getLogger(__name__)
 

@@ -21,10 +21,10 @@ class Event:
     """Data model for an event in a schedule."""
 
     identity: int = field(compare=True)
-    round_type: RoundType = field(compare=False)
+    roundtype: RoundType = field(compare=False)
     timeslot: TimeSlot = field(compare=False)
     location: Room | Table = field(compare=False)
-    paired_event: "Event | None" = field(default=None, repr=False, compare=False)
+    paired: "Event | None" = field(default=None, repr=False, compare=False)
 
     def __hash__(self) -> int:
         """Use the unique identity for hashing."""
@@ -32,7 +32,7 @@ class Event:
 
     def __str__(self) -> str:
         """Get string representation of Event."""
-        return f"{self.identity}, {self.round_type}, {self.location}, {self.timeslot}"
+        return f"{self.identity}, {self.roundtype}, {self.location}, {self.timeslot}"
 
 
 @dataclass(slots=True)
@@ -52,6 +52,11 @@ class EventFactory:
         self.flat_list()
         self.event_map()
 
+        for rt, events in self._cached_events.items():
+            round_events_str = f"{rt} Round has {len(events)} events:"
+            events_str = "\n\t  ".join(str(e) for e in events)
+            logger.debug("%s\n\t  %s", round_events_str, events_str)
+
     def build(self) -> dict[RoundType, list[Event]]:
         """Create and return all Events for the tournament.
 
@@ -61,8 +66,7 @@ class EventFactory:
         """
         if not self._cached_events:
             self._cached_events = {
-                r.round_type: list(self.create_events(r))
-                for r in sorted(self.config.rounds, key=lambda x: x.start_time)
+                r.roundtype: list(self.create_events(r)) for r in sorted(self.config.rounds, key=lambda x: x.start_time)
             }
         return self._cached_events
 
@@ -70,7 +74,7 @@ class EventFactory:
         """Get a flat list of all Events across all RoundTypes."""
         if not self._cached_flat_list:
             self._cached_flat_list = [e for el in self._cached_events.values() for e in el]
-            for i, e in enumerate(self._cached_flat_list):
+            for i, e in enumerate(self._cached_flat_list, start=1):
                 e.identity = i
         return self._cached_flat_list
 
@@ -93,7 +97,7 @@ class EventFactory:
         start = r.start_time
         times = r.times
         teams_per_round = r.teams_per_round
-        round_type = r.round_type
+        round_type = r.roundtype
         num_slots = r.get_num_slots()
         num_locations = r.num_locations
         duration_minutes = r.duration_minutes
@@ -128,8 +132,8 @@ class EventFactory:
                     side2_loc = self._cached_locations.setdefault(cache_key2, location_type(**params, side=2))
                     event1 = Event(0, round_type, timeslot, side1_loc)
                     event2 = Event(0, round_type, timeslot, side2_loc)
-                    event1.paired_event = event2
-                    event2.paired_event = event1
+                    event1.paired = event2
+                    event2.paired = event1
                     yield event1
                     yield event2
                 else:
@@ -143,19 +147,24 @@ class EventConflicts:
     """Mapping of event identities to their conflicting events."""
 
     event_factory: EventFactory
-    conflicts: dict[int, set[int]] = field(default_factory=dict, init=False, repr=False)
+    conflicts: dict[int, set[int]] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to create the event availability map."""
-        events = self.event_factory.flat_list()
-        self.conflicts = defaultdict(set)
-
-        for i, event in enumerate(events):
-            logger.debug("Event %d: %s", event.identity, event)
-            for other in events[i + 1 :]:
-                if event.timeslot.overlaps(other.timeslot):
-                    self.conflicts[event.identity].add(other.identity)
-                    self.conflicts[other.identity].add(event.identity)
+        self.conflicts = self._map_conflicts()
 
         for k, v in self.conflicts.items():
             logger.debug("Event %d conflicts with %d other events: %s", k, len(v), v)
+
+    def _map_conflicts(self) -> dict[int, set[int]]:
+        """Map conflicts to the event identities."""
+        events = self.event_factory.flat_list()
+        conflicts = defaultdict(set)
+
+        for i, event in enumerate(events):
+            for other in events[i + 1 :]:
+                if event.timeslot.overlaps(other.timeslot):
+                    conflicts[event.identity].add(other.identity)
+                    conflicts[other.identity].add(event.identity)
+
+        return dict(sorted(conflicts.items()))

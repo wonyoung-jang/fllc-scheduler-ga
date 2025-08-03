@@ -23,7 +23,7 @@ def run_preflight_checks(config: TournamentConfig, event_factory: EventFactory) 
 
 def _check_round_definitions(config: TournamentConfig) -> None:
     """Check that round definitions are valid."""
-    defined_round_types = {r.round_type for r in config.rounds}
+    defined_round_types = {r.roundtype for r in config.rounds}
     for req_type in config.round_requirements:
         if req_type not in defined_round_types:
             msg = f"Required round type '{req_type}' is not defined in the configuration."
@@ -36,8 +36,8 @@ def _check_total_capacity(config: TournamentConfig) -> None:
     required = {}
     available = {}
     for r in config.rounds:
-        required[r.round_type] = (config.num_teams * r.rounds_per_team) / r.teams_per_round
-        available[r.round_type] = r.get_num_slots() * r.num_locations
+        required[r.roundtype] = (config.num_teams * r.rounds_per_team) / r.teams_per_round
+        available[r.roundtype] = r.get_num_slots() * r.num_locations
 
     for rt, count in required.items():
         if count > available[rt]:
@@ -68,7 +68,7 @@ def _check_per_team_feasibility(config: TournamentConfig) -> None:
             stop_dt = r.stop_time
             if all_slots[-1] + r.duration_minutes > stop_dt:
                 msg = (
-                    f"Round '{r.round_type}' exceeds configured stop time.\n"
+                    f"Round '{r.roundtype}' exceeds configured stop time.\n"
                     f"  - Last slot starts at {all_slots[-1]} but should not exceed {stop_dt}."
                 )
                 raise ValueError(msg)
@@ -99,11 +99,11 @@ def _check_location_time_overlaps(config: TournamentConfig, event_factory: Event
             for existing_ts, existing_rt in booked_slots.get(loc_key, []):
                 if e.timeslot.overlaps(existing_ts):
                     msg = (
-                        f"Configuration conflict: Round '{r.round_type}' and '{existing_rt}' "
+                        f"Configuration conflict: Round '{r.roundtype}' and '{existing_rt}' "
                         f"are scheduled in the same location ({loc_key[0].__name__} {loc_key[1]}) "
                         f"at overlapping times ({e.timeslot} and "
                         f"{existing_ts})."
                     )
                     raise ValueError(msg)
-            booked_slots[loc_key].append((e.timeslot, r.round_type))
+            booked_slots[loc_key].append((e.timeslot, r.roundtype))
     logger.debug("Check passed: No location/time overlaps found.")

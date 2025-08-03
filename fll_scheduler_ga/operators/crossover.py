@@ -9,8 +9,8 @@ from random import Random
 from ..config.app_config import AppConfig
 from ..config.constants import CrossoverOps
 from ..data_model.event import Event, EventFactory
+from ..data_model.schedule import Schedule
 from ..data_model.team import TeamFactory
-from ..genetic.schedule import Schedule
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +123,7 @@ class EventCrossover(Crossover):
         get_team_from_child = child.get_team
         for e1 in events:
             t1 = get_team_from_child(parent[e1].identity)
-            if (e2 := e1.paired_event) and e1.location.side == 1:
+            if (e2 := e1.paired) and e1.location.side == 1:
                 t2 = get_team_from_child(parent[e2].identity)
                 child.assign_match(e1, e2, t1, t2)
             elif e2 is None:
@@ -134,18 +134,18 @@ class EventCrossover(Crossover):
         get_team_from_child = child.get_team
         for e1 in events:
             t1 = get_team_from_child(parent[e1].identity)
-            if (e2 := e1.paired_event) and e1.location.side == 1:
+            if (e2 := e1.paired) and e1.location.side == 1:
                 t2 = get_team_from_child(parent[e2].identity)
                 if (
-                    not t1.needs_round(e1.round_type)
-                    or not t2.needs_round(e2.round_type)
+                    not t1.needs_round(e1.roundtype)
+                    or not t2.needs_round(e2.roundtype)
                     or t1.conflicts(e1)
                     or t2.conflicts(e2)
                 ):
                     continue
                 child.assign_match(e1, e2, t1, t2)
             elif e2 is None:
-                if not t1.needs_round(e1.round_type) or t1.conflicts(e1):
+                if not t1.needs_round(e1.roundtype) or t1.conflicts(e1):
                     continue
                 child.assign_single(e1, t1)
 
@@ -225,8 +225,8 @@ class RoundTypeCrossover(EventCrossover):
         """Get the genes for RoundType crossover."""
         evts = self.events
         rt = list(self.event_factory.config.round_requirements.keys())
-        yield (e for e in evts for i, r in enumerate(rt) if e.round_type == r and i % 2 != 0 and e in p1)
-        yield (e for e in evts for i, r in enumerate(rt) if e.round_type == r and i % 2 == 0 and e in p2)
+        yield (e for e in evts for i, r in enumerate(rt) if e.roundtype == r and i % 2 != 0 and e in p1)
+        yield (e for e in evts for i, r in enumerate(rt) if e.roundtype == r and i % 2 == 0 and e in p2)
 
 
 @dataclass(slots=True)
@@ -240,7 +240,7 @@ class PartialCrossover(EventCrossover):
         """Get the genes for Partial crossover."""
         evts = self.events
         ne = len(evts)
-        thirds = sorted(self.rng.sample(range(1, ne), 3))
+        sections = sorted(self.rng.sample(range(1, ne), 4))
         indices = self.rng.sample(range(ne), ne)
-        yield (evts[i] for i in indices[: thirds[0]] if evts[i] in p1)
-        yield (evts[i] for i in indices[thirds[2] :] if evts[i] in p2)
+        yield (evts[i] for i in indices[: sections[0]] if evts[i] in p1)
+        yield (evts[i] for i in indices[sections[-1] :] if evts[i] in p2)

@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from logging import Logger
 
-from ..genetic.schedule import Population
+from ..data_model.schedule import Population
 from .base_observer import GaObserver
 
 

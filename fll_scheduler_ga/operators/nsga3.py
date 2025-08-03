@@ -8,7 +8,7 @@ from logging import getLogger
 
 import numpy as np
 
-from ..genetic.schedule import Population, Schedule
+from ..data_model.schedule import Population, Schedule
 
 logger = getLogger(__name__)
 
@@ -53,13 +53,17 @@ class NSGA3:
 
     def select(self, population: Population, population_size: int = 0) -> dict[int, Schedule]:
         """Select the next generation using NSGA-III principles."""
-        pop_size = population_size or self.population_size
+        pop_size = population_size
         fronts = self._non_dominated_sort(population)
         last_idx = self._get_last_front_idx(fronts, pop_size)
-        last_front = fronts[last_idx]
+
         selected = [p for i in range(last_idx) for p in fronts[i]]
+        if len(selected) == pop_size:
+            return {hash(p): p for p in selected}
+
+        last_front = fronts[last_idx]
         k = pop_size - len(selected)
-        selected.extend(self._niching(fronts, last_front, k))
+        selected.extend(self._niching(fronts[: last_idx + 1], last_front, k))
         return {hash(p): p for p in selected}
 
     def _get_last_front_idx(self, fronts: list[Population], pop_size: int) -> int:
@@ -121,15 +125,17 @@ class NSGA3:
         while selected < k and pool:
             picked = False
             min_count = min(counts)
-            for d in (di for di, c in enumerate(counts) if c == min_count):
+            min_count_indices = [di for di, c in enumerate(counts) if c == min_count]
+            self.rng.shuffle(min_count_indices)
+            for d in min_count_indices:
                 if not (clst := [(i, p) for i, p in pool.items() if p.ref_point_idx == d]):
                     continue
                 pi, _ = min(clst, key=lambda p: p[1].distance_to_ref_point) if counts[d] == 0 else self.rng.choice(clst)
                 counts[d] += 1
                 selected += 1
                 picked = True
-
-                yield pool.pop(pi)
+                pick = pool.pop(pi)
+                yield pick
 
                 if selected >= k:
                     break
@@ -154,7 +160,7 @@ class NSGA3:
         nadir = fits_last.max(axis=0) if last_front else fits.max(axis=0)
 
         span = nadir - ideal
-        span[span <= 1e-6] = 1e-6
+        span[span == 0] = 1e-6
 
         for p, fit in zip(pop, fits, strict=True):
             p.normalized_fitness = (fit - ideal) / span
@@ -167,9 +173,8 @@ class NSGA3:
                 continue
 
             dists = np.sum((p.normalized_fitness - _ref_points) ** 2, axis=1)
-            idx = np.argmin(dists)
-            p.ref_point_idx = idx
-            p.distance_to_ref_point = dists[idx]
+            p.ref_point_idx = np.argmin(dists)
+            p.distance_to_ref_point = dists[p.ref_point_idx]
 
     def _count(self, idx_to_count: Iterator[int]) -> list[int]:
         """Count how many individuals are associated with each reference point."""

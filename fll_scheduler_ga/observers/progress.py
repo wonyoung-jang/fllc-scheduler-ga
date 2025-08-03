@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 
 from tqdm import tqdm
 
-from ..genetic.schedule import Population
+from ..data_model.schedule import Population
 from .base_observer import GaObserver
 
 

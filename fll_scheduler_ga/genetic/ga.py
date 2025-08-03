@@ -12,11 +12,11 @@ if TYPE_CHECKING:
     from ..config.config import TournamentConfig
 
 from ..config.constants import RANDOM_SEED_RANGE
+from ..data_model.schedule import Population
 from ..observers.base_observer import GaObserver
 from .builder import ScheduleBuilder
 from .ga_context import GaContext
 from .island import Island
-from .schedule import Population
 
 
 @dataclass(slots=True)
@@ -205,20 +205,22 @@ class GA:
                 self._offspring_ratio.update(ratios["offspring"])
                 self._mutation_ratio.update(ratios["mutation"])
 
-            self.update_fitness_history()
             self._notify_on_generation_end(
                 generation + 1,
                 _ga_params.generations,
-                self._expected_population_size,
+                len(self),
                 self.fitness_history[-1] if self.fitness_history else (),
                 len(self.pareto_front()),
             )
 
-            if _ga_params.num_islands <= 1 or _ga_params.migration_size <= 0:
-                continue
-
-            if (generation + 1) % _ga_params.migration_interval == 0:
+            if (
+                _ga_params.num_islands > 1
+                and _ga_params.migration_size > 0
+                and (generation + 1) % _ga_params.migration_interval == 0
+            ):
                 self.migrate(_ga_params.num_islands, _ga_params.migration_size)
+
+            self.update_fitness_history()
 
     def migrate(self, num_islands: int, migration_size: int) -> None:
         """Migrate the best individuals between islands using a ring topology."""

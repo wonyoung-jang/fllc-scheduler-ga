@@ -6,8 +6,8 @@ from dataclasses import dataclass
 
 from ..config.config import RoundType, TournamentConfig
 from ..data_model.event import Event, EventFactory
+from ..data_model.schedule import Schedule
 from ..data_model.team import Team, TeamFactory
-from .schedule import Schedule
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ class ScheduleBuilder:
         teams = self.rng.sample(teams, k=len(teams))
 
         for r in self.config.rounds:
-            rt = r.round_type
+            rt = r.roundtype
             evts = events.get(rt, [])
             if r.teams_per_round == r.rounds_per_team == 1:
                 self._build_singles(schedule, rt, evts, teams)
@@ -48,7 +48,7 @@ class ScheduleBuilder:
 
     def _build_matches(self, schedule: Schedule, rt: RoundType, events: list[Event], teams: list[Team]) -> None:
         """Book all events for a specific round type."""
-        for side1, side2 in ((e, e.paired_event) for e in events if e.location.side == 1):
+        for side1, side2 in ((e, e.paired) for e in events if e.location.side == 1):
             available = (t for t in teams if t.needs_round(rt) and not t.conflicts(side1))
             if (team1 := next(available, None)) is None or (team2 := next(available, None)) is None:
                 continue

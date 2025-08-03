@@ -10,7 +10,7 @@ import pandas as pd
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
-from ..genetic.schedule import Population
+from ..data_model.schedule import Population
 
 logger = logging.getLogger(__name__)
 

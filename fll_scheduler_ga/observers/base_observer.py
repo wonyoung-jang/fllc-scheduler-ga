@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from ..genetic.schedule import Population
+from ..data_model.schedule import Population
 
 
 @dataclass(slots=True)

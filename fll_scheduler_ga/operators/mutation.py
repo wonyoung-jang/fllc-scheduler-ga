@@ -9,7 +9,7 @@ from random import Random
 from ..config.app_config import AppConfig
 from ..config.constants import MutationOps
 from ..data_model.event import Event
-from ..genetic.schedule import Match, Schedule
+from ..data_model.schedule import Match, Schedule
 
 logger = logging.getLogger(__name__)
 

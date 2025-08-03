@@ -6,9 +6,9 @@ from dataclasses import dataclass, field
 from random import Random
 
 from ..config.constants import ATTEMPTS_RANGE, RANDOM_SEED_RANGE
+from ..data_model.schedule import Population, Schedule
 from .builder import ScheduleBuilder
 from .ga_context import GaContext
-from .schedule import Population, Schedule
 
 
 @dataclass(slots=True)
@@ -154,6 +154,7 @@ class Island:
         self.selected = self.context.nsga3.select(
             list(self.selected.values()), population_size=_ga_params.population_size
         )
+        self.handle_underpopulation()
 
         self.update_fitness_history()
 
@@ -176,11 +177,32 @@ class Island:
         self.selected = self.context.nsga3.select(
             list(self.selected.values()), population_size=self.context.ga_params.population_size
         )
+        self.handle_underpopulation()
+
+    def handle_underpopulation(self) -> None:
+        """Handle underpopulation by adding new individuals to the island."""
+        if len(self.selected) >= self.context.ga_params.population_size:
+            return
+
+        self.context.logger.debug(
+            "Island %d underpopulated: %d individuals, expected %d.",
+            self.identity,
+            len(self.selected),
+            self.context.ga_params.population_size,
+        )
+
+        seeder = Random(self.rng.randint(*RANDOM_SEED_RANGE))
+
+        while len(self.selected) < self.context.ga_params.population_size:
+            self.builder.rng = Random(seeder.randint(*RANDOM_SEED_RANGE))
+            schedule = self.builder.build()
+
+            if self.context.repairer.repair(schedule) and self.add_to_population(schedule):
+                schedule.fitness = self.context.evaluator.evaluate(schedule)
 
     def finalize_island(self) -> Iterator[Schedule]:
         """Finalize the island's state after evolution."""
-        evaluate = self.context.evaluator.evaluate
         for sched in self.selected.values():
             if sched.fitness is None:
-                sched.fitness = evaluate(sched)
+                sched.fitness = self.context.evaluator.evaluate(sched)
             yield sched

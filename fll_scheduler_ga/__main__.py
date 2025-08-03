@@ -282,8 +282,8 @@ def initialize_logging(args: Namespace) -> None:
     root_logger.addHandler(file_handler)
     root_logger.addHandler(console_handler)
 
-    args_str = "\n".join(f"\t{k} = {v}" for k, v in args.__dict__.items())
-    logger.debug("Starting FLLC Scheduler with args:\n%s", args_str)
+    args_str = "\n\t".join(f"  {k}: {v}" for k, v in args.__dict__.items())
+    logger.debug("Starting FLLC Scheduler with args:\n\targparse.Namespace\n\t%s", args_str)
 
 
 def create_ga_context(app_config: AppConfig) -> GaContext:

@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from ..config.config import RoundType
-from ..data_model.event import Event
-from ..data_model.team import Team, TeamMap
+from .event import Event
+from .team import Team, TeamMap
 
 type Population = list[Schedule]
 type Individual = dict[Event, int]
@@ -124,10 +124,10 @@ class Schedule:
         if self._cached_matches is None:
             self._cached_matches = defaultdict(list)
             for event1, t1 in self.schedule.items():
-                if not (event2 := event1.paired_event) or event1.location.side != 1:
+                if not (event2 := event1.paired) or event1.location.side != 1:
                     continue
 
-                rt = event1.round_type
+                rt = event1.roundtype
                 if t2 := self.schedule[event2]:
                     self._cached_matches[rt].append((event1, event2, self.teams[t1], self.teams[t2]))
         return self._cached_matches

@@ -6,9 +6,9 @@ from pathlib import Path
 
 from ..config.config import RoundType
 from ..data_model.location import Location
+from ..data_model.schedule import Individual, Schedule
 from ..data_model.team import Team
 from ..data_model.time import TimeSlot
-from ..genetic.schedule import Individual, Schedule
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +35,8 @@ class Exporter(ABC):
         grouped = {}
         normalized_teams = schedule.normalize_teams()
         for event, team in sorted(schedule.items(), key=lambda item: (item[0].identity)):
-            grouped.setdefault(event.round_type, {})
-            grouped[event.round_type][event] = normalized_teams.get(team)
+            grouped.setdefault(event.roundtype, {})
+            grouped[event.roundtype][event] = normalized_teams.get(team)
         return grouped
 
     @abstractmethod

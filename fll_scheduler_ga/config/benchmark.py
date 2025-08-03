@@ -93,7 +93,7 @@ class FitnessBenchmark:
         # Canonical representation of rounds
         round_tuples = tuple(
             (
-                r.round_type,
+                r.roundtype,
                 r.rounds_per_team,
                 r.teams_per_round,
                 frozenset(r.times),
@@ -116,7 +116,7 @@ class FitnessBenchmark:
         """Run the table consistency fitness benchmarking."""
         logger.info("Running table consistency and opponent variety benchmarks...")
 
-        config_map = {r.round_type: r.teams_per_round for r in self.config.rounds}
+        config_map = {r.roundtype: r.teams_per_round for r in self.config.rounds}
         logger.debug("Finding events per round type:")
 
         total_locations_possible = 0

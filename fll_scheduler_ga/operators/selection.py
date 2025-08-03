@@ -14,7 +14,7 @@ from random import Random
 
 from ..config.app_config import AppConfig
 from ..config.constants import SelectionOps
-from ..genetic.schedule import Population, Schedule
+from ..data_model.schedule import Population, Schedule
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +60,8 @@ class TournamentSelect(Selection):
 
     def select(self, population: Population, num_parents: int) -> Iterator[Schedule]:
         """Select individuals using NSGA-III tournament selection."""
-        tournament_contenders = self.rng.sample(population, k=min(self.tournament_size, len(population)))
-        tournament = sorted(tournament_contenders, key=lambda p: (p.rank, self.rng.choice([True, False])))
+        contenders = self.rng.sample(population, k=self.tournament_size)
+        tournament = sorted(contenders, key=lambda p: (p.rank, self.rng.choice([True, False])))
         yield from tournament[:num_parents]
 
 

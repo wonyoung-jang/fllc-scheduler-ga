@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 
 from ..config.config import TournamentConfig
 from ..data_model.event import Event, EventFactory
+from ..data_model.schedule import Schedule
 from ..data_model.team import Team
-from ..genetic.schedule import Schedule
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ class Repairer:
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
         self.set_of_events = set(self.event_factory.flat_list())
-        self.rt_teams_needed = {rc.round_type: rc.teams_per_round for rc in self.config.rounds}
+        self.rt_teams_needed = {rc.roundtype: rc.teams_per_round for rc in self.config.rounds}
 
     def repair(self, schedule: Schedule) -> bool:
         """Repair missing assignments in the schedule.
@@ -58,8 +58,8 @@ class Repairer:
         unbooked = self.set_of_events.difference(schedule.keys())
 
         for e in self.rng.sample(list(unbooked), k=len(unbooked)):
-            if (e.paired_event and e.location.side == 1) or e.paired_event is None:
-                rt = e.round_type
+            if (e.paired and e.location.side == 1) or e.paired is None:
+                rt = e.roundtype
                 key = (rt, self.rt_teams_needed[rt])
                 open_events[key].append(e)
 
@@ -71,7 +71,7 @@ class Repairer:
         teams = schedule.all_teams()
 
         for team in self.rng.sample(teams, k=len(teams)):
-            for rt, num_needed in team.round_types.items():
+            for rt, num_needed in team.roundreqs.items():
                 if num_needed > 0:
                     key = (rt, self.rt_teams_needed[rt])
                     needs_by_rt[key].extend([team] * num_needed)
@@ -81,13 +81,17 @@ class Repairer:
     def _assign_singles(self, teams: list[Team], events: list[Event], schedule: Schedule) -> None:
         """Assign single-team events to teams that need them."""
         for team in teams:
+            event_idx = -1
             for i, event in enumerate(events):
                 if team.conflicts(event):
                     continue
 
                 schedule.assign_single(event, team)
-                events.pop(i)
+                event_idx = i
                 break
+
+            if event_idx != -1:
+                events.pop(event_idx)
 
     def _assign_matches(self, teams: list[Team], events: list[Event], schedule: Schedule) -> None:
         """Assign match events to teams that need them."""
@@ -114,15 +118,10 @@ class Repairer:
         """Find an open match slot for two teams and populate it."""
         event_idx = -1
         for i, e1 in enumerate(events):
-            if t1.conflicts(e1):
+            if t1.conflicts(e1) or t2.conflicts(e1):
                 continue
 
-            e2 = e1.paired_event
-
-            if t2.conflicts(e2):
-                continue
-
-            schedule.assign_match(e1, e2, t1, t2)
+            schedule.assign_match(e1, e1.paired, t1, t2)
             event_idx = i
             break
 

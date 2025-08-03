@@ -39,7 +39,7 @@ class TeamFactory:
             info.identity: Team(
                 info=info,
                 identity=info.identity,
-                round_types=self.round_requirements.copy(),
+                roundreqs=self.round_requirements.copy(),
             )
             for info in self.base_teams_info
         }
@@ -51,7 +51,7 @@ class Team:
 
     info: TeamInfo
     identity: int
-    round_types: dict[RoundType, int]
+    roundreqs: dict[RoundType, int]
     fitness: tuple[float, ...] = field(init=False, repr=False)
     events: list[int] = field(default_factory=list, repr=False)
     timeslots: list[TimeSlot] = field(default_factory=list, repr=False)
@@ -66,11 +66,11 @@ class Team:
 
     def rounds_needed(self) -> bool:
         """Get the total number of rounds still needed for the team."""
-        return sum(self.round_types.values()) > 0
+        return sum(self.roundreqs.values()) > 0
 
     def needs_round(self, round_type: RoundType) -> bool:
         """Check if the team still needs to participate in a given round type."""
-        return self.round_types[round_type] > 0
+        return self.roundreqs[round_type] > 0
 
     def switch_event(self, old_event: Event, new_event: Event) -> None:
         """Switch an event for the team."""
@@ -79,18 +79,18 @@ class Team:
 
     def remove_event(self, event: Event) -> None:
         """Unbook a team from an event."""
-        self.round_types[event.round_type] += 1
+        self.roundreqs[event.roundtype] += 1
         self.events.remove(event.identity)
         self.timeslots.remove(event.timeslot)
-        if event.paired_event:
+        if event.paired:
             self.tables.remove(event.location)
 
     def add_event(self, event: Event) -> None:
         """Book a team for an event."""
-        self.round_types[event.round_type] -= 1
+        self.roundreqs[event.roundtype] -= 1
         self.events.append(event.identity)
         self.timeslots.append(event.timeslot)
-        if event.paired_event:
+        if event.paired:
             self.tables.append(event.location)
 
     def switch_opponent(self, old_opponent: "Team", new_opponent: "Team") -> None:
@@ -116,13 +116,14 @@ class Team:
             bool: True if there is a conflict, False otherwise.
 
         """
-        if new_event.identity in self.events:
+        _events = self.events
+        if new_event.identity in _events:
             return True
 
-        if not (potential_conflicts := self.event_conflicts.get(new_event.identity)):
+        if not (potential_conflicts := Team.event_conflicts.get(new_event.identity)):
             return False
 
-        return any(existing_event_id in potential_conflicts for existing_event_id in self.events)
+        return any(existing_event_id in potential_conflicts for existing_event_id in _events)
 
     def break_time_key(self) -> frozenset[int]:
         """Get a key for the break time cache based on the team's events."""

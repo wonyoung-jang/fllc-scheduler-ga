@@ -22,6 +22,26 @@ class GaParameters:
 
     def __post_init__(self) -> None:
         """Post-initialization to ensure valid parameters."""
+        self._validate()
+        logger.debug("Initialized genetic algorithm parameters: %s", self)
+
+    def __str__(self) -> str:
+        """Representation of GA parameters."""
+        return (
+            f"\n\tGaParameters:"
+            f"\n\t  population_size: {self.population_size}"
+            f"\n\t  generations: {self.generations}"
+            f"\n\t  offspring_size: {self.offspring_size}"
+            f"\n\t  selection_size: {self.selection_size}"
+            f"\n\t  crossover_chance: {self.crossover_chance:.2f}"
+            f"\n\t  mutation_chance: {self.mutation_chance:.2f}"
+            f"\n\t  num_islands: {self.num_islands}"
+            f"\n\t  migration_interval: {self.migration_interval}"
+            f"\n\t  migration_size: {self.migration_size}"
+        )
+
+    def _validate(self) -> None:
+        """Validate the parameters."""
         if self.generations <= 0:
             self.generations = 128
             logger.warning("Generations must be greater than 0, defaulting to 128.")
@@ -65,20 +85,3 @@ class GaParameters:
         if self.num_islands > 1 and self.migration_size >= self.population_size:
             self.migration_size = max(1, self.population_size // 4)
             logger.warning("Migration size is >= population size, defaulting to 25%%.")
-
-        logger.debug("Initialized genetic algorithm parameters: %s", self)
-
-    def __str__(self) -> str:
-        """Representation of GA parameters."""
-        return (
-            f"GaParameters:\n"
-            f"\tPopulation Size: {self.population_size}\n"
-            f"\tGenerations: {self.generations}\n"
-            f"\tOffspring Size: {self.offspring_size}\n"
-            f"\tSelection Size: {self.selection_size}\n"
-            f"\tCrossover Chance: {self.crossover_chance:.2f}\n"
-            f"\tMutation Chance: {self.mutation_chance:.2f}\n"
-            f"\tNumber of Islands: {self.num_islands}\n"
-            f"\tMigration Interval: {self.migration_interval}\n"
-            f"\tMigration Size: {self.migration_size}"
-        )
