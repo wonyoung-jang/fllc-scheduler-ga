@@ -94,25 +94,16 @@ class EventFactory:
             Event: An event for the round with a time slot and a location.
 
         """
-        start = r.start_time
-        times = r.times
-        teams_per_round = r.teams_per_round
-        round_type = r.roundtype
-        num_slots = r.get_num_slots()
-        num_locations = r.num_locations
-        duration_minutes = r.duration_minutes
-        location_type = get_location_type(teams_per_round)
+        location_type = get_location_type(r.teams_per_round)
+        start = r.times[0] if r.times else r.start_time
 
-        if times:
-            start = times[0]
-
-        for i in range(num_slots):
-            if not times:
-                stop = start + duration_minutes
-            elif i + 1 < len(times):
-                stop = times[i + 1]
-            elif i + 1 == len(times):
-                stop += duration_minutes
+        for i in range(r.get_num_slots()):
+            if not r.times:
+                stop = start + r.duration_minutes
+            elif i + 1 < len(r.times):
+                stop = r.times[i + 1]
+            elif i + 1 == len(r.times):
+                stop += r.duration_minutes
 
             time_cache_key = (start, stop)
             timeslot = self._cached_timeslots.setdefault(
@@ -120,26 +111,26 @@ class EventFactory:
                 TimeSlot(start, stop, start.strftime(HHMM_FMT), stop.strftime(HHMM_FMT)),
             )
             start = stop
-            for j in range(1, num_locations + 1):
+            for j in range(1, r.num_locations + 1):
                 params = {
                     "identity": j,
-                    "teams_per_round": teams_per_round,
+                    "teams_per_round": r.teams_per_round,
                 }
                 if hasattr(location_type, "side"):
-                    cache_key1 = (j, teams_per_round, 1)
-                    cache_key2 = (j, teams_per_round, 2)
+                    cache_key1 = (j, r.teams_per_round, 1)
+                    cache_key2 = (j, r.teams_per_round, 2)
                     side1_loc = self._cached_locations.setdefault(cache_key1, location_type(**params, side=1))
                     side2_loc = self._cached_locations.setdefault(cache_key2, location_type(**params, side=2))
-                    event1 = Event(0, round_type, timeslot, side1_loc)
-                    event2 = Event(0, round_type, timeslot, side2_loc)
+                    event1 = Event(0, r.roundtype, timeslot, side1_loc)
+                    event2 = Event(0, r.roundtype, timeslot, side2_loc)
                     event1.paired = event2
                     event2.paired = event1
                     yield event1
                     yield event2
                 else:
-                    cache_key = (j, teams_per_round)
+                    cache_key = (j, r.teams_per_round)
                     location = self._cached_locations.setdefault(cache_key, location_type(**params))
-                    yield Event(0, round_type, timeslot, location)
+                    yield Event(0, r.roundtype, timeslot, location)
 
 
 @dataclass(slots=True)

@@ -22,30 +22,6 @@ class TeamInfo:
 
 
 @dataclass(slots=True)
-class TeamFactory:
-    """Factory class to create Team instances."""
-
-    round_requirements: dict[RoundType, int]
-    base_teams_info: frozenset[TeamInfo]
-
-    def build(self) -> TeamMap:
-        """Create a mapping of team identities to Team instances.
-
-        Returns:
-            TeamMap: A mapping of team identities to Team instances.
-
-        """
-        return {
-            info.identity: Team(
-                info=info,
-                identity=info.identity,
-                roundreqs=self.round_requirements.copy(),
-            )
-            for info in self.base_teams_info
-        }
-
-
-@dataclass(slots=True)
 class Team:
     """Data model for a team in the FLL Scheduler GA."""
 
@@ -136,3 +112,27 @@ class Team:
     def opponent_variety_key(self) -> int:
         """Get a key for the opponent variety cache based on the team's events."""
         return len(set(self.opponents))
+
+
+@dataclass(slots=True)
+class TeamFactory:
+    """Factory class to create Team instances."""
+
+    round_requirements: dict[RoundType, int]
+    base_teams_info: frozenset[TeamInfo]
+
+    def build(self) -> TeamMap:
+        """Create a mapping of team identities to Team instances.
+
+        Returns:
+            TeamMap: A mapping of team identities to Team instances.
+
+        """
+        return {
+            info.identity: Team(
+                info=info,
+                identity=info.identity,
+                roundreqs=self.round_requirements.copy(),
+            )
+            for info in self.base_teams_info
+        }

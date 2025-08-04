@@ -97,6 +97,7 @@ class NSGA3:
         while curr < len(fronts) and fronts[curr]:
             next_front = []
             for i in fronts[curr]:
+                pop[i].rank = curr
                 for j in dominates_list[i]:
                     dominated_counts[j] -= 1
                     if dominated_counts[j] == 0:
@@ -107,17 +108,12 @@ class NSGA3:
 
             curr += 1
 
-        for rank_i, front in enumerate(fronts):
-            for i in front:
-                pop[i].rank = rank_i
-
         return [[pop[i] for i in front] for front in fronts]
 
     def _niching(self, fronts: list[Population], last_front: Population, k: int) -> Iterator[Schedule]:
         """Select k individuals from the last front using a niching mechanism."""
         all_schedules = [p for front in fronts for p in front]
-        self._normalize(all_schedules, fronts[-1])
-        self._associate(all_schedules)
+        self._normalize_then_associate(all_schedules, fronts[-1])
         counts = self._count(p.ref_point_idx for fr in fronts[:-1] for p in fr if p.ref_point_idx is not None)
         pool = dict(enumerate(last_front))
         selected = 0
@@ -147,8 +143,8 @@ class NSGA3:
                 selected += 1
                 yield pick
 
-    def _normalize(self, pop: list[Schedule], last_front: Population) -> None:
-        """Normalize objectives for the entire population being considered."""
+    def _normalize_then_associate(self, pop: list[Schedule], last_front: Population) -> None:
+        """Normalize objectives then associate individuals with nearest reference points."""
         all_fitnesses = [p.fitness for p in pop]
         all_fitnesses_last = [p.fitness for p in last_front]
 
@@ -164,15 +160,7 @@ class NSGA3:
 
         for p, fit in zip(pop, fits, strict=True):
             p.normalized_fitness = (fit - ideal) / span
-
-    def _associate(self, pop: list[Schedule]) -> None:
-        """Associate individuals with the nearest reference points and store distances."""
-        _ref_points = self.ref_points
-        for p in pop:
-            if p.normalized_fitness is None:
-                continue
-
-            dists = np.sum((p.normalized_fitness - _ref_points) ** 2, axis=1)
+            dists = np.sum((p.normalized_fitness - self.ref_points) ** 2, axis=1)
             p.ref_point_idx = np.argmin(dists)
             p.distance_to_ref_point = dists[p.ref_point_idx]
 

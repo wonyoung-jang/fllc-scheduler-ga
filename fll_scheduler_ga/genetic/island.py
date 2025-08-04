@@ -155,7 +155,6 @@ class Island:
             list(self.selected.values()), population_size=_ga_params.population_size
         )
         self.handle_underpopulation()
-
         self.update_fitness_history()
 
         return {
