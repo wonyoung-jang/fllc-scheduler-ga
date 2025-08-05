@@ -92,7 +92,7 @@ class NSGA3:
                 dominated_counts[i] += 1
 
         curr = 0
-        fronts[curr] = [i for i in range(size) if dominated_counts[i] == 0]
+        fronts[curr].extend(i for i in range(size) if dominated_counts[i] == 0)
 
         while curr < len(fronts) and fronts[curr]:
             next_front = []
@@ -171,7 +171,7 @@ class NSGA3:
             counts[idx] += 1
         return counts
 
-    def _dominates(self, p_fit: tuple[float] | None, q_fit: tuple[float] | None) -> bool:
+    def _dominates(self, p_fit: tuple[float, ...], q_fit: tuple[float, ...]) -> bool:
         """Check if schedule p dominates schedule q."""
         better_in_any = False
         for ps, qs in zip(p_fit, q_fit, strict=True):

@@ -7,6 +7,7 @@ from random import Random
 
 from ..config.constants import ATTEMPTS_RANGE, RANDOM_SEED_RANGE
 from ..data_model.schedule import Population, Schedule
+from ..operators.crossover import Crossover
 from .builder import ScheduleBuilder
 from .ga_context import GaContext
 
@@ -95,6 +96,21 @@ class Island:
 
         self.selected = self.context.nsga3.select(list(self.selected.values()), population_size=pop_size)
 
+    def get_initial_offspring(
+        self, parents: tuple[Schedule, Schedule], cs: tuple[Crossover] | tuple, *, crossover_roll: bool
+    ) -> set[Schedule]:
+        """Get the initial offspring for the island from either crossover or parents."""
+        offspring = set()
+        if cs and crossover_roll:
+            crossover_op = self.rng.choice(self.context.crossovers)
+            for child in crossover_op.crossover(parents):
+                if self.context.repairer.repair(child):
+                    child.fitness = self.context.evaluator.evaluate(child)
+                    offspring.add(child)
+        elif not cs:
+            offspring.update(parents)
+        return offspring
+
     def evolve(self) -> dict[str, Counter]:
         """Perform main evolution loop: generations and migrations."""
         offspring_ratio = Counter()
@@ -107,42 +123,39 @@ class Island:
             }
 
         _context = self.context
+        _ss = _context.selections
+        _cs = _context.crossovers
+        _ms = _context.mutations
+        _eval = _context.evaluator.evaluate
         _ga_params = _context.ga_params
         attempts, max_attempts = ATTEMPTS_RANGE
         child_count = 0
 
         while child_count < _ga_params.offspring_size and attempts < max_attempts:
             attempts += 1
-            selection_op = self.rng.choice(_context.selections)
+            _crossover_roll = _ga_params.crossover_chance > self.rng.random()
+            _mutation_roll = _ga_params.mutation_chance > self.rng.random()
+
+            selection_op = self.rng.choice(_ss)
             parents = tuple(selection_op.select(island_pop, num_parents=2))
 
-            offspring: dict[int, Schedule] = {}
-            if _context.crossovers and _ga_params.crossover_chance > self.rng.random():
-                crossover_op = self.rng.choice(_context.crossovers)
+            offspring = self.get_initial_offspring(
+                parents,
+                _cs,
+                crossover_roll=_crossover_roll,
+            )
 
-                for child in crossover_op.crossover(parents):
-                    if _context.repairer.repair(child):
-                        child.fitness = _context.evaluator.evaluate(child)
-                        offspring[hash(child)] = child
-            else:
-                offspring = {hash(p): p for p in parents}
-
-            for child in offspring.values():
-                if _context.mutations:
-                    mutation_ops = self.rng.sample(_context.mutations, k=len(_context.mutations))
-
+            for child in offspring:
+                if _ms and _mutation_roll:
+                    mutation_ops = self.rng.sample(_ms, k=len(_ms))
                     for i, mutation_op in enumerate(mutation_ops, start=1):
-                        mutation_chance = _ga_params.mutation_chance**i
-
-                        if mutation_chance <= self.rng.random():
-                            continue
-
+                        if _ga_params.mutation_chance**i <= self.rng.random():
+                            break
                         mutation_ratio["success" if mutation_op.mutate(child) else "failure"] += 1
 
                 offspring_success = False
-
-                if self.add_to_population(child, s_hash=hash(child)):
-                    child.fitness = _context.evaluator.evaluate(child)
+                if self.add_to_population(child):
+                    child.fitness = _eval(child)
                     child_count += 1
                     offspring_success = True
 
@@ -154,8 +167,6 @@ class Island:
         self.selected = self.context.nsga3.select(
             list(self.selected.values()), population_size=_ga_params.population_size
         )
-        self.handle_underpopulation()
-        self.update_fitness_history()
 
         return {
             "offspring": offspring_ratio,
@@ -176,7 +187,6 @@ class Island:
         self.selected = self.context.nsga3.select(
             list(self.selected.values()), population_size=self.context.ga_params.population_size
         )
-        self.handle_underpopulation()
 
     def handle_underpopulation(self) -> None:
         """Handle underpopulation by adding new individuals to the island."""

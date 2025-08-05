@@ -11,7 +11,7 @@ from fll_scheduler_ga.config.app_config import AppConfig, create_app_config
 from fll_scheduler_ga.config.benchmark import FitnessBenchmark
 from fll_scheduler_ga.config.preflight import run_preflight_checks
 from fll_scheduler_ga.data_model.event import EventConflicts, EventFactory
-from fll_scheduler_ga.data_model.team import Team, TeamFactory, TeamInfo
+from fll_scheduler_ga.data_model.team import Team, TeamFactory
 from fll_scheduler_ga.genetic.fitness import FitnessEvaluator
 from fll_scheduler_ga.genetic.ga import GA
 from fll_scheduler_ga.genetic.ga_context import GaContext
@@ -288,8 +288,7 @@ def initialize_logging(args: Namespace) -> None:
 
 def create_ga_context(app_config: AppConfig) -> GaContext:
     """Create and return a GaContext with the provided configuration."""
-    base_team_info = frozenset(TeamInfo(i) for i in range(1, app_config.tournament.num_teams + 1))
-    team_factory = TeamFactory(app_config.tournament.round_requirements, base_team_info)
+    team_factory = TeamFactory(app_config.tournament)
     event_factory = EventFactory(app_config.tournament)
     event_conflicts = EventConflicts(event_factory)
     Team.event_conflicts = event_conflicts.conflicts

@@ -198,36 +198,49 @@ class GA:
 
     def run_epochs(self) -> None:
         """Perform main evolution loop: generations and migrations."""
-        _ga_params = self.context.ga_params
-        for generation in range(_ga_params.generations):
-            for i in range(_ga_params.num_islands):
+        for generation in range(self.context.ga_params.generations):
+            if self._migration_condition(generation):
+                self.migrate()
+
+            for i in range(self.context.ga_params.num_islands):
                 ratios = self.islands[i].evolve()
                 self._offspring_ratio.update(ratios["offspring"])
                 self._mutation_ratio.update(ratios["mutation"])
+                self.islands[i].handle_underpopulation()
+                self.islands[i].update_fitness_history()
 
             self._notify_on_generation_end(
                 generation + 1,
-                _ga_params.generations,
+                self.context.ga_params.generations,
                 len(self),
                 self.fitness_history[-1] if self.fitness_history else (),
                 len(self.pareto_front()),
             )
 
-            if (
-                _ga_params.num_islands > 1
-                and _ga_params.migration_size > 0
-                and (generation + 1) % _ga_params.migration_interval == 0
-            ):
-                self.migrate(_ga_params.num_islands, _ga_params.migration_size)
-
             self.update_fitness_history()
 
-    def migrate(self, num_islands: int, migration_size: int) -> None:
+    def _migration_condition(self, generation: int) -> bool:
+        """Check if migration should occur based on the generation and migration interval."""
+        return (
+            self.context.ga_params.num_islands > 1
+            and self.context.ga_params.migration_size > 0
+            and (generation + 1) % self.context.ga_params.migration_interval == 0
+        )
+
+    def migrate(self) -> None:
         """Migrate the best individuals between islands using a ring topology."""
-        all_migrants = ((i, island.get_migrants(migration_size)) for i, island in enumerate(self.islands))
+        all_migrants = (
+            (
+                i,
+                island.get_migrants(
+                    self.context.ga_params.migration_size,
+                ),
+            )
+            for i, island in enumerate(self.islands)
+        )
 
         for i, migrants in all_migrants:
-            dest_i = (i + 1) % num_islands
+            dest_i = (i + 1) % self.context.ga_params.num_islands
             self.islands[dest_i].receive_migrants(migrants)
 
     def finalize(self) -> None:

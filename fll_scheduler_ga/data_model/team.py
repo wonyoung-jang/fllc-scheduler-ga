@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from logging import getLogger
 from typing import ClassVar
 
-from ..config.config import RoundType
+from ..config.config import RoundType, TournamentConfig
 from ..data_model.event import Event
 from .time import TimeSlot
 
@@ -118,8 +118,12 @@ class Team:
 class TeamFactory:
     """Factory class to create Team instances."""
 
-    round_requirements: dict[RoundType, int]
-    base_teams_info: frozenset[TeamInfo]
+    config: TournamentConfig
+    _base_teams_info: frozenset[TeamInfo] = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        """Post-initialization to set up the initial state."""
+        self._base_teams_info = frozenset(TeamInfo(i) for i in range(1, self.config.num_teams + 1))
 
     def build(self) -> TeamMap:
         """Create a mapping of team identities to Team instances.
@@ -132,7 +136,7 @@ class TeamFactory:
             info.identity: Team(
                 info=info,
                 identity=info.identity,
-                roundreqs=self.round_requirements.copy(),
+                roundreqs=self.config.round_requirements.copy(),
             )
-            for info in self.base_teams_info
+            for info in self._base_teams_info
         }
