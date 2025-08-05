@@ -6,8 +6,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from ..config.config import Round, RoundType, TournamentConfig
-from ..config.constants import HHMM_FMT
-from .location import Room, Table, get_location_type
+from ..config.constants import HHMM_FMT, FllcLocation
+from .location import Location
 from .time import TimeSlot
 
 logger = logging.getLogger(__name__)
@@ -22,7 +22,7 @@ class Event:
     identity: int = field(compare=True)
     roundtype: RoundType = field(compare=False)
     timeslot: TimeSlot = field(compare=False)
-    location: Room | Table = field(compare=False)
+    location: Location = field(compare=False)
     paired: "Event | None" = field(default=None, repr=False, compare=False)
     conflicts: set[int] = field(default_factory=set, repr=False, compare=False)
 
@@ -43,7 +43,7 @@ class EventFactory:
     _cached_events: dict[RoundType, list[Event]] = field(default=None, init=False, repr=False)
     _cached_flat_list: list[Event] = field(default=None, init=False, repr=False)
     _cached_eventmap: EventMap = field(default=None, init=False, repr=False)
-    _cached_locations: dict[tuple[int, int, int], Room | Table] = field(default_factory=dict, init=False, repr=False)
+    _cached_locations: dict[tuple[int, int, int], Location] = field(default_factory=dict, init=False, repr=False)
     _cached_timeslots: dict[tuple[datetime, datetime], TimeSlot] = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -95,7 +95,6 @@ class EventFactory:
             Event: An event for the round with a time slot and a location.
 
         """
-        location_type = get_location_type(r.teams_per_round)
         start = r.times[0] if r.times else r.start_time
 
         for i in range(r.get_num_slots()):
@@ -117,11 +116,12 @@ class EventFactory:
                     "identity": j,
                     "teams_per_round": r.teams_per_round,
                 }
-                if hasattr(location_type, "side"):
-                    cache_key1 = (j, r.teams_per_round, 1)
-                    cache_key2 = (j, r.teams_per_round, 2)
-                    side1_loc = self._cached_locations.setdefault(cache_key1, location_type(**params, side=1))
-                    side2_loc = self._cached_locations.setdefault(cache_key2, location_type(**params, side=2))
+                if r.teams_per_round == 2:
+                    params.setdefault("name", FllcLocation.TABLE)
+                    cache_key1 = (FllcLocation.TABLE, j, r.teams_per_round, 1)
+                    cache_key2 = (FllcLocation.TABLE, j, r.teams_per_round, 2)
+                    side1_loc = self._cached_locations.setdefault(cache_key1, Location(**params, side=1))
+                    side2_loc = self._cached_locations.setdefault(cache_key2, Location(**params, side=2))
                     event1 = Event(0, r.roundtype, timeslot, side1_loc)
                     event2 = Event(0, r.roundtype, timeslot, side2_loc)
                     event1.paired = event2
@@ -129,8 +129,9 @@ class EventFactory:
                     yield event1
                     yield event2
                 else:
-                    cache_key = (j, r.teams_per_round)
-                    location = self._cached_locations.setdefault(cache_key, location_type(**params))
+                    params.setdefault("name", FllcLocation.ROOM)
+                    cache_key = (FllcLocation.ROOM, j, r.teams_per_round)
+                    location = self._cached_locations.setdefault(cache_key, Location(**params))
                     yield Event(0, r.roundtype, timeslot, location)
 
     def build_conflicts(self) -> None:

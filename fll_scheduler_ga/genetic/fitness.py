@@ -27,7 +27,7 @@ class FitnessObjective(StrEnum):
     """Enumeration of fitness objectives for the FLL Scheduler GA."""
 
     BREAK_TIME = "BreakTime"
-    TABLE_CONSISTENCY = "TableConsistency"
+    LOCATION_CONSISTENCY = "LocationConsistency"
     OPPONENT_VARIETY = "OpponentVariety"
 
 
@@ -50,12 +50,12 @@ class FitnessEvaluator:
         self.objectives.extend(
             [
                 FitnessObjective.BREAK_TIME,
-                FitnessObjective.TABLE_CONSISTENCY,
+                FitnessObjective.LOCATION_CONSISTENCY,
                 FitnessObjective.OPPONENT_VARIETY,
             ]
         )
         self._bt_cache = self.benchmark.timeslots
-        self._tc_cache = self.benchmark.table
+        self._tc_cache = self.benchmark.locations
         self._ov_cache = self.benchmark.opponents
 
     def check(self, schedule: Schedule) -> bool:
@@ -134,7 +134,7 @@ class FitnessEvaluator:
                 ov_s = self.hit_ov_cache.setdefault(ov_key, self._ov_cache.pop(ov_key))
 
             scores[FitnessObjective.BREAK_TIME].append(bt_s)
-            scores[FitnessObjective.TABLE_CONSISTENCY].append(tc_s)
+            scores[FitnessObjective.LOCATION_CONSISTENCY].append(tc_s)
             scores[FitnessObjective.OPPONENT_VARIETY].append(ov_s)
 
             t.fitness = (bt_s, tc_s, ov_s)

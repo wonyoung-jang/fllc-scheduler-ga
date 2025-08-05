@@ -12,9 +12,9 @@ from typing import TextIO
 from ..config.config import Round, RoundType, TournamentConfig
 from ..config.constants import HHMM_FMT
 from ..data_model.event import Event, EventFactory
-from ..data_model.location import get_location_type_from_string
+from ..data_model.location import Location
 from ..data_model.schedule import Schedule
-from ..data_model.team import TeamFactory, TeamInfo
+from ..data_model.team import TeamFactory
 from ..data_model.time import TimeSlot
 
 logger = logging.getLogger(__name__)
@@ -38,8 +38,7 @@ class CsvImporter:
         """Post-initialization to validate the CSV file."""
         self._validate_inputs()
         self._initialize_caches()
-        base_team_info = frozenset(TeamInfo(i) for i in range(1, self.config.num_teams + 1))
-        team_factory = TeamFactory(self.config.round_requirements, base_team_info)
+        team_factory = TeamFactory(self.config)
         self.schedule = Schedule(team_factory.build())
         self.import_schedule()
 
@@ -161,7 +160,7 @@ class CsvImporter:
             team_id = int(team_id_str)
 
             location_str = header_locations[i]
-            location = get_location_type_from_string(location_str, round_config.teams_per_round)
+            location = Location.from_string(location_str, round_config.teams_per_round)
             if not location:
                 continue
 

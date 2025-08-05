@@ -38,3 +38,10 @@ class MutationOps(StrEnum):
     SWAP_TEAM_SAME_LOCATION = "SwapTeam_SameLocation"
     SWAP_TEAM_SAME_TIME = "SwapTeam_SameTime"
     SWAP_TABLE_SIDE = "SwapTableSide"
+
+
+class FllcLocation(StrEnum):
+    """Enum for FLLC location types."""
+
+    ROOM = "Room"
+    TABLE = "Table"

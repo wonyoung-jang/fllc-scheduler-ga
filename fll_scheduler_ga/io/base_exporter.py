@@ -64,7 +64,7 @@ class GridBasedExporter(Exporter):
             {i[1] for i in grid_lookup},
             key=lambda loc: (
                 loc.identity,
-                loc.side if hasattr(loc, "side") else 0,
+                loc.side if loc.side else 0,
             ),
         )
         return timeslots, locations, grid_lookup

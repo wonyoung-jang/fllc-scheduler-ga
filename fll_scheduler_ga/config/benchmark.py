@@ -32,7 +32,7 @@ class FitnessBenchmark:
     cache_dir: Path = field(init=False, repr=False)
     penalty: float = FITNESS_PENALTY
     timeslots: dict = field(default_factory=dict, init=False, repr=False)
-    table: dict = field(default_factory=dict, init=False, repr=False)
+    locations: dict = field(default_factory=dict, init=False, repr=False)
     opponents: dict = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -56,7 +56,7 @@ class FitnessBenchmark:
             cache_file.unlink(missing_ok=True)
 
         logger.info("No valid cache found. Calculating and caching new fitness benchmarks...")
-        self.run_table_and_opponent_benchmarks()
+        self.run_location_and_opponent_benchmarks()
         self.run_timeslot_benchmarks()
         self._save_to_cache(cache_file)
 
@@ -66,7 +66,7 @@ class FitnessBenchmark:
             with path.open("rb") as f:
                 cached_data = pickle.load(f)
                 self.timeslots = cached_data["timeslots"]
-                self.table = cached_data["table"]
+                self.locations = cached_data["locations"]
                 self.opponents = cached_data["opponents"]
         except (OSError, pickle.UnpicklingError, EOFError):
             logger.exception("Failed to load fitness benchmarks from cache.")
@@ -75,7 +75,7 @@ class FitnessBenchmark:
         """Save benchmark data to a pickle file."""
         data_to_cache = {
             "timeslots": self.timeslots,
-            "table": self.table,
+            "locations": self.locations,
             "opponents": self.opponents,
         }
 
@@ -112,9 +112,9 @@ class FitnessBenchmark:
         config_representation = (round_tuples, req_tuple, self.penalty)
         return int(sha256(str(config_representation).encode()).hexdigest(), 16)
 
-    def run_table_and_opponent_benchmarks(self) -> None:
-        """Run the table consistency fitness benchmarking."""
-        logger.info("Running table consistency and opponent variety benchmarks...")
+    def run_location_and_opponent_benchmarks(self) -> None:
+        """Run the location consistency fitness benchmarking."""
+        logger.info("Running location consistency and opponent variety benchmarks...")
 
         config_map = {r.roundtype: r.teams_per_round for r in self.config.rounds}
         logger.debug("Finding events per round type:")
@@ -140,16 +140,16 @@ class FitnessBenchmark:
         diff = maximum_score - minimum_score
 
         for num_loc, raw_score in cache_scorer.items():
-            self.table[num_loc] = abs((raw_score - minimum_score) / diff) if diff else 1
+            self.locations[num_loc] = abs((raw_score - minimum_score) / diff) if diff else 1
             self.opponents[num_loc] = abs((raw_score - maximum_score) / diff) if diff else 1
 
-        for k, v in self.table.items():
-            logger.debug("Table score for %d table(s): %.6f", k, v)
+        for k, v in self.locations.items():
+            logger.debug("Location score for %d Location(s): %.6f", k, v)
 
         for k, v in self.opponents.items():
             logger.debug("Opponent score for %d opponent(s): %.6f", k, v)
 
-        if not self.table or not self.opponents:
+        if not self.locations or not self.opponents:
             logger.warning("No valid schedules could be generated.")
             return
 
