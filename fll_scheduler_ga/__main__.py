@@ -10,8 +10,8 @@ from random import Random
 from fll_scheduler_ga.config.app_config import AppConfig, create_app_config
 from fll_scheduler_ga.config.benchmark import FitnessBenchmark
 from fll_scheduler_ga.config.preflight import run_preflight_checks
-from fll_scheduler_ga.data_model.event import EventConflicts, EventFactory
-from fll_scheduler_ga.data_model.team import Team, TeamFactory
+from fll_scheduler_ga.data_model.event import EventFactory
+from fll_scheduler_ga.data_model.team import TeamFactory
 from fll_scheduler_ga.genetic.fitness import FitnessEvaluator
 from fll_scheduler_ga.genetic.ga import GA
 from fll_scheduler_ga.genetic.ga_context import GaContext
@@ -290,8 +290,7 @@ def create_ga_context(app_config: AppConfig) -> GaContext:
     """Create and return a GaContext with the provided configuration."""
     team_factory = TeamFactory(app_config.tournament)
     event_factory = EventFactory(app_config.tournament)
-    event_conflicts = EventConflicts(event_factory)
-    Team.event_conflicts = event_conflicts.conflicts
+    event_factory.build_conflicts()
 
     repairer = Repairer(app_config.rng, app_config.tournament, event_factory)
     benchmark = FitnessBenchmark(app_config.tournament, event_factory)

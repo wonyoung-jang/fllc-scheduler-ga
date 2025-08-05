@@ -1,7 +1,6 @@
 """Event data model for FLL scheduling."""
 
 import logging
-from collections import defaultdict
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -25,6 +24,7 @@ class Event:
     timeslot: TimeSlot = field(compare=False)
     location: Room | Table = field(compare=False)
     paired: "Event | None" = field(default=None, repr=False, compare=False)
+    conflicts: set[int] = field(default_factory=set, repr=False, compare=False)
 
     def __hash__(self) -> int:
         """Use the unique identity for hashing."""
@@ -132,30 +132,11 @@ class EventFactory:
                     location = self._cached_locations.setdefault(cache_key, location_type(**params))
                     yield Event(0, r.roundtype, timeslot, location)
 
-
-@dataclass(slots=True)
-class EventConflicts:
-    """Mapping of event identities to their conflicting events."""
-
-    event_factory: EventFactory
-    conflicts: dict[int, set[int]] = field(init=False, repr=False)
-
-    def __post_init__(self) -> None:
-        """Post-initialization to create the event availability map."""
-        self.conflicts = self._map_conflicts()
-
-        for k, v in self.conflicts.items():
-            logger.debug("Event %d conflicts with %d other events: %s", k, len(v), v)
-
-    def _map_conflicts(self) -> dict[int, set[int]]:
-        """Map conflicts to the event identities."""
-        events = self.event_factory.flat_list()
-        conflicts = defaultdict(set)
-
+    def build_conflicts(self) -> None:
+        """Build a mapping of event identities to their conflicting events."""
+        events = self.flat_list()
         for i, event in enumerate(events):
             for other in events[i + 1 :]:
                 if event.timeslot.overlaps(other.timeslot):
-                    conflicts[event.identity].add(other.identity)
-                    conflicts[other.identity].add(event.identity)
-
-        return dict(sorted(conflicts.items()))
+                    event.conflicts.add(other.identity)
+                    other.conflicts.add(event.identity)

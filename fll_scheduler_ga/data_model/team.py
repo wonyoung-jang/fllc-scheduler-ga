@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass, field
 from logging import getLogger
-from typing import ClassVar
 
 from ..config.config import RoundType, TournamentConfig
 from ..data_model.event import Event
@@ -33,8 +32,6 @@ class Team:
     timeslots: list[TimeSlot] = field(default_factory=list, repr=False)
     opponents: list[int] = field(default_factory=list, repr=False)
     tables: list[int] = field(default_factory=list, repr=False)
-
-    event_conflicts: ClassVar[dict[int, set[int]]]
 
     def __hash__(self) -> int:
         """Hash function for the team based on its identity."""
@@ -96,7 +93,7 @@ class Team:
         if new_event.identity in _events:
             return True
 
-        if not (potential_conflicts := Team.event_conflicts.get(new_event.identity)):
+        if not (potential_conflicts := new_event.conflicts):
             return False
 
         return any(existing_event_id in potential_conflicts for existing_event_id in _events)
