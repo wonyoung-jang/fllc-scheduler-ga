@@ -290,7 +290,6 @@ def create_ga_context(app_config: AppConfig) -> GaContext:
     """Create and return a GaContext with the provided configuration."""
     team_factory = TeamFactory(app_config.tournament)
     event_factory = EventFactory(app_config.tournament)
-    event_factory.build_conflicts()
 
     repairer = Repairer(app_config.rng, app_config.tournament, event_factory)
     benchmark = FitnessBenchmark(app_config.tournament, event_factory)

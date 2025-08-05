@@ -51,6 +51,7 @@ class EventFactory:
         self.build()
         self.flat_list()
         self.event_map()
+        self.build_conflicts()
 
         for rt, events in self._cached_events.items():
             round_events_str = f"{rt} Round has {len(events)} events:"
@@ -74,8 +75,8 @@ class EventFactory:
         """Get a flat list of all Events across all RoundTypes."""
         if not self._cached_flat_list:
             self._cached_flat_list = [e for el in self._cached_events.values() for e in el]
-            for i, e in enumerate(self._cached_flat_list, start=1):
-                e.identity = i
+            for i, event in enumerate(self._cached_flat_list, start=1):
+                event.identity = i
         return self._cached_flat_list
 
     def event_map(self) -> EventMap:

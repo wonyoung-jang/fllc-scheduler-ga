@@ -5,7 +5,8 @@ from csv import writer
 from logging import getLogger
 from pathlib import Path
 
-from ..config.config import RoundType
+from ..config.config import RoundType, TournamentConfig
+from ..data_model.event import EventFactory
 from ..data_model.schedule import Individual, Schedule
 from ..genetic.fitness import FitnessObjective
 from ..genetic.ga import GA
@@ -57,6 +58,11 @@ def generate_summary(args: Namespace, ga: GA) -> None:
         txt_output_path = txt_subdir / f"{name}_summary.txt"
         generate_summary_report(schedule, ga.context.evaluator.objectives, txt_output_path)
 
+        team_schedules_subdir = output_dir / "team_schedules"
+        team_schedules_subdir.mkdir(parents=True, exist_ok=True)
+        team_schedules_output_path = team_schedules_subdir / f"{name}_team_schedule.csv"
+        generate_team_schedules(schedule, ga.context.event_factory, ga.context.config, team_schedules_output_path)
+
     pareto_summary_path = output_dir / "pareto_summary.csv"
     generate_pareto_summary(ga.total_population, ga.context.evaluator.objectives, pareto_summary_path)
 
@@ -107,10 +113,50 @@ def generate_summary_report(schedule: Schedule, objectives: list[FitnessObjectiv
         logger.exception("Failed to write summary report to file %s", path)
 
 
+def generate_team_schedules(
+    schedule: Schedule,
+    event_factory: EventFactory,
+    config: TournamentConfig,
+    path: Path,
+) -> None:
+    """Generate a CSV file with team schedules, sorted by team IDs."""
+    event_map = event_factory.event_map()
+    rows = []
+    headers = ["Team"]
+
+    for r in sorted(config.rounds, key=lambda r: r.start_time):
+        rt = r.roundtype
+        count = config.round_requirements.get(rt, 0)
+        if count == 1:
+            headers.append(f"{rt.capitalize()}")
+            headers.append("")
+        else:
+            for i in range(1, count + 1):
+                headers.append(f"{rt.capitalize()} {i}")
+                headers.append("")
+
+    rows.append(headers)
+
+    for team in sorted(schedule.all_teams(), key=lambda x: x.identity):
+        row = [team.identity]
+        for event_id in sorted(team.events):
+            event = event_map.get(event_id)
+            row.append(str(event.timeslot))
+            row.append(str(event.location))
+        rows.append(row)
+
+    try:
+        with path.open("w", newline="", encoding="utf-8") as f:
+            writer(f).writerows(rows)
+    except OSError:
+        logger.exception("Failed to write team schedules to file %s", path)
+
+
 def generate_pareto_summary(front: list[Schedule], objectives: list[FitnessObjective], path: Path) -> None:
     """Generate a summary of the Pareto front."""
     schedule_enum_digits = len(str(len(front)))
     front.sort(key=lambda s: (s.rank, -sum(s.fitness)))
+
     try:
         with path.open("w", encoding="utf-8") as f:
             f.write("Schedule, ID, Hash, Rank, ")

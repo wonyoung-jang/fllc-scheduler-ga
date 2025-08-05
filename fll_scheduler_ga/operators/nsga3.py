@@ -62,8 +62,9 @@ class NSGA3:
             return {hash(p): p for p in selected}
 
         last_front = fronts[last_idx]
+        fronts_to_last = fronts[: last_idx + 1]
         k = pop_size - len(selected)
-        selected.extend(self._niching(fronts[: last_idx + 1], last_front, k))
+        selected.extend(self._niching(fronts_to_last, last_front, k))
         return {hash(p): p for p in selected}
 
     def _get_last_front_idx(self, fronts: list[Population], pop_size: int) -> int:
@@ -113,7 +114,7 @@ class NSGA3:
     def _niching(self, fronts: list[Population], last_front: Population, k: int) -> Iterator[Schedule]:
         """Select k individuals from the last front using a niching mechanism."""
         all_schedules = [p for front in fronts for p in front]
-        self._normalize_then_associate(all_schedules, fronts[-1])
+        self._normalize_then_associate(all_schedules, last_front)
         counts = self._count(p.ref_point_idx for fr in fronts[:-1] for p in fr if p.ref_point_idx is not None)
         pool = dict(enumerate(last_front))
         selected = 0
