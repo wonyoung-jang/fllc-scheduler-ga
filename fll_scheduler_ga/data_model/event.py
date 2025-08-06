@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from ..config.config import Round, RoundType, TournamentConfig
-from ..config.constants import HHMM_FMT, FllcLocation
+from ..config.constants import HHMM_FMT
 from .location import Location
 from .time import TimeSlot
 
@@ -95,6 +95,8 @@ class EventFactory:
             Event: An event for the round with a time slot and a location.
 
         """
+        locations = sorted(r.locations, key=lambda loc: (loc.identity, loc.side))
+
         start = r.times[0] if r.times else r.start_time
 
         for i in range(r.get_num_slots()):
@@ -111,28 +113,21 @@ class EventFactory:
                 TimeSlot(start, stop, start.strftime(HHMM_FMT), stop.strftime(HHMM_FMT)),
             )
             start = stop
-            for j in range(1, r.num_locations + 1):
-                params = {
-                    "identity": j,
-                    "teams_per_round": r.teams_per_round,
-                }
-                if r.teams_per_round == 2:
-                    params.setdefault("name", FllcLocation.TABLE)
-                    cache_key1 = (FllcLocation.TABLE, j, r.teams_per_round, 1)
-                    cache_key2 = (FllcLocation.TABLE, j, r.teams_per_round, 2)
-                    side1_loc = self._cached_locations.setdefault(cache_key1, Location(**params, side=1))
-                    side2_loc = self._cached_locations.setdefault(cache_key2, Location(**params, side=2))
-                    event1 = Event(0, r.roundtype, timeslot, side1_loc)
-                    event2 = Event(0, r.roundtype, timeslot, side2_loc)
-                    event1.paired = event2
-                    event2.paired = event1
-                    yield event1
-                    yield event2
-                else:
-                    params.setdefault("name", FllcLocation.ROOM)
-                    cache_key = (FllcLocation.ROOM, j, r.teams_per_round)
-                    location = self._cached_locations.setdefault(cache_key, Location(**params))
-                    yield Event(0, r.roundtype, timeslot, location)
+
+            if r.teams_per_round == 1:
+                for loc in locations:
+                    event = Event(0, r.roundtype, timeslot, loc)
+                    yield event
+            else:
+                for loc in locations:
+                    if loc.side == 1:
+                        event1 = Event(0, r.roundtype, timeslot, loc)
+                    elif loc.side == 2:
+                        event2 = Event(0, r.roundtype, timeslot, loc)
+                        event1.paired = event2
+                        event2.paired = event1
+                        yield event1
+                        yield event2
 
     def build_conflicts(self) -> None:
         """Build a mapping of event identities to their conflicting events."""

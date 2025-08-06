@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from ..genetic.fitness import FitnessObjective
+from ..config.constants import FitnessObjective
 from ..genetic.ga import GA
 from .utils import finalize, plot_parallel, plot_pareto_scatter
 

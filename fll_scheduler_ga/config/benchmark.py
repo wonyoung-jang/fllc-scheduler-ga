@@ -100,7 +100,8 @@ class FitnessBenchmark:
                 r.start_time,
                 r.stop_time,
                 r.duration_minutes,
-                r.num_locations,
+                r.location,
+                len(r.locations),
             )
             for r in sorted(self.config.rounds, key=lambda x: x.start_time)
         )
@@ -109,11 +110,11 @@ class FitnessBenchmark:
         req_tuple = tuple(sorted(self.config.round_requirements.items()))
 
         # Include the penalty in the hash
-        config_representation = (round_tuples, req_tuple, self.penalty)
+        config_representation = (round_tuples, req_tuple, self.penalty, self.config.num_teams)
         return int(sha256(str(config_representation).encode()).hexdigest(), 16)
 
     def run_location_and_opponent_benchmarks(self) -> None:
-        """Run the location consistency fitness benchmarking."""
+        """Run the location consistency and opponent variety fitness benchmarking."""
         logger.info("Running location consistency and opponent variety benchmarks...")
 
         config_map = {r.roundtype: r.teams_per_round for r in self.config.rounds}

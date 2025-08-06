@@ -86,6 +86,10 @@ class Island:
                 # Only increment attempts if no valid schedule was created in total
                 attempts += 1
 
+        if num_created == 0:
+            msg = "Island %d: No valid individuals created after %d attempts. Try adjusting parameters."
+            raise RuntimeError(msg % (self.identity, attempts))
+
         if num_created < num_to_create:
             self.context.logger.warning(
                 "Island %d: only created %d/%d valid individuals.",
@@ -94,7 +98,7 @@ class Island:
                 num_to_create,
             )
 
-        self.selected = self.context.nsga3.select(list(self.selected.values()), population_size=pop_size)
+        self.selected = self.context.nsga3.select(self.selected.values(), population_size=pop_size)
 
     def get_initial_offspring(
         self, parents: tuple[Schedule, Schedule], cs: tuple[Crossover] | tuple, *, crossover_roll: bool
@@ -164,9 +168,7 @@ class Island:
                 if child_count >= _ga_params.offspring_size:
                     break
 
-        self.selected = self.context.nsga3.select(
-            list(self.selected.values()), population_size=_ga_params.population_size
-        )
+        self.selected = self.context.nsga3.select(self.selected.values(), population_size=_ga_params.population_size)
 
         return {
             "offspring": offspring_ratio,
@@ -185,7 +187,7 @@ class Island:
             self.add_to_population(migrant, migrant_hash)
 
         self.selected = self.context.nsga3.select(
-            list(self.selected.values()), population_size=self.context.ga_params.population_size
+            self.selected.values(), population_size=self.context.ga_params.population_size
         )
 
     def handle_underpopulation(self) -> None:

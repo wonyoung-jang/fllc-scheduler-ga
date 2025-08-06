@@ -51,8 +51,11 @@ class NSGA3:
         self.ref_points = np.array(points)
         logger.debug("Generated %d reference points:\n%s", len(self.ref_points), self.ref_points)
 
-    def select(self, population: Population, population_size: int = 0) -> dict[int, Schedule]:
+    def select(self, population: Population | None, population_size: int = 0) -> dict[int, Schedule]:
         """Select the next generation using NSGA-III principles."""
+        if not isinstance(population, list):
+            population = list(population)
+
         pop_size = population_size
         fronts = self._non_dominated_sort(population)
         last_idx = self._get_last_front_idx(fronts, pop_size)

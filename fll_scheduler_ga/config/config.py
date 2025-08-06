@@ -5,6 +5,8 @@ from datetime import datetime, timedelta
 from logging import getLogger
 from math import ceil
 
+from ..data_model.location import Location
+
 logger = getLogger(__name__)
 
 type RoundType = str
@@ -21,8 +23,9 @@ class Round:
     start_time: datetime
     stop_time: datetime
     duration_minutes: timedelta
-    num_locations: int
     num_teams: int
+    location: str
+    locations: list[Location]
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the round configuration."""
@@ -39,9 +42,10 @@ class Round:
             f"\n\t  start_time: {self.start_time}"
             f"\n\t  stop_time: {self.stop_time}"
             f"\n\t  duration_minutes: {self.duration_minutes}"
-            f"\n\t  num_locations: {self.num_locations}"
-            f"\n\t  num_teams: {self.num_teams}"
             f"\n\t  num_timeslots: {self.get_num_slots()}"
+            f"\n\t  num_teams: {self.num_teams}"
+            f"\n\t  location: {self.location}"
+            f"\n\t  locations: {self.locations}"
         )
 
     def get_num_slots(self) -> int:
@@ -50,7 +54,7 @@ class Round:
             return len(self.times)
 
         total_num_teams = self.num_teams * self.rounds_per_team
-        slots_per_timeslot = self.num_locations * self.teams_per_round
+        slots_per_timeslot = len(self.locations)
 
         if slots_per_timeslot == 0:
             return 0

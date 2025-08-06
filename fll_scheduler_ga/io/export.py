@@ -6,9 +6,9 @@ from logging import getLogger
 from pathlib import Path
 
 from ..config.config import RoundType, TournamentConfig
+from ..config.constants import FitnessObjective
 from ..data_model.event import EventFactory
 from ..data_model.schedule import Individual, Schedule
-from ..genetic.fitness import FitnessObjective
 from ..genetic.ga import GA
 from ..visualize.plot import Plot
 from .base_exporter import Exporter, GridBasedExporter

@@ -9,6 +9,7 @@ from pathlib import Path
 from random import Random
 
 from ..data_model.event import Round
+from ..data_model.location import Location
 from .config import RoundType, TournamentConfig
 from .constants import HHMM_FMT, RANDOM_SEED_RANGE, CrossoverOps, MutationOps, SelectionOps
 from .ga_operators_config import OperatorConfig
@@ -46,9 +47,9 @@ def load_tournament_config(parser: ConfigParser) -> TournamentConfig:
     all_rounds_per_team = [r.rounds_per_team for r in parsed_rounds]
     total_slots = sum(num_teams * rpt for rpt in all_rounds_per_team)
     unique_opponents_possible = 1 <= max(all_rounds_per_team) <= num_teams - 1
-    weight_mean = parser.get("DEFAULT", "weight_mean", fallback="3")
-    weight_variation = parser.get("DEFAULT", "weight_variation", fallback="1")
-    weight_range = parser.get("DEFAULT", "weight_range", fallback="1")
+    weight_mean = parser.get("fitness", "weight_mean", fallback="3")
+    weight_variation = parser.get("fitness", "weight_variation", fallback="1")
+    weight_range = parser.get("fitness", "weight_range", fallback="1")
     weight_floats = tuple(max(0, float(w)) for w in (weight_mean, weight_variation, weight_range))
     weight_sum = sum(w for w in weight_floats)
     weights = tuple(w / weight_sum for w in weight_floats)
@@ -199,18 +200,19 @@ def _parse_rounds(parser: ConfigParser) -> tuple[list[Round], dict[RoundType, in
         int: The total number of teams in the tournament.
 
     """
-    num_teams = parser["DEFAULT"].getint("num_teams")
+    num_teams = parser["teams"].getint("num_teams")
     rounds: list[Round] = []
     round_reqs = {}
+    all_locations = load_location_config(parser)
 
     for section in parser.sections():
         if not section.startswith("round"):
             continue
 
         p_section = parser[section]
-        round_type = p_section.get("round_type")
+        roundtype = p_section.get("round_type")
         rounds_per_team = p_section.getint("rounds_per_team")
-        round_reqs[round_type] = rounds_per_team
+        round_reqs[roundtype] = rounds_per_team
 
         if start_time := p_section.get("start_time", ""):
             start_time = datetime.strptime(start_time, HHMM_FMT).replace(tzinfo=UTC)
@@ -225,19 +227,21 @@ def _parse_rounds(parser: ConfigParser) -> tuple[list[Round], dict[RoundType, in
         teams_per_round = p_section.getint("teams_per_round")
         duration_minutes = p_section.getint("duration_minutes")
         duration_minutes = timedelta(minutes=duration_minutes)
-        num_locations = p_section.getint("num_locations")
+        location = p_section.get("location")
+        locations = [loc for loc in all_locations.values() if loc.name == location]
 
         rounds.append(
             Round(
-                round_type,
-                rounds_per_team,
-                teams_per_round,
-                times,
-                start_time,
-                stop_time,
-                duration_minutes,
-                num_locations,
-                num_teams,
+                roundtype=roundtype,
+                rounds_per_team=rounds_per_team,
+                teams_per_round=teams_per_round,
+                times=times,
+                start_time=start_time,
+                stop_time=stop_time,
+                duration_minutes=duration_minutes,
+                num_teams=num_teams,
+                location=location,
+                locations=locations,
             )
         )
 
@@ -253,3 +257,36 @@ def _parse_operator_types(p: ConfigParser, section: str, option: str, fallback: 
     if dtype == "int":
         return [int(i.strip()) for i in p.get(section, option, fallback=fallback).split(",") if i.strip()]
     return [i.strip() for i in p.get(section, option, fallback=fallback).split(",") if i.strip()]
+
+
+def load_location_config(parser: ConfigParser) -> dict[tuple[str, int | str, int, int], Location]:
+    """Parse and return a dictionary of location IDs to names from the configuration."""
+    _lconfig = {}
+    for s in (s for s in parser.sections() if s.startswith("location")):
+        _lconfig[s] = {}
+        for k, v in parser[s].items():
+            _lconfig[s][k] = v
+
+    locations = {}
+    for data in _lconfig.values():
+        name = data["name"]
+        sides = int(data["sides"])
+        teams_per_round = int(data["teams_per_round"])
+
+        for i in (i.strip() for i in data["identities"].split(",") if i.strip()):
+            oneside = sides == 1
+            isdigit = i.isdigit()
+            identity = int(i) if isdigit else i
+
+            for j in range(1, sides + 1):
+                side = 0 if oneside else j
+                loc_key = (name, identity, teams_per_round, side)
+                loc_obj = Location(
+                    name=name,
+                    identity=identity,
+                    teams_per_round=teams_per_round,
+                    side=side,
+                )
+                locations[loc_key] = loc_obj
+
+    return locations

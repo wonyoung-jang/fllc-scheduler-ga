@@ -4,31 +4,16 @@ import logging
 from collections import defaultdict
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from enum import StrEnum
 from math import sqrt
 from typing import Any
 
 from ..config.benchmark import FitnessBenchmark
 from ..config.config import TournamentConfig
+from ..config.constants import FitnessObjective, HardConstraints
 from ..data_model.schedule import Schedule
 from ..data_model.team import Team
 
 logger = logging.getLogger(__name__)
-
-
-class HardConstraints(StrEnum):
-    """Enumeration of hard constraints for the FLL Scheduler GA."""
-
-    ALL_EVENTS_SCHEDULED = "AllEventsScheduled"
-    SCHEDULE_EXISTENCE = "ScheduleExistence"
-
-
-class FitnessObjective(StrEnum):
-    """Enumeration of fitness objectives for the FLL Scheduler GA."""
-
-    BREAK_TIME = "BreakTime"
-    LOCATION_CONSISTENCY = "LocationConsistency"
-    OPPONENT_VARIETY = "OpponentVariety"
 
 
 @dataclass(slots=True)

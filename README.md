@@ -1,5 +1,7 @@
 # FIRST LEGO League Challenge Scheduler NSGA-III (Non-dominated Sorting Genetic Algorithm III)
 
+![Image of scatterplot](/assets/2022-2023/after_512_generations/pareto_scatter_3d.png)
+
 FLL-C Scheduler NSGA-III uses a multi-objective optimization non-dominated sorting genetic algorithm (NSGA-III) to generate tournament schedules for FIRST LEGO League Challenge.
 
 ## [Click here for a run through of a comparison with a real FLLC schedule](/REAL_LIFE_EXAMPLES.md)
@@ -42,7 +44,35 @@ Using the scheduler is a two-step process: creating a configuration file and run
 
 ### 1. Create a Configuration File
 
-Create a file named `config.ini` to define your tournament's structure. The configuration is split into a `[DEFAULT]` section for global settings, a `[genetic]` section for the genetic algorithm's parameters, and one `[round.*]` section for each type of activity (e.g., judging, practice, official/table).
+Create a file named `config.ini` to define your tournament's structure. The configuration is split into sections for different parts of the application.
+
+**Team Parameters:**
+
+-   `num_teams`: Total number of teams in the tournament.
+
+**Location Parameters:**
+
+-   `name`: The name of the location type.
+-   `identities`: The identities for the locations.
+-   `sides`: Determines whether or not a location is a match or solo area.
+-   `teams_per_round`: How many teams are schedule for this location type per round.
+
+**Round Parameters:**
+
+-   `round_type`: Type of round. Must be `Judging`, `Practice`, or `Table`.
+-   `rounds_per_team`: How many times each team must participate in this type of round.
+-   `teams_per_round`: The number of teams involved in a single instance of this round (e.g., `1` for judging, `2` for a match).
+-   `times`: A list of comma separated start times for the tournament.
+-   `start_time`: The time of the very first slot for this round type (`HH:MM` 24-hour format).
+-   `stop_time`: The time of the latest stop time for the last slot (`HH:MM` 24-hour format).
+-   `duration_minutes`: The duration of a single round in minutes.
+-   `location`: The location type determined by the `name` of the location associated with this round.
+
+**Fitness Parameters:**
+
+-   `weight_mean`: Mean weight - The average fitness of all teams.
+-   `weight_variation`: Variation weight - How much the teams can vary in fitness.
+-   `weight_range`: Range weight - How far apart the best and worst teams are.
 
 **Genetic Parameters:**
 
@@ -57,23 +87,31 @@ Create a file named `config.ini` to define your tournament's structure. The conf
 -   `genetic.operator.crossover`: Configure GA crossover.
 -   `genetic.operator.mutation`: Configure GA muatation.
 
-**Round Parameters:**
-
--   `num_teams`: (Default) Total number of teams in the tournament.
--   `round_type`: Type of round. Must be `Judging`, `Practice`, or `Table`.
--   `rounds_per_team`: How many times each team must participate in this type of round.
--   `teams_per_round`: The number of teams involved in a single instance of this round (e.g., `1` for judging, `2` for a match).
--   `times`: A list of comma separated start times for the tournament.
--   `start_time`: The time of the very first slot for this round type (`HH:MM` 24-hour format).
--   `stop_time`: The time of the latest stop time for the last slot (`HH:MM` 24-hour format).
--   `duration_minutes`: The duration of a single round in minutes.
--   `num_locations`: Number of parallel locations for this round (e.g., 3 judging rooms or 4 competition tables).
-
 **Example `config.ini`:**
 
 ```ini
-[DEFAULT]
+[teams]
 num_teams = 42
+
+[fitness]
+; Values of weights are porportional to each other, the following are the same: 
+; (1, 2, 3) == (50, 100, 150) == (0.01, 0.02, 0.03)
+; Each translates to: (1/6, 2/6, 3/6) ~~ (0.166, 0.333, 0.500)
+weight_mean = 3         ; Mean weight - The average fitness of all teams
+weight_variation = 1    ; Variation weight - How much the teams can vary in fitness
+weight_range = 1        ; Range weight - How far apart the best and worst teams are
+
+[location.room]
+name = Room
+identities = 1, 2, 3, 4, 5, 6, 7
+sides = 1
+teams_per_round = 1
+
+[location.table]
+name = Table
+identities = A, B, C, D
+sides = 2
+teams_per_round = 2
 
 [round.judging]
 round_type = Judging
@@ -81,7 +119,7 @@ rounds_per_team = 1
 teams_per_round = 1
 start_time = 08:00
 duration_minutes = 45
-num_locations = 7 ; i.e., 7 judging rooms
+location = Room
 
 [round.practice]
 round_type = Practice
@@ -90,7 +128,7 @@ teams_per_round = 2
 start_time = 09:00
 stop_time = 12:00 ; Add optional stop time to control buffer slots
 duration_minutes = 15
-num_locations = 4  ; Same tables as the official matches
+location = Table
 
 [round.table]
 round_type = Table
@@ -116,7 +154,7 @@ times =
   16:04,
   16:15
 duration_minutes = 11
-num_locations = 4  ; i.e., 4 competition tables (A, B, C, D)
+location = Table
 
 [genetic]
 population_size = 16

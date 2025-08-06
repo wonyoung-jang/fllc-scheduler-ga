@@ -37,7 +37,7 @@ def _check_total_capacity(config: TournamentConfig) -> None:
     available = {}
     for r in config.rounds:
         required[r.roundtype] = (config.num_teams * r.rounds_per_team) / r.teams_per_round
-        available[r.roundtype] = r.get_num_slots() * r.num_locations
+        available[r.roundtype] = r.get_num_slots() * (len(r.locations) // r.teams_per_round)
 
     for rt, count in required.items():
         if count > available[rt]:

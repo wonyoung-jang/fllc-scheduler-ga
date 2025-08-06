@@ -159,15 +159,24 @@ class CsvImporter:
 
             team_id = int(team_id_str)
 
-            location_str = header_locations[i]
-            location = Location.from_string(location_str, round_config.teams_per_round)
-            if not location:
-                continue
+            loc_name_full = header_locations[i]
+            loc_name_split = loc_name_full.split(" ")
+            loc_name = loc_name_split[0].strip()
+            loc_identifier = loc_name_split[1].strip()
+            if len(loc_identifier) == 1:
+                isdigit = loc_identifier.isdigit()
+                identity = int(loc_identifier) if isdigit else loc_identifier
+                location = Location(loc_name, identity, round_config.teams_per_round, 0)
+            else:
+                identity, side = loc_identifier[::2], loc_identifier[1::2]
+                isdigit = identity.isdigit()
+                identity = int(identity) if isdigit else identity
+                location = Location(loc_name, identity, round_config.teams_per_round, int(side))
 
             rtl_event_key = (current_round_type, timeslot, location)
             event = self._rtl_map.get(rtl_event_key)
 
-            created_event_key = (current_round_type, time_str, location_str)
+            created_event_key = (current_round_type, time_str, loc_name_full)
             created_events[created_event_key] = event
 
             team = self.schedule.get_team(team_id)
