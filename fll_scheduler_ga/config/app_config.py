@@ -210,7 +210,7 @@ def _parse_teams_config(parser: ConfigParser) -> tuple[int, dict[int, int | str]
     identities = [i.strip() for i in p_teams.get("identities", "").split(",") if i.strip()] if has_ids else []
 
     if has_num and not identities:
-        identities = list(range(1, num_teams + 1))
+        identities = [str(i) for i in range(1, num_teams + 1)]
 
     if not has_num and identities:
         num_teams = len(identities)

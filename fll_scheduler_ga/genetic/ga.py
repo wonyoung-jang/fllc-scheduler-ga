@@ -99,8 +99,8 @@ class GA:
 
             # Less than 1/5 generations improved -> decrease operator chance / exploit
             if improved_count < 2:
-                self.context.ga_params.crossover_chance = max(0.0001, c_chance * epsilon)
-                self.context.ga_params.mutation_chance = max(0.0001, m_chance * epsilon)
+                self.context.ga_params.crossover_chance = max(0.01, c_chance * epsilon)
+                self.context.ga_params.mutation_chance = max(0.001, m_chance * epsilon)
                 self.context.logger.debug(
                     "Reduced crossover chance to %.2f and mutation chance to %.2f",
                     self.context.ga_params.crossover_chance,

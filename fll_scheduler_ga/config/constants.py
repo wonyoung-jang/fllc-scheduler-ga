@@ -24,6 +24,7 @@ class CrossoverOp(StrEnum):
     UNIFORM = "Uniform"
     ROUND_TYPE_CROSSOVER = "RoundTypeCrossover"
     PARTIAL_CROSSOVER = "PartialCrossover"
+    BEST_TEAM_CROSSOVER = "BestTeamCrossover"
 
 
 class MutationOp(StrEnum):

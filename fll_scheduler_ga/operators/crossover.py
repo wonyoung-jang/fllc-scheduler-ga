@@ -26,6 +26,7 @@ def build_crossovers(
         CrossoverOp.UNIFORM: lambda: Uniform(team_factory, event_factory, rng),
         CrossoverOp.ROUND_TYPE_CROSSOVER: lambda: RoundTypeCrossover(team_factory, event_factory, rng),
         CrossoverOp.PARTIAL_CROSSOVER: lambda: PartialCrossover(team_factory, event_factory, rng),
+        CrossoverOp.BEST_TEAM_CROSSOVER: lambda: BestTeamCrossover(team_factory, event_factory, rng),
     }
 
     if not (crossover_types := app_config.operators.crossover_types):
@@ -244,3 +245,25 @@ class PartialCrossover(EventCrossover):
         indices = self.rng.sample(range(ne), ne)
         yield (evts[i] for i in indices[: sections[0]] if evts[i] in p1)
         yield (evts[i] for i in indices[sections[-1] :] if evts[i] in p2)
+
+
+@dataclass(slots=True)
+class BestTeamCrossover(EventCrossover):
+    """Team crossover operator for genetic algorithms.
+
+    This operator combines events from two parent schedules based on team assignments.
+    """
+
+    def get_genes(self, p1: Schedule, p2: Schedule) -> Iterator[Iterator[Event]]:
+        """Get the genes for Team crossover."""
+        event_map = self.event_factory.as_mapping()
+        p1_teams_best = set()
+        p2_teams_best = set()
+        for t1, t2 in zip(p1.all_teams(), p2.all_teams(), strict=True):
+            if all(f1 > f2 for f1, f2 in zip(t1.fitness, t2.fitness, strict=True)):
+                p1_teams_best.update(t1.events)
+            else:
+                p2_teams_best.update(t2.events)
+
+        yield (event_map[e] for e in p1_teams_best)
+        yield (event_map[e] for e in p2_teams_best.difference(p1_teams_best))
