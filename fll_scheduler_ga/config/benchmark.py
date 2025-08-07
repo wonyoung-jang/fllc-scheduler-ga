@@ -39,9 +39,9 @@ class FitnessBenchmark:
         """Post-initialization to validate run benchmark."""
         self.cache_dir = Path(".benchmarks_cache/")
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self.run_benchmarks()
+        self._run_benchmarks()
 
-    def run_benchmarks(self) -> None:
+    def _run_benchmarks(self) -> None:
         """Load benchmarks from cache or run calculations if cache is invalid/missing."""
         config_hash = self._get_config_hash()
         cache_file = self.cache_dir / f"benchmark_cache_{config_hash}.pkl"
@@ -56,8 +56,8 @@ class FitnessBenchmark:
             cache_file.unlink(missing_ok=True)
 
         logger.info("No valid cache found. Calculating and caching new fitness benchmarks...")
-        self.run_location_and_opponent_benchmarks()
-        self.run_timeslot_benchmarks()
+        self._run_location_and_opponent_benchmarks()
+        self._run_timeslot_benchmarks()
         self._save_to_cache(cache_file)
 
     def _load_from_cache(self, path: Path) -> None:
@@ -113,7 +113,7 @@ class FitnessBenchmark:
         config_representation = (round_tuples, req_tuple, self.penalty, self.config.num_teams)
         return int(sha256(str(config_representation).encode()).hexdigest(), 16)
 
-    def run_location_and_opponent_benchmarks(self) -> None:
+    def _run_location_and_opponent_benchmarks(self) -> None:
         """Run the location consistency and opponent variety fitness benchmarking."""
         logger.info("Running location consistency and opponent variety benchmarks...")
 
@@ -154,7 +154,7 @@ class FitnessBenchmark:
             logger.warning("No valid schedules could be generated.")
             return
 
-    def run_timeslot_benchmarks(self) -> None:
+    def _run_timeslot_benchmarks(self) -> None:
         """Run the time slot fitness benchmarking."""
         logger.info("Running break time consistency benchmarks...")
         logger.debug("Finding timeslots per round type:")
@@ -181,8 +181,8 @@ class FitnessBenchmark:
             current_combination = [slot for combo in schedule_tuple for slot in combo]
             current_combination.sort(key=lambda ts: ts.start)
 
-            if not FitnessBenchmark.has_overlaps(current_combination):
-                score = FitnessBenchmark.score_break_time(current_combination, self.penalty)
+            if not FitnessBenchmark._has_overlaps(current_combination):
+                score = FitnessBenchmark._score_break_time(current_combination, self.penalty)
                 valid_scored_schedules.append([score, current_combination])
                 self.timeslots[frozenset(current_combination)] = score
 
@@ -217,12 +217,12 @@ class FitnessBenchmark:
         logger.debug("Average score of top 20: %f", avg_score)
 
     @staticmethod
-    def has_overlaps(timeslots: list[TimeSlot]) -> bool:
+    def _has_overlaps(timeslots: list[TimeSlot]) -> bool:
         """Check if any timeslots in a sorted list overlap."""
         return any(timeslots[i + 1].overlaps(timeslots[i]) for i in range(len(timeslots) - 1))
 
     @staticmethod
-    def score_break_time(timeslots: list[TimeSlot], penalty: float) -> float:
+    def _score_break_time(timeslots: list[TimeSlot], penalty: float) -> float:
         """Calculate a break time fitness score for a non-overlapping combination of timeslots.
 
         A higher score is better.

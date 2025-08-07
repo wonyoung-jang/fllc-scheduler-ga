@@ -3,6 +3,7 @@
 from collections import defaultdict
 from collections.abc import ItemsView, KeysView, ValuesView
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 import numpy as np
 
@@ -33,6 +34,8 @@ class Schedule:
     _cached_matches: dict[RoundType, list[Match]] = field(default=None, init=False, repr=False, compare=False)
     _cached_hash: int = field(default=None, init=False, repr=False)
     _cached_canonical_representation: tuple[tuple[int, ...], ...] = field(default=None, init=False, repr=False)
+
+    team_identities: ClassVar[dict[int, int | str]]
 
     def __len__(self) -> int:
         """Return the number of scheduled events."""
@@ -141,7 +144,7 @@ class Schedule:
                 if team in self._cached_normalized_teams:
                     continue
 
-                self._cached_normalized_teams[team] = count
+                self._cached_normalized_teams[team] = self.team_identities.get(count, count)
                 if count == len(self.teams):
                     break
                 count += 1

@@ -59,7 +59,7 @@ class CsvImporter:
     def _initialize_caches(self) -> None:
         """Initialize caches for round configurations and event mappings."""
         self._round_configs = {r.roundtype: r for r in self.config.rounds}
-        self._rtl_map = {(e.roundtype, e.timeslot, e.location): e for e in self.event_factory.flat_list()}
+        self._rtl_map = {(e.roundtype, e.timeslot, e.location): e for e in self.event_factory.as_list()}
 
     def import_schedule(self) -> None:
         """Import schedule from the CSV file."""

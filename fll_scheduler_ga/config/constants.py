@@ -9,14 +9,14 @@ HHMM_FMT = "%H:%M"
 RANDOM_SEED_RANGE = (1, 2**32 - 1)
 
 
-class SelectionOps(StrEnum):
+class SelectionOp(StrEnum):
     """Enum for selection operator keys."""
 
     TOURNAMENT_SELECT = "TournamentSelect"
     RANDOM_SELECT = "RandomSelect"
 
 
-class CrossoverOps(StrEnum):
+class CrossoverOp(StrEnum):
     """Enum for crossover operator keys."""
 
     K_POINT = "KPoint"
@@ -26,7 +26,7 @@ class CrossoverOps(StrEnum):
     PARTIAL_CROSSOVER = "PartialCrossover"
 
 
-class MutationOps(StrEnum):
+class MutationOp(StrEnum):
     """Enum for mutation operator keys."""
 
     SWAP_MATCH_CROSS_TIME_LOCATION = "SwapMatch_CrossTimeLocation"
@@ -38,7 +38,7 @@ class MutationOps(StrEnum):
     SWAP_TABLE_SIDE = "SwapTableSide"
 
 
-class HardConstraints(StrEnum):
+class HardConstraint(StrEnum):
     """Enumeration of hard constraints for the FLL Scheduler GA."""
 
     ALL_EVENTS_SCHEDULED = "AllEventsScheduled"

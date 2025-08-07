@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from logging import getLogger
 
-from ..config.constants import CrossoverOps, MutationOps, SelectionOps
+from ..config.constants import CrossoverOp, MutationOp, SelectionOp
 
 logger = getLogger(__name__)
 
@@ -12,10 +12,10 @@ logger = getLogger(__name__)
 class OperatorConfig:
     """Configuration for the genetic algorithm operators."""
 
-    selection_types: list[SelectionOps | str]
-    crossover_types: list[CrossoverOps | str]
+    selection_types: list[SelectionOp | str]
+    crossover_types: list[CrossoverOp | str]
     crossover_ks: list[int]
-    mutation_types: list[MutationOps | str]
+    mutation_types: list[MutationOp | str]
 
     def __post_init__(self) -> None:
         """Post-initialization for operator configuration."""

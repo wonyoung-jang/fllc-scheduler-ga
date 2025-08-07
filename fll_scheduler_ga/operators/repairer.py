@@ -25,7 +25,7 @@ class Repairer:
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
-        self.set_of_events = set(self.event_factory.flat_list())
+        self.set_of_events = set(self.event_factory.as_list())
         self.rt_teams_needed = {rc.roundtype: rc.teams_per_round for rc in self.config.rounds}
 
     def repair(self, schedule: Schedule) -> bool:

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from random import Random
 
 from ..config.app_config import AppConfig
-from ..config.constants import MutationOps
+from ..config.constants import MutationOp
 from ..data_model.event import Event
 from ..data_model.schedule import Match, Schedule
 
@@ -18,39 +18,39 @@ def build_mutations(app_config: AppConfig) -> Iterator["Mutation"]:
     """Build and return a tuple of mutation operators based on the configuration."""
     variant_map = {
         # SwapMatchMutation variants
-        MutationOps.SWAP_MATCH_CROSS_TIME_LOCATION: lambda: SwapMatchMutation(
+        MutationOp.SWAP_MATCH_CROSS_TIME_LOCATION: lambda: SwapMatchMutation(
             app_config.rng,
             same_timeslot=False,
             same_location=False,
         ),
-        MutationOps.SWAP_MATCH_SAME_LOCATION: lambda: SwapMatchMutation(
+        MutationOp.SWAP_MATCH_SAME_LOCATION: lambda: SwapMatchMutation(
             app_config.rng,
             same_timeslot=False,
             same_location=True,
         ),
-        MutationOps.SWAP_MATCH_SAME_TIME: lambda: SwapMatchMutation(
+        MutationOp.SWAP_MATCH_SAME_TIME: lambda: SwapMatchMutation(
             app_config.rng,
             same_timeslot=True,
             same_location=False,
         ),
         # SwapTeamMutation variants
-        MutationOps.SWAP_TEAM_CROSS_TIME_LOCATION: lambda: SwapTeamMutation(
+        MutationOp.SWAP_TEAM_CROSS_TIME_LOCATION: lambda: SwapTeamMutation(
             app_config.rng,
             same_timeslot=False,
             same_location=False,
         ),
-        MutationOps.SWAP_TEAM_SAME_LOCATION: lambda: SwapTeamMutation(
+        MutationOp.SWAP_TEAM_SAME_LOCATION: lambda: SwapTeamMutation(
             app_config.rng,
             same_timeslot=False,
             same_location=True,
         ),
-        MutationOps.SWAP_TEAM_SAME_TIME: lambda: SwapTeamMutation(
+        MutationOp.SWAP_TEAM_SAME_TIME: lambda: SwapTeamMutation(
             app_config.rng,
             same_timeslot=True,
             same_location=False,
         ),
         # SwapTableSideMutation variant
-        MutationOps.SWAP_TABLE_SIDE: lambda: SwapTableSideMutation(
+        MutationOp.SWAP_TABLE_SIDE: lambda: SwapTableSideMutation(
             app_config.rng,
             same_timeslot=True,
             same_location=True,

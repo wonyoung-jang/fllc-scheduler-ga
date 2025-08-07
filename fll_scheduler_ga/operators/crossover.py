@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from random import Random
 
 from ..config.app_config import AppConfig
-from ..config.constants import CrossoverOps
+from ..config.constants import CrossoverOp
 from ..data_model.event import Event, EventFactory
 from ..data_model.schedule import Schedule
 from ..data_model.team import TeamFactory
@@ -21,11 +21,11 @@ def build_crossovers(
     """Build and return a tuple of crossover operators based on the configuration."""
     rng = app_config.rng
     variant_map = {
-        CrossoverOps.K_POINT: lambda k: KPoint(team_factory, event_factory, rng, k=k),
-        CrossoverOps.SCATTERED: lambda: Scattered(team_factory, event_factory, rng),
-        CrossoverOps.UNIFORM: lambda: Uniform(team_factory, event_factory, rng),
-        CrossoverOps.ROUND_TYPE_CROSSOVER: lambda: RoundTypeCrossover(team_factory, event_factory, rng),
-        CrossoverOps.PARTIAL_CROSSOVER: lambda: PartialCrossover(team_factory, event_factory, rng),
+        CrossoverOp.K_POINT: lambda k: KPoint(team_factory, event_factory, rng, k=k),
+        CrossoverOp.SCATTERED: lambda: Scattered(team_factory, event_factory, rng),
+        CrossoverOp.UNIFORM: lambda: Uniform(team_factory, event_factory, rng),
+        CrossoverOp.ROUND_TYPE_CROSSOVER: lambda: RoundTypeCrossover(team_factory, event_factory, rng),
+        CrossoverOp.PARTIAL_CROSSOVER: lambda: PartialCrossover(team_factory, event_factory, rng),
     }
 
     if not (crossover_types := app_config.operators.crossover_types):
@@ -38,7 +38,7 @@ def build_crossovers(
             raise ValueError(msg)
         else:
             crossover_factory = variant_map[variant_name]
-            if variant_name == CrossoverOps.K_POINT:
+            if variant_name == CrossoverOp.K_POINT:
                 for k in app_config.operators.crossover_ks:
                     if k <= 0:
                         msg = f"Invalid crossover k value: {k}. Must be greater than 0."
@@ -59,7 +59,7 @@ class Crossover(ABC):
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the crossover operator."""
-        self.events = self.event_factory.flat_list()
+        self.events = self.event_factory.as_list()
 
     @abstractmethod
     def crossover(self, parents: tuple[Schedule]) -> Iterator[Schedule]:

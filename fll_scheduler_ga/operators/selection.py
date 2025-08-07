@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from random import Random
 
 from ..config.app_config import AppConfig
-from ..config.constants import SelectionOps
+from ..config.constants import SelectionOp
 from ..data_model.schedule import Population, Schedule
 
 logger = logging.getLogger(__name__)
@@ -22,8 +22,8 @@ logger = logging.getLogger(__name__)
 def build_selections(app_config: AppConfig) -> Iterator["Selection"]:
     """Build and return a tuple of selection operators based on the configuration."""
     variant_map = {
-        SelectionOps.TOURNAMENT_SELECT: lambda: TournamentSelect(app_config.rng, app_config.ga_params.selection_size),
-        SelectionOps.RANDOM_SELECT: lambda: RandomSelect(app_config.rng),
+        SelectionOp.TOURNAMENT_SELECT: lambda: TournamentSelect(app_config.rng, app_config.ga_params.selection_size),
+        SelectionOp.RANDOM_SELECT: lambda: RandomSelect(app_config.rng),
     }
 
     if not app_config.operators.selection_types:

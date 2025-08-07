@@ -10,8 +10,9 @@ from random import Random
 
 from ..data_model.event import Round
 from ..data_model.location import Location
+from ..data_model.schedule import Schedule
 from .config import RoundType, TournamentConfig
-from .constants import HHMM_FMT, RANDOM_SEED_RANGE, CrossoverOps, MutationOps, SelectionOps
+from .constants import HHMM_FMT, RANDOM_SEED_RANGE, CrossoverOp, MutationOp, SelectionOp
 from .ga_operators_config import OperatorConfig
 from .ga_parameters import GaParameters
 
@@ -43,7 +44,8 @@ def create_app_config(args: argparse.Namespace, path: Path | None = None) -> App
 
 def load_tournament_config(parser: ConfigParser) -> TournamentConfig:
     """Load and return the tournament configuration from the provided ConfigParser."""
-    parsed_rounds, round_reqs, num_teams = _parse_rounds(parser)
+    num_teams, team_ids = _parse_teams_config(parser)
+    parsed_rounds, round_reqs = _parse_rounds_config(parser, num_teams)
     all_rounds_per_team = [r.rounds_per_team for r in parsed_rounds]
     total_slots = sum(num_teams * rpt for rpt in all_rounds_per_team)
     unique_opponents_possible = 1 <= max(all_rounds_per_team) <= num_teams - 1
@@ -53,6 +55,7 @@ def load_tournament_config(parser: ConfigParser) -> TournamentConfig:
     weight_floats = tuple(max(0, float(w)) for w in (weight_mean, weight_variation, weight_range))
     weight_sum = sum(w for w in weight_floats)
     weights = tuple(w / weight_sum for w in weight_floats)
+    Schedule.team_identities = team_ids
     return TournamentConfig(
         num_teams,
         parsed_rounds,
@@ -76,18 +79,18 @@ def load_operator_config(parser: ConfigParser) -> OperatorConfig:
     if parser.has_option("genetic.operator.selection", "selection_types"):
         selection_types = _parse_operator_types(parser, "genetic.operator.selection", "selection_types", "")
     else:
-        selection_types = [SelectionOps.TOURNAMENT_SELECT, SelectionOps.RANDOM_SELECT]
+        selection_types = [SelectionOp.TOURNAMENT_SELECT, SelectionOp.RANDOM_SELECT]
         logger.warning("%s not found in config. Using defaults: %s", "selection_types", selection_types)
 
     if parser.has_option("genetic.operator.crossover", "crossover_types"):
         crossover_types = _parse_operator_types(parser, "genetic.operator.crossover", "crossover_types", "")
     else:
         crossover_types = [
-            CrossoverOps.K_POINT,
-            CrossoverOps.SCATTERED,
-            CrossoverOps.UNIFORM,
-            CrossoverOps.ROUND_TYPE_CROSSOVER,
-            CrossoverOps.PARTIAL_CROSSOVER,
+            CrossoverOp.K_POINT,
+            CrossoverOp.SCATTERED,
+            CrossoverOp.UNIFORM,
+            CrossoverOp.ROUND_TYPE_CROSSOVER,
+            CrossoverOp.PARTIAL_CROSSOVER,
         ]
         logger.warning("%s not found in config. Using defaults: %s", "crossover_types", crossover_types)
 
@@ -101,13 +104,13 @@ def load_operator_config(parser: ConfigParser) -> OperatorConfig:
         mutation_types = _parse_operator_types(parser, "genetic.operator.mutation", "mutation_types", "")
     else:
         mutation_types = [
-            MutationOps.SWAP_MATCH_CROSS_TIME_LOCATION,
-            MutationOps.SWAP_MATCH_SAME_LOCATION,
-            MutationOps.SWAP_MATCH_SAME_TIME,
-            MutationOps.SWAP_TEAM_CROSS_TIME_LOCATION,
-            MutationOps.SWAP_TEAM_SAME_LOCATION,
-            MutationOps.SWAP_TEAM_SAME_TIME,
-            MutationOps.SWAP_TABLE_SIDE,
+            MutationOp.SWAP_MATCH_CROSS_TIME_LOCATION,
+            MutationOp.SWAP_MATCH_SAME_LOCATION,
+            MutationOp.SWAP_MATCH_SAME_TIME,
+            MutationOp.SWAP_TEAM_CROSS_TIME_LOCATION,
+            MutationOp.SWAP_TEAM_SAME_LOCATION,
+            MutationOp.SWAP_TEAM_SAME_TIME,
+            MutationOp.SWAP_TABLE_SIDE,
         ]
         logger.warning("%s not found in config. Using defaults: %s", "mutation_types", mutation_types)
 
@@ -188,27 +191,58 @@ def _get_config_parser(path: Path | None = None) -> ConfigParser:
     return parser
 
 
-def _parse_rounds(parser: ConfigParser) -> tuple[list[Round], dict[RoundType, int], int]:
+def _parse_teams_config(parser: ConfigParser) -> tuple[int, dict[int, int | str]]:
+    """Parse and return a list of team IDs from the configuration."""
+    if not parser.has_section("teams"):
+        msg = "No 'teams' section found in the configuration file."
+        raise KeyError(msg)
+
+    has_num = parser.has_option("teams", "num_teams")
+    has_ids = parser.has_option("teams", "identities")
+
+    if not (has_num or has_ids):
+        msg = "No 'identities' or 'num_teams' option found in the 'teams' section."
+        raise KeyError(msg)
+
+    p_teams = parser["teams"]
+
+    num_teams = p_teams.getint("num_teams") if has_num else 0
+    identities = [i.strip() for i in p_teams.get("identities", "").split(",") if i.strip()] if has_ids else []
+
+    if has_num and not identities:
+        identities = list(range(1, num_teams + 1))
+
+    if not has_num and identities:
+        num_teams = len(identities)
+
+    if (has_num and has_ids) and num_teams != len(identities):
+        msg = "Number of teams does not match number of identities."
+        raise ValueError(msg)
+
+    team_ids = {}
+    for i, team_id in enumerate(identities, start=1):
+        team_ids[i] = int(team_id) if team_id.isdigit() else team_id
+    return num_teams, team_ids
+
+
+def _parse_rounds_config(parser: ConfigParser, num_teams: int) -> tuple[list[Round], dict[RoundType, int]]:
     """Parse and return a list of Round objects from the configuration.
 
     Args:
         parser (ConfigParser): The ConfigParser instance with tournament configuration.
+        num_teams (int): The total number of teams in the tournament.
 
     Returns:
         list[Round]: A list of Round objects parsed from the configuration.
         dict[RoundType, int]: A dictionary mapping round types to the number of rounds per team.
-        int: The total number of teams in the tournament.
 
     """
-    num_teams = parser["teams"].getint("num_teams")
     rounds: list[Round] = []
     round_reqs = {}
     all_locations = load_location_config(parser)
+    round_sections = (s for s in parser.sections() if s.startswith("round"))
 
-    for section in parser.sections():
-        if not section.startswith("round"):
-            continue
-
+    for section in round_sections:
         p_section = parser[section]
         roundtype = p_section.get("round_type")
         rounds_per_team = p_section.getint("rounds_per_team")
@@ -222,7 +256,7 @@ def _parse_rounds(parser: ConfigParser) -> tuple[list[Round], dict[RoundType, in
 
         if times := p_section.get("times", []):
             times = [datetime.strptime(t.strip(), HHMM_FMT).replace(tzinfo=UTC) for t in times.split(",")]
-            start_time = times[0] if times else start_time
+            start_time = times[0]
 
         teams_per_round = p_section.getint("teams_per_round")
         duration_minutes = p_section.getint("duration_minutes")
@@ -249,7 +283,7 @@ def _parse_rounds(parser: ConfigParser) -> tuple[list[Round], dict[RoundType, in
         msg = "No rounds defined in the configuration file."
         raise ValueError(msg)
 
-    return rounds, round_reqs, num_teams
+    return rounds, round_reqs
 
 
 def _parse_operator_types(p: ConfigParser, section: str, option: str, fallback: str, dtype: str = "") -> list[str]:

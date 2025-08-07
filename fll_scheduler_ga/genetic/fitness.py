@@ -9,7 +9,7 @@ from typing import Any
 
 from ..config.benchmark import FitnessBenchmark
 from ..config.config import TournamentConfig
-from ..config.constants import FitnessObjective, HardConstraints
+from ..config.constants import FitnessObjective, HardConstraint
 from ..data_model.schedule import Schedule
 from ..data_model.team import Team
 
@@ -55,12 +55,12 @@ class FitnessEvaluator:
         """
         # Check if the schedule is empty
         if not schedule:
-            logger.debug("%s: %s", HardConstraints.SCHEDULE_EXISTENCE, "Schedule is empty")
+            logger.debug("%s: %s", HardConstraint.SCHEDULE_EXISTENCE, "Schedule is empty")
             return False
 
         # Check if all events are scheduled
         if len(schedule) < self.config.total_slots:
-            logger.debug("%s: %s", HardConstraints.ALL_EVENTS_SCHEDULED, "Not all events are scheduled")
+            logger.debug("%s: %s", HardConstraint.ALL_EVENTS_SCHEDULED, "Not all events are scheduled")
             return False
 
         return True

@@ -120,7 +120,7 @@ def generate_team_schedules(
     path: Path,
 ) -> None:
     """Generate a CSV file with team schedules, sorted by team IDs."""
-    event_map = event_factory.event_map()
+    event_map = event_factory.as_mapping()
     rows = []
     headers = ["Team"]
 

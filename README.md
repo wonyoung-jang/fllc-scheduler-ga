@@ -49,6 +49,7 @@ Create a file named `config.ini` to define your tournament's structure. The conf
 **Team Parameters:**
 
 -   `num_teams`: Total number of teams in the tournament.
+-   `identities`: A comma separated list of team names or identities.
 
 **Location Parameters:**
 
@@ -91,7 +92,52 @@ Create a file named `config.ini` to define your tournament's structure. The conf
 
 ```ini
 [teams]
+; num_teams and identities are optional if the other is provided.
+; If both are provided, the comma separated list of team identities length must match num_teams
 num_teams = 42
+identities = 
+    16495,
+    19580,
+    20935,
+    22558,
+    28598,
+    29579,
+    30520,
+    35133,
+    39555,
+    41005,
+    418,
+    46381,
+    48058,
+    50015,
+    53983,
+    56385,
+    57345,
+    59635,
+    61440,
+    68592,
+    70859,
+    72589,
+    74150,
+    74675,
+    7484,
+    75585,
+    75985,
+    76558,
+    78361,
+    84153,
+    84347,
+    85133,
+    85351,
+    86335,
+    86861,
+    88458,
+    93150,
+    9348,
+    94129,
+    94553,
+    96553,
+    98762
 
 [fitness]
 ; Values of weights are porportional to each other, the following are the same: 

@@ -15,16 +15,16 @@ logger = logging.getLogger(__name__)
 type EventMap = dict[int, Event]
 
 
-@dataclass(slots=True, order=True)
+@dataclass(slots=True)
 class Event:
     """Data model for an event in a schedule."""
 
-    identity: int = field(compare=True)
-    roundtype: RoundType = field(compare=False)
-    timeslot: TimeSlot = field(compare=False)
-    location: Location = field(compare=False)
+    identity: int
+    roundtype: RoundType
+    timeslot: TimeSlot
+    location: Location
     paired: "Event | None" = field(default=None, repr=False, compare=False)
-    conflicts: set[int] = field(default_factory=set, repr=False, compare=False)
+    conflicts: set[int] = field(default_factory=set, repr=False)
 
     def __hash__(self) -> int:
         """Use the unique identity for hashing."""
@@ -41,16 +41,16 @@ class EventFactory:
 
     config: TournamentConfig
     _cached_events: dict[RoundType, list[Event]] = field(default=None, init=False, repr=False)
-    _cached_flat_list: list[Event] = field(default=None, init=False, repr=False)
-    _cached_eventmap: EventMap = field(default=None, init=False, repr=False)
+    _cached_list: list[Event] = field(default=None, init=False, repr=False)
+    _cached_mapping: EventMap = field(default=None, init=False, repr=False)
     _cached_locations: dict[tuple[int, int, int], Location] = field(default_factory=dict, init=False, repr=False)
     _cached_timeslots: dict[tuple[datetime, datetime], TimeSlot] = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
         self.build()
-        self.flat_list()
-        self.event_map()
+        self.as_list()
+        self.as_mapping()
         self.build_conflicts()
 
         for rt, events in self._cached_events.items():
@@ -71,20 +71,6 @@ class EventFactory:
             }
         return self._cached_events
 
-    def flat_list(self) -> list[Event]:
-        """Get a flat list of all Events across all RoundTypes."""
-        if not self._cached_flat_list:
-            self._cached_flat_list = [e for el in self._cached_events.values() for e in el]
-            for i, event in enumerate(self._cached_flat_list, start=1):
-                event.identity = i
-        return self._cached_flat_list
-
-    def event_map(self) -> EventMap:
-        """Get a mapping of event identities to Event objects."""
-        if not self._cached_eventmap:
-            self._cached_eventmap = {e.identity: e for e in self.flat_list()}
-        return self._cached_eventmap
-
     def create_events(self, r: Round) -> Iterator[Event]:
         """Generate all possible Events for a given Round configuration.
 
@@ -96,15 +82,14 @@ class EventFactory:
 
         """
         locations = sorted(r.locations, key=lambda loc: (loc.identity, loc.side))
-
         start = r.times[0] if r.times else r.start_time
 
-        for i in range(r.get_num_slots()):
+        for i in range(1, r.get_num_slots() + 1):
             if not r.times:
                 stop = start + r.duration_minutes
-            elif i + 1 < len(r.times):
-                stop = r.times[i + 1]
-            elif i + 1 == len(r.times):
+            elif i < len(r.times):
+                stop = r.times[i]
+            elif i == len(r.times):
                 stop += r.duration_minutes
 
             time_cache_key = (start, stop)
@@ -129,9 +114,23 @@ class EventFactory:
                         yield event1
                         yield event2
 
+    def as_list(self) -> list[Event]:
+        """Get a flat list of all Events across all RoundTypes."""
+        if not self._cached_list:
+            self._cached_list = [e for el in self._cached_events.values() for e in el]
+            for i, event in enumerate(self._cached_list, start=1):
+                event.identity = i
+        return self._cached_list
+
+    def as_mapping(self) -> EventMap:
+        """Get a mapping of event identities to Event objects."""
+        if not self._cached_mapping:
+            self._cached_mapping = {e.identity: e for e in self.as_list()}
+        return self._cached_mapping
+
     def build_conflicts(self) -> None:
         """Build a mapping of event identities to their conflicting events."""
-        events = self.flat_list()
+        events = self.as_list()
         for i, event in enumerate(events):
             for other in events[i + 1 :]:
                 if event.timeslot.overlaps(other.timeslot):
