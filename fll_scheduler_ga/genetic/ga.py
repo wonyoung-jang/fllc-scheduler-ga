@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..config.config import TournamentConfig
 
-from ..config.constants import RANDOM_SEED_RANGE
+from ..config.constants import EPSILON, RANDOM_SEED_RANGE
 from ..data_model.schedule import Population
 from ..observers.base_observer import GaObserver
 from .builder import ScheduleBuilder
@@ -94,8 +94,8 @@ class GA:
 
     def _get_this_gen_fitness(self) -> tuple[float, ...]:
         """Calculate the average fitness of the current generation."""
-        island_last_gens = [i.get_last_gen_fitness() for i in self.islands]
-        return tuple(sum(s) / len(island_last_gens) for s in zip(*island_last_gens, strict=True))
+        island_last_gens = (i.get_last_gen_fitness() for i in self.islands)
+        return tuple(sum(s) / len(self.islands) for s in zip(*island_last_gens, strict=True))
 
     def _get_last_gen_fitness(self) -> tuple[float, ...]:
         """Get the fitness of the last generation."""
@@ -103,7 +103,6 @@ class GA:
 
     def adapt_operator_probabilities(self) -> None:
         """Adapt the operator probabilities based on the fitness history."""
-        epsilon = 0.82
         c_chance = self.context.ga_params.crossover_chance
         m_chance = self.context.ga_params.mutation_chance
         len_improvements = len(self.fitness_improvement_history)
@@ -114,8 +113,8 @@ class GA:
 
             # Less than 1/5 generations improved -> decrease operator chance / exploit
             if improved_ratio < 0.2:
-                self.context.ga_params.crossover_chance = max(0.01, c_chance * epsilon)
-                self.context.ga_params.mutation_chance = max(0.001, m_chance * epsilon)
+                self.context.ga_params.crossover_chance = max(0.01, c_chance * EPSILON)
+                self.context.ga_params.mutation_chance = max(0.001, m_chance * EPSILON)
                 self.context.logger.debug(
                     "Reduced crossover chance to %.2f and mutation chance to %.2f",
                     self.context.ga_params.crossover_chance,
@@ -123,8 +122,8 @@ class GA:
                 )
             # More than 1/5 generations improved -> increase operator chance / explore
             elif improved_ratio > 0.2:
-                self.context.ga_params.crossover_chance = min(0.9999, c_chance / epsilon)
-                self.context.ga_params.mutation_chance = min(0.9999, m_chance / epsilon)
+                self.context.ga_params.crossover_chance = min(0.9999, c_chance / EPSILON)
+                self.context.ga_params.mutation_chance = min(0.9999, m_chance / EPSILON)
                 self.context.logger.debug(
                     "Increased crossover chance to %.2f and mutation chance to %.2f",
                     self.context.ga_params.crossover_chance,
@@ -218,16 +217,7 @@ class GA:
                 self.migrate()
 
             for i in range(self.context.ga_params.num_islands):
-                ratios = self.islands[i].evolve()
-                for tracker, crossovers in ratios["crossover"].items():
-                    for crossover, count in crossovers.items():
-                        self._crossover_ratio[tracker][crossover] += count
-
-                for tracker, mutations in ratios["mutation"].items():
-                    for mutation, count in mutations.items():
-                        self._mutation_ratio[tracker][mutation] += count
-
-                self._offspring_ratio.update(ratios["offspring"])
+                self.islands[i].evolve()
                 self.islands[i].handle_underpopulation()
                 self.islands[i].update_fitness_history()
 
@@ -275,8 +265,23 @@ class GA:
             len(unique_pop),
         )
 
-        self.total_population = list(self.context.nsga3.select(unique_pop, population_size=len(unique_pop)).values())
-        self.total_population.sort(key=lambda s: (s.rank, -sum(s.fitness)))
+        self.total_population = sorted(
+            self.context.nsga3.select(unique_pop, population_size=len(unique_pop)).values(),
+            key=lambda s: (s.rank, -sum(s.fitness)),
+        )
+
+        for i in range(self.context.ga_params.num_islands):
+            c_ratio = self.islands[i].crossover_ratio
+            m_ratio = self.islands[i].mutation_ratio
+            o_ratio = self.islands[i].offspring_ratio
+            for tracker, crossovers in c_ratio.items():
+                for crossover, count in crossovers.items():
+                    self._crossover_ratio[tracker][crossover] += count
+            for tracker, mutations in m_ratio.items():
+                for mutation, count in mutations.items():
+                    self._mutation_ratio[tracker][mutation] += count
+            for tracker, count in o_ratio.items():
+                self._offspring_ratio[tracker] += count
 
         # Log final crossover statistics
         crossover_log = f"{'=' * 20}\nCrossover statistics"
@@ -287,12 +292,10 @@ class GA:
             strict=False,
         ):
             self._crossover_ratio["ratio"][f"{crossover!s}"] += success / total if total > 0 else 0.0
-
         for tracker, crossovers in self._crossover_ratio.items():
             crossover_log += f"\n  {tracker}:"
             for crossover, count in sorted(crossovers.items()):
                 crossover_log += f"\n    Crossover {crossover}: {count}"
-
         self.context.logger.info(crossover_log)
 
         # Log final mutation statistics
@@ -304,7 +307,6 @@ class GA:
             strict=False,
         ):
             self._mutation_ratio["ratio"][f"{mutation!s}"] += success / total if total > 0 else 0.0
-
         for tracker, mutations in self._mutation_ratio.items():
             mutation_log += f"\n  {tracker}:"
             for mutation, count in sorted(mutations.items()):

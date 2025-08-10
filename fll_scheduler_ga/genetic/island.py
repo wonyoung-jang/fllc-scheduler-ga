@@ -23,6 +23,15 @@ class Island:
 
     selected: dict[int, Schedule] = field(default_factory=dict, init=False, repr=False)
     fitness_history: list[tuple] = field(default_factory=list, init=False, repr=False)
+    offspring_ratio: Counter = field(default_factory=Counter, init=False, repr=False)
+    crossover_ratio: dict = field(default_factory=dict, init=False, repr=False)
+    mutation_ratio: dict = field(default_factory=dict, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        """Post-initialization to set up the initial state."""
+        self.crossover_ratio = {tracker: Counter() for tracker in ("success", "total")}
+        self.mutation_ratio = {tracker: Counter() for tracker in ("success", "total")}
+        self.offspring_ratio = Counter()
 
     def __len__(self) -> int:
         """Return the number of individuals in the island's population."""
@@ -104,7 +113,6 @@ class Island:
         self,
         parents: tuple[Schedule, Schedule],
         cs: tuple[Crossover] | tuple,
-        crossover_ratio: dict[str, Counter],
         *,
         crossover_roll: bool,
     ) -> set[Schedule]:
@@ -113,33 +121,19 @@ class Island:
         if crossover_roll and cs:
             crossover_op = self.rng.choice(self.context.crossovers)
             for child in crossover_op.crossover(parents):
-                crossover_ratio["total"][f"{crossover_op!s}"] += 1
+                self.crossover_ratio["total"][f"{crossover_op!s}"] += 1
                 if self.context.repairer.repair(child):
                     child.fitness = self.context.evaluator.evaluate(child)
                     offspring.add(child)
-                    crossover_ratio["success"][f"{crossover_op!s}"] += 1
+                    self.crossover_ratio["success"][f"{crossover_op!s}"] += 1
         elif not cs:
             offspring.update(parents)
         return offspring
 
-    def evolve(self) -> dict[str, Counter]:
+    def evolve(self) -> None:
         """Perform main evolution loop: generations and migrations."""
-        offspring_ratio = Counter()
-        crossover_ratio = {
-            "success": Counter(),
-            "total": Counter(),
-        }
-        mutation_ratio = {
-            "success": Counter(),
-            "total": Counter(),
-        }
-
         if not (island_pop := list(self.selected.values())):
-            return {
-                "offspring": offspring_ratio,
-                "crossover": crossover_ratio,
-                "mutation": mutation_ratio,
-            }
+            return
 
         _context = self.context
         _ss = _context.selections
@@ -161,33 +155,26 @@ class Island:
             offspring = self.get_initial_offspring(
                 parents,
                 _cs,
-                crossover_ratio,
                 crossover_roll=_crossover_roll,
             )
 
             for child in offspring:
                 if _mutation_roll and _ms:
                     mutation_op = self.rng.choice(_ms)
-                    mutation_ratio["total"][f"{mutation_op!s}"] += 1
+                    self.mutation_ratio["total"][f"{mutation_op!s}"] += 1
                     if mutation_op.mutate(child):
-                        mutation_ratio["success"][f"{mutation_op!s}"] += 1
+                        self.mutation_ratio["success"][f"{mutation_op!s}"] += 1
 
-                offspring_ratio["total"] += 1
+                self.offspring_ratio["total"] += 1
                 if self.add_to_population(child):
                     child.fitness = _eval(child)
                     child_count += 1
-                    offspring_ratio["success"] += 1
+                    self.offspring_ratio["success"] += 1
 
                 if child_count >= _ga_params.offspring_size:
                     break
 
         self.selected = self.context.nsga3.select(self.selected.values(), population_size=_ga_params.population_size)
-
-        return {
-            "offspring": offspring_ratio,
-            "crossover": crossover_ratio,
-            "mutation": mutation_ratio,
-        }
 
     def get_migrants(self, migration_size: int) -> Iterator[tuple[int, Schedule]]:
         """Randomly yield migrants from population."""
@@ -198,7 +185,9 @@ class Island:
     def receive_migrants(self, migrants: Iterator[tuple[int, Schedule]]) -> None:
         """Receive migrants from another island and add them to the current island's population."""
         for migrant_hash, migrant in migrants:
-            self.add_to_population(migrant, migrant_hash)
+            self.offspring_ratio["total"] += 1
+            if self.add_to_population(migrant, migrant_hash):
+                self.offspring_ratio["success"] += 1
 
         self.selected = self.context.nsga3.select(
             self.selected.values(), population_size=self.context.ga_params.population_size
@@ -222,7 +211,9 @@ class Island:
             self.builder.rng = Random(seeder.randint(*RANDOM_SEED_RANGE))
             schedule = self.builder.build()
 
+            self.offspring_ratio["total"] += 1
             if self.context.repairer.repair(schedule) and self.add_to_population(schedule):
+                self.offspring_ratio["success"] += 1
                 schedule.fitness = self.context.evaluator.evaluate(schedule)
 
     def finalize_island(self) -> Iterator[Schedule]:
