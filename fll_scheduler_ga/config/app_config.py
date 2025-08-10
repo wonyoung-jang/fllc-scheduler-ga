@@ -49,12 +49,7 @@ def load_tournament_config(parser: ConfigParser) -> TournamentConfig:
     all_rounds_per_team = [r.rounds_per_team for r in parsed_rounds]
     total_slots = sum(num_teams * rpt for rpt in all_rounds_per_team)
     unique_opponents_possible = 1 <= max(all_rounds_per_team) <= num_teams - 1
-    weight_mean = parser.get("fitness", "weight_mean", fallback="3")
-    weight_variation = parser.get("fitness", "weight_variation", fallback="1")
-    weight_range = parser.get("fitness", "weight_range", fallback="1")
-    weight_floats = tuple(max(0, float(w)) for w in (weight_mean, weight_variation, weight_range))
-    weight_sum = sum(w for w in weight_floats)
-    weights = tuple(w / weight_sum for w in weight_floats)
+    weights = _parse_fitness_config(parser)
     Schedule.team_identities = team_ids
     return TournamentConfig(
         num_teams,
@@ -131,7 +126,7 @@ def load_ga_parameters(args: argparse.Namespace, config_parser: ConfigParser) ->
     config_genetic = config_parser["genetic"] if config_parser.has_section("genetic") else {}
 
     if not config_genetic:
-        msg = "No 'genetic' section found in the configuration file. Using default values."
+        msg = "No 'genetic' section found in the configuration file."
         raise KeyError(msg)
 
     params = {
@@ -225,6 +220,23 @@ def _parse_teams_config(parser: ConfigParser) -> tuple[int, dict[int, int | str]
     return num_teams, team_ids
 
 
+def _parse_fitness_config(parser: ConfigParser) -> tuple[float, float, float]:
+    """Parse and return fitness-related configuration values."""
+    if not parser.has_section("fitness"):
+        msg = "No 'fitness' section found in the configuration file."
+        raise KeyError(msg)
+
+    p_fitness = parser["fitness"]
+    weights = (
+        p_fitness.get("weight_mean", 3),
+        p_fitness.get("weight_variation", 1),
+        p_fitness.get("weight_range", 1),
+    )
+    weight_floats = tuple(max(0, float(w)) for w in weights)
+    weight_sums = sum(w for w in weight_floats)
+    return tuple(w / weight_sums for w in weight_floats)
+
+
 def _parse_rounds_config(parser: ConfigParser, num_teams: int) -> tuple[list[Round], dict[RoundType, int]]:
     """Parse and return a list of Round objects from the configuration.
 
@@ -238,32 +250,34 @@ def _parse_rounds_config(parser: ConfigParser, num_teams: int) -> tuple[list[Rou
 
     """
     rounds: list[Round] = []
-    round_reqs = {}
+    roundreqs: dict[RoundType, int] = {}
     all_locations = load_location_config(parser)
     round_sections = (s for s in parser.sections() if s.startswith("round"))
 
     for section in round_sections:
-        p_section = parser[section]
-        roundtype = p_section.get("round_type")
-        rounds_per_team = p_section.getint("rounds_per_team")
-        round_reqs[roundtype] = rounds_per_team
+        _validate_round_section(parser, section)
 
-        if start_time := p_section.get("start_time", ""):
-            start_time = datetime.strptime(start_time, HHMM_FMT).replace(tzinfo=UTC)
+        p_round = parser[section]
+        roundtype = p_round.get("round_type")
+        rounds_per_team = p_round.getint("rounds_per_team")
+        teams_per_round = p_round.getint("teams_per_round")
 
-        if stop_time := p_section.get("stop_time", ""):
-            stop_time = datetime.strptime(stop_time, HHMM_FMT).replace(tzinfo=UTC)
+        if start_time := p_round.get("start_time", ""):
+            start_time = datetime.strptime(start_time.strip(), HHMM_FMT).replace(tzinfo=UTC)
 
-        if times := p_section.get("times", []):
+        if stop_time := p_round.get("stop_time", ""):
+            stop_time = datetime.strptime(stop_time.strip(), HHMM_FMT).replace(tzinfo=UTC)
+
+        if times := p_round.get("times", []):
             times = [datetime.strptime(t.strip(), HHMM_FMT).replace(tzinfo=UTC) for t in times.split(",")]
             start_time = times[0]
 
-        teams_per_round = p_section.getint("teams_per_round")
-        duration_minutes = p_section.getint("duration_minutes")
-        duration_minutes = timedelta(minutes=duration_minutes)
-        location = p_section.get("location")
+        duration_minutes = timedelta(minutes=p_round.getint("duration_minutes"))
+
+        location = p_round.get("location")
         locations = [loc for loc in all_locations.values() if loc.name == location]
 
+        roundreqs.setdefault(roundtype, rounds_per_team)
         rounds.append(
             Round(
                 roundtype=roundtype,
@@ -283,7 +297,24 @@ def _parse_rounds_config(parser: ConfigParser, num_teams: int) -> tuple[list[Rou
         msg = "No rounds defined in the configuration file."
         raise ValueError(msg)
 
-    return rounds, round_reqs
+    return rounds, roundreqs
+
+
+def _validate_round_section(p: ConfigParser, sect: str) -> None:
+    """Validate round sections in config file."""
+    if not p.has_section(sect):
+        msg = f"Missing section: '{sect}'"
+        raise KeyError(msg)
+
+    options = ("round_type", "rounds_per_team", "teams_per_round", "duration_minutes", "location")
+    for option in options:
+        if not p[sect].get(option):
+            msg = f"No '{option}' option found in section '{sect}'."
+            raise KeyError(msg)
+
+    if not p[sect].get("start_time") and not p[sect].get("times"):
+        msg = f"Either 'start_time' or 'times' must be specified in section '{sect}'."
+        raise KeyError(msg)
 
 
 def _parse_operator_types(p: ConfigParser, section: str, option: str, fallback: str, dtype: str = "") -> list[str]:
@@ -308,12 +339,10 @@ def load_location_config(parser: ConfigParser) -> dict[tuple[str, int | str, int
         teams_per_round = int(data["teams_per_round"])
 
         for i in (i.strip() for i in data["identities"].split(",") if i.strip()):
-            oneside = sides == 1
-            isdigit = i.isdigit()
-            identity = int(i) if isdigit else i
+            identity = int(i) if i.isdigit() else i
 
             for j in range(1, sides + 1):
-                side = 0 if oneside else j
+                side = 0 if sides == 1 else j
                 loc_key = (name, identity, teams_per_round, side)
                 loc_obj = Location(
                     name=name,

@@ -105,7 +105,7 @@ class Island:
     ) -> set[Schedule]:
         """Get the initial offspring for the island from either crossover or parents."""
         offspring = set()
-        if cs and crossover_roll:
+        if crossover_roll and cs:
             crossover_op = self.rng.choice(self.context.crossovers)
             for child in crossover_op.crossover(parents):
                 if self.context.repairer.repair(child):
@@ -150,12 +150,9 @@ class Island:
             )
 
             for child in offspring:
-                if _ms and _mutation_roll:
-                    mutation_ops = self.rng.sample(_ms, k=len(_ms))
-                    for i, mutation_op in enumerate(mutation_ops, start=1):
-                        if _ga_params.mutation_chance**i <= self.rng.random():
-                            break
-                        mutation_ratio["success" if mutation_op.mutate(child) else "failure"] += 1
+                if _mutation_roll and _ms:
+                    mutation_op = self.rng.choice(_ms)
+                    mutation_ratio["success" if mutation_op.mutate(child) else "failure"] += 1
 
                 offspring_success = False
                 if self.add_to_population(child):
