@@ -79,17 +79,18 @@ class Team:
         """Add an opponent for a given event."""
         self.opponents.append(opponent.identity)
 
-    def conflicts(self, new_event: Event) -> bool:
+    def conflicts(self, new_event: Event, *, ignore: Event = None) -> bool:
         """Check if adding a new event would cause a time conflict.
 
         Args:
             new_event (Event): The new event to check for conflicts.
+            ignore (Event): An event to ignore when checking for conflicts.
 
         Returns:
             bool: True if there is a conflict, False otherwise.
 
         """
-        _events = self.events
+        _events = [e for e in self.events if e != ignore.identity] if ignore else self.events
         if new_event.identity in _events:
             return True
 

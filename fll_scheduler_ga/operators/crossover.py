@@ -81,6 +81,12 @@ class Crossover(ABC):
 class EventCrossover(Crossover):
     """Abstract base class for crossover operators in the FLL Scheduler GA."""
 
+    def __str__(self) -> str:
+        """Return a string representation of the crossover operator."""
+        if hasattr(self, "k"):
+            return f"{self.__class__.__name__}(k={self.k})"
+        return f"{self.__class__.__name__}"
+
     @abstractmethod
     def get_genes(self, p1: Schedule, p2: Schedule) -> Iterator[Iterator[Event]]:
         """Get the genes for the crossover.
@@ -241,7 +247,7 @@ class PartialCrossover(EventCrossover):
         """Get the genes for Partial crossover."""
         evts = self.events
         ne = len(evts)
-        sections = sorted(self.rng.sample(range(1, ne), 4))
+        sections = sorted(self.rng.sample(range(1, ne), 3))
         indices = self.rng.sample(range(ne), ne)
         yield (evts[i] for i in indices[: sections[0]] if evts[i] in p1)
         yield (evts[i] for i in indices[sections[-1] :] if evts[i] in p2)

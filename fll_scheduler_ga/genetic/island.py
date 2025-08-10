@@ -101,16 +101,23 @@ class Island:
         self.selected = self.context.nsga3.select(self.selected.values(), population_size=pop_size)
 
     def get_initial_offspring(
-        self, parents: tuple[Schedule, Schedule], cs: tuple[Crossover] | tuple, *, crossover_roll: bool
+        self,
+        parents: tuple[Schedule, Schedule],
+        cs: tuple[Crossover] | tuple,
+        crossover_ratio: dict[str, Counter],
+        *,
+        crossover_roll: bool,
     ) -> set[Schedule]:
         """Get the initial offspring for the island from either crossover or parents."""
         offspring = set()
         if crossover_roll and cs:
             crossover_op = self.rng.choice(self.context.crossovers)
             for child in crossover_op.crossover(parents):
+                crossover_ratio["total"][f"{crossover_op!s}"] += 1
                 if self.context.repairer.repair(child):
                     child.fitness = self.context.evaluator.evaluate(child)
                     offspring.add(child)
+                    crossover_ratio["success"][f"{crossover_op!s}"] += 1
         elif not cs:
             offspring.update(parents)
         return offspring
@@ -118,11 +125,19 @@ class Island:
     def evolve(self) -> dict[str, Counter]:
         """Perform main evolution loop: generations and migrations."""
         offspring_ratio = Counter()
-        mutation_ratio = Counter()
+        crossover_ratio = {
+            "success": Counter(),
+            "total": Counter(),
+        }
+        mutation_ratio = {
+            "success": Counter(),
+            "total": Counter(),
+        }
 
         if not (island_pop := list(self.selected.values())):
             return {
                 "offspring": offspring_ratio,
+                "crossover": crossover_ratio,
                 "mutation": mutation_ratio,
             }
 
@@ -146,21 +161,22 @@ class Island:
             offspring = self.get_initial_offspring(
                 parents,
                 _cs,
+                crossover_ratio,
                 crossover_roll=_crossover_roll,
             )
 
             for child in offspring:
                 if _mutation_roll and _ms:
                     mutation_op = self.rng.choice(_ms)
-                    mutation_ratio["success" if mutation_op.mutate(child) else "failure"] += 1
+                    mutation_ratio["total"][f"{mutation_op!s}"] += 1
+                    if mutation_op.mutate(child):
+                        mutation_ratio["success"][f"{mutation_op!s}"] += 1
 
-                offspring_success = False
+                offspring_ratio["total"] += 1
                 if self.add_to_population(child):
                     child.fitness = _eval(child)
                     child_count += 1
-                    offspring_success = True
-
-                offspring_ratio["success" if offspring_success else "failure"] += 1
+                    offspring_ratio["success"] += 1
 
                 if child_count >= _ga_params.offspring_size:
                     break
@@ -169,6 +185,7 @@ class Island:
 
         return {
             "offspring": offspring_ratio,
+            "crossover": crossover_ratio,
             "mutation": mutation_ratio,
         }
 

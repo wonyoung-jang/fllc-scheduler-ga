@@ -111,8 +111,8 @@ class Repairer:
 
             if partner_idx != -1:
                 teams.pop(partner_idx)
-            else:
-                logger.debug("Could not find a match partner for team %d", t1.identity)
+            # else:
+            # logger.debug("Could not find a match partner for team %d", t1.identity)
 
     def _find_and_populate_match(self, t1: Team, t2: Team, events: list[Event], schedule: Schedule) -> bool:
         """Find an open match slot for two teams and populate it."""

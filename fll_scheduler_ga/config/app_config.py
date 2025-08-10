@@ -214,9 +214,13 @@ def _parse_teams_config(parser: ConfigParser) -> tuple[int, dict[int, int | str]
         msg = "Number of teams does not match number of identities."
         raise ValueError(msg)
 
-    team_ids = {}
-    for i, team_id in enumerate(identities, start=1):
-        team_ids[i] = int(team_id) if team_id.isdigit() else team_id
+    team_ids = {
+        i: int(team_id) if team_id.isdigit() else team_id
+        for i, team_id in enumerate(
+            identities,
+            start=1,
+        )
+    }
     return num_teams, team_ids
 
 

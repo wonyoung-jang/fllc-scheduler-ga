@@ -173,15 +173,22 @@ class Mutation(ABC):
         if not self.same_timeslot and not self.same_location:
             return not is_same_timeslot and not is_same_location
 
-        if self.same_timeslot and self.same_location:
-            return is_same_timeslot and is_same_location
-
-        return False
+        return self.same_timeslot and self.same_location
 
 
 @dataclass(slots=True)
 class SwapTeamMutation(Mutation):
     """Mutation operator for swapping single team between two matches."""
+
+    def __str__(self) -> str:
+        """Return string representation."""
+        if not self.same_location and not self.same_timeslot:
+            return MutationOp.SWAP_TEAM_CROSS_TIME_LOCATION
+        if self.same_location and not self.same_timeslot:
+            return MutationOp.SWAP_TEAM_SAME_LOCATION
+        if not self.same_location and self.same_timeslot:
+            return MutationOp.SWAP_TEAM_SAME_TIME
+        return self.__class__.__name__
 
     def get_swap_candidates(self, child: Schedule) -> tuple[Match | None]:
         """Get two matches to swap in the child schedule."""
@@ -191,7 +198,7 @@ class SwapTeamMutation(Mutation):
 
             match_team_ids = {t1a.identity, t1b.identity, t2a.identity, t2b.identity}
 
-            if len(match_team_ids) < 4 or t1a.conflicts(e2a) or t2a.conflicts(e1a):
+            if len(match_team_ids) < 4 or t1a.conflicts(e2a, ignore=e1a) or t2a.conflicts(e1a, ignore=e2a):
                 continue
 
             return match1_data, match2_data
@@ -226,13 +233,28 @@ class SwapTeamMutation(Mutation):
 class SwapMatchMutation(Mutation):
     """Base class for mutations that swap the locations of two entire matches."""
 
+    def __str__(self) -> str:
+        """Return string representation."""
+        if not self.same_location and not self.same_timeslot:
+            return MutationOp.SWAP_MATCH_CROSS_TIME_LOCATION
+        if self.same_location and not self.same_timeslot:
+            return MutationOp.SWAP_MATCH_SAME_LOCATION
+        if not self.same_location and self.same_timeslot:
+            return MutationOp.SWAP_MATCH_SAME_TIME
+        return self.__class__.__name__
+
     def get_swap_candidates(self, child: Schedule) -> tuple[Match | None]:
         """Get two matches to swap in the child schedule."""
         for match1_data, match2_data in self.yield_swap_candidates(child):
             e1a, e1b, t1a, t1b = match1_data
             e2a, e2b, t2a, t2b = match2_data
 
-            if t1a.conflicts(e2a) or t1b.conflicts(e2b) or t2a.conflicts(e1a) or t2b.conflicts(e1b):
+            if (
+                t1a.conflicts(e2a, ignore=e1a)
+                or t1b.conflicts(e2b, ignore=e1b)
+                or t2a.conflicts(e1a, ignore=e2a)
+                or t2b.conflicts(e1b, ignore=e2b)
+            ):
                 continue
 
             return match1_data, match2_data
@@ -265,9 +287,15 @@ class SwapMatchMutation(Mutation):
 class SwapTableSideMutation(Mutation):
     """Mutation operator for swapping the sides of two tables in a match."""
 
+    def __str__(self) -> str:
+        """Return string representation."""
+        return MutationOp.SWAP_TABLE_SIDE
+
     def get_swap_candidates(self, child: Schedule) -> Match | None:
         """Get two matches to swap in the child schedule."""
-        return self.rng.choice(next(self.yield_swap_candidates(child), (None, None)))
+        if (next_swap := next(self.yield_swap_candidates(child), None)) is not None:
+            return self.rng.choice(next_swap)
+        return None
 
     def mutate(self, child: Schedule) -> bool:
         """Swap the sides of two tables in a match."""

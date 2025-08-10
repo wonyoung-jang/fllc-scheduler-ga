@@ -34,8 +34,8 @@ class GA:
 
     _seed_file: Path | None = field(default=None, init=False, repr=False)
     _offspring_ratio: Counter = field(default_factory=Counter, init=False, repr=False)
-    _mutation_ratio: Counter = field(default_factory=Counter, init=False, repr=False)
-    _expected_population_size: int = field(init=False, repr=False)
+    _crossover_ratio: dict = field(default_factory=dict, init=False, repr=False)
+    _mutation_ratio: dict = field(default_factory=dict, init=False, repr=False)
     _c_base: float = field(init=False, repr=False)
     _m_base: float = field(init=False, repr=False)
 
@@ -43,7 +43,6 @@ class GA:
         """Post-initialization to set up the initial state."""
         self._c_base = self.context.ga_params.crossover_chance
         self._m_base = self.context.ga_params.mutation_chance
-        self._expected_population_size = self.context.ga_params.population_size * self.context.ga_params.num_islands
         seeder = Random(self.rng.randint(*RANDOM_SEED_RANGE))
         builder = ScheduleBuilder(
             self.context.team_factory,
@@ -61,6 +60,22 @@ class GA:
             )
             for i in range(1, self.context.ga_params.num_islands + 1)
         )
+
+        self._crossover_ratio["success"] = Counter()
+        self._crossover_ratio["total"] = Counter()
+        self._crossover_ratio["ratio"] = {}
+        for crossover in self.context.crossovers:
+            self._crossover_ratio["success"][f"{crossover!s}"] = 0
+            self._crossover_ratio["total"][f"{crossover!s}"] = 0
+            self._crossover_ratio["ratio"][f"{crossover!s}"] = 0.0
+
+        self._mutation_ratio["success"] = Counter()
+        self._mutation_ratio["total"] = Counter()
+        self._mutation_ratio["ratio"] = {}
+        for mutation in self.context.mutations:
+            self._mutation_ratio["success"][f"{mutation!s}"] = 0
+            self._mutation_ratio["total"][f"{mutation!s}"] = 0
+            self._mutation_ratio["ratio"][f"{mutation!s}"] = 0.0
 
     def __len__(self) -> int:
         """Return the number of individuals in the population."""
@@ -94,11 +109,11 @@ class GA:
         len_improvements = len(self.fitness_improvement_history)
 
         if len_improvements >= 10:
-            last_improvements = self.fitness_improvement_history[-10:]
-            improved_count = last_improvements.count(1)
+            last_improvements = self.fitness_improvement_history[-len_improvements // 5 :]
+            improved_ratio = last_improvements.count(1) / len(last_improvements)
 
             # Less than 1/5 generations improved -> decrease operator chance / exploit
-            if improved_count < 2:
+            if improved_ratio < 0.2:
                 self.context.ga_params.crossover_chance = max(0.01, c_chance * epsilon)
                 self.context.ga_params.mutation_chance = max(0.001, m_chance * epsilon)
                 self.context.logger.debug(
@@ -107,7 +122,7 @@ class GA:
                     self.context.ga_params.mutation_chance,
                 )
             # More than 1/5 generations improved -> increase operator chance / explore
-            elif improved_count > 2:
+            elif improved_ratio > 0.2:
                 self.context.ga_params.crossover_chance = min(0.9999, c_chance / epsilon)
                 self.context.ga_params.mutation_chance = min(0.9999, m_chance / epsilon)
                 self.context.logger.debug(
@@ -204,8 +219,15 @@ class GA:
 
             for i in range(self.context.ga_params.num_islands):
                 ratios = self.islands[i].evolve()
+                for tracker, crossovers in ratios["crossover"].items():
+                    for crossover, count in crossovers.items():
+                        self._crossover_ratio[tracker][crossover] += count
+
+                for tracker, mutations in ratios["mutation"].items():
+                    for mutation, count in mutations.items():
+                        self._mutation_ratio[tracker][mutation] += count
+
                 self._offspring_ratio.update(ratios["offspring"])
-                self._mutation_ratio.update(ratios["mutation"])
                 self.islands[i].handle_underpopulation()
                 self.islands[i].update_fitness_history()
 
@@ -256,21 +278,64 @@ class GA:
         self.total_population = list(self.context.nsga3.select(unique_pop, population_size=len(unique_pop)).values())
         self.total_population.sort(key=lambda s: (s.rank, -sum(s.fitness)))
 
-        # Log final statistics
+        # Log final crossover statistics
+        crossover_log = f"{'=' * 20}\nCrossover statistics"
+        for success, total, crossover in zip(
+            self._crossover_ratio["success"].values(),
+            self._crossover_ratio["total"].values(),
+            self.context.crossovers,
+            strict=False,
+        ):
+            self._crossover_ratio["ratio"][f"{crossover!s}"] += success / total if total > 0 else 0.0
+
+        for tracker, crossovers in self._crossover_ratio.items():
+            crossover_log += f"\n  {tracker}:"
+            for crossover, count in sorted(crossovers.items()):
+                crossover_log += f"\n    Crossover {crossover}: {count}"
+
+        self.context.logger.info(crossover_log)
+
+        # Log final mutation statistics
+        mutation_log = f"{'=' * 20}\nMutation statistics"
+        for success, total, mutation in zip(
+            self._mutation_ratio["success"].values(),
+            self._mutation_ratio["total"].values(),
+            self.context.mutations,
+            strict=False,
+        ):
+            self._mutation_ratio["ratio"][f"{mutation!s}"] += success / total if total > 0 else 0.0
+
+        for tracker, mutations in self._mutation_ratio.items():
+            mutation_log += f"\n  {tracker}:"
+            for mutation, count in sorted(mutations.items()):
+                mutation_log += f"\n    Mutation {mutation}: {count}"
+        self.context.logger.info(mutation_log)
+
+        self.context.logger.info(
+            "Crossovers: %s/%s, Mutations: %s/%s",
+            sum(self._crossover_ratio["success"].values()),
+            sum(self._crossover_ratio["total"].values()),
+            sum(self._mutation_ratio["success"].values()),
+            sum(self._mutation_ratio["total"].values()),
+        )
+
         o_success = self._offspring_ratio["success"]
-        o_total = o_success + self._offspring_ratio["failure"]
+        o_total = self._offspring_ratio["total"]
         o_percent = f"{o_success / o_total if o_total > 0 else 0.0:.2%}"
+        offspring_log = (
+            f"{'=' * 20}"
+            f"\nOffspring statistics"
+            f"\n  Successes: {o_success}"
+            f"\n  Failures: {o_total - o_success}"
+            f"\n  Total: {o_total}"
+            f"\n  Success rate: {o_percent}"
+        )
+        self.context.logger.info(offspring_log)
 
-        m_success = self._mutation_ratio["success"]
-        m_total = m_success + self._mutation_ratio["failure"]
-        m_percent = f"{m_success / m_total if m_total > 0 else 0.0:.2%}"
-
-        self.context.logger.info("Offspring success: %s/%s = %s", o_success, o_total, o_percent)
-        self.context.logger.info("Mutation success: %s/%s = %s", m_success, m_total, m_percent)
         self.context.logger.info(
             "Unique/Total individuals: %s/%s",
             len(self.total_population),
-            self._expected_population_size,
+            len(self),
         )
 
     def _notify_on_start(self, num_generations: int) -> None:
