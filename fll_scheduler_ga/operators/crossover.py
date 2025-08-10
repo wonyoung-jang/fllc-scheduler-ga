@@ -247,7 +247,7 @@ class PartialCrossover(EventCrossover):
         """Get the genes for Partial crossover."""
         evts = self.events
         ne = len(evts)
-        sections = sorted(self.rng.sample(range(1, ne), 3))
+        sections = sorted(self.rng.sample(range(1, ne - 1), 3))
         indices = self.rng.sample(range(ne), ne)
         yield (evts[i] for i in indices[: sections[0]] if evts[i] in p1)
         yield (evts[i] for i in indices[sections[-1] :] if evts[i] in p2)

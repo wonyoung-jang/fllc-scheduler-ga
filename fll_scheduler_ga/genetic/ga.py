@@ -217,8 +217,8 @@ class GA:
                 self.migrate()
 
             for i in range(self.context.ga_params.num_islands):
-                self.islands[i].evolve()
                 self.islands[i].handle_underpopulation()
+                self.islands[i].evolve()
                 self.islands[i].update_fitness_history()
 
             self._notify_on_generation_end(

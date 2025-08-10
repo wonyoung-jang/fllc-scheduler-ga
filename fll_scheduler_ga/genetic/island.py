@@ -110,11 +110,7 @@ class Island:
         self.selected = self.context.nsga3.select(self.selected.values(), population_size=pop_size)
 
     def get_initial_offspring(
-        self,
-        parents: tuple[Schedule, Schedule],
-        cs: tuple[Crossover] | tuple,
-        *,
-        crossover_roll: bool,
+        self, parents: tuple[Schedule, Schedule], cs: tuple[Crossover] | tuple, *, crossover_roll: bool
     ) -> set[Schedule]:
         """Get the initial offspring for the island from either crossover or parents."""
         offspring = set()
@@ -205,9 +201,8 @@ class Island:
             self.context.ga_params.population_size,
         )
 
-        seeder = Random(self.rng.randint(*RANDOM_SEED_RANGE))
-
         while len(self.selected) < self.context.ga_params.population_size:
+            seeder = Random(self.rng.randint(*RANDOM_SEED_RANGE))
             self.builder.rng = Random(seeder.randint(*RANDOM_SEED_RANGE))
             schedule = self.builder.build()
 
