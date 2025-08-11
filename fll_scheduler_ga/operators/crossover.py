@@ -25,7 +25,6 @@ def build_crossovers(
         CrossoverOp.SCATTERED: lambda: Scattered(team_factory, event_factory, rng),
         CrossoverOp.UNIFORM: lambda: Uniform(team_factory, event_factory, rng),
         CrossoverOp.ROUND_TYPE_CROSSOVER: lambda: RoundTypeCrossover(team_factory, event_factory, rng),
-        CrossoverOp.PARTIAL_CROSSOVER: lambda: PartialCrossover(team_factory, event_factory, rng),
         CrossoverOp.BEST_TEAM_CROSSOVER: lambda: BestTeamCrossover(team_factory, event_factory, rng),
     }
 
@@ -234,23 +233,6 @@ class RoundTypeCrossover(EventCrossover):
         rt = list(self.event_factory.config.round_requirements.keys())
         yield (e for e in evts for i, r in enumerate(rt) if e.roundtype == r and i % 2 != 0 and e in p1)
         yield (e for e in evts for i, r in enumerate(rt) if e.roundtype == r and i % 2 == 0 and e in p2)
-
-
-@dataclass(slots=True)
-class PartialCrossover(EventCrossover):
-    """Partial crossover operator for genetic algorithms.
-
-    This operator takes a random subset of events from each parent.
-    """
-
-    def get_genes(self, p1: Schedule, p2: Schedule) -> Iterator[Iterator[Event]]:
-        """Get the genes for Partial crossover."""
-        evts = self.events
-        ne = len(evts)
-        sections = sorted(self.rng.sample(range(1, ne - 1), 3))
-        indices = self.rng.sample(range(ne), ne)
-        yield (evts[i] for i in indices[: sections[0]] if evts[i] in p1)
-        yield (evts[i] for i in indices[sections[-1] :] if evts[i] in p2)
 
 
 @dataclass(slots=True)

@@ -43,7 +43,6 @@ class EventFactory:
     _cached_events: dict[RoundType, list[Event]] = field(default=None, init=False, repr=False)
     _cached_list: list[Event] = field(default=None, init=False, repr=False)
     _cached_mapping: EventMap = field(default=None, init=False, repr=False)
-    _cached_locations: dict[tuple[int, int, int], Location] = field(default_factory=dict, init=False, repr=False)
     _cached_timeslots: dict[tuple[datetime, datetime], TimeSlot] = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self) -> None:

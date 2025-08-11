@@ -36,13 +36,9 @@ class GA:
     _offspring_ratio: Counter = field(default_factory=Counter, init=False, repr=False)
     _crossover_ratio: dict = field(default_factory=dict, init=False, repr=False)
     _mutation_ratio: dict = field(default_factory=dict, init=False, repr=False)
-    _c_base: float = field(init=False, repr=False)
-    _m_base: float = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
-        self._c_base = self.context.ga_params.crossover_chance
-        self._m_base = self.context.ga_params.mutation_chance
         seeder = Random(self.rng.randint(*RANDOM_SEED_RANGE))
         builder = ScheduleBuilder(
             self.context.team_factory,
@@ -124,14 +120,6 @@ class GA:
                 self.context.ga_params.mutation_chance = min(0.9999, m_chance / EPSILON)
                 self.context.logger.debug(
                     "Increased crossover chance to %.2f and mutation chance to %.2f",
-                    self.context.ga_params.crossover_chance,
-                    self.context.ga_params.mutation_chance,
-                )
-            else:
-                self.context.ga_params.crossover_chance = self._c_base
-                self.context.ga_params.mutation_chance = self._m_base
-                self.context.logger.debug(
-                    "No change in crossover or mutation chance, current values: %.2f, %.2f",
                     self.context.ga_params.crossover_chance,
                     self.context.ga_params.mutation_chance,
                 )

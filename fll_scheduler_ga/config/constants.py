@@ -24,7 +24,6 @@ class CrossoverOp(StrEnum):
     SCATTERED = "Scattered"
     UNIFORM = "Uniform"
     ROUND_TYPE_CROSSOVER = "RoundTypeCrossover"
-    PARTIAL_CROSSOVER = "PartialCrossover"
     BEST_TEAM_CROSSOVER = "BestTeamCrossover"
 
 

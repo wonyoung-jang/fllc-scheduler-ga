@@ -181,9 +181,7 @@ class Island:
     def receive_migrants(self, migrants: Iterator[tuple[int, Schedule]]) -> None:
         """Receive migrants from another island and add them to the current island's population."""
         for migrant_hash, migrant in migrants:
-            self.offspring_ratio["total"] += 1
-            if self.add_to_population(migrant, migrant_hash):
-                self.offspring_ratio["success"] += 1
+            self.add_to_population(migrant, migrant_hash)
 
         self.selected = self.context.nsga3.select(
             self.selected.values(), population_size=self.context.ga_params.population_size

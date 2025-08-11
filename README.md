@@ -224,10 +224,12 @@ selection_types = TournamentSelect, RandomSelect
 ;   - Scattered             (swaps random half of events between parents)
 ;   - Uniform               (swaps each gene randomly)
 ;   - RoundTypeCrossover    (preserves whole round types during crossover)
-;   - PartialCrossover      (partially take genes from both parents, repair to complete the child)
-crossover_types = KPoint, Scattered, Uniform, RoundTypeCrossover, PartialCrossover
+;   - BestTeamCrossover     (takes the best teams from both parents)
+crossover_types = KPoint, Scattered, Uniform, RoundTypeCrossover, BestTeamCrossover
 ; Split point values for KPoint crossover, does nothing if KPoint is not used
-crossover_ks = 1, 2, 4 
+; If KPoint is used but no crossover_ks are specified, it defaults to 1
+; Multiple different KPoints can be specified, separated by the number of their splits by commas
+crossover_ks = 1, 2, 3
 
 [genetic.operator.mutation]
 ; Available mutation types:
