@@ -63,11 +63,9 @@ class GA:
 
         self._crossover_ratio["success"] = Counter()
         self._crossover_ratio["total"] = Counter()
-        self._crossover_ratio["ratio"] = {}
         for crossover in self.context.crossovers:
             self._crossover_ratio["success"][f"{crossover!s}"] = 0
             self._crossover_ratio["total"][f"{crossover!s}"] = 0
-            self._crossover_ratio["ratio"][f"{crossover!s}"] = 0.0
 
         self._mutation_ratio["success"] = Counter()
         self._mutation_ratio["total"] = Counter()
@@ -257,19 +255,14 @@ class GA:
 
     def finalize(self) -> None:
         """Aggregate islands and run a final selection to produce the final population."""
+        # Deduplicate the population
         unique_pop = list({ind for island in self.islands for ind in island.finalize_island()})
-
-        self.context.logger.info(
-            "Finalized %d islands with population of %d unique individuals.",
-            len(self.islands),
-            len(unique_pop),
-        )
-
         self.total_population = sorted(
             self.context.nsga3.select(unique_pop, population_size=len(unique_pop)).values(),
             key=lambda s: (s.rank, -sum(s.fitness)),
         )
 
+        # Aggregate statistics from all islands
         for i in range(self.context.ga_params.num_islands):
             c_ratio = self.islands[i].crossover_ratio
             m_ratio = self.islands[i].mutation_ratio
@@ -285,60 +278,46 @@ class GA:
 
         # Log final crossover statistics
         crossover_log = f"{'=' * 20}\nCrossover statistics"
-        for success, total, crossover in zip(
-            self._crossover_ratio["success"].values(),
-            self._crossover_ratio["total"].values(),
-            self.context.crossovers,
-            strict=False,
-        ):
-            self._crossover_ratio["ratio"][f"{crossover!s}"] += success / total if total > 0 else 0.0
-        for tracker, crossovers in self._crossover_ratio.items():
-            crossover_log += f"\n  {tracker}:"
-            for crossover, count in sorted(crossovers.items()):
-                crossover_log += f"\n    Crossover {crossover}: {count}"
+        crossover_strings = [f"{crossover!s}" for crossover in self.context.crossovers]
+        max_len_crs = max(len(crossover) for crossover in crossover_strings) + 1
+        for crossover in crossover_strings:
+            success = self._crossover_ratio.get("success", {}).get(crossover, 0)
+            total = self._crossover_ratio.get("total", {}).get(crossover, 0)
+            ratio = success / total if total > 0 else 0.0
+            crossover_log += f"\n  Crossover {crossover:<{max_len_crs}}: {success}/{total} ({ratio:.2%})"
         self.context.logger.info(crossover_log)
 
         # Log final mutation statistics
         mutation_log = f"{'=' * 20}\nMutation statistics"
-        for success, total, mutation in zip(
-            self._mutation_ratio["success"].values(),
-            self._mutation_ratio["total"].values(),
-            self.context.mutations,
-            strict=False,
-        ):
-            self._mutation_ratio["ratio"][f"{mutation!s}"] += success / total if total > 0 else 0.0
-        for tracker, mutations in self._mutation_ratio.items():
-            mutation_log += f"\n  {tracker}:"
-            for mutation, count in sorted(mutations.items()):
-                mutation_log += f"\n    Mutation {mutation}: {count}"
+        mutation_strings = [f"{mutation!s}" for mutation in self.context.mutations]
+        max_len_mut = max(len(mutation) for mutation in mutation_strings) + 1
+        for mutation in mutation_strings:
+            success = self._mutation_ratio.get("success", {}).get(mutation, 0)
+            total = self._mutation_ratio.get("total", {}).get(mutation, 0)
+            ratio = success / total if total > 0 else 0.0
+            mutation_log += f"\n  Mutation {mutation:<{max_len_mut}}: {success}/{total} ({ratio:.2%})"
         self.context.logger.info(mutation_log)
 
-        self.context.logger.info(
-            "Crossovers: %s/%s, Mutations: %s/%s",
-            sum(self._crossover_ratio["success"].values()),
-            sum(self._crossover_ratio["total"].values()),
-            sum(self._mutation_ratio["success"].values()),
-            sum(self._mutation_ratio["total"].values()),
-        )
-
-        o_success = self._offspring_ratio["success"]
-        o_total = self._offspring_ratio["total"]
-        o_percent = f"{o_success / o_total if o_total > 0 else 0.0:.2%}"
-        offspring_log = (
-            f"{'=' * 20}"
-            f"\nOffspring statistics"
-            f"\n  Successes: {o_success}"
-            f"\n  Failures: {o_total - o_success}"
-            f"\n  Total: {o_total}"
-            f"\n  Success rate: {o_percent}"
-        )
-        self.context.logger.info(offspring_log)
-
-        self.context.logger.info(
-            "Unique/Total individuals: %s/%s",
-            len(self.total_population),
-            len(self),
-        )
+        # Log final aggregate statistics
+        final_log = f"{'=' * 20}\nFinal statistics"
+        sum_crs_suc = sum(self._crossover_ratio.get("success", {}).values())
+        sum_crs_tot = sum(self._crossover_ratio.get("total", {}).values())
+        sum_crs_rte = f"{sum_crs_suc / sum_crs_tot if sum_crs_tot > 0 else 0.0:.2%}"
+        sum_mut_suc = sum(self._mutation_ratio.get("success", {}).values())
+        sum_mut_tot = sum(self._mutation_ratio.get("total", {}).values())
+        sum_mut_rte = f"{sum_mut_suc / sum_mut_tot if sum_mut_tot > 0 else 0.0:.2%}"
+        off_suc = self._offspring_ratio.get("success", 0)
+        off_tot = self._offspring_ratio.get("total", 0)
+        off_rte = f"{off_suc / off_tot if off_tot > 0 else 0.0:.2%}"
+        unique_inds = len(self.total_population)
+        total_inds = len(self)
+        unique_rte = f"{unique_inds / total_inds if total_inds > 0 else 0.0:.2%}"
+        final_log += f"\n  {'Total islands':<30}: {len(self.islands)}"
+        final_log += f"\n  {'Crossover success rate':<30}: {sum_crs_suc}/{sum_crs_tot} ({sum_crs_rte})"
+        final_log += f"\n  {'Mutation success rate':<30}: {sum_mut_suc}/{sum_mut_tot} ({sum_mut_rte})"
+        final_log += f"\n  {'Offspring success rate':<30}: {off_suc}/{off_tot} ({off_rte})"
+        final_log += f"\n  {'Unique individuals':<30}: {unique_inds}/{total_inds} ({unique_rte})"
+        self.context.logger.info(final_log)
 
     def _notify_on_start(self, num_generations: int) -> None:
         """Notify observers when the genetic algorithm run starts."""

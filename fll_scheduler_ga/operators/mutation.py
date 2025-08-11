@@ -182,13 +182,11 @@ class SwapTeamMutation(Mutation):
 
     def __str__(self) -> str:
         """Return string representation."""
-        if not self.same_location and not self.same_timeslot:
-            return MutationOp.SWAP_TEAM_CROSS_TIME_LOCATION
-        if self.same_location and not self.same_timeslot:
-            return MutationOp.SWAP_TEAM_SAME_LOCATION
-        if not self.same_location and self.same_timeslot:
-            return MutationOp.SWAP_TEAM_SAME_TIME
-        return self.__class__.__name__
+        return {
+            (False, False): MutationOp.SWAP_TEAM_CROSS_TIME_LOCATION,
+            (True, False): MutationOp.SWAP_TEAM_SAME_LOCATION,
+            (False, True): MutationOp.SWAP_TEAM_SAME_TIME,
+        }.get((self.same_location, self.same_timeslot), self.__class__.__name__)
 
     def get_swap_candidates(self, child: Schedule) -> tuple[Match | None]:
         """Get two matches to swap in the child schedule."""
@@ -235,13 +233,11 @@ class SwapMatchMutation(Mutation):
 
     def __str__(self) -> str:
         """Return string representation."""
-        if not self.same_location and not self.same_timeslot:
-            return MutationOp.SWAP_MATCH_CROSS_TIME_LOCATION
-        if self.same_location and not self.same_timeslot:
-            return MutationOp.SWAP_MATCH_SAME_LOCATION
-        if not self.same_location and self.same_timeslot:
-            return MutationOp.SWAP_MATCH_SAME_TIME
-        return self.__class__.__name__
+        return {
+            (False, False): MutationOp.SWAP_MATCH_CROSS_TIME_LOCATION,
+            (True, False): MutationOp.SWAP_MATCH_SAME_LOCATION,
+            (False, True): MutationOp.SWAP_MATCH_SAME_TIME,
+        }.get((self.same_location, self.same_timeslot), self.__class__.__name__)
 
     def get_swap_candidates(self, child: Schedule) -> tuple[Match | None]:
         """Get two matches to swap in the child schedule."""
