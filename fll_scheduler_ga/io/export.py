@@ -20,7 +20,7 @@ def generate_summary(args: Namespace, ga: GA) -> None:
     """Run the fll-scheduler-ga application and generate summary reports."""
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    logger.info("Output directory: %s", output_dir)
+    logger.debug("Output directory: %s", output_dir)
 
     if not args.no_plotting:
         plot = Plot(ga, ga.context.evaluator.objectives)

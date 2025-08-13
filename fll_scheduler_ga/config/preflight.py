@@ -17,7 +17,7 @@ def run_preflight_checks(config: TournamentConfig, event_factory: EventFactory) 
         _check_location_time_overlaps(config, event_factory)
     except ValueError:
         logger.exception("Preflight checks failed. Please review the configuration.")
-    logger.info("All preflight checks passed successfully.")
+    logger.debug("All preflight checks passed successfully.")
 
 
 def _check_round_definitions(config: TournamentConfig) -> None:

@@ -52,6 +52,7 @@ class GA:
             self.context.app_config.tournament,
             Random(seeder.randint(*RANDOM_SEED_RANGE)),
         )
+
         self.context.repairer.rng = Random(seeder.randint(*RANDOM_SEED_RANGE))
         self.islands.extend(
             Island(
@@ -153,11 +154,11 @@ class GA:
             self.update_fitness_history()
             return False
         except KeyboardInterrupt:
-            self.context.logger.warning("Genetic algorithm run interrupted by user. Saving...")
+            self.context.logger.debug("Genetic algorithm run interrupted by user. Saving...")
             self.update_fitness_history()
             return True
         finally:
-            self.context.logger.info("Total time taken: %.2f seconds", time() - start_time)
+            self.context.logger.debug("Total time taken: %.2f seconds", time() - start_time)
             self.finalize()
             self._notify_on_finish(self.total_population, self.pareto_front())
         return True
@@ -171,13 +172,13 @@ class GA:
                 i = spi % self.ga_params.num_islands
                 self.islands[i].add_to_population(schedule)
 
-        self.context.logger.info("Initializing %d islands...", self.ga_params.num_islands)
+        self.context.logger.debug("Initializing %d islands...", self.ga_params.num_islands)
         for i in range(self.ga_params.num_islands):
             self.islands[i].initialize()
 
     def retrieve_seed_population(self) -> Population | None:
         """Load and integrate a population from a seed file."""
-        self.context.logger.info("Loading seed population from: %s", self._seed_file)
+        self.context.logger.debug("Loading seed population from: %s", self._seed_file)
         try:
             with self._seed_file.open("rb") as f:
                 seed_data = pickle.load(f)
@@ -292,7 +293,7 @@ class GA:
             total = ratios.get("total", {}).get(op, 0)
             ratio = success / total if total > 0 else 0.0
             log += f"\n  {op:<{max_len}}: {success}/{total} ({ratio:.2%})"
-        self.context.logger.info(log)
+        self.context.logger.debug(log)
 
     def _log_aggregate_stats(self) -> None:
         """Log aggregate statistics across all islands."""
@@ -316,7 +317,7 @@ class GA:
             f"\n  Mutation success rate  : {sum_mut_suc}/{sum_mut_tot} ({sum_mut_rte})"
             f"\n  Offspring success rate : {off_suc}/{off_tot} ({off_rte})"
         )
-        self.context.logger.info(final_log)
+        self.context.logger.debug(final_log)
 
     def finalize(self) -> None:
         """Aggregate islands and run a final selection to produce the final population."""

@@ -135,6 +135,7 @@ def create_ga_context(app_config: AppConfig) -> GaContext:
 
     num_objectives = len(evaluator.objectives)
     pop_size_ref_points = app_config.ga_params.population_size * app_config.ga_params.num_islands
+    pop_size_ref_points = max(pop_size_ref_points, 100)
     nsga3 = NSGA3(
         rng=app_config.rng,
         num_objectives=num_objectives,
@@ -165,8 +166,8 @@ def create_ga_instance(context: GaContext, rng: Random) -> GA:
         context=context,
         rng=rng,
         observers=(
-            LoggingObserver(logger),
             TqdmObserver(),
+            LoggingObserver(logger),
         ),
     )
 
@@ -185,7 +186,7 @@ def save_population_to_seed_file(ga: GA, seed_file: str | Path, *, front: bool =
     }
 
     path = Path(seed_file)
-    logger.info("Saving final population of size %d to seed file: %s", len(population), path)
+    logger.debug("Saving final population of size %d to seed file: %s", len(population), path)
     try:
         with path.open("wb") as f:
             pickle.dump(data_to_cache, f)
@@ -213,7 +214,7 @@ def main() -> None:
             save_population_to_seed_file(ga, args.seed_file, front=args.front_only)
             generate_summary(args, ga)
 
-    logger.info("FLLC Scheduler finished")
+    logger.debug("FLLC Scheduler finished")
 
 
 if __name__ == "__main__":

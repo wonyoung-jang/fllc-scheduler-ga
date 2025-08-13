@@ -168,7 +168,7 @@ def load_rng(args: argparse.Namespace, config_parser: ConfigParser) -> Random:
     if not rng_seed:
         rng_seed = Random().randint(*RANDOM_SEED_RANGE)
 
-    logger.info("Using RNG seed: %d", rng_seed)
+    logger.debug("Using RNG seed: %d", rng_seed)
     return Random(rng_seed)
 
 

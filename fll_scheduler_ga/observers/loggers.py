@@ -15,7 +15,7 @@ class LoggingObserver(GaObserver):
 
     def on_start(self, num_generations: int) -> None:
         """Log the start of the genetic algorithm run."""
-        self.logger.info("Starting genetic algorithm run for %d generations.", num_generations)
+        self.logger.debug("Starting genetic algorithm run for %d generations.", num_generations)
 
     def on_generation_end(
         self,
@@ -27,10 +27,12 @@ class LoggingObserver(GaObserver):
     ) -> None:
         """Log the end of a generation with population size and best fitness."""
         self.logger.debug(
-            "Population: %d | Generation %d/%d",
+            "Population: %d/%d | Generation %d/%d | Best Fitness %s",
+            front_size,
             population_size,
             generation,
             num_generations,
+            best_fitness,
         )
 
     def on_finish(self, pop: Population, front: Population) -> None:
@@ -39,5 +41,4 @@ class LoggingObserver(GaObserver):
         if not pop:
             self.logger.warning("No valid schedule was found after all generations.")
             return
-
-        self.logger.info("Final pareto front size: %d/%d (%.2f%%)", len(front), len(pop), len(front) / len(pop) * 100)
+        self.logger.debug("Final pareto front size: %d/%d (%.2f%%)", len(front), len(pop), len(front) / len(pop) * 100)

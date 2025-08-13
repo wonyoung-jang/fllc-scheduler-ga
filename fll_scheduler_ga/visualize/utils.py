@@ -52,7 +52,7 @@ def plot_pareto_scatter(front: Population, objectives: list[str], title: str, sa
         ax.set(title=title, xlabel=x_obj, ylabel=y_obj, zlabel=z_obj)
         _attach_colorbar(ax, ranks, label="Rank")
     else:
-        logger.info("Scatter plot is only supported for 2 or 3 objectives.")
+        logger.error("Scatter plot is only supported for 2 or 3 objectives.")
         return None
 
     return finalize(fig, save_dir, "pareto_scatter.png")
@@ -66,7 +66,7 @@ def finalize(fig: Figure, save_dir: str | Path | None, default_name: str) -> Any
             path = path / default_name
         try:
             fig.savefig(path, dpi=300)
-            logger.info("Saved plot: %s", path)
+            logger.debug("Saved plot: %s", path)
         except Exception:
             logger.exception("Error saving plot to %s", path)
     else:

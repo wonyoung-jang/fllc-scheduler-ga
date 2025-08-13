@@ -48,7 +48,7 @@ class FitnessBenchmark:
 
         try:
             if cache_file.exists():
-                logger.info("Loading fitness benchmarks from cache: %s", cache_file)
+                logger.debug("Loading fitness benchmarks from cache: %s", cache_file)
                 self._load_from_cache(cache_file)
                 return
         except (OSError, pickle.UnpicklingError, EOFError):

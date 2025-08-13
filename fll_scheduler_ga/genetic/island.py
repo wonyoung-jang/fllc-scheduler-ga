@@ -76,9 +76,9 @@ class Island:
         pop_size = self.ga_params.population_size
         num_to_create = pop_size - len(self.selected)
         if num_to_create <= 0:
-            self.context.logger.info("Initializing island %d with 0 individuals.", self.identity)
+            self.context.logger.debug("Initializing island %d with 0 individuals.", self.identity)
             return
-        self.context.logger.info("Initializing island %d with %d individuals.", self.identity, num_to_create)
+        self.context.logger.debug("Initializing island %d with %d individuals.", self.identity, num_to_create)
 
         _randlow, _randhigh = RANDOM_SEED_RANGE
         seeder = Random(self.rng.randint(_randlow, _randhigh))
