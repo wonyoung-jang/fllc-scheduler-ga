@@ -9,18 +9,21 @@ from random import Random
 from fll_scheduler_ga.config.app_config import AppConfig, create_app_config
 from fll_scheduler_ga.config.benchmark import FitnessBenchmark
 from fll_scheduler_ga.config.cli import create_parser
+from fll_scheduler_ga.config.ga_context import GaContext
 from fll_scheduler_ga.config.preflight import run_preflight_checks
 from fll_scheduler_ga.data_model.event import EventFactory
 from fll_scheduler_ga.data_model.team import TeamFactory
 from fll_scheduler_ga.genetic.fitness import FitnessEvaluator
 from fll_scheduler_ga.genetic.ga import GA
-from fll_scheduler_ga.genetic.ga_context import GaContext
 from fll_scheduler_ga.io.export import generate_summary, generate_summary_report
 from fll_scheduler_ga.io.importer import CsvImporter
 from fll_scheduler_ga.observers.loggers import LoggingObserver
 from fll_scheduler_ga.observers.progress import TqdmObserver
+from fll_scheduler_ga.operators.crossover import build_crossovers
+from fll_scheduler_ga.operators.mutation import build_mutations
 from fll_scheduler_ga.operators.nsga3 import NSGA3
 from fll_scheduler_ga.operators.repairer import Repairer
+from fll_scheduler_ga.operators.selection import build_selections
 
 logger = getLogger(__name__)
 
@@ -48,7 +51,7 @@ def setup_environment() -> tuple[Namespace, GA]:
 
 def handle_seed_file(args: Namespace, ga_context: GaContext) -> None:
     """Handle the seed file for the genetic algorithm."""
-    config = ga_context.config
+    config = ga_context.app_config.tournament
     path = Path(args.seed_file).resolve()
 
     if args.flush and path.exists():
@@ -87,7 +90,7 @@ def handle_seed_file(args: Namespace, ga_context: GaContext) -> None:
                 with path.open("wb") as f:
                     data_to_cache = {
                         "population": population,
-                        "config": ga_context.config,
+                        "config": ga_context.app_config.tournament,
                     }
                     pickle.dump(data_to_cache, f)
             except (OSError, pickle.PicklingError):
@@ -132,12 +135,15 @@ def create_ga_context(app_config: AppConfig) -> GaContext:
 
     num_objectives = len(evaluator.objectives)
     pop_size_ref_points = app_config.ga_params.population_size * app_config.ga_params.num_islands
-    pop_size_ref_points = max(pop_size_ref_points, 32)  # Ensure at least 32 reference points
     nsga3 = NSGA3(
         rng=app_config.rng,
         num_objectives=num_objectives,
         population_size=pop_size_ref_points,
     )
+
+    selections = tuple(build_selections(app_config))
+    crossovers = tuple(build_crossovers(app_config, team_factory, event_factory))
+    mutations = tuple(build_mutations(app_config))
 
     return GaContext(
         app_config=app_config,
@@ -147,6 +153,9 @@ def create_ga_context(app_config: AppConfig) -> GaContext:
         evaluator=evaluator,
         logger=logger,
         nsga3=nsga3,
+        selections=selections,
+        crossovers=crossovers,
+        mutations=mutations,
     )
 
 
@@ -172,7 +181,7 @@ def save_population_to_seed_file(ga: GA, seed_file: str | Path, *, front: bool =
 
     data_to_cache = {
         "population": population,
-        "config": ga.context.config,
+        "config": ga.context.app_config.tournament,
     }
 
     path = Path(seed_file)

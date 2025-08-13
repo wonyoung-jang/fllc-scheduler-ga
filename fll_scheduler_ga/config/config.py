@@ -35,17 +35,17 @@ class Round:
         """Represent the Round."""
         return (
             f"\n\tRound:"
-            f"\n\t  roundtype: {self.roundtype}"
-            f"\n\t  teams_per_round: {self.teams_per_round}"
-            f"\n\t  rounds_per_team: {self.rounds_per_team}"
-            f"\n\t  times: {self.times}"
-            f"\n\t  start_time: {self.start_time}"
-            f"\n\t  stop_time: {self.stop_time}"
-            f"\n\t  duration_minutes: {self.duration_minutes}"
-            f"\n\t  num_timeslots: {self.get_num_slots()}"
-            f"\n\t  num_teams: {self.num_teams}"
-            f"\n\t  location: {self.location}"
-            f"\n\t  locations: {self.locations}"
+            f"\n\t  roundtype        : {self.roundtype}"
+            f"\n\t  teams_per_round  : {self.teams_per_round}"
+            f"\n\t  rounds_per_team  : {self.rounds_per_team}"
+            f"\n\t  times            : {self.times}"
+            f"\n\t  start_time       : {self.start_time}"
+            f"\n\t  stop_time        : {self.stop_time}"
+            f"\n\t  duration_minutes : {self.duration_minutes}"
+            f"\n\t  num_timeslots    : {self.get_num_slots()}"
+            f"\n\t  num_teams        : {self.num_teams}"
+            f"\n\t  location         : {self.location}"
+            f"\n\t  locations        : {self.locations}"
         )
 
     def get_num_slots(self) -> int:
@@ -91,10 +91,10 @@ class TournamentConfig:
 
         return (
             f"\n\tTournamentConfig:"
-            f"\n\t  num_teams: {self.num_teams}"
-            f"\n\t  rounds: {rounds_str}"
-            f"\n\t  round_requirements: {round_reqs_str}"
-            f"\n\t  total_slots: {self.total_slots}"
-            f"\n\t  unique_opponents_possible: {self.unique_opponents_possible}"
-            f"\n\t  weights: {self.weights}"
+            f"\n\t  num_teams                 : {self.num_teams}"
+            f"\n\t  rounds                    : {rounds_str}"
+            f"\n\t  round_requirements        : {round_reqs_str}"
+            f"\n\t  total_slots               : {self.total_slots}"
+            f"\n\t  unique_opponents_possible : {self.unique_opponents_possible}"
+            f"\n\t  weights                   : {self.weights}"
         )

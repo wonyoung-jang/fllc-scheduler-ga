@@ -53,7 +53,6 @@ class Schedule:
     def __setitem__(self, event: Event, team: Team) -> None:
         """Assign a team to a specific event."""
         self.schedule[event] = team.identity
-        self._clear_cache()
 
     def __contains__(self, event: Event) -> bool:
         """Check if a specific event is scheduled."""
@@ -71,7 +70,7 @@ class Schedule:
             self._cached_hash = hash(self._get_canonical_representation())
         return self._cached_hash
 
-    def _clear_cache(self) -> None:
+    def clear_cache(self) -> None:
         """Clear cached values to ensure fresh calculations."""
         self._cached_all_teams = None
         self._cached_normalized_teams = None

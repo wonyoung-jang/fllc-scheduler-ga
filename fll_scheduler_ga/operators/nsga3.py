@@ -119,30 +119,28 @@ class NSGA3:
         all_schedules = [p for front in fronts for p in front]
         self._normalize_then_associate(all_schedules, last_front)
         counts = self._count(p.ref_point_idx for fr in fronts[:-1] for p in fr if p.ref_point_idx is not None)
-        pool = dict(enumerate(last_front))
+        pool = last_front
         selected = 0
 
         while selected < k and pool:
             picked = False
             min_count = min(counts)
             min_count_indices = [di for di, c in enumerate(counts) if c == min_count]
-            self.rng.shuffle(min_count_indices)
-            for d in min_count_indices:
-                if not (clst := [(i, p) for i, p in pool.items() if p.ref_point_idx == d]):
+            for d in self.rng.sample(min_count_indices, k=len(min_count_indices)):
+                if not (
+                    clst := sorted((p for p in pool if p.ref_point_idx == d), key=lambda p: p.distance_to_ref_point)
+                ):
                     continue
-                pi, _ = min(clst, key=lambda p: p[1].distance_to_ref_point) if counts[d] == 0 else self.rng.choice(clst)
                 counts[d] += 1
                 selected += 1
                 picked = True
-                pick = pool.pop(pi)
-                yield pick
+                yield pool.pop(0 if counts[d] == 0 else self.rng.randint(0, len(clst) - 1))
 
                 if selected >= k:
                     break
 
             if not picked and pool:
-                pi = self.rng.choice(list(pool.keys()))
-                pick = pool.pop(pi)
+                pick = pool.pop(self.rng.randint(0, len(pool) - 1))
                 counts[pick.ref_point_idx] += 1
                 selected += 1
                 yield pick

@@ -122,6 +122,7 @@ class EventCrossover(Crossover):
         p1_genes, p2_genes = self.get_genes(p1, p2)
         self._transfer_genes_from_parent1(child, p1, p1_genes)
         self._transfer_genes_from_parent2(child, p2, p2_genes)
+        child.clear_cache()
         return child
 
     def _transfer_genes_from_parent1(self, child: Schedule, parent: Schedule, events: Iterator[Event]) -> None:
@@ -248,7 +249,7 @@ class BestTeamCrossover(EventCrossover):
         p1_teams_best = set()
         p2_teams_best = set()
         for t1, t2 in zip(p1.all_teams(), p2.all_teams(), strict=True):
-            if all(f1 > f2 for f1, f2 in zip(t1.fitness, t2.fitness, strict=True)):
+            if sum(t1.fitness) > sum(t2.fitness):
                 p1_teams_best.update(t1.events)
             else:
                 p2_teams_best.update(t2.events)

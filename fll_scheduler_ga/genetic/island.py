@@ -6,10 +6,11 @@ from dataclasses import dataclass, field
 from random import Random
 
 from ..config.constants import ATTEMPTS_RANGE, RANDOM_SEED_RANGE
+from ..config.ga_context import GaContext
+from ..config.ga_parameters import GaParameters
 from ..data_model.schedule import Population, Schedule
 from ..operators.crossover import Crossover
 from .builder import ScheduleBuilder
-from .ga_context import GaContext
 
 
 @dataclass(slots=True)
@@ -20,18 +21,18 @@ class Island:
     rng: Random
     builder: ScheduleBuilder
     context: GaContext
+    ga_params: GaParameters
 
     selected: dict[int, Schedule] = field(default_factory=dict, init=False, repr=False)
     fitness_history: list[tuple] = field(default_factory=list, init=False, repr=False)
     offspring_ratio: Counter = field(default_factory=Counter, init=False, repr=False)
-    crossover_ratio: dict = field(default_factory=dict, init=False, repr=False)
-    mutation_ratio: dict = field(default_factory=dict, init=False, repr=False)
+    crossover_ratio: dict = field(default=None, init=False, repr=False)
+    mutation_ratio: dict = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
         self.crossover_ratio = {tracker: Counter() for tracker in ("success", "total")}
         self.mutation_ratio = {tracker: Counter() for tracker in ("success", "total")}
-        self.offspring_ratio = Counter()
 
     def __len__(self) -> int:
         """Return the number of individuals in the island's population."""
@@ -48,7 +49,7 @@ class Island:
             for i in range(len_objectives):
                 avg_fits[i] += p.fitness[i]
 
-        return tuple(s / len(pop) for s in avg_fits)
+        return tuple(avg_fit / len(pop) for avg_fit in avg_fits)
 
     def get_last_gen_fitness(self) -> tuple[float, ...]:
         """Get the fitness of the last generation."""
@@ -72,7 +73,7 @@ class Island:
 
     def initialize(self) -> None:
         """Initialize the population for each island."""
-        pop_size = self.context.ga_params.population_size
+        pop_size = self.ga_params.population_size
         num_to_create = pop_size - len(self.selected)
         if num_to_create <= 0:
             self.context.logger.info("Initializing island %d with 0 individuals.", self.identity)
@@ -89,6 +90,7 @@ class Island:
             schedule = self.builder.build()
 
             if self.context.repairer.repair(schedule) and self.add_to_population(schedule):
+                schedule.clear_cache()
                 schedule.fitness = self.context.evaluator.evaluate(schedule)
                 num_created += 1
             elif num_created == 0:
@@ -119,6 +121,7 @@ class Island:
             for child in crossover_op.crossover(parents):
                 self.crossover_ratio["total"][f"{crossover_op!s}"] += 1
                 if self.context.repairer.repair(child):
+                    child.clear_cache()
                     child.fitness = self.context.evaluator.evaluate(child)
                     offspring.add(child)
                     self.crossover_ratio["success"][f"{crossover_op!s}"] += 1
@@ -136,7 +139,7 @@ class Island:
         _cs = _context.crossovers
         _ms = _context.mutations
         _eval = _context.evaluator.evaluate
-        _ga_params = _context.ga_params
+        _ga_params = self.ga_params
         attempts, max_attempts = ATTEMPTS_RANGE
         child_count = 0
 
@@ -147,12 +150,7 @@ class Island:
 
             selection_op = self.rng.choice(_ss)
             parents = tuple(selection_op.select(island_pop, num_parents=2))
-
-            offspring = self.get_initial_offspring(
-                parents,
-                _cs,
-                crossover_roll=_crossover_roll,
-            )
+            offspring = self.get_initial_offspring(parents, _cs, crossover_roll=_crossover_roll)
 
             for child in offspring:
                 if _mutation_roll and _ms:
@@ -175,8 +173,7 @@ class Island:
     def get_migrants(self, migration_size: int) -> Iterator[tuple[int, Schedule]]:
         """Randomly yield migrants from population."""
         for migrant_hash in self.rng.sample(list(self.selected.keys()), k=migration_size):
-            migrant = self.selected.pop(migrant_hash)
-            yield (migrant_hash, migrant)
+            yield (migrant_hash, self.selected.pop(migrant_hash))
 
     def receive_migrants(self, migrants: Iterator[tuple[int, Schedule]]) -> None:
         """Receive migrants from another island and add them to the current island's population."""
@@ -184,30 +181,31 @@ class Island:
             self.add_to_population(migrant, migrant_hash)
 
         self.selected = self.context.nsga3.select(
-            self.selected.values(), population_size=self.context.ga_params.population_size
+            self.selected.values(), population_size=self.ga_params.population_size
         )
 
     def handle_underpopulation(self) -> None:
         """Handle underpopulation by adding new individuals to the island."""
-        if len(self.selected) >= self.context.ga_params.population_size:
+        if len(self.selected) >= self.ga_params.population_size:
             return
 
         self.context.logger.debug(
             "Island %d underpopulated: %d individuals, expected %d.",
             self.identity,
             len(self.selected),
-            self.context.ga_params.population_size,
+            self.ga_params.population_size,
         )
 
-        while len(self.selected) < self.context.ga_params.population_size:
+        while len(self.selected) < self.ga_params.population_size:
             seeder = Random(self.rng.randint(*RANDOM_SEED_RANGE))
             self.builder.rng = Random(seeder.randint(*RANDOM_SEED_RANGE))
             schedule = self.builder.build()
 
             self.offspring_ratio["total"] += 1
             if self.context.repairer.repair(schedule) and self.add_to_population(schedule):
-                self.offspring_ratio["success"] += 1
+                schedule.clear_cache()
                 schedule.fitness = self.context.evaluator.evaluate(schedule)
+                self.offspring_ratio["success"] += 1
 
     def finalize_island(self) -> Iterator[Schedule]:
         """Finalize the island's state after evolution."""

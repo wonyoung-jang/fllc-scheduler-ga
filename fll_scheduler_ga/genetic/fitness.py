@@ -22,26 +22,20 @@ class FitnessEvaluator:
 
     config: TournamentConfig
     benchmark: FitnessBenchmark
+    bt_cache: dict[Any, float] = field(default=None, init=False, repr=False)
+    tc_cache: dict[Any, float] = field(default=None, init=False, repr=False)
+    ov_cache: dict[Any, float] = field(default=None, init=False, repr=False)
     objectives: list[FitnessObjective] = field(default_factory=list, init=False)
     hit_bt_cache: dict[Any, float] = field(default_factory=dict, init=False, repr=False)
     hit_tc_cache: dict[Any, float] = field(default_factory=dict, init=False, repr=False)
     hit_ov_cache: dict[Any, float] = field(default_factory=dict, init=False, repr=False)
-    _bt_cache: dict[Any, float] = field(default=None, init=False, repr=False)
-    _tc_cache: dict[Any, float] = field(default=None, init=False, repr=False)
-    _ov_cache: dict[Any, float] = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the configuration."""
-        self.objectives.extend(
-            [
-                FitnessObjective.BREAK_TIME,
-                FitnessObjective.LOCATION_CONSISTENCY,
-                FitnessObjective.OPPONENT_VARIETY,
-            ]
-        )
-        self._bt_cache = self.benchmark.timeslots
-        self._tc_cache = self.benchmark.locations
-        self._ov_cache = self.benchmark.opponents
+        self.objectives.extend(tuple(FitnessObjective))
+        self.bt_cache = self.benchmark.timeslots
+        self.tc_cache = self.benchmark.locations
+        self.ov_cache = self.benchmark.opponents
 
     def check(self, schedule: Schedule) -> bool:
         """Check if the schedule meets hard constraints.
@@ -91,7 +85,7 @@ class FitnessEvaluator:
         scores = self.aggregate_team_fitnesses(schedule.all_teams())
         mean_scores = self.get_mean_scores(scores)
         var_scores = self.get_variation_scores(scores, mean_scores)
-        range_scores = self.get_range_scores(scores)
+        range_scores = FitnessEvaluator.get_range_scores(scores)
         mn_w, vr_w, rn_w = self.config.weights
 
         return tuple(
@@ -108,15 +102,19 @@ class FitnessEvaluator:
         """Aggregate fitness scores for all teams in the schedule."""
         scores = defaultdict(list)
 
-        for t, bt_key, tc_key, ov_key in self._yield_team_info(all_teams):
+        for t in all_teams:
+            bt_key = t.break_time_key()
+            tc_key = t.table_consistency_key()
+            ov_key = t.opponent_variety_key()
+
             if (bt_s := self.hit_bt_cache.get(bt_key)) is None:
-                bt_s = self.hit_bt_cache.setdefault(bt_key, self._bt_cache.pop(bt_key))
+                bt_s = self.hit_bt_cache.setdefault(bt_key, self.bt_cache.pop(bt_key))
 
             if (tc_s := self.hit_tc_cache.get(tc_key)) is None:
-                tc_s = self.hit_tc_cache.setdefault(tc_key, self._tc_cache.pop(tc_key))
+                tc_s = self.hit_tc_cache.setdefault(tc_key, self.tc_cache.pop(tc_key))
 
             if (ov_s := self.hit_ov_cache.get(ov_key)) is None:
-                ov_s = self.hit_ov_cache.setdefault(ov_key, self._ov_cache.pop(ov_key))
+                ov_s = self.hit_ov_cache.setdefault(ov_key, self.ov_cache.pop(ov_key))
 
             scores[FitnessObjective.BREAK_TIME].append(bt_s)
             scores[FitnessObjective.LOCATION_CONSISTENCY].append(tc_s)
@@ -125,11 +123,6 @@ class FitnessEvaluator:
             t.fitness = (bt_s, tc_s, ov_s)
 
         return scores.values()
-
-    def _yield_team_info(self, all_teams: list[Team]) -> Iterator[tuple[Team, frozenset[int], int, int]]:
-        """Yield keys for break time, table consistency, and opponent variety for each team."""
-        for t in all_teams:
-            yield t, t.break_time_key(), t.table_consistency_key(), t.opponent_variety_key()
 
     def get_mean_scores(self, scores: tuple[list[float], ...]) -> tuple[float, ...]:
         """Calculate the mean scores for each objective."""
@@ -143,7 +136,8 @@ class FitnessEvaluator:
         _coeff_of_vars = (std_dev / mean if mean else 0 for std_dev, mean in zip(_std_devs, means, strict=True))
         yield from (1 / (1 + coeff) if coeff else 1 for coeff in _coeff_of_vars)
 
-    def get_range_scores(self, scores: tuple[list[float], ...]) -> Iterator[float]:
+    @staticmethod
+    def get_range_scores(scores: tuple[list[float], ...]) -> Iterator[float]:
         """Calculate the range of scores for each objective."""
         _ranges = (max(lst) - min(lst) if lst else 1 for lst in scores)
         yield from (1 / (1 + range_val) if range_val else 1 for range_val in _ranges)

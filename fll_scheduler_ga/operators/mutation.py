@@ -195,7 +195,6 @@ class SwapTeamMutation(Mutation):
             e2a, _, t2a, t2b = match2_data
 
             match_team_ids = {t1a.identity, t1b.identity, t2a.identity, t2b.identity}
-
             if len(match_team_ids) < 4 or t1a.conflicts(e2a, ignore=e1a) or t2a.conflicts(e1a, ignore=e2a):
                 continue
 
@@ -223,6 +222,8 @@ class SwapTeamMutation(Mutation):
 
         child[e1a] = t2a
         child[e2a] = t1a
+
+        child.clear_cache()
 
         return True
 
@@ -277,6 +278,8 @@ class SwapMatchMutation(Mutation):
         child[e2a] = t1a
         child[e2b] = t1b
 
+        child.clear_cache()
+
         return True
 
 
@@ -301,8 +304,13 @@ class SwapTableSideMutation(Mutation):
             return False
 
         e1a, e1b, t1a, t1b = match_data
+
         t1a.switch_event(e1a, e1b)
         t1b.switch_event(e1b, e1a)
+
         child[e1a] = t1b
         child[e1b] = t1a
+
+        child.clear_cache()
+
         return True

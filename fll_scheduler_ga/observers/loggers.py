@@ -40,4 +40,4 @@ class LoggingObserver(GaObserver):
             self.logger.warning("No valid schedule was found after all generations.")
             return
 
-        self.logger.info("Final pareto front size: %d", len(front))
+        self.logger.info("Final pareto front size: %d/%d (%.2f%%)", len(front), len(pop), len(front) / len(pop) * 100)

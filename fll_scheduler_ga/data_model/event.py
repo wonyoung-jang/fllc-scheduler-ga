@@ -115,7 +115,7 @@ class EventFactory:
 
     def as_list(self) -> list[Event]:
         """Get a flat list of all Events across all RoundTypes."""
-        if not self._cached_list:
+        if self._cached_list is None:
             self._cached_list = [e for el in self._cached_events.values() for e in el]
             for i, event in enumerate(self._cached_list, start=1):
                 event.identity = i
@@ -123,7 +123,7 @@ class EventFactory:
 
     def as_mapping(self) -> EventMap:
         """Get a mapping of event identities to Event objects."""
-        if not self._cached_mapping:
+        if self._cached_mapping is None:
             self._cached_mapping = {e.identity: e for e in self.as_list()}
         return self._cached_mapping
 

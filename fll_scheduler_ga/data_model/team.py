@@ -28,7 +28,7 @@ class Team:
     identity: int
     roundreqs: dict[RoundType, int]
     fitness: tuple[float, ...] = field(init=False, repr=False)
-    events: list[int] = field(default_factory=list, repr=False)
+    events: set[int] = field(default_factory=set, repr=False)
     timeslots: list[TimeSlot] = field(default_factory=list, repr=False)
     opponents: list[int] = field(default_factory=list, repr=False)
     tables: list[int] = field(default_factory=list, repr=False)
@@ -61,7 +61,7 @@ class Team:
     def add_event(self, event: Event) -> None:
         """Book a team for an event."""
         self.roundreqs[event.roundtype] -= 1
-        self.events.append(event.identity)
+        self.events.add(event.identity)
         self.timeslots.append(event.timeslot)
         if event.paired:
             self.tables.append(event.location)
@@ -90,14 +90,20 @@ class Team:
             bool: True if there is a conflict, False otherwise.
 
         """
-        _events = [e for e in self.events if e != ignore.identity] if ignore else self.events
-        if new_event.identity in _events:
-            return True
+        _events = self.events
 
-        if not (potential_conflicts := new_event.conflicts):
-            return False
+        if ignore and ignore.identity in _events:
+            _events.remove(ignore.identity)
 
-        return any(existing_event_id in potential_conflicts for existing_event_id in _events)
+        conflict_found = new_event.identity in _events
+
+        if not conflict_found and new_event.conflicts and not _events.isdisjoint(new_event.conflicts):
+            conflict_found = True
+
+        if ignore:
+            _events.add(ignore.identity)
+
+        return conflict_found
 
     def break_time_key(self) -> frozenset[int]:
         """Get a key for the break time cache based on the team's events."""

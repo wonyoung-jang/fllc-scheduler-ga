@@ -38,7 +38,7 @@ class ScheduleBuilder:
                 self._build_singles(schedule, rt, evts, teams)
             else:
                 self._build_matches(schedule, rt, evts, teams)
-
+        schedule.clear_cache()
         return schedule
 
     def _build_singles(self, schedule: Schedule, rt: RoundType, events: list[Event], teams: list[Team]) -> None:

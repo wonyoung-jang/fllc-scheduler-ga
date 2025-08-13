@@ -41,6 +41,7 @@ class CsvImporter:
         team_factory = TeamFactory(self.config)
         self.schedule = Schedule(team_factory.build())
         self.import_schedule()
+        self.schedule.clear_cache()
 
         if not self.schedule:
             logger.error("Failed to reconstruct schedule from CSV. Aborting.")

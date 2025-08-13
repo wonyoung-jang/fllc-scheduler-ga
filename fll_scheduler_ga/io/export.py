@@ -61,7 +61,12 @@ def generate_summary(args: Namespace, ga: GA) -> None:
         team_schedules_subdir = output_dir / "team_schedules"
         team_schedules_subdir.mkdir(parents=True, exist_ok=True)
         team_schedules_output_path = team_schedules_subdir / f"{name}_team_schedule.csv"
-        generate_team_schedules(schedule, ga.context.event_factory, ga.context.config, team_schedules_output_path)
+        generate_team_schedules(
+            schedule,
+            ga.context.event_factory,
+            ga.context.app_config.tournament,
+            team_schedules_output_path,
+        )
 
     pareto_summary_path = output_dir / "pareto_summary.csv"
     generate_pareto_summary(ga.total_population, ga.context.evaluator.objectives, pareto_summary_path)
@@ -74,9 +79,15 @@ def generate_summary_report(schedule: Schedule, objectives: list[FitnessObjectiv
 
     try:
         with path.open("w", encoding="utf-8") as f:
-            f.write(f"--- FLL Scheduler GA Summary Report (ID: {id(schedule)} | Hash: {hash(schedule)}) ---\n\n")
-            f.write("Objective Scores:\n")
+            f.write(f"--- FLL Scheduler GA Summary Report (ID: {id(schedule)} | Hash: {hash(schedule)}) ---\n")
 
+            f.write("\nSchedule Attributes:\n")
+            for slot in schedule.__slots__:
+                if slot.startswith("_") or slot in ("teams", "schedule"):
+                    continue
+                f.write(f"  - {slot}: {getattr(schedule, slot)}\n")
+
+            f.write("\nObjective Scores:\n")
             for name, score in zip(objectives, schedule.fitness, strict=True):
                 f.write(f"  - {name:<{max_len_obj}}: {score:.6f}\n")
 

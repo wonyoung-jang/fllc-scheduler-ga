@@ -29,15 +29,15 @@ class GaParameters:
         """Representation of GA parameters."""
         return (
             f"\n\tGaParameters:"
-            f"\n\t  population_size: {self.population_size}"
-            f"\n\t  generations: {self.generations}"
-            f"\n\t  offspring_size: {self.offspring_size}"
-            f"\n\t  selection_size: {self.selection_size}"
-            f"\n\t  crossover_chance: {self.crossover_chance:.2f}"
-            f"\n\t  mutation_chance: {self.mutation_chance:.2f}"
-            f"\n\t  num_islands: {self.num_islands}"
-            f"\n\t  migration_interval: {self.migration_interval}"
-            f"\n\t  migration_size: {self.migration_size}"
+            f"\n\t  population_size    : {self.population_size}"
+            f"\n\t  generations        : {self.generations}"
+            f"\n\t  offspring_size     : {self.offspring_size}"
+            f"\n\t  selection_size     : {self.selection_size}"
+            f"\n\t  crossover_chance   : {self.crossover_chance:.2f}"
+            f"\n\t  mutation_chance    : {self.mutation_chance:.2f}"
+            f"\n\t  num_islands        : {self.num_islands}"
+            f"\n\t  migration_interval : {self.migration_interval}"
+            f"\n\t  migration_size     : {self.migration_size}"
         )
 
     def _validate(self) -> None:

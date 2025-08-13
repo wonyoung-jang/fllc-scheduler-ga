@@ -74,7 +74,10 @@ def load_operator_config(parser: ConfigParser) -> OperatorConfig:
     if parser.has_option("genetic.operator.selection", "selection_types"):
         selection_types = _parse_operator_types(parser, "genetic.operator.selection", "selection_types", "")
     else:
-        selection_types = [SelectionOp.TOURNAMENT_SELECT, SelectionOp.RANDOM_SELECT]
+        selection_types = [
+            SelectionOp.TOURNAMENT_SELECT,
+            SelectionOp.RANDOM_SELECT,
+        ]
         logger.warning("%s not found in config. Using defaults: %s", "selection_types", selection_types)
 
     if parser.has_option("genetic.operator.crossover", "crossover_types"):
@@ -85,14 +88,19 @@ def load_operator_config(parser: ConfigParser) -> OperatorConfig:
             CrossoverOp.SCATTERED,
             CrossoverOp.UNIFORM,
             CrossoverOp.ROUND_TYPE_CROSSOVER,
-            CrossoverOp.PARTIAL_CROSSOVER,
+            CrossoverOp.BEST_TEAM_CROSSOVER,
         ]
         logger.warning("%s not found in config. Using defaults: %s", "crossover_types", crossover_types)
 
     if parser.has_option("genetic.operator.crossover", "crossover_ks"):
         crossover_ks = _parse_operator_types(parser, "genetic.operator.crossover", "crossover_ks", "", "int")
     else:
-        crossover_ks = [1, 2, 3]
+        crossover_ks = [
+            1,
+            2,
+            4,
+            8,
+        ]
         logger.warning("%s not found in config. Using defaults: %s", "crossover_ks", crossover_ks)
 
     if parser.has_option("genetic.operator.mutation", "mutation_types"):
