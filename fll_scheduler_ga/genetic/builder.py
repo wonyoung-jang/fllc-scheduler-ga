@@ -50,6 +50,10 @@ class ScheduleBuilder:
         """Book all events for a specific round type."""
         for side1, side2 in ((e, e.paired) for e in events if e.location.side == 1):
             available = (t for t in teams if t.needs_round(rt) and not t.conflicts(side1))
-            if (team1 := next(available, None)) is None or (team2 := next(available, None)) is None:
+            team1 = next(available, None)
+            if team1 is None:
+                continue
+            team2 = next(available, None)
+            if team2 is None:
                 continue
             schedule.assign_match(side1, side2, team1, team2)

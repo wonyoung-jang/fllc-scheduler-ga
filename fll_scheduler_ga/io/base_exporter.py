@@ -33,7 +33,7 @@ class Exporter(ABC):
     def _group_by_type(self, schedule: Schedule) -> dict[RoundType, Individual]:
         """Group the schedule by round type."""
         grouped = {}
-        normalized_teams = schedule.normalize_teams()
+        normalized_teams = schedule.normalized_teams()
         for event, team in sorted(schedule.items(), key=lambda item: (item[0].identity)):
             grouped.setdefault(event.roundtype, {})
             grouped[event.roundtype][event] = normalized_teams.get(team)

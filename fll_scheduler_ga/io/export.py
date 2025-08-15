@@ -107,7 +107,7 @@ def generate_summary_report(schedule: Schedule, objectives: list[FitnessObjectiv
             f.write(f"Range   : {max_team_f - min_team_f:.6f}\n")
             f.write(f"Average : {sum(total_fitnesses) / len(total_fitnesses):.6f}\n\n")
 
-            normalized_teams = schedule.normalize_teams()
+            normalized_teams = schedule.normalized_teams()
 
             objectives_header = (f"{name:<{len_objectives[i] + 1}}" for i, name in enumerate(objectives))
             objectives_header_str = "|".join(objectives_header)

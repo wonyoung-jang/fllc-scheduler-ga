@@ -79,11 +79,11 @@ class Mutation(ABC):
     same_location: bool = False
 
     @abstractmethod
-    def get_swap_candidates(self, child: Schedule) -> tuple[Match | None]:
-        """Get candidates for swapping teams in the child schedule.
+    def get_swap_candidates(self, schedule: Schedule) -> tuple[Match | None]:
+        """Get candidates for swapping teams in the schedule schedule.
 
         Args:
-            child (Schedule): The schedule to analyze.
+            schedule (Schedule): The schedule to analyze.
 
         Returns:
             tuple[Match | None]: A tuple containing two matches to swap,
@@ -94,11 +94,11 @@ class Mutation(ABC):
         raise NotImplementedError(msg)
 
     @abstractmethod
-    def mutate(self, child: Schedule) -> bool:
-        """Mutate a child schedule to introduce genetic diversity.
+    def mutate(self, schedule: Schedule) -> bool:
+        """Mutate a schedule schedule to introduce genetic diversity.
 
         Args:
-            child (Schedule): The schedule to mutate.
+            schedule (Schedule): The schedule to mutate.
 
         Returns:
             bool: True if mutation was successful, False otherwise.
@@ -107,17 +107,17 @@ class Mutation(ABC):
         msg = "Mutate method must be implemented by subclasses."
         raise NotImplementedError(msg)
 
-    def get_match_pool(self, child: Schedule) -> Iterator[Match]:
-        """Get a pool of matches from the child schedule.
+    def get_match_pool(self, schedule: Schedule) -> Iterator[Match]:
+        """Get a pool of matches from the schedule schedule.
 
         Args:
-            child (Schedule): The schedule to analyze.
+            schedule (Schedule): The schedule to analyze
 
         Yields:
             Match: A match consisting of two events and their associated teams.
 
         """
-        matches = child.get_matches()
+        matches = schedule.matches()
 
         if len(matches) < 2:
             return
@@ -126,24 +126,24 @@ class Mutation(ABC):
         match_pool = matches[target_roundtype]
         yield from self.rng.sample(match_pool, k=len(match_pool))
 
-    def yield_swap_candidates(self, child: Schedule) -> Iterator[tuple[Match, ...]]:
+    def yield_swap_candidates(self, schedule: Schedule) -> Iterator[tuple[Match, ...]]:
         """Yield candidates for swapping teams in matches.
 
         Args:
-            child (Schedule): The schedule to analyze.
+            schedule (Schedule): The schedule to analyze.
 
         Yields:
             tuple[Match, ...]: A tuple containing two matches to swap.
 
         """
-        match_pool = self.get_match_pool(child)
+        match_pool = self.get_match_pool(schedule)
 
         for match1_data in match_pool:
             if (match2_data := next(match_pool, None)) is None:
                 return
 
-            e1a = match1_data[0]
-            e2a = match2_data[0]
+            e1a, _, _, _ = match1_data
+            e2a, _, _, _ = match2_data
 
             if not self._validate_swap(e1a, e2a):
                 continue
@@ -188,9 +188,9 @@ class SwapTeamMutation(Mutation):
             (False, True): MutationOp.SWAP_TEAM_SAME_TIME,
         }.get((self.same_location, self.same_timeslot), self.__class__.__name__)
 
-    def get_swap_candidates(self, child: Schedule) -> tuple[Match | None]:
-        """Get two matches to swap in the child schedule."""
-        for match1_data, match2_data in self.yield_swap_candidates(child):
+    def get_swap_candidates(self, schedule: Schedule) -> tuple[Match | None]:
+        """Get two matches to swap in the schedule schedule."""
+        for match1_data, match2_data in self.yield_swap_candidates(schedule):
             e1a, _, t1a, t1b = match1_data
             e2a, _, t2a, t2b = match2_data
 
@@ -202,9 +202,9 @@ class SwapTeamMutation(Mutation):
 
         return None, None
 
-    def mutate(self, child: Schedule) -> bool:
+    def mutate(self, schedule: Schedule) -> bool:
         """Swap one team from two different matches."""
-        match1_data, match2_data = self.get_swap_candidates(child)
+        match1_data, match2_data = self.get_swap_candidates(schedule)
 
         if not match1_data:
             return False
@@ -220,10 +220,10 @@ class SwapTeamMutation(Mutation):
         t1a.switch_event(e1a, e2a)
         t2a.switch_event(e2a, e1a)
 
-        child[e1a] = t2a
-        child[e2a] = t1a
+        schedule[e1a] = t2a
+        schedule[e2a] = t1a
 
-        child.clear_cache()
+        schedule.clear_cache()
 
         return True
 
@@ -240,9 +240,9 @@ class SwapMatchMutation(Mutation):
             (False, True): MutationOp.SWAP_MATCH_SAME_TIME,
         }.get((self.same_location, self.same_timeslot), self.__class__.__name__)
 
-    def get_swap_candidates(self, child: Schedule) -> tuple[Match | None]:
-        """Get two matches to swap in the child schedule."""
-        for match1_data, match2_data in self.yield_swap_candidates(child):
+    def get_swap_candidates(self, schedule: Schedule) -> tuple[Match | None]:
+        """Get two matches to swap in the schedule schedule."""
+        for match1_data, match2_data in self.yield_swap_candidates(schedule):
             e1a, e1b, t1a, t1b = match1_data
             e2a, e2b, t2a, t2b = match2_data
 
@@ -258,9 +258,9 @@ class SwapMatchMutation(Mutation):
 
         return None, None
 
-    def mutate(self, child: Schedule) -> bool:
+    def mutate(self, schedule: Schedule) -> bool:
         """Swap two entire matches."""
-        match1_data, match2_data = self.get_swap_candidates(child)
+        match1_data, match2_data = self.get_swap_candidates(schedule)
 
         if not match1_data:
             return False
@@ -273,12 +273,12 @@ class SwapMatchMutation(Mutation):
         t2a.switch_event(e2a, e1a)
         t2b.switch_event(e2b, e1b)
 
-        child[e1a] = t2a
-        child[e1b] = t2b
-        child[e2a] = t1a
-        child[e2b] = t1b
+        schedule[e1a] = t2a
+        schedule[e1b] = t2b
+        schedule[e2a] = t1a
+        schedule[e2b] = t1b
 
-        child.clear_cache()
+        schedule.clear_cache()
 
         return True
 
@@ -290,15 +290,15 @@ class SwapTableSideMutation(Mutation):
         """Return string representation."""
         return MutationOp.SWAP_TABLE_SIDE
 
-    def get_swap_candidates(self, child: Schedule) -> Match | None:
-        """Get two matches to swap in the child schedule."""
-        if (next_swap := next(self.yield_swap_candidates(child), None)) is not None:
+    def get_swap_candidates(self, schedule: Schedule) -> Match | None:
+        """Get two matches to swap in the schedule schedule."""
+        if (next_swap := next(self.yield_swap_candidates(schedule), None)) is not None:
             return self.rng.choice(next_swap)
         return None
 
-    def mutate(self, child: Schedule) -> bool:
+    def mutate(self, schedule: Schedule) -> bool:
         """Swap the sides of two tables in a match."""
-        match_data = self.get_swap_candidates(child)
+        match_data = self.get_swap_candidates(schedule)
 
         if not match_data:
             return False
@@ -308,9 +308,9 @@ class SwapTableSideMutation(Mutation):
         t1a.switch_event(e1a, e1b)
         t1b.switch_event(e1b, e1a)
 
-        child[e1a] = t1b
-        child[e1b] = t1a
+        schedule[e1a] = t1b
+        schedule[e1b] = t1a
 
-        child.clear_cache()
+        schedule.clear_cache()
 
         return True

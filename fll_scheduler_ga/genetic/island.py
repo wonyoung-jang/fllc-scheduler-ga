@@ -119,12 +119,13 @@ class Island:
         if crossover_roll and cs:
             crossover_op = self.rng.choice(self.context.crossovers)
             for child in crossover_op.crossover(parents):
-                self.crossover_ratio["total"][f"{crossover_op!s}"] += 1
+                _c_str = str(crossover_op)
+                self.crossover_ratio["total"][_c_str] += 1
                 if self.context.repairer.repair(child):
                     child.clear_cache()
                     child.fitness = self.context.evaluator.evaluate(child)
                     offspring.add(child)
-                    self.crossover_ratio["success"][f"{crossover_op!s}"] += 1
+                    self.crossover_ratio["success"][_c_str] += 1
         elif not cs:
             offspring.update(parents)
         return offspring
@@ -155,9 +156,10 @@ class Island:
             for child in offspring:
                 if _mutation_roll and _ms:
                     mutation_op = self.rng.choice(_ms)
-                    self.mutation_ratio["total"][f"{mutation_op!s}"] += 1
+                    _m_str = str(mutation_op)
+                    self.mutation_ratio["total"][_m_str] += 1
                     if mutation_op.mutate(child):
-                        self.mutation_ratio["success"][f"{mutation_op!s}"] += 1
+                        self.mutation_ratio["success"][_m_str] += 1
 
                 self.offspring_ratio["total"] += 1
                 if self.add_to_population(child):
@@ -172,13 +174,13 @@ class Island:
 
     def get_migrants(self, migration_size: int) -> Iterator[tuple[int, Schedule]]:
         """Randomly yield migrants from population."""
-        for migrant_hash in self.rng.sample(list(self.selected.keys()), k=migration_size):
-            yield (migrant_hash, self.selected.pop(migrant_hash))
+        for m_hash in self.rng.sample(list(self.selected.keys()), k=migration_size):
+            yield (m_hash, self.selected.pop(m_hash))
 
     def receive_migrants(self, migrants: Iterator[tuple[int, Schedule]]) -> None:
         """Receive migrants from another island and add them to the current island's population."""
-        for migrant_hash, migrant in migrants:
-            self.add_to_population(migrant, migrant_hash)
+        for m_hash, migrant in migrants:
+            self.add_to_population(migrant, s_hash=m_hash)
 
         self.selected = self.context.nsga3.select(
             self.selected.values(), population_size=self.ga_params.population_size

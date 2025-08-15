@@ -22,8 +22,13 @@ logger = logging.getLogger(__name__)
 def build_selections(app_config: AppConfig) -> Iterator["Selection"]:
     """Build and return a tuple of selection operators based on the configuration."""
     variant_map = {
-        SelectionOp.TOURNAMENT_SELECT: lambda: TournamentSelect(app_config.rng, app_config.ga_params.selection_size),
-        SelectionOp.RANDOM_SELECT: lambda: RandomSelect(app_config.rng),
+        SelectionOp.TOURNAMENT_SELECT: lambda: TournamentSelect(
+            app_config.rng,
+            app_config.ga_params.selection_size,
+        ),
+        SelectionOp.RANDOM_SELECT: lambda: RandomSelect(
+            app_config.rng,
+        ),
     }
 
     if not app_config.operators.selection_types:
@@ -60,8 +65,8 @@ class TournamentSelect(Selection):
 
     def select(self, population: Population, num_parents: int) -> Iterator[Schedule]:
         """Select individuals using NSGA-III tournament selection."""
-        contenders = self.rng.sample(population, k=self.tournament_size)
-        tournament = sorted(contenders, key=lambda p: (p.rank, self.rng.choice([True, False])))
+        tournament = self.rng.sample(population, k=self.tournament_size)
+        tournament.sort(key=lambda p: (p.rank, self.rng.choice([True, False])))
         yield from tournament[:num_parents]
 
 

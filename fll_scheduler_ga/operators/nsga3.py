@@ -5,6 +5,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from itertools import combinations
 from logging import getLogger
+from math import comb
 
 import numpy as np
 
@@ -26,18 +27,13 @@ class NSGA3:
         """Post-initialization to generate reference points."""
         self._generate_reference_points()
 
-    def _get_num_divisions(self) -> int:
-        """Calculate the number of divisions for reference point generation."""
-        p = 1
-        m = self.num_objectives
-        while len(list(combinations(range(p + m - 1), m - 1))) < self.population_size:
-            p += 1
-        return p
-
     def _generate_reference_points(self) -> None:
         """Generate a set of structured reference points."""
-        p = self._get_num_divisions()
         m = self.num_objectives
+        p = 1
+        while comb(p + m - 1, m - 1) < self.population_size:
+            p += 1
+
         points = []
         for c in combinations(range(p + m - 1), m - 1):
             coords = []
@@ -51,23 +47,26 @@ class NSGA3:
         self.ref_points = np.array(points)
         logger.debug("Generated %d reference points:\n%s", len(self.ref_points), self.ref_points)
 
-    def select(self, population: Population | None, population_size: int = 0) -> dict[int, Schedule]:
+    def select(self, population: Population | None, population_size: int) -> dict[int, Schedule]:
         """Select the next generation using NSGA-III principles."""
         if not isinstance(population, list):
             population = list(population)
 
-        pop_size = population_size
         fronts = self._non_dominated_sort(population)
-        last_idx = self._get_last_front_idx(fronts, pop_size)
+        last_idx = self._get_last_front_idx(fronts, population_size)
 
         selected = [p for i in range(last_idx) for p in fronts[i]]
-        if len(selected) == pop_size:
+        if len(selected) == population_size:
             return {hash(p): p for p in selected}
 
-        last_front = fronts[last_idx]
-        fronts_to_last = fronts[: last_idx + 1]
-        k = pop_size - len(selected)
-        selected.extend(self._niching(fronts_to_last, last_front, k))
+        k = population_size - len(selected)
+        selected.extend(
+            self._niching(
+                fronts=fronts[: last_idx + 1],
+                last_front=fronts[last_idx],
+                k=k,
+            )
+        )
         return {hash(p): p for p in selected}
 
     def _get_last_front_idx(self, fronts: list[Population], pop_size: int) -> int:
@@ -125,46 +124,49 @@ class NSGA3:
         while selected < k and pool:
             picked = False
             min_count = min(counts)
-            min_count_indices = [di for di, c in enumerate(counts) if c == min_count]
-            for d in self.rng.sample(min_count_indices, k=len(min_count_indices)):
-                if not (
-                    clst := sorted((p for p in pool if p.ref_point_idx == d), key=lambda p: p.distance_to_ref_point)
-                ):
+            for d in (i for i, c in enumerate(counts) if c == min_count):
+                cluster = [p for p in pool if p.ref_point_idx == d]
+                if not cluster:
                     continue
+                cluster.sort(key=lambda p: p.distance_to_ref_point)
+                pick = (
+                    cluster.pop(0)
+                    if counts[d] == min_count
+                    else cluster.pop(
+                        self.rng.randrange(0, len(cluster)),
+                    )
+                )
+                yield pick
+                pool.remove(pick)
                 counts[d] += 1
                 selected += 1
                 picked = True
-                yield pool.pop(0 if counts[d] == 0 else self.rng.randint(0, len(clst) - 1))
-
                 if selected >= k:
                     break
-
             if not picked and pool:
-                pick = pool.pop(self.rng.randint(0, len(pool) - 1))
-                counts[pick.ref_point_idx] += 1
+                pick = pool.pop(self.rng.randrange(0, len(pool)))
+                if pick.ref_point_idx is not None and 0 <= pick.ref_point_idx < len(counts):
+                    counts[pick.ref_point_idx] += 1
                 selected += 1
                 yield pick
 
-    def _normalize_then_associate(self, pop: list[Schedule], last_front: Population) -> None:
+    def _normalize_then_associate(self, pop: Population, last_front: Population) -> None:
         """Normalize objectives then associate individuals with nearest reference points."""
-        all_fitnesses = [p.fitness for p in pop]
-        all_fitnesses_last = [p.fitness for p in last_front]
-
-        fits = np.array(all_fitnesses)
-        fits_last = np.array(all_fitnesses_last)
+        fits = np.array([p.fitness for p in pop])
+        fits_last = np.array([p.fitness for p in last_front]) if last_front else fits
 
         # Calculate nadir point by taking the max from each objective across the last front considered
         ideal = fits.min(axis=0)
-        nadir = fits_last.max(axis=0) if last_front else fits.max(axis=0)
-
+        nadir = fits_last.max(axis=0)
         span = nadir - ideal
-        span[span == 0] = 1e-6
+        span[span == 0] = 1e-12
 
         for p, fit in zip(pop, fits, strict=True):
             p.normalized_fitness = (fit - ideal) / span
-            dists = np.sum((p.normalized_fitness - self.ref_points) ** 2, axis=1)
-            p.ref_point_idx = np.argmin(dists)
-            p.distance_to_ref_point = dists[p.ref_point_idx]
+            dists = np.sum((self.ref_points - p.normalized_fitness) ** 2, axis=1)
+            min_dist = int(np.argmin(dists))
+            p.ref_point_idx = min_dist
+            p.distance_to_ref_point = float(dists[min_dist])
 
     def _count(self, idx_to_count: Iterator[int]) -> list[int]:
         """Count how many individuals are associated with each reference point."""

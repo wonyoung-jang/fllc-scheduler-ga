@@ -187,6 +187,7 @@ def save_population_to_seed_file(ga: GA, seed_file: str | Path, *, front: bool =
 
     path = Path(seed_file)
     logger.debug("Saving final population of size %d to seed file: %s", len(population), path)
+
     try:
         with path.open("wb") as f:
             pickle.dump(data_to_cache, f)

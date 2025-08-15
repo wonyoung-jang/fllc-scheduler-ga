@@ -86,8 +86,13 @@ class GA:
 
     def _get_this_gen_fitness(self) -> tuple[float, ...]:
         """Calculate the average fitness of the current generation."""
-        island_last_gens = (i.get_last_gen_fitness() for i in self.islands)
-        return tuple(sum(s) / len(self.islands) for s in zip(*island_last_gens, strict=True))
+        return tuple(
+            sum(s) / len(self.islands)
+            for s in zip(
+                *(i.get_last_gen_fitness() for i in self.islands),
+                strict=True,
+            )
+        )
 
     def _get_last_gen_fitness(self) -> tuple[float, ...]:
         """Get the fitness of the last generation."""
@@ -99,13 +104,13 @@ class GA:
         m_chance = self.ga_params.mutation_chance
         len_improvements = len(self.fitness_improvement_history)
 
-        if len_improvements >= 10:
-            last_improvements = self.fitness_improvement_history[-len_improvements // 5 :]
+        if len_improvements >= self.ga_params.migration_interval:
+            last_improvements = self.fitness_improvement_history[-self.ga_params.migration_interval :]
             improved_ratio = last_improvements.count(1) / len(last_improvements)
 
             # Less than 1/5 generations improved -> decrease operator chance / exploit
             if improved_ratio < 0.2:
-                self.ga_params.crossover_chance = max(0.01, c_chance * EPSILON)
+                self.ga_params.crossover_chance = max(0.001, c_chance * EPSILON)
                 self.ga_params.mutation_chance = max(0.001, m_chance * EPSILON)
                 self.context.logger.debug(
                     "Reduced crossover chance to %.2f and mutation chance to %.2f",
@@ -114,8 +119,8 @@ class GA:
                 )
             # More than 1/5 generations improved -> increase operator chance / explore
             elif improved_ratio > 0.2:
-                self.ga_params.crossover_chance = min(0.9999, c_chance / EPSILON)
-                self.ga_params.mutation_chance = min(0.9999, m_chance / EPSILON)
+                self.ga_params.crossover_chance = min(0.999, c_chance / EPSILON)
+                self.ga_params.mutation_chance = min(0.999, m_chance / EPSILON)
                 self.context.logger.debug(
                     "Increased crossover chance to %.2f and mutation chance to %.2f",
                     self.ga_params.crossover_chance,
@@ -126,11 +131,13 @@ class GA:
         """Update the fitness history with the current generation's fitness."""
         this_gen_fitness = self._get_this_gen_fitness()
         last_gen_fitness = self._get_last_gen_fitness()
+        sum_this_gen_fitness = sum(this_gen_fitness) if this_gen_fitness else 0.0
+        sum_last_gen_fitness = sum(last_gen_fitness) if last_gen_fitness else 0.0
 
         if self.fitness_history:
-            if sum(last_gen_fitness) < sum(this_gen_fitness):
+            if sum_last_gen_fitness < sum_this_gen_fitness:
                 self.fitness_improvement_history.append(1)
-            elif sum(last_gen_fitness) > sum(this_gen_fitness):
+            elif sum_last_gen_fitness > sum_this_gen_fitness:
                 self.fitness_improvement_history.append(-1)
             else:
                 self.fitness_improvement_history.append(0)
@@ -197,23 +204,27 @@ class GA:
     def run_epochs(self) -> None:
         """Perform main evolution loop: generations and migrations."""
         for generation in range(1, self.ga_params.generations + 1):
-            if self._migration_condition(generation):
-                self.migrate()
+            self._run_epoch(generation)
 
-            for island in self.islands:
-                island.handle_underpopulation()
-                island.evolve()
-                island.update_fitness_history()
+    def _run_epoch(self, generation: int) -> None:
+        """Run a single epoch of the genetic algorithm."""
+        if self._migration_condition(generation):
+            self.migrate()
 
-            self._notify_on_generation_end(
-                generation,
-                self.ga_params.generations,
-                len(self),
-                self.fitness_history[-1] if self.fitness_history else (),
-                len(self.pareto_front()),
-            )
+        for island in self.islands:
+            island.handle_underpopulation()
+            island.evolve()
+            island.update_fitness_history()
 
-            self.update_fitness_history()
+        self._notify_on_generation_end(
+            generation,
+            self.ga_params.generations,
+            len(self),
+            self.fitness_history[-1] if self.fitness_history else (),
+            len(self.pareto_front()),
+        )
+
+        self.update_fitness_history()
 
     def _migration_condition(self, generation: int) -> bool:
         """Check if migration should occur based on the generation and migration interval."""

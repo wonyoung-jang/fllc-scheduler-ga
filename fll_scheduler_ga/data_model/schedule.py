@@ -44,8 +44,7 @@ class Schedule:
     def __getitem__(self, event: Event) -> Team:
         """Get the team assigned to a specific event."""
         try:
-            team_id = self.schedule[event]
-            return self.teams[team_id]
+            return self.teams[self.schedule[event]]
         except KeyError:
             msg = f"The event {event} is not scheduled."
             raise KeyError(msg) from None
@@ -62,12 +61,12 @@ class Schedule:
         """Two Schedules are equal if they assign the same teams to the same events."""
         if not isinstance(other, Schedule):
             return NotImplemented
-        return self._get_canonical_representation() == other._get_canonical_representation()
+        return self.canonical_representation() == other.canonical_representation()
 
     def __hash__(self) -> int:
         """Hash is based on the frozenset of (event_id, team_id) pairs."""
         if self._cached_hash is None:
-            self._cached_hash = hash(self._get_canonical_representation())
+            self._cached_hash = hash(self.canonical_representation())
         return self._cached_hash
 
     def clear_cache(self) -> None:
@@ -114,14 +113,14 @@ class Schedule:
             self._cached_all_teams = list(self.teams.values())
         return self._cached_all_teams
 
-    def _get_canonical_representation(self) -> frozenset[frozenset[int]]:
+    def canonical_representation(self) -> frozenset[frozenset[int]]:
         """Get a canonical representation of the schedule for hashing."""
         if self._cached_canonical_representation is None:
             team_events = (frozenset(t.events) for t in self.teams.values())
             self._cached_canonical_representation = frozenset(team_events)
         return self._cached_canonical_representation
 
-    def get_matches(self) -> dict[RoundType, list[Match]]:
+    def matches(self) -> dict[RoundType, list[Match]]:
         """Get all matches in the schedule."""
         if self._cached_matches is None:
             self._cached_matches = defaultdict(list)
@@ -134,7 +133,7 @@ class Schedule:
                     self._cached_matches[rt].append((event1, event2, self.teams[t1], self.teams[t2]))
         return self._cached_matches
 
-    def normalize_teams(self) -> dict[int, int]:
+    def normalized_teams(self) -> dict[int, int]:
         """Normalize the schedule by reassigning team identities."""
         if self._cached_normalized_teams is None:
             self._cached_normalized_teams = {}

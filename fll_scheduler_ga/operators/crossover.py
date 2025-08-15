@@ -16,7 +16,9 @@ logger = logging.getLogger(__name__)
 
 
 def build_crossovers(
-    app_config: AppConfig, team_factory: TeamFactory, event_factory: EventFactory
+    app_config: AppConfig,
+    team_factory: TeamFactory,
+    event_factory: EventFactory,
 ) -> Iterator["Crossover"]:
     """Build and return a tuple of crossover operators based on the configuration."""
     rng = app_config.rng
@@ -251,7 +253,7 @@ class BestTeamCrossover(EventCrossover):
         for t1, t2 in zip(p1.all_teams(), p2.all_teams(), strict=True):
             if sum(t1.fitness) > sum(t2.fitness):
                 p1_teams_best.update(t1.events)
-            else:
+            elif sum(t1.fitness) < sum(t2.fitness):
                 p2_teams_best.update(t2.events)
 
         yield (event_map[e] for e in p1_teams_best)
