@@ -162,13 +162,11 @@ def create_ga_context(app_config: AppConfig) -> GaContext:
 
 def create_ga_instance(context: GaContext, rng: Random) -> GA:
     """Create and return a GA instance with the provided configuration."""
+    observers = (TqdmObserver(), LoggingObserver(logger))
     return GA(
         context=context,
         rng=rng,
-        observers=(
-            TqdmObserver(),
-            LoggingObserver(logger),
-        ),
+        observers=observers,
     )
 
 

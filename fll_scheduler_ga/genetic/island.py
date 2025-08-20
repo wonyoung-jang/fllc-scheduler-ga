@@ -172,10 +172,10 @@ class Island:
 
         self.selected = self.context.nsga3.select(self.selected.values(), population_size=_ga_params.population_size)
 
-    def get_migrants(self, migration_size: int) -> Iterator[tuple[int, Schedule]]:
+    def get_migrants(self) -> Iterator[tuple[int, Schedule]]:
         """Randomly yield migrants from population."""
-        for m_hash in self.rng.sample(list(self.selected.keys()), k=migration_size):
-            yield (m_hash, self.selected.pop(m_hash))
+        for _ in range(self.ga_params.migration_size):
+            yield self.selected.popitem()
 
     def receive_migrants(self, migrants: Iterator[tuple[int, Schedule]]) -> None:
         """Receive migrants from another island and add them to the current island's population."""

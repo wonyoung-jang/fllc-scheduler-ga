@@ -31,29 +31,35 @@ class ScheduleBuilder:
         teams = schedule.all_teams()
         teams = self.rng.sample(teams, k=len(teams))
 
+        _build_map = {
+            1: self._build_singles,
+            2: self._build_matches,
+        }
+
         for r in self.config.rounds:
             rt = r.roundtype
             evts = events.get(rt, [])
-            if r.teams_per_round == r.rounds_per_team == 1:
-                self._build_singles(schedule, rt, evts, teams)
-            else:
-                self._build_matches(schedule, rt, evts, teams)
+            build_fn = _build_map.get(r.teams_per_round, None)
+            if build_fn:
+                build_fn(schedule, rt, evts, teams)
+
         schedule.clear_cache()
         return schedule
 
     def _build_singles(self, schedule: Schedule, rt: RoundType, events: list[Event], teams: list[Team]) -> None:
         """Book all judging events for a specific round type."""
-        for event, team in zip(events, (t for t in teams if t.needs_round(rt)), strict=False):
+        for event in events:
+            available = (t for t in teams if t.needs_round(rt) and not t.conflicts(event))
+            if (team := next(available, None)) is None:
+                continue
             schedule.assign_single(event, team)
 
     def _build_matches(self, schedule: Schedule, rt: RoundType, events: list[Event], teams: list[Team]) -> None:
         """Book all events for a specific round type."""
         for side1, side2 in ((e, e.paired) for e in events if e.location.side == 1):
             available = (t for t in teams if t.needs_round(rt) and not t.conflicts(side1))
-            team1 = next(available, None)
-            if team1 is None:
+            if (team1 := next(available, None)) is None:
                 continue
-            team2 = next(available, None)
-            if team2 is None:
+            if (team2 := next(available, None)) is None:
                 continue
             schedule.assign_match(side1, side2, team1, team2)

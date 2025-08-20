@@ -25,7 +25,7 @@ class Schedule:
     fitness: tuple[float, ...] | None = field(default=(0, 0, 0), compare=False)
     rank: int = field(default=10, compare=True)
 
-    normalized_fitness: np.ndarray | None = field(default=None, init=False, repr=False, compare=False)
+    normalized_fitness: np.ndarray = field(default=None, init=False, repr=False, compare=False)
     ref_point_idx: int = field(default=None, init=False, repr=False, compare=False)
     distance_to_ref_point: float = field(default=None, init=False, repr=False, compare=False)
 

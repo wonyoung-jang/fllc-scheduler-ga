@@ -12,14 +12,15 @@ def create_parser() -> ArgumentParser:
 
     """
     _default_values = {
+        "cmap_name": "viridis",
         "config_file": "fll_scheduler_ga/config.ini",
-        "output_dir": "fllc_schedule_outputs",
-        "log_file": "fll_scheduler_ga.log",
-        "loglevel_file": "DEBUG",
-        "loglevel_console": "INFO",
-        "no_plotting": False,
-        "seed_file": "fllc_genetic.pkl",
         "front_only": True,
+        "log_file": "fll_scheduler_ga.log",
+        "loglevel_console": "INFO",
+        "loglevel_file": "DEBUG",
+        "no_plotting": False,
+        "output_dir": "fllc_schedule_outputs",
+        "seed_file": "fllc_genetic.pkl",
     }
 
     parser = ArgumentParser(
@@ -59,6 +60,12 @@ def create_parser() -> ArgumentParser:
         action="store_true",
         default=_default_values["no_plotting"],
         help="Disable plotting of results.",
+    )
+    output_group.add_argument(
+        "--cmap_name",
+        type=str,
+        default=_default_values["cmap_name"],
+        help="Name of the colormap to use for plotting.",
     )
 
     # Logging parameters

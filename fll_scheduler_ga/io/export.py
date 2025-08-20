@@ -2,6 +2,7 @@
 
 from argparse import Namespace
 from csv import writer
+from dataclasses import dataclass
 from logging import getLogger
 from pathlib import Path
 
@@ -18,24 +19,24 @@ logger = getLogger(__name__)
 
 def generate_summary(args: Namespace, ga: GA) -> None:
     """Run the fll-scheduler-ga application and generate summary reports."""
+    time_fmt = ga.context.app_config.tournament.time_fmt
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     logger.debug("Output directory: %s", output_dir)
 
-    if not args.no_plotting:
-        plot = Plot(ga, ga.context.evaluator.objectives)
-
+    if not args.no_plotting and ga.total_population:
+        plot = Plot(
+            ga=ga,
+            save_dir=output_dir,
+            cmap_name=args.cmap_name,
+        )
         plot.plot_fitness(
-            title="Average Fitness over Generations",
-            xlabel="Generation",
-            ylabel="Average Fitnesses",
-            save_dir=output_dir / "fitness_vs_generation.png",
+            title="Fitness over time",
+            xlabel="Generations",
+            ylabel="Average fitnesses",
         )
-
-        plot.plot_pareto_front(
-            title="Pareto Front: Trade-offs",
-            save_dir=output_dir / "pareto_front.png",
-        )
+        plot.plot_parallel(title="Trade-off parallel coordinates")
+        plot.plot_scatter(title=f"{len(ga.context.evaluator.objectives)}D scatter plot of schedules")
 
     front = sorted(ga.pareto_front(), key=lambda s: (s.rank, -sum(s.fitness)))
 
@@ -50,7 +51,7 @@ def generate_summary(args: Namespace, ga: GA) -> None:
             suffix_subdir.mkdir(parents=True, exist_ok=True)
             output_path = suffix_subdir / name
             output_path = output_path.with_suffix(f".{suffix}")
-            exporter = get_exporter(output_path)
+            exporter = get_exporter(output_path, time_fmt)
             exporter.export(schedule, output_path)
 
         txt_subdir = output_dir / "txt"
@@ -175,33 +176,36 @@ def generate_pareto_summary(front: list[Schedule], objectives: list[FitnessObjec
             for name in objectives:
                 f.write(f"{name}, ")
 
-            f.write("Sum\n")
+            f.write("Sum, Ref Point Index, Distance")
+            f.write("\n")
             for i, schedule in enumerate(front, start=1):
                 f.write(f"{i:0{schedule_enum_digits}}, {id(schedule)}, {hash(schedule)}, {schedule.rank}, ")
 
                 for score in schedule.fitness:
                     f.write(f"{score:.4f}, ")
 
-                f.write(f"{sum(schedule.fitness):.4f}\n")
+                f.write(f"{sum(schedule.fitness):.4f}, ")
+                f.write(f"{schedule.ref_point_idx if schedule.ref_point_idx is not None else ''}, ")
+                f.write(f"{schedule.distance_to_ref_point if schedule.distance_to_ref_point is not None else '':.2f}")
+                f.write("\n")
     except OSError:
         logger.exception("Failed to write Pareto summary to file %s", path)
 
 
-def get_exporter(path: Path) -> Exporter:
+def get_exporter(path: Path, time_fmt: str) -> Exporter:
     """Get the appropriate exporter based on the file extension."""
-    exporter_map = {
+    exporter = {
         ".csv": CsvExporter,
         ".html": HtmlExporter,
-    }
-
-    exporter = exporter_map.get(path.suffix.lower(), None)
+    }.get(path.suffix.lower(), None)
 
     if exporter is None:
         logger.warning("No exporter found for file extension %s. Defaulting to CSV.", path.suffix)
-        return CsvExporter()
-    return exporter()
+        return CsvExporter(time_fmt=time_fmt)
+    return exporter(time_fmt=time_fmt)
 
 
+@dataclass(slots=True)
 class CsvExporter(GridBasedExporter):
     """Exporter for schedules in CSV format."""
 
@@ -218,7 +222,7 @@ class CsvExporter(GridBasedExporter):
         rows.append(header)
 
         for time_slot in timeslots:
-            r = [time_slot.start_str]
+            r = [time_slot.start.strftime(self.time_fmt)]
             for location in locations:
                 team = grid_lookup.get((time_slot, location))
                 if isinstance(team, int):
@@ -239,6 +243,7 @@ class CsvExporter(GridBasedExporter):
             writer(csvfile).writerows(csv_parts)
 
 
+@dataclass(slots=True)
 class HtmlExporter(GridBasedExporter):
     """Exporter for schedules in HTML format."""
 
@@ -255,7 +260,7 @@ class HtmlExporter(GridBasedExporter):
         html.extend(["</tr>", "</thead>", "<tbody>"])
 
         for time_slot in timeslots:
-            html.append(f"<tr><td>{time_slot.start_str}</td>")
+            html.append(f"<tr><td>{time_slot.start.strftime(self.time_fmt)}</td>")
             for location in locations:
                 team = grid_lookup.get((time_slot, location))
                 if isinstance(team, int):

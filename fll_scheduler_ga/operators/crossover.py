@@ -129,33 +129,27 @@ class EventCrossover(Crossover):
 
     def _transfer_genes_from_parent1(self, child: Schedule, parent: Schedule, events: Iterator[Event]) -> None:
         """Transfer genes from the first parent. Fewer checks needed."""
-        get_team_from_child = child.get_team
         for e1 in events:
-            t1 = get_team_from_child(parent[e1].identity)
+            t1 = child.get_team(parent[e1].identity)
             if (e2 := e1.paired) and e1.location.side == 1:
-                t2 = get_team_from_child(parent[e2].identity)
+                t2 = child.get_team(parent[e2].identity)
                 child.assign_match(e1, e2, t1, t2)
             elif e2 is None:
                 child.assign_single(e1, t1)
 
     def _transfer_genes_from_parent2(self, child: Schedule, parent: Schedule, events: Iterator[Event]) -> None:
         """Transfer genes from the second parent."""
-        get_team_from_child = child.get_team
         for e1 in events:
-            t1 = get_team_from_child(parent[e1].identity)
+            t1 = child.get_team(parent[e1].identity)
+            if not t1.needs_round(e1.roundtype) or t1.conflicts(e1):
+                continue
+
             if (e2 := e1.paired) and e1.location.side == 1:
-                t2 = get_team_from_child(parent[e2].identity)
-                if (
-                    not t1.needs_round(e1.roundtype)
-                    or not t2.needs_round(e2.roundtype)
-                    or t1.conflicts(e1)
-                    or t2.conflicts(e2)
-                ):
+                t2 = child.get_team(parent[e2].identity)
+                if not t2.needs_round(e2.roundtype) or t2.conflicts(e2):
                     continue
                 child.assign_match(e1, e2, t1, t2)
             elif e2 is None:
-                if not t1.needs_round(e1.roundtype) or t1.conflicts(e1):
-                    continue
                 child.assign_single(e1, t1)
 
 
@@ -176,7 +170,7 @@ class KPoint(EventCrossover):
         """Get the genes for KPoint crossover."""
         evts = self.events
         ne = len(evts)
-        indices = sorted(self.rng.sample(range(1, ne), self.k))
+        indices = sorted(self.rng.sample(range(1, ne), k=self.k))
         genes = []
         start = 0
 
@@ -218,7 +212,7 @@ class Uniform(EventCrossover):
         """Get the genes for Uniform crossover."""
         evts = self.events
         ne = len(evts)
-        indices = [1 if self.rng.choice([True, False]) else 2 for _ in range(ne)]
+        indices = [self.rng.choice((1, 2)) for _ in range(ne)]
         yield (evts[i] for i in range(ne) if indices[i] == 1 and evts[i] in p1)
         yield (evts[i] for i in range(ne) if indices[i] == 2 and evts[i] in p2)
 

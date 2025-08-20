@@ -12,7 +12,7 @@ from ..data_model.event import Round
 from ..data_model.location import Location
 from ..data_model.schedule import Schedule
 from .config import RoundType, TournamentConfig
-from .constants import HHMM_FMT, RANDOM_SEED_RANGE, CrossoverOp, MutationOp, SelectionOp
+from .constants import RANDOM_SEED_RANGE, CrossoverOp, MutationOp, SelectionOp
 from .ga_operators_config import OperatorConfig
 from .ga_parameters import GaParameters
 
@@ -45,7 +45,8 @@ def create_app_config(args: argparse.Namespace, path: Path | None = None) -> App
 def load_tournament_config(parser: ConfigParser) -> TournamentConfig:
     """Load and return the tournament configuration from the provided ConfigParser."""
     num_teams, team_ids = _parse_teams_config(parser)
-    parsed_rounds, round_reqs = _parse_rounds_config(parser, num_teams)
+    time_fmt = _parse_time_config(parser)
+    parsed_rounds, round_reqs = _parse_rounds_config(parser, num_teams, time_fmt)
     all_rounds_per_team = [r.rounds_per_team for r in parsed_rounds]
     total_slots = sum(num_teams * rpt for rpt in all_rounds_per_team)
     unique_opponents_possible = 1 <= max(all_rounds_per_team) <= num_teams - 1
@@ -53,6 +54,7 @@ def load_tournament_config(parser: ConfigParser) -> TournamentConfig:
     Schedule.team_identities = team_ids
     return TournamentConfig(
         num_teams,
+        time_fmt,
         parsed_rounds,
         round_reqs,
         total_slots,
@@ -232,6 +234,30 @@ def _parse_teams_config(parser: ConfigParser) -> tuple[int, dict[int, int | str]
     return num_teams, team_ids
 
 
+def _parse_time_config(parser: ConfigParser) -> int:
+    """Parse and return the time format configuration value."""
+    if not parser.has_section("time"):
+        msg = "No 'time' section found in the configuration file."
+        raise KeyError(msg)
+
+    has_fmt = parser.has_option("time", "format")
+
+    if not has_fmt:
+        msg = "No 'format' option found in the 'time' section."
+        raise KeyError(msg)
+
+    time_fmt = {
+        12: "%I:%M %p",
+        24: "%H:%M",
+    }.get(parser["time"].getint("format", 24))
+
+    if time_fmt is None:
+        msg = "Invalid time format. Must be 12 or 24."
+        raise ValueError(msg)
+
+    return time_fmt
+
+
 def _parse_fitness_config(parser: ConfigParser) -> tuple[float, float, float]:
     """Parse and return fitness-related configuration values."""
     if not parser.has_section("fitness"):
@@ -249,12 +275,17 @@ def _parse_fitness_config(parser: ConfigParser) -> tuple[float, float, float]:
     return tuple(w / weight_sums for w in weight_floats)
 
 
-def _parse_rounds_config(parser: ConfigParser, num_teams: int) -> tuple[list[Round], dict[RoundType, int]]:
+def _parse_rounds_config(
+    parser: ConfigParser,
+    num_teams: int,
+    time_fmt: str,
+) -> tuple[list[Round], dict[RoundType, int]]:
     """Parse and return a list of Round objects from the configuration.
 
     Args:
         parser (ConfigParser): The ConfigParser instance with tournament configuration.
         num_teams (int): The total number of teams in the tournament.
+        time_fmt (str): The time format string.
 
     Returns:
         list[Round]: A list of Round objects parsed from the configuration.
@@ -275,13 +306,13 @@ def _parse_rounds_config(parser: ConfigParser, num_teams: int) -> tuple[list[Rou
         teams_per_round = p_round.getint("teams_per_round")
 
         if start_time := p_round.get("start_time", ""):
-            start_time = datetime.strptime(start_time.strip(), HHMM_FMT).replace(tzinfo=UTC)
+            start_time = datetime.strptime(start_time.strip(), time_fmt).replace(tzinfo=UTC)
 
         if stop_time := p_round.get("stop_time", ""):
-            stop_time = datetime.strptime(stop_time.strip(), HHMM_FMT).replace(tzinfo=UTC)
+            stop_time = datetime.strptime(stop_time.strip(), time_fmt).replace(tzinfo=UTC)
 
         if times := p_round.get("times", []):
-            times = [datetime.strptime(t.strip(), HHMM_FMT).replace(tzinfo=UTC) for t in times.split(",")]
+            times = [datetime.strptime(t.strip(), time_fmt).replace(tzinfo=UTC) for t in times.split(",")]
             start_time = times[0]
 
         duration_minutes = timedelta(minutes=p_round.getint("duration_minutes"))

@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from ..config.config import Round, RoundType, TournamentConfig
-from ..config.constants import HHMM_FMT
 from .location import Location
 from .time import TimeSlot
 
@@ -92,10 +91,7 @@ class EventFactory:
                 stop += r.duration_minutes
 
             time_cache_key = (start, stop)
-            timeslot = self._cached_timeslots.setdefault(
-                time_cache_key,
-                TimeSlot(start, stop, start.strftime(HHMM_FMT), stop.strftime(HHMM_FMT)),
-            )
+            timeslot = self._cached_timeslots.setdefault(time_cache_key, TimeSlot(start, stop))
             start = stop
 
             if r.teams_per_round == 1:
@@ -110,8 +106,7 @@ class EventFactory:
                         event2 = Event(0, r.roundtype, timeslot, loc)
                         event1.paired = event2
                         event2.paired = event1
-                        yield event1
-                        yield event2
+                        yield from (event1, event2)
 
     def as_list(self) -> list[Event]:
         """Get a flat list of all Events across all RoundTypes."""
@@ -124,7 +119,8 @@ class EventFactory:
     def as_mapping(self) -> EventMap:
         """Get a mapping of event identities to Event objects."""
         if self._cached_mapping is None:
-            self._cached_mapping = {e.identity: e for e in self.as_list()}
+            as_list = self.as_list()
+            self._cached_mapping = {e.identity: e for e in as_list}
         return self._cached_mapping
 
     def build_conflicts(self) -> None:

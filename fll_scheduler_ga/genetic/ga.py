@@ -145,7 +145,7 @@ class GA:
         self.adapt_operator_probabilities()
         self.fitness_history.append(this_gen_fitness)
 
-    def run(self) -> bool:
+    def run(self) -> None:
         """Run the genetic algorithm and return the best schedule found."""
         start_time = time()
         self._notify_on_start(self.ga_params.generations)
@@ -159,16 +159,13 @@ class GA:
         except Exception:
             self.context.logger.exception("An error occurred during the genetic algorithm run.")
             self.update_fitness_history()
-            return False
         except KeyboardInterrupt:
             self.context.logger.debug("Genetic algorithm run interrupted by user. Saving...")
             self.update_fitness_history()
-            return True
         finally:
             self.context.logger.debug("Total time taken: %.2f seconds", time() - start_time)
             self.finalize()
             self._notify_on_finish(self.total_population, self.pareto_front())
-        return True
 
     def initialize_population(self) -> None:
         """Initialize the population for each island."""
@@ -203,52 +200,41 @@ class GA:
 
     def run_epochs(self) -> None:
         """Perform main evolution loop: generations and migrations."""
-        for generation in range(1, self.ga_params.generations + 1):
-            self._run_epoch(generation)
+        num_generations = self.ga_params.generations
+        for generation in range(1, num_generations + 1):
+            self.migrate(generation)
+            self.run_single_epoch()
+            self.update_fitness_history()
+            self._notify_on_generation_end(
+                generation=generation,
+                num_generations=num_generations,
+                expected=len(self),
+                fitness=self._get_last_gen_fitness(),
+                pareto_size=len(self.pareto_front()),
+            )
 
-    def _run_epoch(self, generation: int) -> None:
+    def run_single_epoch(self) -> None:
         """Run a single epoch of the genetic algorithm."""
-        if self._migration_condition(generation):
-            self.migrate()
-
         for island in self.islands:
             island.handle_underpopulation()
             island.evolve()
+            island.handle_underpopulation()
             island.update_fitness_history()
 
-        self._notify_on_generation_end(
-            generation,
-            self.ga_params.generations,
-            len(self),
-            self.fitness_history[-1] if self.fitness_history else (),
-            len(self.pareto_front()),
-        )
-
-        self.update_fitness_history()
-
-    def _migration_condition(self, generation: int) -> bool:
-        """Check if migration should occur based on the generation and migration interval."""
-        return (
-            self.ga_params.num_islands > 1
+    def migrate(self, generation: int) -> None:
+        """Migrate the best individuals between islands using a random ring topology."""
+        num_islands = self.ga_params.num_islands
+        if not (
+            num_islands > 1
             and self.ga_params.migration_size > 0
             and (generation) % self.ga_params.migration_interval == 0
-        )
+        ):
+            return
 
-    def migrate(self) -> None:
-        """Migrate the best individuals between islands using a ring topology."""
-        all_migrants = (
-            (
-                i,
-                island.get_migrants(
-                    self.ga_params.migration_size,
-                ),
-            )
-            for i, island in enumerate(self.islands)
-        )
-
-        for i, migrants in all_migrants:
-            dest_i = (i + 1) % self.ga_params.num_islands
-            self.islands[dest_i].receive_migrants(migrants)
+        r = self.rng.randrange(1, num_islands)  # Random offset
+        for i, island in enumerate(self.islands):
+            j = (i + r) % num_islands
+            self.islands[j].receive_migrants(island.get_migrants())
 
     def _notify_on_start(self, num_generations: int) -> None:
         """Notify observers when the genetic algorithm run starts."""
@@ -337,3 +323,14 @@ class GA:
         self._log_operators(name="crossover", ratios=self._crossover_ratio, ops=self.context.crossovers)
         self._log_operators(name="mutation", ratios=self._mutation_ratio, ops=self.context.mutations)
         self._log_aggregate_stats()
+        self._log_unique_events()
+
+    def _log_unique_events(self) -> None:
+        """Count unique event lists."""
+        unique_genes = Counter()
+        for schedule in self.total_population:
+            for team in schedule.all_teams():
+                unique_gene = tuple(sorted(team.events))
+                unique_genes[unique_gene] += 1
+        for gene, count in sorted(unique_genes.items(), key=lambda x: x[1], reverse=True):
+            self.context.logger.debug("Event: %s, Count: %d", gene, count)

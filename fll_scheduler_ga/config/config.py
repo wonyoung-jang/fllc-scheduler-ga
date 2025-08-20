@@ -74,6 +74,7 @@ class TournamentConfig:
     """Configuration for the tournament."""
 
     num_teams: int
+    time_fmt: str
     rounds: list[Round]
     round_requirements: dict[RoundType, int]
     total_slots: int
@@ -92,6 +93,7 @@ class TournamentConfig:
         return (
             f"\n\tTournamentConfig:"
             f"\n\t  num_teams                 : {self.num_teams}"
+            f"\n\t  time_fmt                  : {self.time_fmt}"
             f"\n\t  rounds                    : {rounds_str}"
             f"\n\t  round_requirements        : {round_reqs_str}"
             f"\n\t  total_slots               : {self.total_slots}"

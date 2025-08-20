@@ -1,16 +1,18 @@
 """Methods to create plots."""
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
+import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 
 from ..config.constants import FitnessObjective
 from ..genetic.ga import GA
-from .utils import finalize, plot_parallel, plot_pareto_scatter
 
 logger = logging.getLogger("visualize.plot")
 logging.getLogger("matplotlib").setLevel(logging.WARNING)
@@ -22,10 +24,16 @@ plt.style.use("seaborn-v0_8-whitegrid")
 class Plot:
     """A class for creating and managing plots related to the GA run."""
 
-    ga_instance: GA
-    objectives: list[FitnessObjective]
+    ga: GA
+    save_dir: str | Path | None
+    cmap_name: str
+    objectives: list[FitnessObjective] = field(init=False)
 
-    def plot_fitness(self, title: str, xlabel: str, ylabel: str, save_dir: str | Path | None) -> None:
+    def __post_init__(self) -> None:
+        """Post initializtion for Plot class."""
+        self.objectives = list(FitnessObjective)
+
+    def plot_fitness(self, title: str, xlabel: str, ylabel: str) -> None:
         """Create figure that summarizes how the average fitness of the first Pareto front evolved by generation.
 
         Args:
@@ -35,18 +43,16 @@ class Plot:
             save_dir: Directory to save the figure. If None, the plot is shown.
 
         """
-        if not (history := self.ga_instance.fitness_history):
+        if not (history := self.ga.fitness_history):
             logger.error("Cannot plot fitness. No generation history was recorded.")
             return
 
         fig, ax = plt.subplots(figsize=(12, 7))
-        avg_objs = (sum(fh) / len(self.objectives) for fh in history)
-        history = tuple([*fh, avg_obj] for fh, avg_obj in zip(history, avg_objs, strict=True))
-        columns = [f.name for f in self.objectives] + ["Avg"]
+        columns = [f.name for f in self.objectives]
         history_df = pd.DataFrame(data=history, columns=columns)
         history_df.plot(kind="line", ax=ax, linewidth=2.5, alpha=0.8)
-        x = np.arange(len(history_df))
 
+        x = np.arange(len(history_df))
         for col in history_df.columns:
             y = history_df[col].to_numpy()
             z = np.polyfit(x, y, 3)
@@ -55,28 +61,84 @@ class Plot:
 
         ax.set(title=title, xlabel=xlabel, ylabel=ylabel)
         ax.legend(title="Objectives", fontsize=10)
+        self.finalize(fig, "fitness_vs_generation.png")
 
-        finalize(fig, save_dir, "fitness_plot.png")
+    def plot_parallel(self, title: str) -> None:
+        """Create the parallel coordinates plot."""
+        data = [[p.fitness[i] for i, _ in enumerate(self.objectives)] + [p.rank] for p in self.ga.total_population]
+        objectives = [*self.objectives, "Rank"]
+        dataframe = pd.DataFrame(data=data, columns=objectives)
+        fig, ax = plt.subplots(figsize=(12, 7))
+        pd.plotting.parallel_coordinates(
+            frame=dataframe,
+            class_column=objectives[-1],
+            ax=ax,
+            linewidth=1.5,
+            alpha=0.7,
+            colormap=self.cmap_name,
+        )
+        ax.set(title=title, xlabel="Objectives", ylabel="Score")
+        plt.xticks(rotation=15, ha="right")
+        ax.get_legend().remove()
+        self._attach_colorbar(ax, dataframe[objectives[-1]].tolist(), label="Rank")
+        self.finalize(fig, "pareto_parallel.png")
 
-    def plot_pareto_front(self, title: str, save_dir: str | Path | None) -> None:
-        """Generate and saves a parallel coordinates plot of the final Pareto front."""
-        if not (pop := self.ga_instance.total_population):
-            logger.warning("Cannot plot an empty Pareto front.")
+    def plot_scatter(self, title: str) -> None:
+        """Create a 2D or 3D scatter plot of the Pareto front."""
+        len_obj = len(self.objectives)
+        if len_obj not in (2, 3):
+            logger.error("Cannot plot Pareto scatter for %d objectives. Only 2D and 3D supported.", len_obj)
             return
 
-        fig = plot_parallel(pop, self.objectives, title)
-        finalize(fig, save_dir, "pareto_parallel.png")
+        dataframe = pd.DataFrame(data=[p.fitness for p in self.ga.total_population], columns=self.objectives)
+        ranks = [p.rank for p in self.ga.total_population]
 
-        if len(self.objectives) in (2, 3):
-            scatter_name = f"pareto_scatter_{len(self.objectives)}d.png"
-            plot_pareto_scatter(
-                pop,
-                self.objectives,
-                title=title,
-                save_dir=Path(save_dir).with_name(scatter_name) if save_dir else None,
-            )
+        if len_obj == 2:
+            fig, ax = plt.subplots(figsize=(10, 8))
+            x_obj, y_obj = self.objectives
+            ax.scatter(dataframe[x_obj], dataframe[y_obj], c=ranks, cmap=self.cmap_name, s=60, alpha=0.8)
+            ax.set(title=title, xlabel=x_obj, ylabel=y_obj)
+            self._attach_colorbar(ax, ranks, label="Rank")
+        elif len_obj == 3:
+            fig, ax = plt.subplots(figsize=(10, 8), subplot_kw={"projection": "3d"})
+            x_obj, y_obj, z_obj = self.objectives
+            ax.view_init(azim=45, elev=40)
+            ax.scatter(dataframe[x_obj], dataframe[y_obj], dataframe[z_obj], c=ranks, cmap=self.cmap_name, s=60)
+            ax.set(title=title, xlabel=x_obj, ylabel=y_obj, zlabel=z_obj, box_aspect=[1, 1, 1])
+            self._attach_colorbar(ax, ranks, label="Rank")
+
+        self.finalize(fig, f"pareto_scatter_{len_obj}d.png")
+
+    def finalize(self, fig: Figure, filename: str) -> None:
+        """Finalize the plot by saving or showing it."""
+        try:
+            if self.save_dir:
+                path = Path(self.save_dir) / filename
+                path.parent.mkdir(parents=True, exist_ok=True)
+                fig.savefig(path, dpi=300)
+                logger.debug("Saved plot: %s", path)
+                plt.close(fig)
+            else:
+                plt.show()
+                plt.close(fig)
+        except Exception:
+            logger.exception("Error saving plot to %s", path)
+            plt.close(fig)
+
+    def _attach_colorbar(self, ax: Axes, values: list[float], label: str | None = None) -> None:
+        """Attach a colorbar to the given axes."""
+        unique_values = sorted(set(values))
+
+        if len(unique_values) <= 10:
+            cmap = plt.get_cmap(self.cmap_name, len(unique_values))
+            norm = mcolors.BoundaryNorm(np.arange(min(values) - 0.5, max(values) + 1.5), cmap.N)
+            sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+            cbar = plt.colorbar(mappable=sm, ax=ax, ticks=unique_values)
         else:
-            logger.warning(
-                "Cannot plot Pareto scatter for %d objectives. Only 2D and 3D plots are supported.",
-                len(self.objectives),
-            )
+            norm = plt.Normalize(min(values), max(values))
+            sm = plt.cm.ScalarMappable(norm=norm, cmap=self.cmap_name)
+            cbar = plt.colorbar(mappable=sm, ax=ax)
+
+        sm.set_array([])
+        if label:
+            cbar.set_label(label, fontsize=12)

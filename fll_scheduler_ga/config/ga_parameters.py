@@ -50,9 +50,9 @@ class GaParameters:
             self.crossover_chance = 0.5
             logger.warning("Crossover chance must be between 0.0 and 1.0, defaulting to 0.5.")
 
-        if 2 <= self.population_size <= self.selection_size:
-            self.population_size = self.selection_size + 1
-            logger.warning("Population size must be greater than selection size, defaulting to selection_size + 1.")
+        if self.population_size <= 2:
+            self.population_size = 3
+            logger.warning("Population size must be greater than 2, defaulting to 3.")
 
         if self.offspring_size < 0:
             self.offspring_size = 0
@@ -64,7 +64,10 @@ class GaParameters:
 
         if self.selection_size >= self.population_size:
             self.selection_size = max(2, self.population_size // 5)
-            logger.warning("Selection size is greater than or equal to population size, defaulting to 20%%")
+            logger.warning(
+                "Selection size must be less than population size, defaulting to max(2, 20%%): %i",
+                self.selection_size,
+            )
 
         if not (0.0 <= self.mutation_chance <= 1.0):
             self.mutation_chance = 0.05
@@ -84,4 +87,4 @@ class GaParameters:
 
         if self.num_islands > 1 and self.migration_size >= self.population_size:
             self.migration_size = max(1, self.population_size // 4)
-            logger.warning("Migration size is >= population size, defaulting to 25%%.")
+            logger.warning("Migration size is >= population size, defaulting to max(1, 25%%): %i", self.migration_size)

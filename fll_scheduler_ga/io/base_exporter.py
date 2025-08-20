@@ -2,6 +2,7 @@
 
 import logging
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
 
 from ..config.config import RoundType
@@ -13,6 +14,7 @@ from ..data_model.time import TimeSlot
 logger = logging.getLogger(__name__)
 
 
+@dataclass(slots=True)
 class Exporter(ABC):
     """Abstract base class for exporting schedules."""
 
@@ -48,8 +50,11 @@ class Exporter(ABC):
         """Render a schedule grid for a specific round type."""
 
 
+@dataclass(slots=True)
 class GridBasedExporter(Exporter):
     """Base class for exporters that render a grid-based schedule."""
+
+    time_fmt: str
 
     def _build_grid_data(
         self, schedule: Schedule

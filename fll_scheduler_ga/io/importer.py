@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import TextIO
 
 from ..config.config import Round, RoundType, TournamentConfig
-from ..config.constants import HHMM_FMT
 from ..data_model.event import Event, EventFactory
 from ..data_model.location import Location
 from ..data_model.schedule import Schedule
@@ -133,26 +132,22 @@ class CsvImporter:
                 - A dictionary to store created events for linking opponents.
 
         """
+        _time_fmt = self.config.time_fmt
         time_str = row[0]
         round_config: Round = self._round_configs[current_round_type]
         if not round_config.times:
-            start_time = datetime.strptime(time_str, HHMM_FMT).replace(tzinfo=UTC)
-            stop_time = start_time + round_config.duration_minutes
+            start = datetime.strptime(time_str, _time_fmt).replace(tzinfo=UTC)
+            stop = start + round_config.duration_minutes
         else:
-            start_time = datetime.strptime(time_str, HHMM_FMT).replace(tzinfo=UTC)
-            start_index = round_config.times.index(start_time)
-            stop_time = (
+            start = datetime.strptime(time_str, _time_fmt).replace(tzinfo=UTC)
+            start_index = round_config.times.index(start)
+            stop = (
                 round_config.times[start_index + 1]
                 if start_index + 1 < len(round_config.times)
-                else start_time + round_config.duration_minutes
+                else start + round_config.duration_minutes
             )
 
-        timeslot = TimeSlot(
-            start=start_time,
-            stop=stop_time,
-            start_str=start_time.strftime(HHMM_FMT),
-            stop_str=stop_time.strftime(HHMM_FMT),
-        )
+        timeslot = TimeSlot(start, stop)
 
         for i, team_id_str in enumerate(row[1:]):
             if not (team_id_str := team_id_str.strip()):

@@ -107,24 +107,23 @@ class Mutation(ABC):
         msg = "Mutate method must be implemented by subclasses."
         raise NotImplementedError(msg)
 
-    def get_match_pool(self, schedule: Schedule) -> Iterator[Match]:
+    def get_match_pool(self, schedule: Schedule) -> list[Match]:
         """Get a pool of matches from the schedule schedule.
 
         Args:
             schedule (Schedule): The schedule to analyze
 
-        Yields:
-            Match: A match consisting of two events and their associated teams.
+        Returns:
+            list[Match]: A list of matches consisting of two events and their associated teams.
 
         """
         matches = schedule.matches()
 
         if len(matches) < 2:
-            return
+            return []
 
-        target_roundtype = self.rng.choice(list(matches.keys()))
-        match_pool = matches[target_roundtype]
-        yield from self.rng.sample(match_pool, k=len(match_pool))
+        match_pool = matches[self.rng.choice(list(matches.keys()))]
+        return self.rng.sample(match_pool, k=len(match_pool))
 
     def yield_swap_candidates(self, schedule: Schedule) -> Iterator[tuple[Match, ...]]:
         """Yield candidates for swapping teams in matches.
@@ -137,32 +136,29 @@ class Mutation(ABC):
 
         """
         match_pool = self.get_match_pool(schedule)
+        for i, match1_data in enumerate(match_pool, start=1):
+            for match2_data in match_pool[i:]:
+                e1a, _, _, _ = match1_data
+                e2a, _, _, _ = match2_data
 
-        for match1_data in match_pool:
-            if (match2_data := next(match_pool, None)) is None:
-                return
+                if not self._validate_swap(e1a, e2a):
+                    continue
 
-            e1a, _, _, _ = match1_data
-            e2a, _, _, _ = match2_data
+                yield match1_data, match2_data
 
-            if not self._validate_swap(e1a, e2a):
-                continue
-
-            yield match1_data, match2_data
-
-    def _validate_swap(self, event1: Event, event2: Event) -> bool:
+    def _validate_swap(self, e1: Event, e2: Event) -> bool:
         """Check if the swap between two events is valid based on timeslot and location.
 
         Args:
-            event1 (Event): The first event to swap.
-            event2 (Event): The second event to swap.
+            e1 (Event): The first event to swap.
+            e2 (Event): The second event to swap.
 
         Returns:
             bool: True if the swap is valid, False otherwise.
 
         """
-        is_same_timeslot = event1.timeslot == event2.timeslot
-        is_same_location = event1.location == event2.location
+        is_same_timeslot = e1.timeslot == e2.timeslot
+        is_same_location = e1.location == e2.location
 
         if self.same_timeslot and not self.same_location:
             return is_same_timeslot and not is_same_location
@@ -292,15 +288,14 @@ class SwapTableSideMutation(Mutation):
 
     def get_swap_candidates(self, schedule: Schedule) -> Match | None:
         """Get two matches to swap in the schedule schedule."""
-        if (next_swap := next(self.yield_swap_candidates(schedule), None)) is not None:
-            return self.rng.choice(next_swap)
-        return None
+        next_swap = next(self.yield_swap_candidates(schedule), None)
+        return self.rng.choice(next_swap) if next_swap is not None else None
 
     def mutate(self, schedule: Schedule) -> bool:
         """Swap the sides of two tables in a match."""
         match_data = self.get_swap_candidates(schedule)
 
-        if not match_data:
+        if match_data is None:
             return False
 
         e1a, e1b, t1a, t1b = match_data
