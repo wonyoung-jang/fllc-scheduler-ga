@@ -54,12 +54,10 @@ class Round:
             return len(self.times)
 
         total_num_teams = self.num_teams * self.rounds_per_team
-        slots_per_timeslot = len(self.locations)
-
-        if slots_per_timeslot == 0:
+        if len(self.locations) == 0:
             return 0
 
-        minimum_slots = ceil(total_num_teams / slots_per_timeslot)
+        minimum_slots = ceil(total_num_teams / len(self.locations))
 
         if self.stop_time:
             total_available = self.stop_time - self.start_time

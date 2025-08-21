@@ -135,27 +135,21 @@ class Island:
         if not (island_pop := list(self.selected.values())):
             return
 
-        _context = self.context
-        _ss = _context.selections
-        _cs = _context.crossovers
-        _ms = _context.mutations
-        _eval = _context.evaluator.evaluate
-        _ga_params = self.ga_params
         attempts, max_attempts = ATTEMPTS_RANGE
         child_count = 0
 
-        while child_count < _ga_params.offspring_size and attempts < max_attempts:
+        while child_count < self.ga_params.offspring_size and attempts < max_attempts:
             attempts += 1
-            _crossover_roll = _ga_params.crossover_chance > self.rng.random()
-            _mutation_roll = _ga_params.mutation_chance > self.rng.random()
+            _crossover_roll = self.ga_params.crossover_chance > self.rng.random()
+            _mutation_roll = self.ga_params.mutation_chance > self.rng.random()
 
-            selection_op = self.rng.choice(_ss)
-            parents = tuple(selection_op.select(island_pop, num_parents=2))
-            offspring = self.get_initial_offspring(parents, _cs, crossover_roll=_crossover_roll)
+            selection_op = self.rng.choice(self.context.selections)
+            parents = tuple(selection_op.select(island_pop))
+            offspring = self.get_initial_offspring(parents, self.context.crossovers, crossover_roll=_crossover_roll)
 
             for child in offspring:
-                if _mutation_roll and _ms:
-                    mutation_op = self.rng.choice(_ms)
+                if _mutation_roll and self.context.mutations:
+                    mutation_op = self.rng.choice(self.context.mutations)
                     _m_str = str(mutation_op)
                     self.mutation_ratio["total"][_m_str] += 1
                     if mutation_op.mutate(child):
@@ -163,14 +157,16 @@ class Island:
 
                 self.offspring_ratio["total"] += 1
                 if self.add_to_population(child):
-                    child.fitness = _eval(child)
+                    child.fitness = self.context.evaluator.evaluate(child)
                     child_count += 1
                     self.offspring_ratio["success"] += 1
 
-                if child_count >= _ga_params.offspring_size:
+                if child_count >= self.ga_params.offspring_size:
                     break
 
-        self.selected = self.context.nsga3.select(self.selected.values(), population_size=_ga_params.population_size)
+        self.selected = self.context.nsga3.select(
+            self.selected.values(), population_size=self.ga_params.population_size
+        )
 
     def get_migrants(self) -> Iterator[tuple[int, Schedule]]:
         """Randomly yield migrants from population."""
@@ -188,17 +184,18 @@ class Island:
 
     def handle_underpopulation(self) -> None:
         """Handle underpopulation by adding new individuals to the island."""
-        if len(self.selected) >= self.ga_params.population_size:
+        pop_size = self.ga_params.population_size
+        if len(self.selected) >= pop_size:
             return
 
         self.context.logger.debug(
             "Island %d underpopulated: %d individuals, expected %d.",
             self.identity,
             len(self.selected),
-            self.ga_params.population_size,
+            pop_size,
         )
 
-        while len(self.selected) < self.ga_params.population_size:
+        while len(self.selected) < pop_size:
             seeder = Random(self.rng.randint(*RANDOM_SEED_RANGE))
             self.builder.rng = Random(seeder.randint(*RANDOM_SEED_RANGE))
             schedule = self.builder.build()

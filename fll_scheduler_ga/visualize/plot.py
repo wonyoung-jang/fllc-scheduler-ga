@@ -48,19 +48,20 @@ class Plot:
             return
 
         fig, ax = plt.subplots(figsize=(12, 7))
-        columns = [f.name for f in self.objectives]
+        columns = [f.value for f in self.objectives]
         history_df = pd.DataFrame(data=history, columns=columns)
-        history_df.plot(kind="line", ax=ax, linewidth=2.5, alpha=0.8)
+        history_df.plot(kind="line", ax=ax, linewidth=2.5, alpha=0.9)
 
         x = np.arange(len(history_df))
         for col in history_df.columns:
             y = history_df[col].to_numpy()
             z = np.polyfit(x, y, 3)
             p = np.poly1d(z)
-            ax.plot(x, p(x), linestyle="--", linewidth=0.5, label=f"{col} Trend (^3)")
+            ax.plot(x, p(x), linestyle="--", linewidth=0.8, label=f"{col} Trend (deg={len(z) - 1})")
 
         ax.set(title=title, xlabel=xlabel, ylabel=ylabel)
         ax.legend(title="Objectives", fontsize=10)
+        fig.tight_layout()
         self.finalize(fig, "fitness_vs_generation.png")
 
     def plot_parallel(self, title: str) -> None:
@@ -78,8 +79,8 @@ class Plot:
             colormap=self.cmap_name,
         )
         ax.set(title=title, xlabel="Objectives", ylabel="Score")
-        plt.xticks(rotation=15, ha="right")
         ax.get_legend().remove()
+        plt.xticks(rotation=15, ha="right")
         self._attach_colorbar(ax, dataframe[objectives[-1]].tolist(), label="Rank")
         self.finalize(fig, "pareto_parallel.png")
 
