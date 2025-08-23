@@ -1,80 +1,95 @@
 """Module for exporting schedules to different formats."""
 
+import shutil
 from argparse import Namespace
+from collections.abc import Iterator
 from csv import writer
 from dataclasses import dataclass
 from logging import getLogger
 from pathlib import Path
 
-from ..config.config import RoundType, TournamentConfig
+from ..config.config import RoundType
 from ..config.constants import FitnessObjective
-from ..data_model.event import EventFactory
-from ..data_model.schedule import Individual, Schedule
+from ..data_model.schedule import Individual, Population, Schedule
 from ..genetic.ga import GA
 from ..visualize.plot import Plot
-from .base_exporter import Exporter, GridBasedExporter
+from .base_exporter import GridBasedExporter
 
 logger = getLogger(__name__)
 
 
 def generate_summary(args: Namespace, ga: GA) -> None:
     """Run the fll-scheduler-ga application and generate summary reports."""
-    time_fmt = ga.context.app_config.tournament.time_fmt
     output_dir = Path(args.output_dir)
+    if output_dir.exists():
+        logger.debug("Output directory %s already exists. Clearing contents.", output_dir)
+        shutil.rmtree(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     logger.debug("Output directory: %s", output_dir)
 
-    if not args.no_plotting and ga.total_population:
-        plot = Plot(
-            ga=ga,
-            save_dir=output_dir,
-            cmap_name=args.cmap_name,
-        )
-        plot.plot_fitness(
-            title="Fitness over time",
-            xlabel="Generations",
-            ylabel="Average fitnesses",
-        )
-        plot.plot_parallel(title="Trade-off parallel coordinates")
-        plot.plot_scatter(title=f"{len(ga.context.evaluator.objectives)}D scatter plot of schedules")
+    generate_plots(ga, output_dir, args)
 
-    front = sorted(ga.pareto_front(), key=lambda s: (s.rank, -sum(s.fitness)))
+    subdir_names = (
+        "csv",
+        "html",
+        "txt",
+        "team_schedules",
+    )
 
-    for i, schedule in enumerate(front, start=1):
+    subdirs: dict[str, Path] = {}
+    for name in subdir_names:
+        subdirs[name] = output_dir / name
+        subdirs[name].mkdir(parents=True, exist_ok=True)
+
+    time_fmt = ga.context.app_config.tournament.time_fmt
+    csv_exporter = CsvExporter(time_fmt)
+    html_exporter = HtmlExporter(time_fmt)
+
+    # Sorts by lowest rank, then highest sum of fitness
+    schedules = ga.pareto_front() if args.front_only else ga.total_population
+    schedules.sort(key=lambda s: (s.rank, -sum(s.fitness)))
+    for i, schedule in enumerate(schedules, start=1):
         name = f"front_{schedule.rank}_schedule_{i}"
-        suffixes = (
-            "csv",
-            "html",
+
+        csv_exporter.export(
+            schedule=schedule,
+            path=subdirs["csv"] / f"{name}.csv",
         )
-        for suffix in suffixes:
-            suffix_subdir = output_dir / suffix
-            suffix_subdir.mkdir(parents=True, exist_ok=True)
-            output_path = suffix_subdir / name
-            output_path = output_path.with_suffix(f".{suffix}")
-            exporter = get_exporter(output_path, time_fmt)
-            exporter.export(schedule, output_path)
 
-        txt_subdir = output_dir / "txt"
-        txt_subdir.mkdir(parents=True, exist_ok=True)
-        txt_output_path = txt_subdir / f"{name}_summary.txt"
-        generate_summary_report(schedule, ga.context.evaluator.objectives, txt_output_path)
+        html_exporter.export(
+            schedule=schedule,
+            path=subdirs["html"] / f"{name}.html",
+        )
 
-        team_schedules_subdir = output_dir / "team_schedules"
-        team_schedules_subdir.mkdir(parents=True, exist_ok=True)
-        team_schedules_output_path = team_schedules_subdir / f"{name}_team_schedule.csv"
+        generate_summary_report(
+            schedule=schedule,
+            path=subdirs["txt"] / f"{name}_summary.txt",
+        )
+
         generate_team_schedules(
-            schedule,
-            ga.context.event_factory,
-            ga.context.app_config.tournament,
-            team_schedules_output_path,
+            schedule=schedule,
+            path=subdirs["team_schedules"] / f"{name}_team_schedule.csv",
+            ga=ga,
         )
 
-    pareto_summary_path = output_dir / "pareto_summary.csv"
-    generate_pareto_summary(ga.total_population, ga.context.evaluator.objectives, pareto_summary_path)
+    generate_pareto_summary(
+        pop=ga.total_population,
+        path=output_dir / "pareto_summary.csv",
+    )
 
 
-def generate_summary_report(schedule: Schedule, objectives: list[FitnessObjective], path: Path) -> None:
+def generate_plots(ga: GA, output_dir: Path, args: Namespace) -> None:
+    """Generate plots for the GA results."""
+    if not args.no_plotting and ga.total_population:
+        plot = Plot(ga, output_dir, args.cmap_name)
+        plot.plot_fitness("Fitness over time", xlabel="Generations", ylabel="Average fitnesses")
+        plot.plot_parallel("Trade-off parallel coordinates")
+        plot.plot_scatter(f"{len(ga.context.evaluator.objectives)}D scatter plot of schedules")
+
+
+def generate_summary_report(schedule: Schedule, path: Path) -> None:
     """Generate a text summary report for a single schedule."""
+    objectives = list(FitnessObjective)
     len_objectives = [len(name) for name in objectives]
     max_len_obj = max(len_objectives, default=0) + 1
 
@@ -125,13 +140,10 @@ def generate_summary_report(schedule: Schedule, objectives: list[FitnessObjectiv
         logger.exception("Failed to write summary report to file %s", path)
 
 
-def generate_team_schedules(
-    schedule: Schedule,
-    event_factory: EventFactory,
-    config: TournamentConfig,
-    path: Path,
-) -> None:
+def generate_team_schedules(schedule: Schedule, path: Path, ga: GA) -> None:
     """Generate a CSV file with team schedules, sorted by team IDs."""
+    event_factory = ga.context.event_factory
+    config = ga.context.app_config.tournament
     event_map = event_factory.as_mapping()
     rows = []
     headers = ["Team"]
@@ -164,21 +176,18 @@ def generate_team_schedules(
         logger.exception("Failed to write team schedules to file %s", path)
 
 
-def generate_pareto_summary(front: list[Schedule], objectives: list[FitnessObjective], path: Path) -> None:
+def generate_pareto_summary(pop: Population, path: Path) -> None:
     """Generate a summary of the Pareto front."""
-    schedule_enum_digits = len(str(len(front)))
-    front.sort(key=lambda s: (s.rank, -sum(s.fitness)))
-
     try:
         with path.open("w", encoding="utf-8") as f:
+            schedule_enum_digits = len(str(len(pop)))
             f.write("Schedule, ID, Hash, Rank, ")
-
-            for name in objectives:
+            for name in list(FitnessObjective):
                 f.write(f"{name}, ")
 
             f.write("Sum, Ref Point Index, Distance")
             f.write("\n")
-            for i, schedule in enumerate(front, start=1):
+            for i, schedule in enumerate(sorted(pop, key=lambda s: (s.rank, -sum(s.fitness))), start=1):
                 f.write(f"{i:0{schedule_enum_digits}}, {id(schedule)}, {hash(schedule)}, {schedule.rank}, ")
 
                 for score in schedule.fitness:
@@ -192,89 +201,43 @@ def generate_pareto_summary(front: list[Schedule], objectives: list[FitnessObjec
         logger.exception("Failed to write Pareto summary to file %s", path)
 
 
-def get_exporter(path: Path, time_fmt: str) -> Exporter:
-    """Get the appropriate exporter based on the file extension."""
-    exporter = {
-        ".csv": CsvExporter,
-        ".html": HtmlExporter,
-    }.get(path.suffix.lower(), None)
-
-    if exporter is None:
-        logger.warning("No exporter found for file extension %s. Defaulting to CSV.", path.suffix)
-        return CsvExporter(time_fmt=time_fmt)
-    return exporter(time_fmt=time_fmt)
-
-
 @dataclass(slots=True)
 class CsvExporter(GridBasedExporter):
     """Exporter for schedules in CSV format."""
 
-    def render_grid(self, title: str, schedule: Schedule) -> list[str]:
+    def render_grid(self, schedule_by_type: dict[RoundType, Individual]) -> Iterator[list[str]]:
         """Write a single schedule grid to a CSV writer."""
-        rows = []
-        rows.append([title])
-        if not schedule:
-            return [*rows, "No events scheduled for this round type.", []]
-
-        timeslots, locations, grid_lookup = self._build_grid_data(schedule)
-
-        header = ["Time"] + [str(loc) for loc in locations]
-        rows.append(header)
-
-        for time_slot in timeslots:
-            r = [time_slot.start.strftime(self.time_fmt)]
-            for location in locations:
-                team = grid_lookup.get((time_slot, location))
-                if isinstance(team, int):
-                    r.append(str(team))
-                else:
-                    r.append("")
-            rows.append(r)
-        rows.append([])
-        return rows
+        for title, schedule in schedule_by_type.items():
+            yield [title]
+            if not schedule:
+                yield ["No events scheduled for this round type.", []]
+                continue
+            timeslots, locations, grid_lookup = self._build_grid_data(schedule)
+            yield ["Time"] + [str(loc) for loc in locations]
+            for ts in timeslots:
+                r = [ts.start.strftime(self.time_fmt)]
+                for loc in locations:
+                    team = grid_lookup.get((ts, loc))
+                    if isinstance(team, int):
+                        r.append(str(team))
+                    else:
+                        r.append("")
+                yield r
+            yield []
 
     def write_to_file(self, schedule_by_type: dict[RoundType, Individual], filename: Path) -> None:
         """Write the schedule to a file."""
-        csv_parts = []
-        for rt, values in schedule_by_type.items():
-            csv_parts.extend(self.render_grid(rt, values))
-
         with filename.open("w", newline="", encoding="utf-8") as csvfile:
-            writer(csvfile).writerows(csv_parts)
+            writer(csvfile).writerows(self.render_grid(schedule_by_type))
 
 
 @dataclass(slots=True)
 class HtmlExporter(GridBasedExporter):
     """Exporter for schedules in HTML format."""
 
-    def render_grid(self, title: str, schedule: Schedule) -> list[str]:
+    def render_grid(self, schedule_by_type: dict[RoundType, Individual]) -> Iterator[str]:
         """Render a single schedule grid as an HTML table."""
-        if not schedule:
-            return [f"<h2>{title}</h2><p>No events scheduled.</p>"]
-
-        timeslots, locations, grid_lookup = self._build_grid_data(schedule)
-
-        html = [f"<h2>{title}</h2>", "<table>", "<thead>", "<tr><th>Time</th>"]
-        for location in locations:
-            html.extend(f"<th>{location!s}</th>")
-        html.extend(["</tr>", "</thead>", "<tbody>"])
-
-        for time_slot in timeslots:
-            html.append(f"<tr><td>{time_slot.start.strftime(self.time_fmt)}</td>")
-            for location in locations:
-                team = grid_lookup.get((time_slot, location))
-                if isinstance(team, int):
-                    html.append(f"<td>{team}</td>")
-                else:
-                    html.append("<td></td>")
-            html.append("</tr>")
-        html.append("</tbody></table>")
-        return html
-
-    def write_to_file(self, schedule_by_type: dict[RoundType, Individual], filename: Path) -> None:
-        """Write the schedule to a file."""
-        html_parts = [
-            """
+        yield """
             <!DOCTYPE html>
             <html lang="en">
             <head>
@@ -314,13 +277,34 @@ class HtmlExporter(GridBasedExporter):
             <body>
                 <div class="container">
                 <h1>Tournament Schedule</h1>
-            """
-        ]
+        """
+        for title, schedule in schedule_by_type.items():
+            yield f"<h2>{title}</h2>"
+            if not schedule:
+                yield "<p>No events scheduled.</p>"
+                continue
 
-        for rt, values in schedule_by_type.items():
-            html_parts.extend(self.render_grid(rt, values))
+            timeslots, locations, grid_lookup = self._build_grid_data(schedule)
+            yield "<table><thead><tr>"
+            yield "<th>Time</th>"
+            for loc in locations:
+                yield f"<th>{loc!s}</th>"
+            yield "</tr></thead>"
+            yield "<tbody>"
 
-        html_parts.append("</body></html>")
+            for ts in timeslots:
+                yield "<tr>"
+                yield f"<td>{ts.start.strftime(self.time_fmt)}</td>"
+                for loc in locations:
+                    team = grid_lookup.get((ts, loc))
+                    if isinstance(team, int):
+                        yield f"<td>{team}</td>"
+                    else:
+                        yield "<td></td>"
+                yield "</tr>"
+            yield "</tbody></table>"
 
+    def write_to_file(self, schedule_by_type: dict[RoundType, Individual], filename: Path) -> None:
+        """Write the schedule to a file."""
         with filename.open("w", encoding="utf-8") as f:
-            f.write("".join(html_parts))
+            f.write("".join(self.render_grid(schedule_by_type)))

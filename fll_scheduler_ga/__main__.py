@@ -68,7 +68,6 @@ def handle_seed_file(args: Namespace, ga_context: GaContext) -> None:
             report_path = parent_dir / "report.txt"
             generate_summary_report(
                 csv_import.schedule,
-                ga_context.evaluator.objectives,
                 report_path,
             )
 

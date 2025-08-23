@@ -2,6 +2,7 @@
 
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 class Exporter(ABC):
     """Abstract base class for exporting schedules."""
 
-    def export(self, schedule: Schedule, filename: Path) -> None:
+    def export(self, schedule: Schedule, path: Path) -> None:
         """Export the schedule to a given filename."""
         if not schedule:
             logger.warning("Cannot export an empty schedule.")
@@ -27,10 +28,10 @@ class Exporter(ABC):
         schedule_by_type = self._group_by_type(schedule)
 
         try:
-            self.write_to_file(schedule_by_type, filename)
-            logger.debug("Schedule successfully exported to %s", filename)
+            self.write_to_file(schedule_by_type, path)
+            logger.debug("Schedule successfully exported to %s", path)
         except OSError:
-            logger.exception("Failed to export schedule to %s", filename)
+            logger.exception("Failed to export schedule to %s", path)
 
     def _group_by_type(self, schedule: Schedule) -> dict[RoundType, Individual]:
         """Group the schedule by round type."""
@@ -46,7 +47,7 @@ class Exporter(ABC):
         """Write the schedule to a file."""
 
     @abstractmethod
-    def render_grid(self, title: str, schedule: Schedule) -> list[str]:
+    def render_grid(self, schedule_by_type: dict[RoundType, Individual]) -> Iterator[str | Iterator[str]]:
         """Render a schedule grid for a specific round type."""
 
 

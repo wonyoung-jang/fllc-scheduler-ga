@@ -41,13 +41,10 @@ class Schedule:
         """Return the number of scheduled events."""
         return len(self.schedule)
 
-    def __getitem__(self, event: Event) -> Team:
+    def __getitem__(self, event: Event) -> Team | None:
         """Get the team assigned to a specific event."""
-        try:
-            return self.teams[self.schedule[event]]
-        except KeyError:
-            msg = f"The event {event} is not scheduled."
-            raise KeyError(msg) from None
+        team_id = self.schedule.get(event, None)
+        return self.teams.get(team_id, None)
 
     def __setitem__(self, event: Event, team: Team) -> None:
         """Assign a team to a specific event."""
@@ -103,7 +100,7 @@ class Schedule:
         self[event1] = team1
         self[event2] = team2
 
-    def get_team(self, team_id: int) -> Team:
+    def get_team(self, team_id: int) -> Team | None:
         """Get a team object by its identity."""
         return self.teams[team_id]
 

@@ -81,7 +81,8 @@ class Plot:
         ax.set(title=title, xlabel="Objectives", ylabel="Score")
         ax.get_legend().remove()
         plt.xticks(rotation=15, ha="right")
-        self._attach_colorbar(ax, dataframe[objectives[-1]].tolist(), label="Rank")
+        ranks = dataframe[objectives[-1]].tolist()
+        self._attach_colorbar(ax, ranks, label="Rank")
         self.finalize(fig, "pareto_parallel.png")
 
     def plot_scatter(self, title: str) -> None:
@@ -126,7 +127,7 @@ class Plot:
             logger.exception("Error saving plot to %s", path)
             plt.close(fig)
 
-    def _attach_colorbar(self, ax: Axes, values: list[float], label: str | None = None) -> None:
+    def _attach_colorbar(self, ax: Axes, values: list[int], label: str | None = None) -> None:
         """Attach a colorbar to the given axes."""
         unique_values = sorted(set(values))
 
