@@ -36,6 +36,8 @@ class MutationOp(StrEnum):
     SWAP_TEAM_SAME_LOCATION = "SwapTeam_SameLocation"
     SWAP_TEAM_SAME_TIME = "SwapTeam_SameTime"
     SWAP_TABLE_SIDE = "SwapTableSide"
+    INVERSION = "Inversion"
+    SCRAMBLE = "Scramble"
 
 
 class HardConstraint(StrEnum):

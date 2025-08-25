@@ -143,7 +143,7 @@ def create_ga_context(app_config: AppConfig) -> GaContext:
 
     selections = tuple(build_selections(app_config))
     crossovers = tuple(build_crossovers(app_config, team_factory, event_factory))
-    mutations = tuple(build_mutations(app_config))
+    mutations = tuple(build_mutations(app_config, event_factory))
 
     return GaContext(
         app_config=app_config,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass, field
 from logging import getLogger
 from typing import TYPE_CHECKING
@@ -49,12 +50,16 @@ class EventFactory:
     _cached_list: list[Event] = field(default=None, init=False, repr=False)
     _cached_mapping: EventMap = field(default=None, init=False, repr=False)
     _cached_timeslots: dict[tuple[datetime, datetime], TimeSlot] = field(default_factory=dict, init=False, repr=False)
+    _cached_timeslots_list: dict[tuple[RoundType, TimeSlot], list[Event]] = field(default=None, init=False, repr=False)
+    _cached_matches: dict[RoundType, list[tuple[Event, ...]]] = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
         self.build()
         self.as_list()
         self.as_mapping()
+        self.as_timeslots()
+        self.as_matches()
         self.build_conflicts()
 
         for rt, events in self._cached_events.items():
@@ -128,6 +133,24 @@ class EventFactory:
             as_list = self.as_list()
             self._cached_mapping = {e.identity: e for e in as_list}
         return self._cached_mapping
+
+    def as_timeslots(self) -> dict[tuple[RoundType, TimeSlot], list[Event]]:
+        """Get a mapping of TimeSlots to their Events."""
+        if self._cached_timeslots_list is None:
+            self._cached_timeslots_list = defaultdict(list)
+            for event in self.as_list():
+                self._cached_timeslots_list[(event.roundtype, event.timeslot)].append(event)
+        return self._cached_timeslots_list
+
+    def as_matches(self) -> dict[RoundType, list[tuple[Event, ...]]]:
+        """Get a mapping of RoundTypes to their matched Events."""
+        if self._cached_matches is None:
+            self._cached_matches = defaultdict(list)
+            for event in self.as_list():
+                if not event.paired or event.location.side != 1:
+                    continue
+                self._cached_matches[event.roundtype].append((event, event.paired))
+        return self._cached_matches
 
     def build_conflicts(self) -> None:
         """Build a mapping of event identities to their conflicting events."""

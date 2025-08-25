@@ -206,16 +206,26 @@ class Island:
 
         # Handle underpopulation by cloning then mutating existing individuals.
         while len(self.selected) < needed_size:
-            choice_index = self.rng.choice(range(len(current_pop)))
-            choice = current_pop[choice_index].clone()
-            mutation_op = self.rng.choice(self.context.mutations)
-            _m_str = str(mutation_op)
-            for _ in range(5):
-                self.mutation_ratio["total"][_m_str] += 1
-                if mutation_op.mutate(choice):
-                    self.mutation_ratio["success"][_m_str] += 1
+            choice: Schedule = None
+            if self.rng.choice((True, False)):
+                self.context.logger.debug("Underpopulation: cloning and mutating existing")
+                choice_index = self.rng.choice(range(len(current_pop)))
+                choice = current_pop[choice_index].clone()
+                mutation_op = self.rng.choice(self.context.mutations)
+                _m_str = str(mutation_op)
+                for _ in range(5):
+                    self.mutation_ratio["total"][_m_str] += 1
+                    if mutation_op.mutate(choice):
+                        self.mutation_ratio["success"][_m_str] += 1
+            else:
+                self.context.logger.debug("Underpopulation: generating new")
+                seeder = Random(self.rng.randint(*RANDOM_SEED_RANGE))
+                self.builder.rng = Random(seeder.randint(*RANDOM_SEED_RANGE))
+                choice = self.builder.build()
+                if not self.context.repairer.repair(choice):
+                    continue
 
-            if self.add_to_population(choice):
+            if choice and self.add_to_population(choice):
                 choice.clear_cache()
                 choice.fitness = self.context.evaluator.evaluate(choice)
                 break

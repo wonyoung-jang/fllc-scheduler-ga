@@ -28,7 +28,7 @@ class Schedule:
     teams: TeamMap = field(default_factory=dict, compare=False)
     schedule: Individual = field(default_factory=dict, compare=False)
     fitness: tuple[float, ...] | None = field(default=None, compare=False)
-    rank: int = field(default=None, compare=True)
+    rank: int = field(default=99, compare=True)
 
     normalized_fitness: np.ndarray = field(default=None, init=False, repr=False, compare=False)
     ref_point_idx: int = field(default=None, init=False, repr=False, compare=False)
@@ -54,6 +54,10 @@ class Schedule:
     def __setitem__(self, event: Event, team: Team) -> None:
         """Assign a team to a specific event."""
         self.schedule[event] = team.identity
+
+    def __delitem__(self, event: Event) -> None:
+        """Remove a specific event from the schedule."""
+        del self.schedule[event]
 
     def __contains__(self, event: Event) -> bool:
         """Check if a specific event is scheduled."""

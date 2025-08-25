@@ -14,52 +14,70 @@ if TYPE_CHECKING:
     from random import Random
 
     from ..config.app_config import AppConfig
-    from ..config.config import RoundType
+    from ..data_model.event import Event, EventFactory
     from ..data_model.schedule import Match, Schedule
+    from ..data_model.team import Team
+    from ..data_model.time import TimeSlot
 
 logger = getLogger(__name__)
 
 
-def build_mutations(app_config: AppConfig) -> Iterator[Mutation]:
+def build_mutations(app_config: AppConfig, event_factory: EventFactory) -> Iterator[Mutation]:
     """Build and return a tuple of mutation operators based on the configuration."""
     variant_map = {
         # SwapMatchMutation variants
         MutationOp.SWAP_MATCH_CROSS_TIME_LOCATION: lambda: SwapMatchMutation(
             rng=app_config.rng,
+            event_factory=event_factory,
             same_timeslot=False,
             same_location=False,
         ),
         MutationOp.SWAP_MATCH_SAME_LOCATION: lambda: SwapMatchMutation(
             rng=app_config.rng,
+            event_factory=event_factory,
             same_timeslot=False,
             same_location=True,
         ),
         MutationOp.SWAP_MATCH_SAME_TIME: lambda: SwapMatchMutation(
             rng=app_config.rng,
+            event_factory=event_factory,
             same_timeslot=True,
             same_location=False,
         ),
         # SwapTeamMutation variants
         MutationOp.SWAP_TEAM_CROSS_TIME_LOCATION: lambda: SwapTeamMutation(
             rng=app_config.rng,
+            event_factory=event_factory,
             same_timeslot=False,
             same_location=False,
         ),
         MutationOp.SWAP_TEAM_SAME_LOCATION: lambda: SwapTeamMutation(
             rng=app_config.rng,
+            event_factory=event_factory,
             same_timeslot=False,
             same_location=True,
         ),
         MutationOp.SWAP_TEAM_SAME_TIME: lambda: SwapTeamMutation(
             rng=app_config.rng,
+            event_factory=event_factory,
             same_timeslot=True,
             same_location=False,
         ),
         # SwapTableSideMutation variant
         MutationOp.SWAP_TABLE_SIDE: lambda: SwapTableSideMutation(
             rng=app_config.rng,
+            event_factory=event_factory,
             same_timeslot=True,
             same_location=True,
+        ),
+        # TimeSlotSequenceMutation variants
+        MutationOp.INVERSION: lambda: InversionMutation(
+            rng=app_config.rng,
+            event_factory=event_factory,
+        ),
+        MutationOp.SCRAMBLE: lambda: ScrambleMutation(
+            rng=app_config.rng,
+            event_factory=event_factory,
         ),
     }
 
@@ -81,6 +99,7 @@ class Mutation(ABC):
     """Abstract base class for mutation operators in the FLL Scheduler GA."""
 
     rng: Random
+    event_factory: EventFactory
 
     @abstractmethod
     def mutate(self, schedule: Schedule) -> bool:
@@ -95,11 +114,6 @@ class Mutation(ABC):
         """
         msg = "Mutate method must be implemented by subclasses."
         raise NotImplementedError(msg)
-
-
-@dataclass(slots=True)
-class InversionMutation(Mutation):
-    """Mutation operator for mutating an entire timeslot."""
 
 
 @dataclass(slots=True)
@@ -136,11 +150,17 @@ class SwapMutation(Mutation):
         """
         _same_timeslot = self.same_timeslot
         _same_location = self.same_location
-        _match_pool = self._get_match_pool(schedule)
+        _match_pool = self._get_match_pool()
         for i, match1_data in enumerate(_match_pool, start=1):
             for match2_data in _match_pool[i:]:
-                _e1, _, _, _ = match1_data
-                _e2, _, _, _ = match2_data
+                (
+                    _e1,
+                    _,
+                ) = match1_data
+                (
+                    _e2,
+                    _,
+                ) = match2_data
                 _is_same_timeslot = _e1.timeslot == _e2.timeslot
                 _is_same_location = _e1.location == _e2.location
 
@@ -154,10 +174,9 @@ class SwapMutation(Mutation):
 
                 yield match1_data, match2_data
 
-    def _get_match_pool(self, schedule: Schedule) -> list[Match]:
-        """Get a pool of matches from the schedule schedule."""
-        _matches: dict[RoundType, list[Match]] = schedule.matches()
-
+    def _get_match_pool(self) -> list[tuple[Event, ...]]:
+        """Get a pool of matches from the schedule."""
+        _matches = self.event_factory.as_matches()
         if len(_matches) < 2:
             return []
 
@@ -226,14 +245,18 @@ class SwapTeamMutation(SwapMutation):
     def get_swap_candidates(self, schedule: Schedule) -> tuple[Match | None]:
         """Get two matches to swap in the schedule schedule."""
         for match1_data, match2_data in self.yield_swap_candidates(schedule):
-            e1a, _, t1a, t1b = match1_data
-            e2a, _, t2a, t2b = match2_data
+            e1a, e1b = match1_data
+            e2a, e2b = match2_data
+            t1a, t1b = schedule[e1a], schedule[e1b]
+            t2a, t2b = schedule[e2a], schedule[e2b]
+            if None in (t1a, t1b, t2a, t2b):
+                continue
 
             match_team_ids = {t1a.identity, t1b.identity, t2a.identity, t2b.identity}
             if len(match_team_ids) < 4 or t1a.conflicts(e2a, ignore=e1a) or t2a.conflicts(e1a, ignore=e2a):
                 continue
 
-            return match1_data, match2_data
+            return (e1a, e1b, t1a, t1b), (e2a, e2b, t2a, t2b)
 
         return None, None
 
@@ -259,36 +282,48 @@ class SwapMatchMutation(SwapMutation):
 
         e1a, e1b, t1a, t1b = match1_data
         e2a, e2b, t2a, t2b = match2_data
+        is_match1_teams = None not in (t1a, t1b)
+        is_match2_teams = None not in (t2a, t2b)
 
-        t1a.switch_event(e1a, e2a)
-        t1b.switch_event(e1b, e2b)
-        t2a.switch_event(e2a, e1a)
-        t2b.switch_event(e2b, e1b)
+        if not is_match1_teams and not is_match2_teams:
+            return False
 
-        schedule[e1a] = t2a
-        schedule[e1b] = t2b
-        schedule[e2a] = t1a
-        schedule[e2b] = t1b
+        if is_match1_teams:
+            t1a.switch_event(e1a, e2a)
+            t1b.switch_event(e1b, e2b)
+            schedule[e2a] = t1a
+            schedule[e2b] = t1b
+            if not is_match2_teams:
+                del schedule[e1a]
+                del schedule[e1b]
+
+        if is_match2_teams:
+            t2a.switch_event(e2a, e1a)
+            t2b.switch_event(e2b, e1b)
+            schedule[e1a] = t2a
+            schedule[e1b] = t2b
+            if not is_match1_teams:
+                del schedule[e2a]
+                del schedule[e2b]
 
         schedule.clear_cache()
-
         return True
 
     def get_swap_candidates(self, schedule: Schedule) -> tuple[Match | None]:
         """Get two matches to swap in the schedule schedule."""
         for match1_data, match2_data in self.yield_swap_candidates(schedule):
-            e1a, e1b, t1a, t1b = match1_data
-            e2a, e2b, t2a, t2b = match2_data
+            e1a, e1b = match1_data
+            e2a, e2b = match2_data
 
-            if (
-                t1a.conflicts(e2a, ignore=e1a)
-                or t1b.conflicts(e2b, ignore=e1b)
-                or t2a.conflicts(e1a, ignore=e2a)
-                or t2b.conflicts(e1b, ignore=e2b)
-            ):
+            t1a, t1b = schedule[e1a], schedule[e1b]
+            if None not in (t1a, t1b) and (t1a.conflicts(e2a, ignore=e1a) or t1b.conflicts(e2b, ignore=e1b)):
                 continue
 
-            return match1_data, match2_data
+            t2a, t2b = schedule[e2a], schedule[e2b]
+            if None not in (t2a, t2b) and (t2a.conflicts(e1a, ignore=e2a) or t2b.conflicts(e1b, ignore=e2b)):
+                continue
+
+            return (e1a, e1b, t1a, t1b), (e2a, e2b, t2a, t2b)
 
         return None, None
 
@@ -307,7 +342,12 @@ class SwapTableSideMutation(SwapMutation):
         if match_data is None:
             return False
 
-        e1a, e1b, t1a, t1b = match_data
+        e1a, e1b = match_data
+
+        t1a, t1b = schedule[e1a], schedule[e1b]
+
+        if None in (t1a, t1b):
+            return False
 
         t1a.switch_event(e1a, e1b)
         t1b.switch_event(e1b, e1a)
@@ -323,3 +363,179 @@ class SwapTableSideMutation(SwapMutation):
         """Get two matches to swap in the schedule schedule."""
         next_swap = next(self.yield_swap_candidates(schedule), None)
         return self.rng.choice(next_swap) if next_swap is not None else None
+
+
+@dataclass(slots=True)
+class TimeSlotSequenceMutation(Mutation):
+    """Abstract base class for mutations that permute assignments within a single timeslot."""
+
+    event_factory: EventFactory
+    _timeslot_event_map: dict[TimeSlot, list[Event]] = None
+
+    def __post_init__(self) -> None:
+        """Post-initialization to set up the initial state."""
+        self._timeslot_event_map = self.event_factory.as_timeslots()
+
+    @abstractmethod
+    def _permute(self, items: list) -> list:
+        """Permute the list of items. To be implemented by subclasses."""
+        msg = "Subclasses must implement this method."
+        raise NotImplementedError(msg)
+
+    def mutate(self, schedule: Schedule) -> bool:
+        """Find a suitable timeslot and round type, then permute assignments."""
+        chosen_key = self.rng.choice(list(self._timeslot_event_map.keys()))
+        chosen_rt, _ = chosen_key
+        max_len_timeslot = max(len(v) for k, v in self._timeslot_event_map.items() if k[0] == chosen_rt)
+        schedule_events = schedule.keys()
+        less_than_timeslots = [
+            k
+            for k, _ in self._timeslot_event_map.items()
+            if k[0] == chosen_rt and len([e for e in schedule_events if e.timeslot == k[1]]) < max_len_timeslot
+        ]
+        chosen_rt_ts = chosen_key if not less_than_timeslots else self.rng.choice(less_than_timeslots)
+
+        candidates = self._timeslot_event_map[chosen_rt_ts]
+        teams_per_round = candidates[0].location.teams_per_round
+
+        if teams_per_round == 1:
+            return self._mutate_singles(schedule, candidates)
+        if teams_per_round == 2:
+            return self._mutate_matches(schedule, candidates)
+        return False
+
+    def _mutate_singles(self, schedule: Schedule, candidates: list[Event]) -> bool:
+        """Permute team assignments for single-team events."""
+        candidates.sort(key=lambda e: (e.location.identity, e.location.side if e.location.side else 0))
+
+        original_team_ids = []
+        for e in candidates:
+            team = None if schedule[e] is None else schedule[e].identity
+            original_team_ids.append(team)
+
+        if len(original_team_ids) < 2:
+            return False
+
+        permuted_team_ids = self._permute(original_team_ids)
+        if original_team_ids == permuted_team_ids:
+            return False
+
+        # Reassign by swapping teams between events based on the permutation.
+        for event, old_team_id, new_team_id in zip(candidates, original_team_ids, permuted_team_ids, strict=True):
+            if old_team_id == new_team_id:
+                continue
+
+            old_team = schedule.get_team(old_team_id) if old_team_id is not None else None
+            new_team = schedule.get_team(new_team_id) if new_team_id is not None else None
+
+            if old_team is not None:
+                old_team.remove_event(event)
+                del schedule[event]
+
+            if new_team is not None:
+                new_team.add_event(event)
+                schedule[event] = new_team
+
+        schedule.clear_cache()
+        return True
+
+    def _mutate_matches(self, schedule: Schedule, candidates: list[Event]) -> bool:
+        """Permute team assignments for match-based events."""
+        matches: list[tuple[tuple[Event, ...], tuple[Team | None, ...]]] = []
+        seen_events = set()
+        candidates.sort(key=lambda e: (e.location.identity, e.location.side if e.location.side else 0))
+
+        for e1 in candidates:
+            if e1 in seen_events or e1.location.side != 1:
+                continue
+
+            if e2 := e1.paired:
+                t1 = schedule[e1]
+                t2 = schedule[e2]
+                matches.append(((e1, e2), (t1, t2)))
+                seen_events.add(e1)
+                seen_events.add(e2)
+
+        if len(matches) < 2:
+            return False
+
+        original_team_pair_ids: list[tuple[int | None, ...]] = [
+            (None, None) if (t1, t2) == (None, None) else (t1.identity, t2.identity) for _, (t1, t2) in matches
+        ]
+        permuted_team_pair_ids = self._permute(original_team_pair_ids)
+
+        if original_team_pair_ids == permuted_team_pair_ids:
+            return False
+
+        event_pairs = (m[0] for m in matches)
+        for event_pair, old_ids, new_ids in zip(
+            event_pairs,
+            original_team_pair_ids,
+            permuted_team_pair_ids,
+            strict=True,
+        ):
+            if old_ids == new_ids:
+                continue
+
+            e1, e2 = event_pair
+            old_t1, old_t2 = (schedule.get_team(i) if i is not None else None for i in old_ids)
+            new_t1, new_t2 = (schedule.get_team(i) if i is not None else None for i in new_ids)
+
+            if None not in (old_t1, old_t2):
+                old_t1.remove_event(e1)
+                old_t1.remove_opponent(old_t2)
+                old_t2.remove_event(e2)
+                old_t2.remove_opponent(old_t1)
+
+                del schedule[e1]
+                del schedule[e2]
+
+            if None not in (new_t1, new_t2):
+                new_t1.add_event(e1)
+                new_t1.add_opponent(new_t2)
+                new_t2.add_event(e2)
+                new_t2.add_opponent(new_t1)
+
+                schedule[e1] = new_t1
+                schedule[e2] = new_t2
+
+        schedule.clear_cache()
+        return True
+
+
+@dataclass(slots=True)
+class InversionMutation(TimeSlotSequenceMutation):
+    """Inverts a sub-sequence of assignments within a single timeslot."""
+
+    def __str__(self) -> str:
+        """Return string representation."""
+        return MutationOp.INVERSION
+
+    def _permute(self, items: list) -> list:
+        """Invert a random sub-sequence of the items."""
+        if len(items) < 2:
+            return items
+
+        if isinstance(items[0], tuple):
+            return list(reversed([tuple(reversed(pair)) for pair in items]))
+
+        return list(reversed(items[:]))
+
+
+@dataclass(slots=True)
+class ScrambleMutation(TimeSlotSequenceMutation):
+    """Scrambles a sub-sequence of assignments within a single timeslot."""
+
+    def __str__(self) -> str:
+        """Return string representation."""
+        return MutationOp.SCRAMBLE
+
+    def _permute(self, items: list) -> list:
+        """Scramble a random sub-sequence of the items."""
+        if len(items) < 2:
+            return items
+
+        if isinstance(items[0], tuple):
+            return [tuple(self.rng.sample(pair, len(pair))) for pair in items]
+
+        return self.rng.sample(items[:], len(items))

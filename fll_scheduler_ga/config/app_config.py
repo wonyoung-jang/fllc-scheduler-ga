@@ -115,6 +115,8 @@ def load_operator_config(parser: ConfigParser) -> OperatorConfig:
             MutationOp.SWAP_TEAM_SAME_LOCATION,
             MutationOp.SWAP_TEAM_SAME_TIME,
             MutationOp.SWAP_TABLE_SIDE,
+            MutationOp.INVERSION,
+            MutationOp.SCRAMBLE,
         ]
         logger.warning("%s not found in config. Using defaults: %s", "mutation_types", mutation_types)
 
