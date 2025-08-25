@@ -8,19 +8,18 @@ from random import Random
 from time import time
 from typing import TYPE_CHECKING
 
+from ..config.constants import EPSILON, RANDOM_SEED_RANGE
+from ..config.ga_context import GaContext
 from ..config.ga_parameters import GaParameters
+from ..data_model.schedule import Population
+from ..observers.base_observer import GaObserver
 from ..operators.crossover import Crossover
 from ..operators.mutation import Mutation
+from .builder import ScheduleBuilder
+from .island import Island
 
 if TYPE_CHECKING:
     from ..config.config import TournamentConfig
-
-from ..config.constants import EPSILON, RANDOM_SEED_RANGE
-from ..config.ga_context import GaContext
-from ..data_model.schedule import Population
-from ..observers.base_observer import GaObserver
-from .builder import ScheduleBuilder
-from .island import Island
 
 
 @dataclass(slots=True)

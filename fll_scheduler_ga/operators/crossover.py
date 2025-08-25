@@ -1,25 +1,29 @@
 """Genetic operators for FLL Scheduler GA."""
 
-import logging
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
 from dataclasses import dataclass, field
-from random import Random
+from logging import getLogger
+from typing import TYPE_CHECKING
 
-from ..config.app_config import AppConfig
 from ..config.constants import CrossoverOp
-from ..data_model.event import Event, EventFactory, EventMap
 from ..data_model.schedule import Schedule
-from ..data_model.team import TeamFactory
 
-logger = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from random import Random
+
+    from ..config.app_config import AppConfig
+    from ..data_model.event import Event, EventFactory, EventMap
+    from ..data_model.team import TeamFactory
+
+logger = getLogger(__name__)
 
 
 def build_crossovers(
-    app_config: AppConfig,
-    team_factory: TeamFactory,
-    event_factory: EventFactory,
-) -> Iterator["Crossover"]:
+    app_config: AppConfig, team_factory: TeamFactory, event_factory: EventFactory
+) -> Iterator[Crossover]:
     """Build and return a tuple of crossover operators based on the configuration."""
     rng = app_config.rng
     variant_map = {

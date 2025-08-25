@@ -1,11 +1,11 @@
 """Tools for Non-dominated Sorting Genetic Algorithm III (NSGA-III)."""
 
-import random
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from itertools import combinations
 from logging import getLogger
 from math import comb
+from random import Random
 
 import numpy as np
 
@@ -18,7 +18,7 @@ logger = getLogger(__name__)
 class NSGA3:
     """Non-dominated Sorting Genetic Algorithm III (NSGA-III)."""
 
-    rng: random.Random
+    rng: Random
     num_objectives: int
     population_size: int
     ref_points: np.ndarray = field(init=False, repr=False)

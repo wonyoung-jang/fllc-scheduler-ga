@@ -1,15 +1,21 @@
 """Event data model for FLL scheduling."""
 
-import logging
-from collections.abc import Iterator
-from dataclasses import dataclass, field
-from datetime import datetime
+from __future__ import annotations
 
-from ..config.config import Round, RoundType, TournamentConfig
-from .location import Location
+from dataclasses import dataclass, field
+from logging import getLogger
+from typing import TYPE_CHECKING
+
 from .time import TimeSlot
 
-logger = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from datetime import datetime
+
+    from ..config.config import Round, RoundType, TournamentConfig
+    from .location import Location
+
+logger = getLogger(__name__)
 
 type EventMap = dict[int, Event]
 
@@ -22,7 +28,7 @@ class Event:
     roundtype: RoundType
     timeslot: TimeSlot
     location: Location
-    paired: "Event | None" = field(default=None, repr=False, compare=False)
+    paired: Event | None = field(default=None, repr=False, compare=False)
     conflicts: set[int] = field(default_factory=set, repr=False)
 
     def __hash__(self) -> int:

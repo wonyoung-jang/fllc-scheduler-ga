@@ -1,15 +1,20 @@
 """Represents a schedule (individual) with its associated fitness score."""
 
+from __future__ import annotations
+
 from collections import defaultdict
-from collections.abc import ItemsView, KeysView, ValuesView
 from dataclasses import dataclass, field
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
-import numpy as np
-
-from ..config.config import RoundType
 from .event import Event
 from .team import Team, TeamMap
+
+if TYPE_CHECKING:
+    from collections.abc import ItemsView, KeysView, ValuesView
+
+    import numpy as np
+
+    from ..config.config import RoundType
 
 type Population = list[Schedule]
 type Individual = dict[Event, int]
@@ -22,8 +27,8 @@ class Schedule:
 
     teams: TeamMap = field(default_factory=dict, compare=False)
     schedule: Individual = field(default_factory=dict, compare=False)
-    fitness: tuple[float, ...] | None = field(default=(0, 0, 0), compare=False)
-    rank: int = field(default=10, compare=True)
+    fitness: tuple[float, ...] | None = field(default=None, compare=False)
+    rank: int = field(default=None, compare=True)
 
     normalized_fitness: np.ndarray = field(default=None, init=False, repr=False, compare=False)
     ref_point_idx: int = field(default=None, init=False, repr=False, compare=False)
@@ -65,6 +70,15 @@ class Schedule:
         if self._cached_hash is None:
             self._cached_hash = hash(self.canonical_representation())
         return self._cached_hash
+
+    def clone(self) -> Schedule:
+        """Create a deep copy of the schedule."""
+        return Schedule(
+            teams={i: t.clone() for i, t in self.teams.items()},
+            schedule=self.schedule.copy(),
+            fitness=self.fitness,
+            rank=self.rank,
+        )
 
     def clear_cache(self) -> None:
         """Clear cached values to ensure fresh calculations."""

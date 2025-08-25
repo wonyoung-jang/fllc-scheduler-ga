@@ -71,6 +71,13 @@ class Island:
             return True
         return False
 
+    def _nsga3_select(self) -> None:
+        """NSGA-III selection."""
+        self.selected = self.context.nsga3.select(
+            population=self.selected.values(),
+            population_size=self.ga_params.population_size,
+        )
+
     def initialize(self) -> None:
         """Initialize the population for each island."""
         pop_size = self.ga_params.population_size
@@ -109,7 +116,7 @@ class Island:
                 num_to_create,
             )
 
-        self.selected = self.context.nsga3.select(self.selected.values(), population_size=pop_size)
+        self._nsga3_select()
 
     def get_initial_offspring(
         self, parents: tuple[Schedule, Schedule], cs: tuple[Crossover] | tuple, *, crossover_roll: bool
@@ -164,47 +171,54 @@ class Island:
                 if child_count >= self.ga_params.offspring_size:
                     break
 
-        self.selected = self.context.nsga3.select(
-            self.selected.values(), population_size=self.ga_params.population_size
-        )
+        self._nsga3_select()
 
     def get_migrants(self) -> Iterator[tuple[int, Schedule]]:
         """Randomly yield migrants from population."""
+        keys = list(self.selected.keys())
+        self.rng.shuffle(keys)
         for _ in range(self.ga_params.migration_size):
-            yield self.selected.popitem()
+            s_hash = keys.pop()
+            yield s_hash, self.selected.pop(s_hash)
 
     def receive_migrants(self, migrants: Iterator[tuple[int, Schedule]]) -> None:
         """Receive migrants from another island and add them to the current island's population."""
         for m_hash, migrant in migrants:
             self.add_to_population(migrant, s_hash=m_hash)
 
-        self.selected = self.context.nsga3.select(
-            self.selected.values(), population_size=self.ga_params.population_size
-        )
+        self._nsga3_select()
 
     def handle_underpopulation(self) -> None:
         """Handle underpopulation by adding new individuals to the island."""
-        pop_size = self.ga_params.population_size
-        if len(self.selected) >= pop_size:
+        needed_size = self.ga_params.population_size
+        current_pop = list(self.selected.values())
+        current_size = len(current_pop)
+        missing_size = needed_size - current_size
+        if missing_size <= 0:
             return
 
         self.context.logger.debug(
             "Island %d underpopulated: %d individuals, expected %d.",
             self.identity,
-            len(self.selected),
-            pop_size,
+            current_size,
+            needed_size,
         )
 
-        while len(self.selected) < pop_size:
-            seeder = Random(self.rng.randint(*RANDOM_SEED_RANGE))
-            self.builder.rng = Random(seeder.randint(*RANDOM_SEED_RANGE))
-            schedule = self.builder.build()
+        # Handle underpopulation by cloning then mutating existing individuals.
+        while len(self.selected) < needed_size:
+            choice_index = self.rng.choice(range(len(current_pop)))
+            choice = current_pop[choice_index].clone()
+            mutation_op = self.rng.choice(self.context.mutations)
+            _m_str = str(mutation_op)
+            for _ in range(5):
+                self.mutation_ratio["total"][_m_str] += 1
+                if mutation_op.mutate(choice):
+                    self.mutation_ratio["success"][_m_str] += 1
 
-            self.offspring_ratio["total"] += 1
-            if self.context.repairer.repair(schedule) and self.add_to_population(schedule):
-                schedule.clear_cache()
-                schedule.fitness = self.context.evaluator.evaluate(schedule)
-                self.offspring_ratio["success"] += 1
+            if self.add_to_population(choice):
+                choice.clear_cache()
+                choice.fitness = self.context.evaluator.evaluate(choice)
+                break
 
     def finalize_island(self) -> Iterator[Schedule]:
         """Finalize the island's state after evolution."""

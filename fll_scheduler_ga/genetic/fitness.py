@@ -1,9 +1,9 @@
 """Fitness evaluator for the FLL Scheduler GA."""
 
-import logging
 from collections import defaultdict
 from collections.abc import Iterator
 from dataclasses import dataclass, field
+from logging import getLogger
 from math import sqrt
 from typing import Any
 
@@ -13,7 +13,7 @@ from ..config.constants import FitnessObjective, HardConstraint
 from ..data_model.schedule import Schedule
 from ..data_model.team import Team
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -106,7 +106,6 @@ class FitnessEvaluator:
             bt_key = t.break_time_key()
             tc_key = t.table_consistency_key()
             ov_key = t.opponent_variety_key()
-
             if (bt_s := self.hit_bt_cache.get(bt_key)) is None:
                 bt_s = self.hit_bt_cache.setdefault(bt_key, self.bt_cache.pop(bt_key))
 

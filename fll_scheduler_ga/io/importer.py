@@ -2,10 +2,10 @@
 """Evaluate an existing, grid-based CSV schedule against the GA's fitness metrics."""
 
 import csv
-import logging
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from logging import getLogger
 from pathlib import Path
 from typing import TextIO
 
@@ -16,7 +16,7 @@ from ..data_model.schedule import Schedule
 from ..data_model.team import TeamFactory
 from ..data_model.time import TimeSlot
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 _TIME_HEADER = "Time"
 _RE_HHMM = re.compile(r"\d{2}:\d{2}")

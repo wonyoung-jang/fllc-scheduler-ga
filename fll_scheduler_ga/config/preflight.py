@@ -1,12 +1,12 @@
 """Preflight checks for the fll-scheduler-ga application."""
 
-import logging
 from collections import defaultdict
+from logging import getLogger
 
 from ..data_model.event import EventFactory
 from .config import TournamentConfig
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 def run_preflight_checks(config: TournamentConfig, event_factory: EventFactory) -> None:

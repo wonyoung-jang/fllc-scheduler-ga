@@ -1,22 +1,21 @@
 """Configuration for the FLL Scheduler GA application."""
 
-import argparse
-import logging
+from argparse import Namespace
 from configparser import ConfigParser
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from logging import getLogger
 from pathlib import Path
 from random import Random
 
-from ..data_model.event import Round
 from ..data_model.location import Location
 from ..data_model.schedule import Schedule
-from .config import RoundType, TournamentConfig
+from .config import Round, RoundType, TournamentConfig
 from .constants import RANDOM_SEED_RANGE, CrossoverOp, MutationOp, SelectionOp
 from .ga_operators_config import OperatorConfig
 from .ga_parameters import GaParameters
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -29,7 +28,7 @@ class AppConfig:
     rng: Random
 
 
-def create_app_config(args: argparse.Namespace, path: Path | None = None) -> AppConfig:
+def create_app_config(args: Namespace, path: Path | None = None) -> AppConfig:
     """Create and return the application configuration."""
     if path is None:
         path = Path(args.config_file).resolve()
@@ -122,11 +121,11 @@ def load_operator_config(parser: ConfigParser) -> OperatorConfig:
     return OperatorConfig(selection_types, crossover_types, crossover_ks, mutation_types)
 
 
-def load_ga_parameters(args: argparse.Namespace, config_parser: ConfigParser) -> GaParameters:
+def load_ga_parameters(args: Namespace, config_parser: ConfigParser) -> GaParameters:
     """Build a GaParameters, overriding defaults with any provided CLI args.
 
     Args:
-        args (argparse.Namespace): Parsed command-line arguments.
+        args (Namespace): Parsed command-line arguments.
         config_parser (ConfigParser): Configuration parser with default values.
 
     Returns:
@@ -158,7 +157,7 @@ def load_ga_parameters(args: argparse.Namespace, config_parser: ConfigParser) ->
     return GaParameters(**params)
 
 
-def load_rng(args: argparse.Namespace, config_parser: ConfigParser) -> Random:
+def load_rng(args: Namespace, config_parser: ConfigParser) -> Random:
     """Set up the random number generator."""
     rng_seed = ""
 

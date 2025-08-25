@@ -1,12 +1,12 @@
 """Module for exporting schedules to different formats."""
 
-import shutil
 from argparse import Namespace
 from collections.abc import Iterator
 from csv import writer
 from dataclasses import dataclass
 from logging import getLogger
 from pathlib import Path
+from shutil import rmtree
 
 from ..config.config import RoundType
 from ..config.constants import FitnessObjective
@@ -23,7 +23,7 @@ def generate_summary(args: Namespace, ga: GA) -> None:
     output_dir = Path(args.output_dir)
     if output_dir.exists():
         logger.debug("Output directory %s already exists. Clearing contents.", output_dir)
-        shutil.rmtree(output_dir)
+        rmtree(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     logger.debug("Output directory: %s", output_dir)
 
@@ -95,36 +95,42 @@ def generate_summary_report(schedule: Schedule, path: Path) -> None:
 
     try:
         with path.open("w", encoding="utf-8") as f:
-            f.write(f"--- FLL Scheduler GA Summary Report (ID: {id(schedule)} | Hash: {hash(schedule)}) ---\n")
-
-            f.write("\nSchedule Attributes:\n")
-            for slot in schedule.__slots__:
-                if slot.startswith("_") or slot in ("teams", "schedule"):
-                    continue
-                f.write(f"  - {slot}: {getattr(schedule, slot)}\n")
-
-            f.write("\nObjective Scores:\n")
-            for name, score in zip(objectives, schedule.fitness, strict=True):
-                f.write(f"  - {name:<{max_len_obj}}: {score:.6f}\n")
+            f.write(f"FLL Scheduler GA Summary Report (ID: {id(schedule)} | Hash: {hash(schedule)})\n")
 
             f.write("\n")
+            f.write("Schedule attributes:\n")
+            f.write("--------------------\n")
+            slots = (
+                s for s in schedule.__slots__ if not s.startswith("_") and s not in ("fitness", "teams", "schedule")
+            )
+            for slot in slots:
+                f.write(f"{slot}: {getattr(schedule, slot)}\n")
+
+            f.write("\n")
+            f.write("Schedule objective scores:\n")
+            f.write("--------------------------\n")
+            for name, score in zip(objectives, schedule.fitness, strict=True):
+                f.write(f"{name:<{max_len_obj}}: {score:.6f}\n")
+            f.write(f"{'-' * (max_len_obj + 15)}\n")
             f.write(f"{'Total':<{max_len_obj}}: {sum(schedule.fitness):.6f}\n")
-            f.write(f"{'Average':<{max_len_obj}}: {sum(schedule.fitness) / len(schedule.fitness):.6f}\n\n")
+            f.write(f"{'Percentage':<{max_len_obj}}: {sum(schedule.fitness) / len(schedule.fitness):.2%}\n")
 
             all_teams = schedule.all_teams()
             total_fitnesses = [sum(t.fitness) for t in all_teams]
             max_team_f = max(total_fitnesses)
             min_team_f = min(total_fitnesses)
 
-            f.write("Team fitnesses (sorted by total fitness descending):\n\n")
-
+            f.write("\n")
+            f.write("Team fitnesses (sorted by total fitness descending):\n")
+            f.write("----------------------------------------------------\n")
             f.write(f"Max     : {max_team_f:.6f}\n")
             f.write(f"Min     : {min_team_f:.6f}\n")
             f.write(f"Range   : {max_team_f - min_team_f:.6f}\n")
-            f.write(f"Average : {sum(total_fitnesses) / len(total_fitnesses):.6f}\n\n")
+            f.write(f"Average : {sum(total_fitnesses) / len(total_fitnesses):.6f}\n")
 
             normalized_teams = schedule.normalized_teams()
 
+            f.write("\n")
             objectives_header = (f"{name:<{len_objectives[i] + 1}}" for i, name in enumerate(objectives))
             objectives_header_str = "|".join(objectives_header)
             header = f"{'Team':<5}|{objectives_header_str}|Sum\n"
@@ -285,16 +291,13 @@ class HtmlExporter(GridBasedExporter):
                 continue
 
             timeslots, locations, grid_lookup = self._build_grid_data(schedule)
-            yield "<table><thead><tr>"
-            yield "<th>Time</th>"
+            yield "<table><thead><tr><th>Time</th>"
             for loc in locations:
                 yield f"<th>{loc!s}</th>"
-            yield "</tr></thead>"
-            yield "<tbody>"
+            yield "</tr></thead><tbody>"
 
             for ts in timeslots:
-                yield "<tr>"
-                yield f"<td>{ts.start.strftime(self.time_fmt)}</td>"
+                yield f"<tr><td>{ts.start.strftime(self.time_fmt)}</td>"
                 for loc in locations:
                     team = grid_lookup.get((ts, loc))
                     if isinstance(team, int):

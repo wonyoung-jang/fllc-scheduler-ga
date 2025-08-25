@@ -1,11 +1,15 @@
 """Team data model for FLL Scheduler GA."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from logging import getLogger
+from typing import TYPE_CHECKING
 
-from ..config.config import RoundType, TournamentConfig
-from ..data_model.event import Event
-from .time import TimeSlot
+if TYPE_CHECKING:
+    from ..config.config import RoundType, TournamentConfig
+    from .event import Event
+    from .time import TimeSlot
 
 logger = getLogger(__name__)
 
@@ -27,7 +31,7 @@ class Team:
     info: TeamInfo
     identity: int
     roundreqs: dict[RoundType, int]
-    fitness: tuple[float, ...] = field(init=False, repr=False)
+    fitness: tuple[float, ...] = field(default=None)
     events: set[int] = field(default_factory=set, repr=False)
     timeslots: list[TimeSlot] = field(default_factory=list, repr=False)
     opponents: list[int] = field(default_factory=list, repr=False)
@@ -36,6 +40,19 @@ class Team:
     def __hash__(self) -> int:
         """Hash function for the team based on its identity."""
         return self.identity
+
+    def clone(self) -> Team:
+        """Create a deep copy of the team."""
+        return Team(
+            info=self.info,
+            identity=self.identity,
+            roundreqs=self.roundreqs.copy(),
+            fitness=self.fitness,
+            events=self.events.copy(),
+            timeslots=self.timeslots[:],
+            opponents=self.opponents[:],
+            tables=self.tables[:],
+        )
 
     def rounds_needed(self) -> bool:
         """Get the total number of rounds still needed for the team."""
@@ -66,16 +83,16 @@ class Team:
         if event.paired:
             self.tables.append(event.location)
 
-    def switch_opponent(self, old_opponent: "Team", new_opponent: "Team") -> None:
+    def switch_opponent(self, old_opponent: Team, new_opponent: Team) -> None:
         """Switch the opponent for a given event."""
         self.remove_opponent(old_opponent)
         self.add_opponent(new_opponent)
 
-    def remove_opponent(self, opponent: "Team") -> None:
+    def remove_opponent(self, opponent: Team) -> None:
         """Remove an opponent for a given event."""
         self.opponents.remove(opponent.identity)
 
-    def add_opponent(self, opponent: "Team") -> None:
+    def add_opponent(self, opponent: Team) -> None:
         """Add an opponent for a given event."""
         self.opponents.append(opponent.identity)
 

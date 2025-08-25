@@ -1,15 +1,15 @@
 """Builder for creating a valid schedule individual."""
 
-import logging
-import random
 from dataclasses import dataclass
+from logging import getLogger
+from random import Random
 
 from ..config.config import RoundType, TournamentConfig
 from ..data_model.event import Event, EventFactory
 from ..data_model.schedule import Schedule
 from ..data_model.team import Team, TeamFactory
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -19,9 +19,9 @@ class ScheduleBuilder:
     team_factory: TeamFactory
     event_factory: EventFactory
     config: TournamentConfig
-    rng: random.Random
+    rng: Random
 
-    def build(self) -> Schedule | None:
+    def build(self) -> Schedule:
         """Construct and return the final schedule."""
         events = self.event_factory.build()
         for e in events.values():

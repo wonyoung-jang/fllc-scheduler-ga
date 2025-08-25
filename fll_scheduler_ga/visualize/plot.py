@@ -1,7 +1,7 @@
 """Methods to create plots."""
 
-import logging
 from dataclasses import dataclass, field
+from logging import WARNING, getLogger
 from pathlib import Path
 
 import matplotlib.colors as mcolors
@@ -14,9 +14,9 @@ from matplotlib.figure import Figure
 from ..config.constants import FitnessObjective
 from ..genetic.ga import GA
 
-logger = logging.getLogger("visualize.plot")
-logging.getLogger("matplotlib").setLevel(logging.WARNING)
-logging.getLogger("PIL").setLevel(logging.WARNING)
+logger = getLogger("visualize.plot")
+getLogger("matplotlib").setLevel(WARNING)
+getLogger("PIL").setLevel(WARNING)
 plt.style.use("seaborn-v0_8-whitegrid")
 
 

@@ -1,9 +1,9 @@
 """Parameters for the genetic algorithm used in FLL Scheduler."""
 
-import logging
 from dataclasses import dataclass
+from logging import getLogger
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 @dataclass(slots=True)

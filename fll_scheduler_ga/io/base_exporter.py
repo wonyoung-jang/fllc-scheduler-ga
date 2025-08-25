@@ -1,9 +1,9 @@
 """Base class for exporting schedules."""
 
-import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass
+from logging import getLogger
 from pathlib import Path
 
 from ..config.config import RoundType
@@ -12,7 +12,7 @@ from ..data_model.schedule import Individual, Schedule
 from ..data_model.team import Team
 from ..data_model.time import TimeSlot
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 @dataclass(slots=True)

@@ -6,20 +6,26 @@ Higher selective pressure means better individuals have a higher chance
 of being selected.
 """
 
-import logging
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
 from dataclasses import dataclass
-from random import Random
+from logging import getLogger
+from typing import TYPE_CHECKING
 
-from ..config.app_config import AppConfig
 from ..config.constants import SelectionOp
-from ..data_model.schedule import Population, Schedule
 
-logger = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from random import Random
+
+    from ..config.app_config import AppConfig
+    from ..data_model.schedule import Population, Schedule
+
+logger = getLogger(__name__)
 
 
-def build_selections(app_config: AppConfig) -> Iterator["Selection"]:
+def build_selections(app_config: AppConfig) -> Iterator[Selection]:
     """Build and return a tuple of selection operators based on the configuration."""
     variant_map = {
         SelectionOp.TOURNAMENT_SELECT: lambda: TournamentSelect(

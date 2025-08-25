@@ -1,23 +1,23 @@
 """A repairer for incomplete schedules."""
 
-import logging
-import random
 from collections import defaultdict
 from dataclasses import dataclass, field
+from logging import getLogger
+from random import Random
 
 from ..config.config import TournamentConfig
 from ..data_model.event import Event, EventFactory
 from ..data_model.schedule import Schedule
 from ..data_model.team import Team
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 @dataclass(slots=True)
 class Repairer:
     """Class to handle the repair of schedules with missing event assignments."""
 
-    rng: random.Random
+    rng: Random
     config: TournamentConfig
     event_factory: EventFactory
     set_of_events: set[Event] = field(init=False, repr=False)
@@ -38,21 +38,23 @@ class Repairer:
 
         """
         if len(schedule) == self.config.total_slots:
+            logger.debug("Schedule is already complete, no repair needed.")
             return True
+        logger.debug("Repairing schedule with %d/%d assigned slots.", len(schedule), self.config.total_slots)
 
-        teams_per_round_map = {
+        tpr_assign_map = {
             1: Repairer._assign_singles,
             2: self._assign_matches,
         }
 
-        teams_by_rt_tpr: dict[tuple[int, int], list[Team]] = defaultdict(list)
+        teams_by_rt_tpr: dict[tuple[int, int], dict[int, Team]] = defaultdict(list)
         teams = schedule.all_teams()
         for team in self.rng.sample(teams, k=len(teams)):
             for rt, num_needed in ((rt, num) for rt, num in team.roundreqs.items() if num):
                 key = (rt, self.rt_teams_needed[rt])
                 teams_by_rt_tpr[key].extend(team for _ in range(num_needed))
 
-        events_by_rt_tpr: dict[tuple[int, int], list[Event]] = defaultdict(list)
+        events_by_rt_tpr: dict[tuple[int, int], dict[int, Event]] = defaultdict(list)
         events = self.set_of_events.difference(schedule.keys())
         for e in events:
             if (e.paired and e.location.side == 1) or e.paired is None:
@@ -61,15 +63,21 @@ class Repairer:
                 if key in teams_by_rt_tpr:
                     events_by_rt_tpr[key].append(e)
 
+        for dictionary in (teams_by_rt_tpr, events_by_rt_tpr):
+            for key, value in dictionary.items():
+                dictionary[key] = dict(enumerate(value))
+
         for key, teams_for_rt in teams_by_rt_tpr.items():
             _, tpr = key
             if len(set(teams_for_rt)) < tpr:
                 break
 
-            if (events_for_rt := events_by_rt_tpr.get(key)) and (assign := teams_per_round_map.get(tpr)):
+            events_for_rt = events_by_rt_tpr.get(key)
+            assign = tpr_assign_map.get(tpr)
+            if events_for_rt and assign:
                 assign(
-                    teams=dict(enumerate(teams_for_rt)),
-                    events=dict(enumerate(events_for_rt)),
+                    teams=teams_for_rt,
+                    events=events_for_rt,
                     schedule=schedule,
                 )
 

@@ -1,7 +1,12 @@
 """Time data module for FLL Scheduler GA."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
-from datetime import datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from datetime import datetime
 
 
 @dataclass(slots=True, frozen=True)
@@ -15,10 +20,10 @@ class TimeSlot:
         """Get a string representation of the time slot."""
         return f"{self.start.strftime('%H:%M')}-{self.stop.strftime('%H:%M')}"
 
-    def __lt__(self, other: "TimeSlot") -> bool:
+    def __lt__(self, other: TimeSlot) -> bool:
         """Less-than comparison based on start time."""
         return self.start < other.start
 
-    def overlaps(self, other: "TimeSlot") -> bool:
+    def overlaps(self, other: TimeSlot) -> bool:
         """Check if this time slot overlaps with another."""
         return self.start < other.stop and other.start < self.stop
