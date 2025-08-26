@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar
 
@@ -14,7 +13,6 @@ if TYPE_CHECKING:
 
     import numpy as np
 
-    from ..config.config import RoundType
 
 type Population = list[Schedule]
 type Individual = dict[Event, int]
@@ -36,11 +34,13 @@ class Schedule:
 
     _cached_all_teams: list[Team] = field(default=None, init=False, repr=False, compare=False)
     _cached_normalized_teams: dict[int, int] = field(default=None, init=False, repr=False, compare=False)
-    _cached_matches: dict[RoundType, list[Match]] = field(default=None, init=False, repr=False, compare=False)
     _cached_hash: int = field(default=None, init=False, repr=False)
     _cached_canonical_representation: tuple[tuple[int, ...], ...] = field(default=None, init=False, repr=False)
 
     team_identities: ClassVar[dict[int, int | str]]
+
+    def __post_init__(self) -> None:
+        """Post-initialization processing."""
 
     def __len__(self) -> int:
         """Return the number of scheduled events."""
@@ -88,7 +88,6 @@ class Schedule:
         """Clear cached values to ensure fresh calculations."""
         self._cached_all_teams = None
         self._cached_normalized_teams = None
-        self._cached_matches = None
         self._cached_hash = None
         self._cached_canonical_representation = None
 
@@ -120,7 +119,7 @@ class Schedule:
 
     def get_team(self, team_id: int) -> Team | None:
         """Get a team object by its identity."""
-        return self.teams[team_id]
+        return self.teams.get(team_id)
 
     def all_teams(self) -> list[Team]:
         """Return a list of all teams in the schedule."""
@@ -134,19 +133,6 @@ class Schedule:
             team_events = (frozenset(t.events) for t in self.teams.values())
             self._cached_canonical_representation = frozenset(team_events)
         return self._cached_canonical_representation
-
-    def matches(self) -> dict[RoundType, list[Match]]:
-        """Get all matches in the schedule."""
-        if self._cached_matches is None:
-            self._cached_matches = defaultdict(list)
-            for event1, t1 in self.schedule.items():
-                if not (event2 := event1.paired) or event1.location.side != 1:
-                    continue
-
-                rt = event1.roundtype
-                if t2 := self.schedule[event2]:
-                    self._cached_matches[rt].append((event1, event2, self.teams[t1], self.teams[t2]))
-        return self._cached_matches
 
     def normalized_teams(self) -> dict[int, int]:
         """Normalize the schedule by reassigning team identities."""

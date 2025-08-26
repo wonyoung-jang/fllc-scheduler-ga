@@ -144,7 +144,7 @@ class TeamFactory:
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
-        self._base_teams_info = frozenset(TeamInfo(i) for i in range(1, self.config.num_teams + 1))
+        self._base_teams_info = frozenset(TeamInfo(i + 1) for i in range(self.config.num_teams))
 
     def build(self) -> TeamMap:
         """Create a mapping of team identities to Team instances.

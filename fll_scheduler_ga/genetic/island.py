@@ -9,7 +9,6 @@ from ..config.constants import ATTEMPTS_RANGE, RANDOM_SEED_RANGE
 from ..config.ga_context import GaContext
 from ..config.ga_parameters import GaParameters
 from ..data_model.schedule import Population, Schedule
-from ..operators.crossover import Crossover
 from .builder import ScheduleBuilder
 
 
@@ -118,25 +117,6 @@ class Island:
 
         self._nsga3_select()
 
-    def get_initial_offspring(
-        self, parents: tuple[Schedule, Schedule], cs: tuple[Crossover] | tuple, *, crossover_roll: bool
-    ) -> set[Schedule]:
-        """Get the initial offspring for the island from either crossover or parents."""
-        offspring = set()
-        if crossover_roll and cs:
-            crossover_op = self.rng.choice(self.context.crossovers)
-            for child in crossover_op.crossover(parents):
-                _c_str = str(crossover_op)
-                self.crossover_ratio["total"][_c_str] += 1
-                if self.context.repairer.repair(child):
-                    child.clear_cache()
-                    child.fitness = self.context.evaluator.evaluate(child)
-                    offspring.add(child)
-                    self.crossover_ratio["success"][_c_str] += 1
-        elif not cs:
-            offspring.update(parents)
-        return offspring
-
     def evolve(self) -> None:
         """Perform main evolution loop: generations and migrations."""
         if not (island_pop := list(self.selected.values())):
@@ -151,8 +131,21 @@ class Island:
             _mutation_roll = self.ga_params.mutation_chance > self.rng.random()
 
             selection_op = self.rng.choice(self.context.selections)
-            parents = tuple(selection_op.select(island_pop))
-            offspring = self.get_initial_offspring(parents, self.context.crossovers, crossover_roll=_crossover_roll)
+            parents: tuple[Schedule] = tuple(selection_op.select(island_pop))
+            offspring: set[Schedule] = set()
+
+            if _crossover_roll and self.context.crossovers:
+                crossover_op = self.rng.choice(self.context.crossovers)
+                for child in crossover_op.crossover(parents):
+                    _c_str = str(crossover_op)
+                    self.crossover_ratio["total"][_c_str] += 1
+                    if self.context.repairer.repair(child):
+                        child.clear_cache()
+                        child.fitness = self.context.evaluator.evaluate(child)
+                        offspring.add(child)
+                        self.crossover_ratio["success"][_c_str] += 1
+            elif not self.context.crossovers:
+                offspring.update(p.clone() for p in parents)
 
             for child in offspring:
                 if _mutation_roll and self.context.mutations:
@@ -193,8 +186,7 @@ class Island:
         needed_size = self.ga_params.population_size
         current_pop = list(self.selected.values())
         current_size = len(current_pop)
-        missing_size = needed_size - current_size
-        if missing_size <= 0:
+        if current_size >= needed_size:
             return
 
         self.context.logger.debug(
@@ -204,10 +196,9 @@ class Island:
             needed_size,
         )
 
-        # Handle underpopulation by cloning then mutating existing individuals.
         while len(self.selected) < needed_size:
             choice: Schedule = None
-            if self.rng.choice((True, False)):
+            if self.rng.random() < 0.5:
                 self.context.logger.debug("Underpopulation: cloning and mutating existing")
                 choice_index = self.rng.choice(range(len(current_pop)))
                 choice = current_pop[choice_index].clone()
@@ -222,10 +213,8 @@ class Island:
                 seeder = Random(self.rng.randint(*RANDOM_SEED_RANGE))
                 self.builder.rng = Random(seeder.randint(*RANDOM_SEED_RANGE))
                 choice = self.builder.build()
-                if not self.context.repairer.repair(choice):
-                    continue
 
-            if choice and self.add_to_population(choice):
+            if self.context.repairer.repair(choice) and self.add_to_population(choice):
                 choice.clear_cache()
                 choice.fitness = self.context.evaluator.evaluate(choice)
                 break

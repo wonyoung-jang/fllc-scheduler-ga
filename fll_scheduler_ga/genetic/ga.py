@@ -283,7 +283,7 @@ class GA:
         """Log statistics for crossover and mutation operators."""
         log = f"{name.capitalize()} statistics:"
         op_strings = [f"{op!s}" for op in ops]
-        max_len = max(len(op) for op in op_strings) + 1
+        max_len = max((len(op) for op in op_strings), default=0) + 1
         for op in op_strings:
             success = ratios.get("success", {}).get(op, 0)
             total = ratios.get("total", {}).get(op, 0)

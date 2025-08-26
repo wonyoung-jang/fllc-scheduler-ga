@@ -90,6 +90,7 @@ class EventFactory:
             Event: An event for the round with a time slot and a location.
 
         """
+        time_fmt = self.config.time_fmt
         locations = sorted(r.locations, key=lambda loc: (loc.identity, loc.side))
         start = r.times[0] if r.times else r.start_time
 
@@ -101,8 +102,8 @@ class EventFactory:
             elif i == len(r.times):
                 stop += r.duration_minutes
 
-            time_cache_key = (start, stop)
-            timeslot = self._cached_timeslots.setdefault(time_cache_key, TimeSlot(start, stop))
+            time_key = (start, stop)
+            timeslot = self._cached_timeslots.setdefault(time_key, TimeSlot(start, stop, time_fmt))
             start = stop
 
             if r.teams_per_round == 1:
@@ -155,8 +156,8 @@ class EventFactory:
     def build_conflicts(self) -> None:
         """Build a mapping of event identities to their conflicting events."""
         events = self.as_list()
-        for i, event in enumerate(events):
-            for other in events[i + 1 :]:
+        for i, event in enumerate(events, start=1):
+            for other in events[i:]:
                 if event.timeslot.overlaps(other.timeslot):
                     event.conflicts.add(other.identity)
                     other.conflicts.add(event.identity)

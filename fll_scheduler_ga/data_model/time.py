@@ -15,10 +15,11 @@ class TimeSlot:
 
     start: datetime
     stop: datetime
+    time_fmt: str
 
     def __str__(self) -> str:
         """Get a string representation of the time slot."""
-        return f"{self.start.strftime('%H:%M')}-{self.stop.strftime('%H:%M')}"
+        return f"{self.start.strftime(self.time_fmt)}-{self.stop.strftime(self.time_fmt)}"
 
     def __lt__(self, other: TimeSlot) -> bool:
         """Less-than comparison based on start time."""

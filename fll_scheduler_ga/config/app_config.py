@@ -45,20 +45,20 @@ def load_tournament_config(parser: ConfigParser) -> TournamentConfig:
     """Load and return the tournament configuration from the provided ConfigParser."""
     num_teams, team_ids = _parse_teams_config(parser)
     time_fmt = _parse_time_config(parser)
-    parsed_rounds, round_reqs = _parse_rounds_config(parser, num_teams, time_fmt)
-    all_rounds_per_team = [r.rounds_per_team for r in parsed_rounds]
+    rounds, round_requirements = _parse_rounds_config(parser, num_teams, time_fmt)
+    all_rounds_per_team = [r.rounds_per_team for r in rounds]
     total_slots = sum(num_teams * rpt for rpt in all_rounds_per_team)
     unique_opponents_possible = 1 <= max(all_rounds_per_team) <= num_teams - 1
     weights = _parse_fitness_config(parser)
     Schedule.team_identities = team_ids
     return TournamentConfig(
-        num_teams,
-        time_fmt,
-        parsed_rounds,
-        round_reqs,
-        total_slots,
-        unique_opponents_possible,
-        weights,
+        num_teams=num_teams,
+        time_fmt=time_fmt,
+        rounds=rounds,
+        round_requirements=round_requirements,
+        total_slots=total_slots,
+        unique_opponents_possible=unique_opponents_possible,
+        weights=weights,
     )
 
 

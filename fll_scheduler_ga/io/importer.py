@@ -147,7 +147,7 @@ class CsvImporter:
                 else start + round_config.duration_minutes
             )
 
-        timeslot = TimeSlot(start, stop)
+        timeslot = TimeSlot(start, stop, _time_fmt)
 
         for i, team_id_str in enumerate(row[1:]):
             if not (team_id_str := team_id_str.strip()):
