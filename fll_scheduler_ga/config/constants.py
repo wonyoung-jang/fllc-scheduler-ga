@@ -22,7 +22,10 @@ class CrossoverOp(StrEnum):
     K_POINT = "KPoint"
     SCATTERED = "Scattered"
     UNIFORM = "Uniform"
+    PARTIAL = "Partial"
     ROUND_TYPE_CROSSOVER = "RoundTypeCrossover"
+    TIMESLOT_CROSSOVER = "TimeSlotCrossover"
+    LOCATION_CROSSOVER = "LocationCrossover"
     BEST_TEAM_CROSSOVER = "BestTeamCrossover"
 
 
@@ -45,6 +48,7 @@ class HardConstraint(StrEnum):
 
     ALL_EVENTS_SCHEDULED = "AllEventsScheduled"
     SCHEDULE_EXISTENCE = "ScheduleExistence"
+    TEAM_REQUIREMENTS_MET = "TeamRequirementsMet"
 
 
 class FitnessObjective(StrEnum):

@@ -7,6 +7,8 @@ from logging import getLogger
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from ..config.config import RoundType, TournamentConfig
     from .event import Event
     from .time import TimeSlot
@@ -121,6 +123,12 @@ class Team:
             _events.add(ignore.identity)
 
         return conflict_found
+
+    def get_fitness_keys(self) -> Iterator[frozenset[int], int, int]:
+        """Get all keys used for fitness calculation."""
+        yield self.break_time_key()
+        yield self.table_consistency_key()
+        yield self.opponent_variety_key()
 
     def break_time_key(self) -> frozenset[int]:
         """Get a key for the break time cache based on the team's events."""

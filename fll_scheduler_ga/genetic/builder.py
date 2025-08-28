@@ -12,24 +12,25 @@ from ..data_model.team import Team, TeamFactory
 logger = getLogger(__name__)
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True)
 class ScheduleBuilder:
-    """Encapsulates the logic for building a valid random schedule."""
+    """Builder for building a valid random schedule."""
 
     team_factory: TeamFactory
     event_factory: EventFactory
     config: TournamentConfig
     rng: Random
 
-    def build(self) -> Schedule:
+    def build(self, rng: Random | None = None) -> Schedule:
         """Construct and return the final schedule."""
+        rng = self.rng if rng is None else rng
         events = self.event_factory.build()
-        for e in events.values():
-            self.rng.shuffle(e)
+        for rt in events:
+            rng.shuffle(events[rt])
 
         schedule = Schedule(self.team_factory.build())
         teams = schedule.all_teams()
-        teams = self.rng.sample(teams, k=len(teams))
+        teams = rng.sample(teams, k=len(teams))
 
         _build_map = {
             1: self._build_singles,

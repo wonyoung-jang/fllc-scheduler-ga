@@ -3,6 +3,7 @@
 from collections import Counter
 from collections.abc import Iterator
 from dataclasses import dataclass, field
+from logging import getLogger
 from random import Random
 
 from ..config.constants import ATTEMPTS_RANGE, RANDOM_SEED_RANGE
@@ -10,6 +11,8 @@ from ..config.ga_context import GaContext
 from ..config.ga_parameters import GaParameters
 from ..data_model.schedule import Population, Schedule
 from .builder import ScheduleBuilder
+
+logger = getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -76,28 +79,25 @@ class Island:
             population=self.selected.values(),
             population_size=self.ga_params.population_size,
         )
+        self.handle_underpopulation()
 
     def initialize(self) -> None:
         """Initialize the population for each island."""
         pop_size = self.ga_params.population_size
         num_to_create = pop_size - len(self.selected)
         if num_to_create <= 0:
-            self.context.logger.debug("Initializing island %d with 0 individuals.", self.identity)
+            logger.debug("Initializing island %d with 0 individuals.", self.identity)
             return
-        self.context.logger.debug("Initializing island %d with %d individuals.", self.identity, num_to_create)
+        logger.debug("Initializing island %d with %d individuals.", self.identity, num_to_create)
 
-        _randlow, _randhigh = RANDOM_SEED_RANGE
-        seeder = Random(self.rng.randint(_randlow, _randhigh))
+        seeder = Random(self.rng.randint(*RANDOM_SEED_RANGE))
         attempts, max_attempts = ATTEMPTS_RANGE
         num_created = 0
 
         while len(self.selected) < pop_size and attempts < max_attempts:
-            self.builder.rng = Random(seeder.randint(_randlow, _randhigh))
-            schedule = self.builder.build()
-
+            schedule = self.builder.build(rng=Random(seeder.randint(*RANDOM_SEED_RANGE)))
             if self.context.repairer.repair(schedule) and self.add_to_population(schedule):
-                schedule.clear_cache()
-                schedule.fitness = self.context.evaluator.evaluate(schedule)
+                self.context.evaluator.evaluate(schedule)
                 num_created += 1
             elif num_created == 0:
                 # Only increment attempts if no valid schedule was created in total
@@ -108,7 +108,7 @@ class Island:
             raise RuntimeError(msg % (self.identity, attempts))
 
         if num_created < num_to_create:
-            self.context.logger.warning(
+            logger.warning(
                 "Island %d: only created %d/%d valid individuals.",
                 self.identity,
                 num_created,
@@ -133,6 +133,7 @@ class Island:
             selection_op = self.rng.choice(self.context.selections)
             parents: tuple[Schedule] = tuple(selection_op.select(island_pop))
             offspring: set[Schedule] = set()
+            must_mutate = False
 
             if _crossover_roll and self.context.crossovers:
                 crossover_op = self.rng.choice(self.context.crossovers)
@@ -140,15 +141,15 @@ class Island:
                     _c_str = str(crossover_op)
                     self.crossover_ratio["total"][_c_str] += 1
                     if self.context.repairer.repair(child):
-                        child.clear_cache()
-                        child.fitness = self.context.evaluator.evaluate(child)
+                        self.context.evaluator.evaluate(child)
                         offspring.add(child)
                         self.crossover_ratio["success"][_c_str] += 1
-            elif not self.context.crossovers:
+            else:
+                must_mutate = True  # If no crossover is performed, we must mutate clones of parents
                 offspring.update(p.clone() for p in parents)
 
             for child in offspring:
-                if _mutation_roll and self.context.mutations:
+                if (must_mutate or _mutation_roll) and self.context.mutations:
                     mutation_op = self.rng.choice(self.context.mutations)
                     _m_str = str(mutation_op)
                     self.mutation_ratio["total"][_m_str] += 1
@@ -156,8 +157,10 @@ class Island:
                         self.mutation_ratio["success"][_m_str] += 1
 
                 self.offspring_ratio["total"] += 1
+                if self.context.repairer.repair(child):
+                    self.context.evaluator.evaluate(child)
+
                 if self.add_to_population(child):
-                    child.fitness = self.context.evaluator.evaluate(child)
                     child_count += 1
                     self.offspring_ratio["success"] += 1
 
@@ -178,7 +181,6 @@ class Island:
         """Receive migrants from another island and add them to the current island's population."""
         for m_hash, migrant in migrants:
             self.add_to_population(migrant, s_hash=m_hash)
-
         self._nsga3_select()
 
     def handle_underpopulation(self) -> None:
@@ -189,17 +191,9 @@ class Island:
         if current_size >= needed_size:
             return
 
-        self.context.logger.debug(
-            "Island %d underpopulated: %d individuals, expected %d.",
-            self.identity,
-            current_size,
-            needed_size,
-        )
-
         while len(self.selected) < needed_size:
             choice: Schedule = None
             if self.rng.random() < 0.5:
-                self.context.logger.debug("Underpopulation: cloning and mutating existing")
                 choice_index = self.rng.choice(range(len(current_pop)))
                 choice = current_pop[choice_index].clone()
                 mutation_op = self.rng.choice(self.context.mutations)
@@ -209,19 +203,16 @@ class Island:
                     if mutation_op.mutate(choice):
                         self.mutation_ratio["success"][_m_str] += 1
             else:
-                self.context.logger.debug("Underpopulation: generating new")
                 seeder = Random(self.rng.randint(*RANDOM_SEED_RANGE))
-                self.builder.rng = Random(seeder.randint(*RANDOM_SEED_RANGE))
-                choice = self.builder.build()
+                choice = self.builder.build(rng=Random(seeder.randint(*RANDOM_SEED_RANGE)))
 
             if self.context.repairer.repair(choice) and self.add_to_population(choice):
-                choice.clear_cache()
-                choice.fitness = self.context.evaluator.evaluate(choice)
+                self.context.evaluator.evaluate(choice)
                 break
 
     def finalize_island(self) -> Iterator[Schedule]:
         """Finalize the island's state after evolution."""
         for sched in self.selected.values():
             if sched.fitness is None:
-                sched.fitness = self.context.evaluator.evaluate(sched)
+                self.context.evaluator.evaluate(sched)
             yield sched

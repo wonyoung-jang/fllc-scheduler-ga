@@ -75,6 +75,11 @@ class Schedule:
             self._cached_hash = hash(self.canonical_representation())
         return self._cached_hash
 
+    @classmethod
+    def set_team_identities(cls, identities: dict[int, int | str]) -> None:
+        """Set the team identities for the schedule."""
+        cls.team_identities = identities
+
     def clone(self) -> Schedule:
         """Create a deep copy of the schedule."""
         return Schedule(
@@ -117,8 +122,10 @@ class Schedule:
         self[event1] = team1
         self[event2] = team2
 
-    def get_team(self, team_id: int) -> Team | None:
+    def get_team(self, team_id: int | Team) -> Team | None:
         """Get a team object by its identity."""
+        if isinstance(team_id, Team):
+            team_id = team_id.identity
         return self.teams.get(team_id)
 
     def all_teams(self) -> list[Team]:

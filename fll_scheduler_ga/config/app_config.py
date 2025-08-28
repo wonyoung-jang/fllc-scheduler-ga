@@ -50,7 +50,7 @@ def load_tournament_config(parser: ConfigParser) -> TournamentConfig:
     total_slots = sum(num_teams * rpt for rpt in all_rounds_per_team)
     unique_opponents_possible = 1 <= max(all_rounds_per_team) <= num_teams - 1
     weights = _parse_fitness_config(parser)
-    Schedule.team_identities = team_ids
+    Schedule.set_team_identities(team_ids)
     return TournamentConfig(
         num_teams=num_teams,
         time_fmt=time_fmt,

@@ -402,7 +402,7 @@ class TimeSlotSequenceMutation(Mutation):
 
     def _mutate_singles(self, schedule: Schedule, candidates: list[Event]) -> bool:
         """Permute team assignments for single-team events."""
-        candidates.sort(key=lambda e: (e.location.identity, e.location.side if e.location.side else 0))
+        candidates.sort(key=lambda e: (e.location.identity, e.location.side))
         original_ids = [None if schedule[e] is None else schedule[e].identity for e in candidates]
         permuted_ids = self._permute(original_ids)
         for event, old_id, new_id in zip(candidates, original_ids, permuted_ids, strict=True):
@@ -427,7 +427,7 @@ class TimeSlotSequenceMutation(Mutation):
         """Permute team assignments for match-based events."""
         event_pairs: list[tuple[Event, ...]] = []
         teams: list[tuple[Team | None, ...]] = []
-        candidates.sort(key=lambda e: (e.location.identity, e.location.side if e.location.side else 0))
+        candidates.sort(key=lambda e: (e.location.identity, e.location.side))
 
         for e1 in candidates:
             if e1.location.side == 1 and (e2 := e1.paired):

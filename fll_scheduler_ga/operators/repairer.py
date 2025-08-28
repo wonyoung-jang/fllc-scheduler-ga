@@ -37,10 +37,9 @@ class Repairer:
             schedule (Schedule): The schedule to repair.
 
         """
+        # self.clean(schedule)
         if len(schedule) == self.config.total_slots:
-            logger.debug("Schedule is already complete, no repair needed.")
             return True
-        logger.debug("Repairing schedule with %d/%d assigned slots.", len(schedule), self.config.total_slots)
 
         tpr_assign_map = {
             1: Repairer._assign_singles,
@@ -81,9 +80,24 @@ class Repairer:
                     schedule=schedule,
                 )
 
-        repaired = len(schedule) == self.config.total_slots
-        logger.debug("Repaired: %s", repaired)
-        return repaired
+        schedule.clear_cache()
+        return len(schedule) == self.config.total_slots
+
+    # def clean(self, schedule: Schedule) -> None:
+    #     """Clean schedule of unpaired matches."""
+    #     for e1, t1 in schedule.items():
+    #         e2 = e1.paired
+    #         if e2 is None:
+    #             continue
+
+    #         t2 = schedule[e2]
+
+    #         if t1 is None and t2 is not None:
+    #             t2.remove_event(e2)
+    #             del schedule[e2]
+    #         elif t1 is not None and t2 is None:
+    #             t1.remove_event(e1)
+    #             del schedule[e1]
 
     @staticmethod
     def _assign_singles(teams: dict[int, Team], events: dict[int, Event], schedule: Schedule) -> None:
@@ -101,8 +115,7 @@ class Repairer:
             logger.debug("Odd number of teams (%d) for match assignment, one team will be left out.", len(teams))
 
         while len(teams) >= 2:
-            rand_team_id = self.rng.choice(list(teams.keys()))
-            t1 = teams.pop(rand_team_id)
+            t1 = teams.pop(self.rng.choice(list(teams.keys())))
             non_conflicting_teams = ((i, t2) for i, t2 in teams.items() if t1.identity != t2.identity)
             for i, t2 in non_conflicting_teams:
                 if Repairer._find_and_populate_match(t1, t2, events, schedule):
@@ -113,10 +126,12 @@ class Repairer:
     def _find_and_populate_match(t1: Team, t2: Team, events: dict[int, Event], schedule: Schedule) -> bool:
         """Find an open match slot for two teams and populate it."""
         non_conflicting_events = (
-            (i, e) for i, e in events.items() if e.paired and not t1.conflicts(e) and not t2.conflicts(e.paired)
+            (i, e, e.paired)
+            for i, e in events.items()
+            if e.paired and not t1.conflicts(e) and not t2.conflicts(e.paired)
         )
-        for i, e1 in non_conflicting_events:
-            schedule.assign_match(e1, e1.paired, t1, t2)
+        for i, e1, e2 in non_conflicting_events:
+            schedule.assign_match(e1, e2, t1, t2)
             events.pop(i)
             return True
         return False

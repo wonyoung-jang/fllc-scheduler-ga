@@ -61,8 +61,9 @@ def handle_seed_file(args: Namespace, ga_context: GaContext) -> None:
     if args.import_file:
         schedule_csv_path = Path(args.import_file).resolve()
         csv_import = CsvImporter(schedule_csv_path, config, ga_context.event_factory)
-        if import_fitness := ga_context.evaluator.evaluate(csv_import.schedule):
-            csv_import.schedule.fitness = import_fitness
+        csv_schedule = csv_import.schedule
+        if ga_context.evaluator.evaluate(csv_schedule):
+            csv_import.schedule.fitness = csv_schedule.fitness
             parent_dir = schedule_csv_path.parent
             parent_dir.mkdir(parents=True, exist_ok=True)
             report_path = parent_dir / "report.txt"
@@ -100,7 +101,7 @@ def handle_seed_file(args: Namespace, ga_context: GaContext) -> None:
 
 def initialize_logging(args: Namespace) -> None:
     """Initialize logging for the application."""
-    file_fmt = Formatter("[%(asctime)s] %(levelname)s[%(name)s] %(message)s")
+    file_fmt = Formatter("[%(asctime)s] %(levelname)s[%(module)s] %(message)s")
     file_handler = FileHandler(
         filename=args.log_file,
         mode="w",
@@ -109,7 +110,7 @@ def initialize_logging(args: Namespace) -> None:
     file_handler.setLevel(args.loglevel_file)
     file_handler.setFormatter(file_fmt)
 
-    console_fmt = Formatter("%(levelname)s[%(name)s] %(message)s")
+    console_fmt = Formatter("%(levelname)s[%(module)s] %(message)s")
     console_handler = StreamHandler()
     console_handler.setLevel(args.loglevel_console)
     console_handler.setFormatter(console_fmt)
@@ -151,7 +152,6 @@ def create_ga_context(app_config: AppConfig) -> GaContext:
         team_factory=team_factory,
         repairer=repairer,
         evaluator=evaluator,
-        logger=logger,
         nsga3=nsga3,
         selections=selections,
         crossovers=crossovers,
@@ -161,7 +161,7 @@ def create_ga_context(app_config: AppConfig) -> GaContext:
 
 def create_ga_instance(context: GaContext, rng: Random) -> GA:
     """Create and return a GA instance with the provided configuration."""
-    observers = (TqdmObserver(), LoggingObserver(logger))
+    observers = (TqdmObserver(), LoggingObserver())
     return GA(
         context=context,
         rng=rng,

@@ -3,6 +3,7 @@
 import pickle
 from collections import Counter
 from dataclasses import dataclass, field
+from logging import getLogger
 from pathlib import Path
 from random import Random
 from time import time
@@ -20,6 +21,8 @@ from .island import Island
 
 if TYPE_CHECKING:
     from ..config.config import TournamentConfig
+
+logger = getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -46,10 +49,10 @@ class GA:
         self.ga_params = self.context.app_config.ga_params
         seeder = Random(self.rng.randint(*RANDOM_SEED_RANGE))
         builder = ScheduleBuilder(
-            self.context.team_factory,
-            self.context.event_factory,
-            self.context.app_config.tournament,
-            Random(seeder.randint(*RANDOM_SEED_RANGE)),
+            team_factory=self.context.team_factory,
+            event_factory=self.context.event_factory,
+            config=self.context.app_config.tournament,
+            rng=Random(seeder.randint(*RANDOM_SEED_RANGE)),
         )
 
         self.context.repairer.rng = Random(seeder.randint(*RANDOM_SEED_RANGE))
@@ -111,7 +114,7 @@ class GA:
             if improved_ratio < 0.2:
                 self.ga_params.crossover_chance = max(0.001, c_chance * EPSILON)
                 self.ga_params.mutation_chance = max(0.001, m_chance * EPSILON)
-                self.context.logger.debug(
+                logger.debug(
                     "Reduced crossover chance to %.2f and mutation chance to %.2f",
                     self.ga_params.crossover_chance,
                     self.ga_params.mutation_chance,
@@ -120,7 +123,7 @@ class GA:
             elif improved_ratio > 0.2:
                 self.ga_params.crossover_chance = min(0.999, c_chance / EPSILON)
                 self.ga_params.mutation_chance = min(0.999, m_chance / EPSILON)
-                self.context.logger.debug(
+                logger.debug(
                     "Increased crossover chance to %.2f and mutation chance to %.2f",
                     self.ga_params.crossover_chance,
                     self.ga_params.mutation_chance,
@@ -152,17 +155,18 @@ class GA:
         try:
             self.initialize_population()
             if not any(self.islands[i].selected for i in range(self.ga_params.num_islands)):
-                self.context.logger.critical("No valid schedule meeting all hard constraints was found.")
+                logger.critical("No valid schedule meeting all hard constraints was found.")
                 return False
             self.run_epochs()
         except Exception:
-            self.context.logger.exception("An error occurred during the genetic algorithm run.")
+            logger.exception("An error occurred during the genetic algorithm run.")
             self.update_fitness_history()
         except KeyboardInterrupt:
-            self.context.logger.debug("Genetic algorithm run interrupted by user. Saving...")
+            logger.debug("Genetic algorithm run interrupted by user. Saving...")
             self.update_fitness_history()
         finally:
-            self.context.logger.debug("Total time taken: %.2f seconds", time() - start_time)
+            logger.debug("Total time taken: %.2f seconds", time() - start_time)
+            logger.debug("Fitness caches: %s", self.context.evaluator.cache_info())
             self.finalize()
             self._notify_on_finish(self.total_population, self.pareto_front())
 
@@ -175,13 +179,13 @@ class GA:
                 i = spi % self.ga_params.num_islands
                 self.islands[i].add_to_population(schedule)
 
-        self.context.logger.debug("Initializing %d islands...", self.ga_params.num_islands)
+        logger.debug("Initializing %d islands...", self.ga_params.num_islands)
         for i in range(self.ga_params.num_islands):
             self.islands[i].initialize()
 
     def retrieve_seed_population(self) -> Population | None:
         """Load and integrate a population from a seed file."""
-        self.context.logger.debug("Loading seed population from: %s", self._seed_file)
+        logger.debug("Loading seed population from: %s", self._seed_file)
         try:
             with self._seed_file.open("rb") as f:
                 seed_data = pickle.load(f)
@@ -189,13 +193,13 @@ class GA:
                 num_teams_changed = self.context.app_config.tournament.num_teams != seed_config.num_teams
                 config_changed = self.context.app_config.tournament.rounds != seed_config.rounds
                 if num_teams_changed or config_changed:
-                    self.context.logger.warning("Seed population does not match current config. Using current...")
+                    logger.warning("Seed population does not match current config. Using current...")
                     return None
                 return seed_data["population"]
         except (OSError, pickle.PicklingError):
-            self.context.logger.exception("Could not load or parse seed file. Starting with a fresh population.")
+            logger.exception("Could not load or parse seed file. Starting with a fresh population.")
         except EOFError:
-            self.context.logger.debug("Pickle file is empty")
+            logger.debug("Pickle file is empty")
 
     def run_epochs(self) -> None:
         """Perform main evolution loop: generations and migrations."""
@@ -289,7 +293,7 @@ class GA:
             total = ratios.get("total", {}).get(op, 0)
             ratio = success / total if total > 0 else 0.0
             log += f"\n  {op:<{max_len}}: {success}/{total} ({ratio:.2%})"
-        self.context.logger.debug(log)
+        logger.debug(log)
 
     def _log_aggregate_stats(self) -> None:
         """Log aggregate statistics across all islands."""
@@ -313,16 +317,7 @@ class GA:
             f"\n  Mutation success rate  : {sum_mut_suc}/{sum_mut_tot} ({sum_mut_rte})"
             f"\n  Offspring success rate : {off_suc}/{off_tot} ({off_rte})"
         )
-        self.context.logger.debug(final_log)
-
-    def finalize(self) -> None:
-        """Aggregate islands and run a final selection to produce the final population."""
-        self._deduplicate_population()
-        self._aggregate_stats_from_islands()
-        self._log_operators(name="crossover", ratios=self._crossover_ratio, ops=self.context.crossovers)
-        self._log_operators(name="mutation", ratios=self._mutation_ratio, ops=self.context.mutations)
-        self._log_aggregate_stats()
-        self._log_unique_events()
+        logger.debug(final_log)
 
     def _log_unique_events(self) -> None:
         """Count unique event lists."""
@@ -332,4 +327,13 @@ class GA:
                 unique_gene = tuple(sorted(team.events))
                 unique_genes[unique_gene] += 1
         for gene, count in sorted(unique_genes.items(), key=lambda x: x[1], reverse=True):
-            self.context.logger.debug("Event: %s, Count: %d", gene, count)
+            logger.debug("Event: %s, Count: %d", gene, count)
+
+    def finalize(self) -> None:
+        """Aggregate islands and run a final selection to produce the final population."""
+        self._deduplicate_population()
+        self._aggregate_stats_from_islands()
+        self._log_operators(name="crossover", ratios=self._crossover_ratio, ops=self.context.crossovers)
+        self._log_operators(name="mutation", ratios=self._mutation_ratio, ops=self.context.mutations)
+        self._log_aggregate_stats()
+        self._log_unique_events()

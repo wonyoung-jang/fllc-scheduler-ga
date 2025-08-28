@@ -51,6 +51,7 @@ class EventFactory:
     _cached_mapping: EventMap = field(default=None, init=False, repr=False)
     _cached_timeslots: dict[tuple[datetime, datetime], TimeSlot] = field(default_factory=dict, init=False, repr=False)
     _cached_timeslots_list: dict[tuple[RoundType, TimeSlot], list[Event]] = field(default=None, init=False, repr=False)
+    _cached_locations: dict[tuple[RoundType, Location], list[Event]] = field(default=None, init=False, repr=False)
     _cached_matches: dict[RoundType, list[tuple[Event, ...]]] = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -59,6 +60,7 @@ class EventFactory:
         self.as_list()
         self.as_mapping()
         self.as_timeslots()
+        self.as_locations()
         self.as_matches()
         self.build_conflicts()
 
@@ -142,6 +144,14 @@ class EventFactory:
             for event in self.as_list():
                 self._cached_timeslots_list[(event.roundtype, event.timeslot)].append(event)
         return self._cached_timeslots_list
+
+    def as_locations(self) -> dict[tuple[RoundType, Location], list[Event]]:
+        """Get a mapping of RoundTypes to their Locations."""
+        if self._cached_locations is None:
+            self._cached_locations = defaultdict(list)
+            for event in self.as_list():
+                self._cached_locations[(event.roundtype, event.location)].append(event)
+        return self._cached_locations
 
     def as_matches(self) -> dict[RoundType, list[tuple[Event, ...]]]:
         """Get a mapping of RoundTypes to their matched Events."""

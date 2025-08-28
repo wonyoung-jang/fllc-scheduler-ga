@@ -30,7 +30,10 @@ def build_crossovers(
         CrossoverOp.K_POINT: lambda k: KPoint(team_factory, event_factory, rng, k=k),
         CrossoverOp.SCATTERED: lambda: Scattered(team_factory, event_factory, rng),
         CrossoverOp.UNIFORM: lambda: Uniform(team_factory, event_factory, rng),
+        CrossoverOp.PARTIAL: lambda: Partial(team_factory, event_factory, rng),
         CrossoverOp.ROUND_TYPE_CROSSOVER: lambda: RoundTypeCrossover(team_factory, event_factory, rng),
+        CrossoverOp.TIMESLOT_CROSSOVER: lambda: TimeSlotCrossover(team_factory, event_factory, rng),
+        CrossoverOp.LOCATION_CROSSOVER: lambda: LocationCrossover(team_factory, event_factory, rng),
         CrossoverOp.BEST_TEAM_CROSSOVER: lambda: BestTeamCrossover(team_factory, event_factory, rng),
     }
 
@@ -70,42 +73,29 @@ class Crossover(ABC):
 
     def _transfer_genes_from_parent1(self, child: Schedule, parent: Schedule, events: Iterator[Event]) -> None:
         """Transfer genes from the first parent. Fewer checks needed."""
-        for e1 in events:
-            if (pt1 := parent[e1]) is None:
+        events_to_parent = ((e, e.paired, child.get_team(parent[e]), child.get_team(parent[e.paired])) for e in events)
+        for e1, e2, t1, t2 in events_to_parent:
+            if t1 is None:
                 continue
 
-            t1 = child.get_team(pt1.identity)
-
-            if (e2 := e1.paired) and e1.location.side == 1:
-                if (pt2 := parent[e2]) is None:
-                    continue
-
-                t2 = child.get_team(pt2.identity)
-                child.assign_match(e1, e2, t1, t2)
-            elif e2 is None:
+            if e2 is None:
                 child.assign_single(e1, t1)
+            elif e2 and e1.location.side == 1 and t2:
+                child.assign_match(e1, e2, t1, t2)
 
     def _transfer_genes_from_parent2(self, child: Schedule, parent: Schedule, events: Iterator[Event]) -> None:
         """Transfer genes from the second parent."""
-        for e1 in events:
-            if (pt1 := parent[e1]) is None:
+        events_to_parent = ((e, e.paired, child.get_team(parent[e]), child.get_team(parent[e.paired])) for e in events)
+        for e1, e2, t1, t2 in events_to_parent:
+            if t1 is None or not t1.needs_round(e1.roundtype) or t1.conflicts(e1):
                 continue
 
-            t1 = child.get_team(pt1.identity)
-            if not t1.needs_round(e1.roundtype) or t1.conflicts(e1):
-                continue
-
-            if (e2 := e1.paired) and e1.location.side == 1:
-                if (pt2 := parent[e2]) is None:
-                    continue
-
-                t2 = child.get_team(pt2.identity)
+            if e2 is None:
+                child.assign_single(e1, t1)
+            elif e2 and e1.location.side == 1 and t2:
                 if not t2.needs_round(e2.roundtype) or t2.conflicts(e2):
                     continue
-
                 child.assign_match(e1, e2, t1, t2)
-            elif e2 is None:
-                child.assign_single(e1, t1)
 
 
 @dataclass(slots=True)
@@ -259,10 +249,25 @@ class Uniform(EventCrossover):
     def get_genes(self) -> Iterator[Iterator[Event]]:
         """Get the genes for Uniform crossover."""
         evts = self.events
-        ne = len(evts)
-        indices = [self.rng.choice((1, 2)) for _ in range(ne)]
-        yield (evts[i] for i in range(ne) if indices[i] == 1)
-        yield (evts[i] for i in range(ne) if indices[i] == 2)
+        indices = [self.rng.randint(1, 2) for _ in evts]
+        yield (evts[i] for i, idx in enumerate(indices) if idx == 1)
+        yield (evts[i] for i, idx in enumerate(indices) if idx == 2)
+
+
+@dataclass(slots=True)
+class Partial(EventCrossover):
+    """Partial crossover operator for genetic algorithms.
+
+    Each gene is chosen from either parent by flipping a 3 sided coin for each gene.
+    The third side is left unselected, leaving the repairer to fix the schedule.
+    """
+
+    def get_genes(self) -> Iterator[Iterator[Event]]:
+        """Get the genes for Partial crossover."""
+        evts = self.events
+        indices = [self.rng.randint(1, 4) for _ in evts]
+        yield (evts[i] for i, idx in enumerate(indices) if idx == 1)
+        yield (evts[i] for i, idx in enumerate(indices) if idx == 2)
 
 
 @dataclass(slots=True)
@@ -275,9 +280,39 @@ class RoundTypeCrossover(EventCrossover):
     def get_genes(self) -> Iterator[Iterator[Event]]:
         """Get the genes for RoundType crossover."""
         evts = self.events
-        rt = list(enumerate(self.event_factory.config.round_requirements.keys()))
-        yield (e for e in evts for i, r in rt if e.roundtype == r and i % 2 != 0)
-        yield (e for e in evts for i, r in rt if e.roundtype == r and i % 2 == 0)
+        rt = self.event_factory.config.round_requirements.keys()
+        yield (e for e in evts for i, r in enumerate(rt) if i % 2 != 0 and e.roundtype == r)
+        yield (e for e in evts for i, r in enumerate(rt) if i % 2 == 0 and e.roundtype == r)
+
+
+@dataclass(slots=True)
+class TimeSlotCrossover(EventCrossover):
+    """Time slot crossover operator for genetic algorithms.
+
+    Each gene is chosen based on the time slot of the event.
+    """
+
+    def get_genes(self) -> Iterator[Iterator[Event]]:
+        """Get the genes for TimeSlot crossover."""
+        evts_by_ts = self.event_factory.as_timeslots()
+        indices = [self.rng.randint(1, 2) for _ in evts_by_ts]
+        yield (e for i, evts in enumerate(evts_by_ts.values()) if indices[i] == 1 for e in evts)
+        yield (e for i, evts in enumerate(evts_by_ts.values()) if indices[i] == 2 for e in evts)
+
+
+@dataclass(slots=True)
+class LocationCrossover(EventCrossover):
+    """Location crossover operator for genetic algorithms.
+
+    Each gene is chosen based on the location of the event.
+    """
+
+    def get_genes(self) -> Iterator[Iterator[Event]]:
+        """Get the genes for Location crossover."""
+        evts_by_loc = self.event_factory.as_locations()
+        indices = [self.rng.randint(1, 2) for _ in evts_by_loc]
+        yield (e for i, evts in enumerate(evts_by_loc.values()) if indices[i] == 1 for e in evts)
+        yield (e for i, evts in enumerate(evts_by_loc.values()) if indices[i] == 2 for e in evts)
 
 
 @dataclass(slots=True)
@@ -293,9 +328,11 @@ class BestTeamCrossover(TeamCrossover):
         p1_teams_best = set()
         p2_teams_best = set()
         for t1, t2 in zip(p1.all_teams(), p2.all_teams(), strict=True):
-            if sum(t1.fitness) > sum(t2.fitness) * 0.9:
+            t1_fit = sum(t1.fitness)
+            t2_fit = sum(t2.fitness)
+            if t1_fit > t2_fit * 0.9:
                 p1_teams_best.update(t1.events)
-            elif sum(t1.fitness) < sum(t2.fitness) * 0.9:
+            elif t1_fit < t2_fit * 0.9:
                 p2_teams_best.update(t2.events)
 
         yield (event_map[e] for e in p1_teams_best)

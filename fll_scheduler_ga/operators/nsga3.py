@@ -117,7 +117,7 @@ class NSGA3:
         all_schedules = [p for front in fronts for p in front]
         self._normalize_then_associate(all_schedules, last_front)
         counts = self._count(p.ref_point_idx for fr in fronts[:-1] for p in fr if p.ref_point_idx is not None)
-        logger.debug("Counts of individuals per reference point: %s", counts)
+        # logger.debug("Counts of individuals per reference point: %s", counts)
         pool = dict(enumerate(last_front))
         selected = 0
 
@@ -131,7 +131,7 @@ class NSGA3:
                 if not clst_pool:
                     continue
                 cluster = [k for k, _ in sorted(clst_pool.items(), key=lambda p: p[1].distance_to_ref_point)]
-                pi = cluster[0 if counts[d] == min_count else self.rng.randrange(0, len(cluster))]
+                pi = cluster[0 if counts[d] == min_count else self.rng.randint(1, len(cluster))]
                 yield pool.pop(pi)
                 found = True
                 counts[d] += 1
@@ -147,15 +147,10 @@ class NSGA3:
                 yield pick
                 selected += 1
 
-        logger.debug("Counts of individuals per reference point: %s", counts)
-        logger.debug("Niching selected %d/%d individuals from the last front.", selected, k)
-
     def _normalize_then_associate(self, pop: Population, last_front: Population) -> None:
         """Normalize objectives then associate individuals with nearest reference points."""
         fits_all = np.fromiter((p.fitness for p in pop), dtype=self._dtype)
         fits_last = np.fromiter((p.fitness for p in last_front), dtype=self._dtype) if last_front else fits_all
-        logger.debug("Fitness (all):\n%s", fits_all)
-        logger.debug("Fitness (last):\n%s", fits_last)
 
         # Ensure 2D arrays: shape (N, m)
         if fits_all.ndim == 1:
@@ -180,7 +175,6 @@ class NSGA3:
         nadir = fits_last.min(axis=0)  # shape (m,)
         span = ideal - nadir
         span[span == 0.0] = 1e-16  # avoid divide-by-zero
-        logger.debug("\nIdeal: %s\nNadir: %s\nSpan: %s", ideal, nadir, span)
 
         for p, fit in zip(pop, fits_all, strict=True):
             p.normalized_fitness = (fit - nadir) / span

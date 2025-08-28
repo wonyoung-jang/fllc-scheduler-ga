@@ -1,6 +1,5 @@
 """Context for the genetic algorithm parts."""
 
-import logging
 from dataclasses import dataclass
 
 from ..data_model.event import EventFactory
@@ -23,7 +22,6 @@ class GaContext:
     team_factory: TeamFactory
     evaluator: FitnessEvaluator
     repairer: Repairer
-    logger: logging.Logger
     nsga3: NSGA3
     selections: tuple[Selection, ...]
     crossovers: tuple[Crossover, ...]
