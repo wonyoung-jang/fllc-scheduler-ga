@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from itertools import pairwise
 from logging import getLogger
 from typing import TYPE_CHECKING
 
@@ -209,17 +210,15 @@ class KPoint(EventCrossover):
         """Get the genes for KPoint crossover."""
         evts = self.events
         ne = len(evts)
-        indices = sorted(self.rng.sample(range(1, ne), k=self.k))
-
-        genes = []
-        start = 0
-        for i in indices:
-            genes.append(evts[start:i])
-            start = i
-        genes.append(evts[start:])
-
-        yield (evt for evts in genes[::2] for evt in evts)
-        yield (evt for evts in genes[1::2] for evt in evts)
+        indices = [0, *sorted(self.rng.sample(range(1, ne), k=self.k)), ne]
+        genes = [range(start, stop) for start, stop in pairwise(indices)]
+        p1_genes, p2_genes = [], []
+        for i, gene in enumerate(genes):
+            if i % 2 == 0:
+                p1_genes.extend(evts[j] for j in gene)
+            else:
+                p2_genes.extend(evts[j] for j in gene)
+        return p1_genes, p2_genes
 
 
 @dataclass(slots=True)
@@ -244,14 +243,21 @@ class Uniform(EventCrossover):
     """Uniform crossover operator for genetic algorithms.
 
     Each gene is chosen from either parent by flipping a coin for each gene.
+    The main difference with Scattered, is Scattered guarantees close to 50/50 splits.
+    Uniform may result in more imbalanced splits.
     """
 
     def get_genes(self) -> Iterator[Iterator[Event]]:
         """Get the genes for Uniform crossover."""
         evts = self.events
         indices = [self.rng.randint(1, 2) for _ in evts]
-        yield (evts[i] for i, idx in enumerate(indices) if idx == 1)
-        yield (evts[i] for i, idx in enumerate(indices) if idx == 2)
+        p1_genes, p2_genes = [], []
+        for i, idx in enumerate(indices):
+            if idx == 1:
+                p1_genes.append(evts[i])
+            else:
+                p2_genes.append(evts[i])
+        return p1_genes, p2_genes
 
 
 @dataclass(slots=True)
@@ -266,8 +272,13 @@ class Partial(EventCrossover):
         """Get the genes for Partial crossover."""
         evts = self.events
         indices = [self.rng.randint(1, 4) for _ in evts]
-        yield (evts[i] for i, idx in enumerate(indices) if idx == 1)
-        yield (evts[i] for i, idx in enumerate(indices) if idx == 2)
+        p1_genes, p2_genes = [], []
+        for i, idx in enumerate(indices):
+            if idx == 1:
+                p1_genes.append(evts[i])
+            elif idx == 2:
+                p2_genes.append(evts[i])
+        return p1_genes, p2_genes
 
 
 @dataclass(slots=True)
@@ -281,8 +292,13 @@ class RoundTypeCrossover(EventCrossover):
         """Get the genes for RoundType crossover."""
         evts = self.events
         rt = self.event_factory.config.round_requirements.keys()
-        yield (e for e in evts for i, r in enumerate(rt) if i % 2 != 0 and e.roundtype == r)
-        yield (e for e in evts for i, r in enumerate(rt) if i % 2 == 0 and e.roundtype == r)
+        p1_genes, p2_genes = [], []
+        for i, r in enumerate(rt):
+            if i % 2 != 0:
+                p1_genes.extend(e for e in evts if e.roundtype == r)
+            else:
+                p2_genes.extend(e for e in evts if e.roundtype == r)
+        return p1_genes, p2_genes
 
 
 @dataclass(slots=True)
@@ -296,8 +312,13 @@ class TimeSlotCrossover(EventCrossover):
         """Get the genes for TimeSlot crossover."""
         evts_by_ts = self.event_factory.as_timeslots()
         indices = [self.rng.randint(1, 2) for _ in evts_by_ts]
-        yield (e for i, evts in enumerate(evts_by_ts.values()) if indices[i] == 1 for e in evts)
-        yield (e for i, evts in enumerate(evts_by_ts.values()) if indices[i] == 2 for e in evts)
+        p1_genes, p2_genes = [], []
+        for i, evts in enumerate(evts_by_ts.values()):
+            if indices[i] == 1:
+                p1_genes.extend(evts)
+            else:
+                p2_genes.extend(evts)
+        return p1_genes, p2_genes
 
 
 @dataclass(slots=True)
@@ -311,8 +332,13 @@ class LocationCrossover(EventCrossover):
         """Get the genes for Location crossover."""
         evts_by_loc = self.event_factory.as_locations()
         indices = [self.rng.randint(1, 2) for _ in evts_by_loc]
-        yield (e for i, evts in enumerate(evts_by_loc.values()) if indices[i] == 1 for e in evts)
-        yield (e for i, evts in enumerate(evts_by_loc.values()) if indices[i] == 2 for e in evts)
+        p1_genes, p2_genes = [], []
+        for i, evts in enumerate(evts_by_loc.values()):
+            if indices[i] == 1:
+                p1_genes.extend(evts)
+            else:
+                p2_genes.extend(evts)
+        return p1_genes, p2_genes
 
 
 @dataclass(slots=True)
@@ -334,6 +360,5 @@ class BestTeamCrossover(TeamCrossover):
                 p1_teams_best.update(t1.events)
             elif t1_fit < t2_fit * 0.9:
                 p2_teams_best.update(t2.events)
-
         yield (event_map[e] for e in p1_teams_best)
         yield (event_map[e] for e in p2_teams_best.difference(p1_teams_best))
