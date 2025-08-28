@@ -19,11 +19,11 @@ class LoggingObserver(GaObserver):
 
     def on_generation_end(
         self,
+        front_size: int,
+        population_size: int,
         generation: int,
         num_generations: int,
-        population_size: int,
         best_fitness: tuple[float, ...],
-        front_size: int,
     ) -> None:
         """Log the end of a generation with population size and best fitness."""
         logger.debug(
@@ -41,4 +41,7 @@ class LoggingObserver(GaObserver):
         if not pop:
             logger.warning("No valid schedule was found after all generations.")
             return
-        logger.debug("Final pareto front size: %d/%d (%.2f%%)", len(front), len(pop), len(front) / len(pop) * 100)
+        len_front = len(front)
+        len_pop = len(pop)
+        front_portion = len_front / len_pop * 100 if len_pop > 0 else 0.0
+        logger.debug("Final pareto front size: %d/%d (%.2f%%)", len_front, len_pop, front_portion)

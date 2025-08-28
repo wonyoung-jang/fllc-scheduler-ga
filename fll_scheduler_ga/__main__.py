@@ -101,19 +101,18 @@ def handle_seed_file(args: Namespace, ga_context: GaContext) -> None:
 
 def initialize_logging(args: Namespace) -> None:
     """Initialize logging for the application."""
-    file_fmt = Formatter("[%(asctime)s] %(levelname)s[%(module)s] %(message)s")
     file_handler = FileHandler(
         filename=args.log_file,
         mode="w",
         encoding="utf-8",
+        delay=True,
     )
     file_handler.setLevel(args.loglevel_file)
-    file_handler.setFormatter(file_fmt)
+    file_handler.setFormatter(Formatter("[%(asctime)s] %(levelname)s[%(module)s] %(message)s"))
 
-    console_fmt = Formatter("%(levelname)s[%(module)s] %(message)s")
     console_handler = StreamHandler()
     console_handler.setLevel(args.loglevel_console)
-    console_handler.setFormatter(console_fmt)
+    console_handler.setFormatter(Formatter("%(levelname)s[%(module)s] %(message)s"))
 
     root_logger = getLogger()
     root_logger.setLevel(DEBUG)

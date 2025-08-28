@@ -17,6 +17,12 @@ class TimeSlot:
     stop: datetime
     time_fmt: str
 
+    def __post_init__(self) -> None:
+        """Post-initialization processing."""
+        if self.start >= self.stop:
+            msg = "Start time must be before stop time."
+            raise ValueError(msg)
+
     def __str__(self) -> str:
         """Get a string representation of the time slot."""
         return f"{self.start.strftime(self.time_fmt)}-{self.stop.strftime(self.time_fmt)}"

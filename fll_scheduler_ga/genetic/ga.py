@@ -167,6 +167,7 @@ class GA:
         finally:
             logger.debug("Total time taken: %.2f seconds", time() - start_time)
             logger.debug("Fitness caches: %s", self.context.evaluator.cache_info())
+            logger.debug("GaParameter Values: %s", str(self.ga_params))
             self.finalize()
             self._notify_on_finish(self.total_population, self.pareto_front())
 
@@ -211,17 +212,15 @@ class GA:
             self._notify_on_generation_end(
                 generation=generation,
                 num_generations=num_generations,
-                expected=len(self),
-                fitness=self._get_last_gen_fitness(),
-                pareto_size=len(self.pareto_front()),
+                population_size=len(self),
+                best_fitness=self._get_last_gen_fitness(),
+                front_size=len(self.pareto_front()),
             )
 
     def run_single_epoch(self) -> None:
         """Run a single epoch of the genetic algorithm."""
         for island in self.islands:
-            island.handle_underpopulation()
             island.evolve()
-            island.handle_underpopulation()
             island.update_fitness_history()
 
     def migrate(self, generation: int) -> None:
@@ -246,15 +245,15 @@ class GA:
 
     def _notify_on_generation_end(
         self,
+        front_size: int,
+        population_size: int,
         generation: int,
         num_generations: int,
-        expected: int,
-        fitness: tuple[float, ...],
-        pareto_size: int,
+        best_fitness: tuple[float, ...],
     ) -> None:
         """Notify observers at the end of a generation."""
         for obs in self.observers:
-            obs.on_generation_end(generation, num_generations, expected, fitness, pareto_size)
+            obs.on_generation_end(front_size, population_size, generation, num_generations, best_fitness)
 
     def _notify_on_finish(self, pop: Population, pareto_front: Population) -> None:
         """Notify observers when the genetic algorithm run is finished."""

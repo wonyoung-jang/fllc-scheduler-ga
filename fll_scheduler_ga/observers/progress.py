@@ -25,11 +25,11 @@ class TqdmObserver(GaObserver):
 
     def on_generation_end(
         self,
+        front_size: int,
+        population_size: int,
         generation: int,
         num_generations: int,
-        population_size: int,
         best_fitness: tuple[float, ...],
-        front_size: int,
     ) -> None:
         """Update progress bar with no new best."""
         if best_fitness:
