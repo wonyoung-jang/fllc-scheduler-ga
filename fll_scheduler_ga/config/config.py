@@ -3,7 +3,6 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from logging import getLogger
-from math import ceil
 
 from ..data_model.location import Location
 
@@ -12,7 +11,7 @@ logger = getLogger(__name__)
 type RoundType = str
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True)
 class Round:
     """Representation of a round in the FLL tournament."""
 
@@ -23,14 +22,13 @@ class Round:
     start_time: datetime
     stop_time: datetime
     duration_minutes: timedelta
+    num_timeslots: int
     num_teams: int
     location: str
     locations: list[Location]
-    num_timeslots: int = 0
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the round configuration."""
-        self.num_timeslots = self.get_num_slots()
         logger.debug("Round configuration loaded: %s", self)
 
     def __str__(self) -> str:
@@ -49,24 +47,6 @@ class Round:
             f"\n\t  location         : {self.location}"
             f"\n\t  locations        : {self.locations}"
         )
-
-    def get_num_slots(self) -> int:
-        """Get the number of slots available for this round."""
-        if self.times:
-            return len(self.times)
-
-        total_num_teams = self.num_teams * self.rounds_per_team
-        if len(self.locations) == 0:
-            return 0
-
-        minimum_slots = ceil(total_num_teams / len(self.locations))
-
-        if self.stop_time:
-            total_available = self.stop_time - self.start_time
-            slots_in_window = int(total_available / self.duration_minutes)
-            return max(minimum_slots, slots_in_window)
-
-        return minimum_slots
 
 
 @dataclass(slots=True, frozen=True)

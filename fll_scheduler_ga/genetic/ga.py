@@ -33,15 +33,15 @@ class GA:
     rng: Random
     observers: tuple[GaObserver]
 
-    fitness_history: list[tuple] = field(default_factory=list, init=False, repr=False)
-    total_population: Population = field(default_factory=list, init=False, repr=False)
-    islands: list[Island] = field(default_factory=list, init=False, repr=False)
-    ga_params: GaParameters = field(init=False)
+    fitness_history: list[tuple] = field(default_factory=list, repr=False)
+    total_population: Population = field(default_factory=list, repr=False)
+    islands: list[Island] = field(default_factory=list, repr=False)
+    ga_params: GaParameters = field(default=None, repr=False)
 
-    _seed_file: Path | None = field(default=None, init=False, repr=False)
-    _offspring_ratio: Counter = field(default_factory=Counter, init=False, repr=False)
-    _crossover_ratio: dict[str, Counter] = field(default=None, init=False, repr=False)
-    _mutation_ratio: dict[str, Counter] = field(default=None, init=False, repr=False)
+    _seed_file: Path | None = field(default=None, repr=False)
+    _offspring_ratio: Counter = field(default_factory=Counter, repr=False)
+    _crossover_ratio: dict[str, Counter] = field(default=None, repr=False)
+    _mutation_ratio: dict[str, Counter] = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
@@ -140,9 +140,10 @@ class GA:
     def retrieve_seed_population(self) -> Population | None:
         """Load and integrate a population from a seed file."""
         logger.debug("Loading seed population from: %s", self._seed_file)
+        seed_data: dict[str, Any] = {}
         try:
             with self._seed_file.open("rb") as f:
-                seed_data: dict[str, Any] = pickle.load(f)
+                seed_data = pickle.load(f)
         except (OSError, pickle.PicklingError):
             logger.exception("Could not load or parse seed file. Starting with a fresh population.")
         except EOFError:
@@ -171,7 +172,7 @@ class GA:
         num_generations = self.ga_params.generations
         for generation in range(1, num_generations + 1):
             self.migrate(generation)
-            self.run_single_epoch(generation)
+            self.run_single_epoch(generation - 1)
             self.update_fitness_history()
             self._notify_on_generation_end(
                 generation=generation,

@@ -31,11 +31,11 @@ class Island:
     context: GaContext
     ga_params: GaParameters
 
-    selected: dict[int, Schedule] = field(default_factory=dict, init=False, repr=False)
-    fitness_history: list[tuple] = field(default_factory=list, init=False, repr=False)
-    offspring_ratio: Counter = field(default_factory=Counter, init=False, repr=False)
-    crossover_ratio: dict = field(default=None, init=False, repr=False)
-    mutation_ratio: dict = field(default=None, init=False, repr=False)
+    selected: dict[int, Schedule] = field(default_factory=dict, repr=False)
+    fitness_history: list[tuple] = field(default_factory=list, repr=False)
+    offspring_ratio: Counter = field(default_factory=Counter, repr=False)
+    crossover_ratio: dict = field(default=None, repr=False)
+    mutation_ratio: dict = field(default=None, repr=False)
 
     op_map: dict[str, dict[str, int]] = field(default_factory=dict, init=False, repr=False)
 

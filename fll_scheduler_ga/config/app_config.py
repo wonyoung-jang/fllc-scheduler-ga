@@ -5,6 +5,7 @@ from configparser import ConfigParser
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from logging import getLogger
+from math import ceil
 from pathlib import Path
 from random import Random
 
@@ -322,6 +323,22 @@ def _parse_rounds_config(
         locations = [loc for loc in all_locations.values() if loc.name == location]
 
         roundreqs.setdefault(roundtype, rounds_per_team)
+
+        num_timeslots = 0
+        if times:
+            num_timeslots = len(times)
+        elif len(locations) == 0:
+            num_timeslots = 0
+        else:
+            total_num_teams = num_teams * rounds_per_team
+            min_slots = ceil(total_num_teams / len(locations))
+            if stop_time:
+                total_available = stop_time - start_time
+                slots_in_window = int(total_available / duration_minutes)
+                num_timeslots = max(min_slots, slots_in_window)
+            else:
+                num_timeslots = min_slots
+
         rounds.append(
             Round(
                 roundtype=roundtype,
@@ -331,6 +348,7 @@ def _parse_rounds_config(
                 start_time=start_time,
                 stop_time=stop_time,
                 duration_minutes=duration_minutes,
+                num_timeslots=num_timeslots,
                 num_teams=num_teams,
                 location=location,
                 locations=locations,
