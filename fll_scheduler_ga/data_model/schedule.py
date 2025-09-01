@@ -11,8 +11,6 @@ from .team import Team, TeamMap
 if TYPE_CHECKING:
     from collections.abc import ItemsView, KeysView, ValuesView
 
-    import numpy as np
-
 
 type Population = list[Schedule]
 type Individual = dict[Event, int]
@@ -28,9 +26,8 @@ class Schedule:
     fitness: tuple[float, ...] | None = field(default=None, compare=False)
     rank: int = field(default=99, compare=True)
 
-    normalized_fitness: np.ndarray = field(default=None, init=False, repr=False, compare=False)
-    ref_point_idx: int = field(default=None, init=False, repr=False, compare=False)
-    distance_to_ref_point: float = field(default=None, init=False, repr=False, compare=False)
+    ref_point: int = field(default=None, init=False, repr=False, compare=False)
+    ref_point_distance: float = field(default=None, init=False, repr=False, compare=False)
 
     _cached_all_teams: list[Team] = field(default=None, init=False, repr=False, compare=False)
     _cached_normalized_teams: dict[int, int] = field(default=None, init=False, repr=False, compare=False)

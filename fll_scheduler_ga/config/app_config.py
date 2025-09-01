@@ -312,11 +312,11 @@ def _parse_rounds_config(
         if stop_time := p_round.get("stop_time", ""):
             stop_time = datetime.strptime(stop_time.strip(), time_fmt).replace(tzinfo=UTC)
 
+        duration_minutes = timedelta(minutes=p_round.getint("duration_minutes"))
+
         if times := p_round.get("times", []):
             times = [datetime.strptime(t.strip(), time_fmt).replace(tzinfo=UTC) for t in times.split(",")]
             start_time = times[0]
-
-        duration_minutes = timedelta(minutes=p_round.getint("duration_minutes"))
 
         location = p_round.get("location")
         locations = [loc for loc in all_locations.values() if loc.name == location]

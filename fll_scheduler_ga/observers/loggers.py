@@ -17,23 +17,9 @@ class LoggingObserver(GaObserver):
         """Log the start of the genetic algorithm run."""
         logger.debug("Starting genetic algorithm run for %d generations.", num_generations)
 
-    def on_generation_end(
-        self,
-        front_size: int,
-        population_size: int,
-        generation: int,
-        num_generations: int,
-        best_fitness: tuple[float, ...],
-    ) -> None:
+    def on_generation_end(self, generation: int, num_generations: int, best_fitness: tuple[float, ...]) -> None:
         """Log the end of a generation with population size and best fitness."""
-        logger.debug(
-            "Population: %d/%d | Generation %d/%d | Best Fitness %s",
-            front_size,
-            population_size,
-            generation,
-            num_generations,
-            best_fitness,
-        )
+        logger.debug("Generation %d/%d | Best Fitness %s", generation, num_generations, best_fitness)
 
     def on_finish(self, pop: Population, front: Population) -> None:
         """Log the completion of the genetic algorithm run."""

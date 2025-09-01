@@ -47,7 +47,7 @@ def build_crossovers(
             msg = f"Unknown crossover type in config: {variant_name}"
             raise ValueError(msg)
         else:
-            crossover_factory = variant_map[variant_name]
+            crossover_factory: Crossover = variant_map[variant_name]
             if variant_name == CrossoverOp.K_POINT:
                 for k in app_config.operators.crossover_ks:
                     if k <= 0:
@@ -208,16 +208,15 @@ class KPoint(EventCrossover):
 
     def get_genes(self) -> Iterator[Iterator[Event]]:
         """Get the genes for KPoint crossover."""
+        p1_genes, p2_genes = [], []
         evts = self.events
         ne = len(evts)
-        indices = [0, *sorted(self.rng.sample(range(1, ne), k=self.k)), ne]
-        genes = [range(start, stop) for start, stop in pairwise(indices)]
-        p1_genes, p2_genes = [], []
-        for i, gene in enumerate(genes):
+        indices = (0, *sorted(self.rng.sample(range(1, ne), k=self.k)), ne)
+        for i, events in enumerate(evts[i:j] for i, j in pairwise(indices)):
             if i % 2 == 0:
-                p1_genes.extend(evts[j] for j in gene)
+                p1_genes.extend(events)
             else:
-                p2_genes.extend(evts[j] for j in gene)
+                p2_genes.extend(events)
         return p1_genes, p2_genes
 
 
@@ -231,11 +230,9 @@ class Scattered(EventCrossover):
     def get_genes(self) -> Iterator[Iterator[Event]]:
         """Get the genes for Scattered crossover."""
         evts = self.events
-        ne = len(evts)
-        mid = ne // 2
-        indices = self.rng.sample(range(ne), ne)
-        yield (evts[i] for i in indices[:mid])
-        yield (evts[i] for i in indices[mid:])
+        self.rng.shuffle(evts)
+        mid = len(evts) // 2
+        return evts[:mid], evts[mid:]
 
 
 @dataclass(slots=True)
@@ -249,14 +246,14 @@ class Uniform(EventCrossover):
 
     def get_genes(self) -> Iterator[Iterator[Event]]:
         """Get the genes for Uniform crossover."""
-        evts = self.events
-        indices = [self.rng.randint(1, 2) for _ in evts]
         p1_genes, p2_genes = [], []
-        for i, idx in enumerate(indices):
+        evts = self.events
+        for e in evts:
+            idx = self.rng.randint(1, 2)
             if idx == 1:
-                p1_genes.append(evts[i])
-            else:
-                p2_genes.append(evts[i])
+                p1_genes.append(e)
+            elif idx == 2:
+                p2_genes.append(e)
         return p1_genes, p2_genes
 
 
@@ -270,14 +267,14 @@ class Partial(EventCrossover):
 
     def get_genes(self) -> Iterator[Iterator[Event]]:
         """Get the genes for Partial crossover."""
-        evts = self.events
-        indices = [self.rng.randint(1, 4) for _ in evts]
         p1_genes, p2_genes = [], []
-        for i, idx in enumerate(indices):
+        evts = self.events
+        for e in evts:
+            idx = self.rng.randint(1, 3)
             if idx == 1:
-                p1_genes.append(evts[i])
+                p1_genes.append(e)
             elif idx == 2:
-                p2_genes.append(evts[i])
+                p2_genes.append(e)
         return p1_genes, p2_genes
 
 
@@ -290,14 +287,13 @@ class RoundTypeCrossover(EventCrossover):
 
     def get_genes(self) -> Iterator[Iterator[Event]]:
         """Get the genes for RoundType crossover."""
-        evts = self.events
-        rt = self.event_factory.config.round_requirements.keys()
         p1_genes, p2_genes = [], []
-        for i, r in enumerate(rt):
+        evts = self.events
+        for i, rt in enumerate(self.event_factory.config.round_requirements.keys()):
             if i % 2 != 0:
-                p1_genes.extend(e for e in evts if e.roundtype == r)
+                p1_genes.extend(e for e in evts if e.roundtype == rt)
             else:
-                p2_genes.extend(e for e in evts if e.roundtype == r)
+                p2_genes.extend(e for e in evts if e.roundtype == rt)
         return p1_genes, p2_genes
 
 
@@ -310,13 +306,13 @@ class TimeSlotCrossover(EventCrossover):
 
     def get_genes(self) -> Iterator[Iterator[Event]]:
         """Get the genes for TimeSlot crossover."""
-        evts_by_ts = self.event_factory.as_timeslots()
-        indices = [self.rng.randint(1, 2) for _ in evts_by_ts]
         p1_genes, p2_genes = [], []
-        for i, evts in enumerate(evts_by_ts.values()):
-            if indices[i] == 1:
+        evts_by_ts = self.event_factory.as_timeslots()
+        for evts in evts_by_ts.values():
+            idx = self.rng.randint(1, 2)
+            if idx == 1:
                 p1_genes.extend(evts)
-            else:
+            elif idx == 2:
                 p2_genes.extend(evts)
         return p1_genes, p2_genes
 
@@ -330,13 +326,13 @@ class LocationCrossover(EventCrossover):
 
     def get_genes(self) -> Iterator[Iterator[Event]]:
         """Get the genes for Location crossover."""
-        evts_by_loc = self.event_factory.as_locations()
-        indices = [self.rng.randint(1, 2) for _ in evts_by_loc]
         p1_genes, p2_genes = [], []
-        for i, evts in enumerate(evts_by_loc.values()):
-            if indices[i] == 1:
+        evts_by_loc = self.event_factory.as_locations()
+        for evts in evts_by_loc.values():
+            idx = self.rng.randint(1, 2)
+            if idx == 1:
                 p1_genes.extend(evts)
-            else:
+            elif idx == 2:
                 p2_genes.extend(evts)
         return p1_genes, p2_genes
 

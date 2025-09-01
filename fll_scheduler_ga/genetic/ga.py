@@ -7,9 +7,9 @@ from logging import getLogger
 from pathlib import Path
 from random import Random
 from time import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from ..config.constants import EPSILON, RANDOM_SEED_RANGE
+from ..config.constants import RANDOM_SEED_RANGE
 from ..config.ga_context import GaContext
 from ..config.ga_parameters import GaParameters
 from ..data_model.schedule import Population
@@ -34,7 +34,6 @@ class GA:
     observers: tuple[GaObserver]
 
     fitness_history: list[tuple] = field(default_factory=list, init=False, repr=False)
-    fitness_improvement_history: list[bool] = field(default_factory=list, init=False, repr=False)
     total_population: Population = field(default_factory=list, init=False, repr=False)
     islands: list[Island] = field(default_factory=list, init=False, repr=False)
     ga_params: GaParameters = field(init=False)
@@ -100,51 +99,9 @@ class GA:
         """Get the fitness of the last generation."""
         return self.fitness_history[-1] if self.fitness_history else ()
 
-    def adapt_operator_probabilities(self) -> None:
-        """Adapt the operator probabilities based on the fitness history."""
-        c_chance = self.ga_params.crossover_chance
-        m_chance = self.ga_params.mutation_chance
-        len_improvements = len(self.fitness_improvement_history)
-
-        if len_improvements >= self.ga_params.migration_interval:
-            last_improvements = self.fitness_improvement_history[-self.ga_params.migration_interval :]
-            improved_ratio = last_improvements.count(1) / len(last_improvements)
-
-            # Less than 1/5 generations improved -> decrease operator chance / exploit
-            if improved_ratio < 0.2:
-                self.ga_params.crossover_chance = max(0.001, c_chance * EPSILON)
-                self.ga_params.mutation_chance = max(0.001, m_chance * EPSILON)
-                logger.debug(
-                    "Reduced crossover chance to %.2f and mutation chance to %.2f",
-                    self.ga_params.crossover_chance,
-                    self.ga_params.mutation_chance,
-                )
-            # More than 1/5 generations improved -> increase operator chance / explore
-            elif improved_ratio > 0.2:
-                self.ga_params.crossover_chance = min(0.999, c_chance / EPSILON)
-                self.ga_params.mutation_chance = min(0.999, m_chance / EPSILON)
-                logger.debug(
-                    "Increased crossover chance to %.2f and mutation chance to %.2f",
-                    self.ga_params.crossover_chance,
-                    self.ga_params.mutation_chance,
-                )
-
     def update_fitness_history(self) -> None:
         """Update the fitness history with the current generation's fitness."""
         this_gen_fitness = self._get_this_gen_fitness()
-        last_gen_fitness = self._get_last_gen_fitness()
-        sum_this_gen_fitness = sum(this_gen_fitness) if this_gen_fitness else 0.0
-        sum_last_gen_fitness = sum(last_gen_fitness) if last_gen_fitness else 0.0
-
-        if self.fitness_history:
-            if sum_last_gen_fitness < sum_this_gen_fitness:
-                self.fitness_improvement_history.append(1)
-            elif sum_last_gen_fitness > sum_this_gen_fitness:
-                self.fitness_improvement_history.append(-1)
-            else:
-                self.fitness_improvement_history.append(0)
-
-        self.adapt_operator_probabilities()
         self.fitness_history.append(this_gen_fitness)
 
     def run(self) -> None:
@@ -165,10 +122,7 @@ class GA:
             logger.debug("Genetic algorithm run interrupted by user. Saving...")
             self.update_fitness_history()
         finally:
-            logger.debug("Total time taken: %.2f seconds", time() - start_time)
-            logger.debug("Fitness caches: %s", self.context.evaluator.cache_info())
-            logger.debug("GaParameter Values: %s", str(self.ga_params))
-            self.finalize()
+            self.finalize(start_time)
             self._notify_on_finish(self.total_population, self.pareto_front())
 
     def initialize_population(self) -> None:
@@ -189,14 +143,24 @@ class GA:
         logger.debug("Loading seed population from: %s", self._seed_file)
         try:
             with self._seed_file.open("rb") as f:
-                seed_data = pickle.load(f)
-                seed_config: TournamentConfig = seed_data["config"]
+                seed_data: dict[str, Any] = pickle.load(f)
+                seed_config: TournamentConfig | None = seed_data.get("config")
+                if not seed_config:
+                    logger.warning("Seed population is missing config. Using current...")
+                    return None
+
                 num_teams_changed = self.context.app_config.tournament.num_teams != seed_config.num_teams
-                config_changed = self.context.app_config.tournament.rounds != seed_config.rounds
-                if num_teams_changed or config_changed:
+                rounds_changed = self.context.app_config.tournament.rounds != seed_config.rounds
+                if num_teams_changed or rounds_changed:
                     logger.warning("Seed population does not match current config. Using current...")
                     return None
-                return seed_data["population"]
+
+                population = seed_data.get("population")
+                if not population:
+                    logger.warning("Seed population is missing. Using current...")
+                    return None
+
+                return population
         except (OSError, pickle.PicklingError):
             logger.exception("Could not load or parse seed file. Starting with a fresh population.")
         except EOFError:
@@ -212,9 +176,7 @@ class GA:
             self._notify_on_generation_end(
                 generation=generation,
                 num_generations=num_generations,
-                population_size=len(self),
                 best_fitness=self._get_last_gen_fitness(),
-                front_size=len(self.pareto_front()),
             )
 
     def run_single_epoch(self) -> None:
@@ -225,18 +187,17 @@ class GA:
 
     def migrate(self, generation: int) -> None:
         """Migrate the best individuals between islands using a random ring topology."""
-        num_islands = self.ga_params.num_islands
-        if not (
-            num_islands > 1
-            and self.ga_params.migration_size > 0
-            and (generation) % self.ga_params.migration_interval == 0
-        ):
+        if self.ga_params.migration_size <= 0 or generation % self.ga_params.migration_interval != 0:
             return
 
-        r = self.rng.randrange(1, num_islands)  # Random offset
+        if (num_giving := len(self.islands)) < 2:
+            return
+
+        offset = self.rng.randrange(0, num_giving)  # Random offset
+        migrants = [i.get_migrants() for i in self.islands]
         for i, island in enumerate(self.islands):
-            j = (i + r) % num_islands
-            self.islands[j].receive_migrants(island.get_migrants())
+            j = (i + offset) % num_giving
+            island.receive_migrants(migrants[j])
 
     def _notify_on_start(self, num_generations: int) -> None:
         """Notify observers when the genetic algorithm run starts."""
@@ -245,15 +206,13 @@ class GA:
 
     def _notify_on_generation_end(
         self,
-        front_size: int,
-        population_size: int,
         generation: int,
         num_generations: int,
         best_fitness: tuple[float, ...],
     ) -> None:
         """Notify observers at the end of a generation."""
         for obs in self.observers:
-            obs.on_generation_end(front_size, population_size, generation, num_generations, best_fitness)
+            obs.on_generation_end(generation, num_generations, best_fitness)
 
     def _notify_on_finish(self, pop: Population, pareto_front: Population) -> None:
         """Notify observers when the genetic algorithm run is finished."""
@@ -297,12 +256,12 @@ class GA:
     def _log_aggregate_stats(self) -> None:
         """Log aggregate statistics across all islands."""
         final_log = f"{'=' * 20}\nFinal statistics"
-        sum_crs_suc = sum(self._crossover_ratio.get("success", {}).values())
-        sum_crs_tot = sum(self._crossover_ratio.get("total", {}).values())
-        sum_crs_rte = f"{sum_crs_suc / sum_crs_tot if sum_crs_tot > 0 else 0.0:.2%}"
-        sum_mut_suc = sum(self._mutation_ratio.get("success", {}).values())
-        sum_mut_tot = sum(self._mutation_ratio.get("total", {}).values())
-        sum_mut_rte = f"{sum_mut_suc / sum_mut_tot if sum_mut_tot > 0 else 0.0:.2%}"
+        crs_suc = sum(self._crossover_ratio.get("success", {}).values())
+        crs_tot = sum(self._crossover_ratio.get("total", {}).values())
+        crs_rte = f"{crs_suc / crs_tot if crs_tot > 0 else 0.0:.2%}"
+        mut_suc = sum(self._mutation_ratio.get("success", {}).values())
+        mut_tot = sum(self._mutation_ratio.get("total", {}).values())
+        mut_rte = f"{mut_suc / mut_tot if mut_tot > 0 else 0.0:.2%}"
         off_suc = self._offspring_ratio.get("success", 0)
         off_tot = self._offspring_ratio.get("total", 0)
         off_rte = f"{off_suc / off_tot if off_tot > 0 else 0.0:.2%}"
@@ -312,8 +271,8 @@ class GA:
         final_log += (
             f"\n  Total islands          : {len(self.islands)}"
             f"\n  Unique individuals     : {unique_inds}/{total_inds} ({unique_rte})"
-            f"\n  Crossover success rate : {sum_crs_suc}/{sum_crs_tot} ({sum_crs_rte})"
-            f"\n  Mutation success rate  : {sum_mut_suc}/{sum_mut_tot} ({sum_mut_rte})"
+            f"\n  Crossover success rate : {crs_suc}/{crs_tot} ({crs_rte})"
+            f"\n  Mutation success rate  : {mut_suc}/{mut_tot} ({mut_rte})"
             f"\n  Offspring success rate : {off_suc}/{off_tot} ({off_rte})"
         )
         logger.debug(final_log)
@@ -328,11 +287,16 @@ class GA:
         for gene, count in sorted(unique_genes.items(), key=lambda x: x[1], reverse=True):
             logger.debug("Event: %s, Count: %d", gene, count)
 
-    def finalize(self) -> None:
+    def finalize(self, start_time: float) -> None:
         """Aggregate islands and run a final selection to produce the final population."""
         self._deduplicate_population()
+        self._log_unique_events()
         self._aggregate_stats_from_islands()
         self._log_operators(name="crossover", ratios=self._crossover_ratio, ops=self.context.crossovers)
         self._log_operators(name="mutation", ratios=self._mutation_ratio, ops=self.context.mutations)
         self._log_aggregate_stats()
-        self._log_unique_events()
+        logger.debug("Fitness caches: %s", self.context.evaluator.cache_info())
+        logger.debug("GaParameter Values: %s", str(self.ga_params))
+        for island in self.islands:
+            logger.debug("Island %d Fitness: %.2f", island.identity, sum(island.get_last_gen_fitness()))
+        logger.debug("Total time taken: %.2f seconds", time() - start_time)

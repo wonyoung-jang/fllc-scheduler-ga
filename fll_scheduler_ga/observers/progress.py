@@ -23,19 +23,12 @@ class TqdmObserver(GaObserver):
             colour="MAGENTA",
         )
 
-    def on_generation_end(
-        self,
-        front_size: int,
-        population_size: int,
-        generation: int,
-        num_generations: int,
-        best_fitness: tuple[float, ...],
-    ) -> None:
+    def on_generation_end(self, generation: int, num_generations: int, best_fitness: tuple[float, ...]) -> None:
         """Update progress bar with no new best."""
         if best_fitness:
             fitness_str = ", ".join([f"{s:.3f}" for s in best_fitness])
             fitness_str += f" | Σ={sum(best_fitness):.3f} ({sum(best_fitness) / len(best_fitness):.2%})"
-            self._progress_bar.set_description(f"Front: {front_size:<3}/{population_size:<3} | Avg: {fitness_str}")
+            self._progress_bar.set_description(f"Fitness Avg: {fitness_str}")
         self._progress_bar.update(1)
 
     def on_finish(self, pop: Population, front: Population) -> None:

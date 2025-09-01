@@ -83,22 +83,6 @@ class Repairer:
         schedule.clear_cache()
         return len(schedule) == self.config.total_slots
 
-    # def clean(self, schedule: Schedule) -> None:
-    #     """Clean schedule of unpaired matches."""
-    #     for e1, t1 in schedule.items():
-    #         e2 = e1.paired
-    #         if e2 is None:
-    #             continue
-
-    #         t2 = schedule[e2]
-
-    #         if t1 is None and t2 is not None:
-    #             t2.remove_event(e2)
-    #             del schedule[e2]
-    #         elif t1 is not None and t2 is None:
-    #             t1.remove_event(e1)
-    #             del schedule[e1]
-
     @staticmethod
     def _assign_singles(teams: dict[int, Team], events: dict[int, Event], schedule: Schedule) -> None:
         """Assign single-team events to teams that need them."""

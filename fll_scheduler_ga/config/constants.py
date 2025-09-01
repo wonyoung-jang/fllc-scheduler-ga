@@ -4,7 +4,6 @@ from enum import StrEnum
 
 ASCII_OFFSET = 64
 ATTEMPTS_RANGE = (0, 50)
-EPSILON = 0.82
 FITNESS_PENALTY = 0.5
 RANDOM_SEED_RANGE = (1, 2**32 - 1)
 

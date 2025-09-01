@@ -15,14 +15,7 @@ class GaObserver(ABC):
         """Call at the start of the genetic algorithm run to initialize observers."""
 
     @abstractmethod
-    def on_generation_end(
-        self,
-        front_size: int,
-        population_size: int,
-        generation: int,
-        num_generations: int,
-        best_fitness: tuple[float, ...],
-    ) -> None:
+    def on_generation_end(self, generation: int, num_generations: int, best_fitness: tuple[float, ...]) -> None:
         """Call at the end of each generation to report status."""
 
     @abstractmethod
