@@ -71,10 +71,9 @@ class TournamentSelect(Selection):
 
     def select(self, population: Population, num_parents: int = 2) -> Iterator[Schedule]:
         """Select individuals using NSGA-III tournament selection."""
-        k = min(self.tournament_size, len(population))
         tournament = sorted(
-            self.rng.sample(population, k=k),
-            key=lambda p: (p.rank, self.rng.choice([True, False])),
+            self.rng.sample(population, k=min(self.tournament_size, len(population))),
+            key=lambda p: (p.rank, self.rng.choice((True, False))),
         )
         yield from tournament[:num_parents]
 

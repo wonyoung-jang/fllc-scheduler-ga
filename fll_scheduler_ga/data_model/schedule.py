@@ -17,22 +17,22 @@ type Individual = dict[Event, int]
 type Match = tuple[Event, Event, Team, Team]
 
 
-@dataclass(slots=True, order=True)
+@dataclass(slots=True)
 class Schedule:
     """Represents a schedule (individual) with its associated fitness score."""
 
-    teams: TeamMap = field(default_factory=dict, compare=False)
-    schedule: Individual = field(default_factory=dict, compare=False)
-    fitness: tuple[float, ...] | None = field(default=None, compare=False)
-    rank: int = field(default=99, compare=True)
+    teams: TeamMap = field(default_factory=dict)
+    schedule: Individual = field(default_factory=dict)
+    fitness: tuple[float, ...] | None = field(default=None)
+    rank: int = field(default=99)
 
-    ref_point: int = field(default=None, init=False, repr=False, compare=False)
-    ref_point_distance: float = field(default=None, init=False, repr=False, compare=False)
+    ref_point: int = field(default=None, repr=False)
+    ref_point_distance: float = field(default=None, repr=False)
 
-    _cached_all_teams: list[Team] = field(default=None, init=False, repr=False, compare=False)
-    _cached_normalized_teams: dict[int, int] = field(default=None, init=False, repr=False, compare=False)
-    _cached_hash: int = field(default=None, init=False, repr=False)
-    _cached_canonical_representation: tuple[tuple[int, ...], ...] = field(default=None, init=False, repr=False)
+    _cached_all_teams: list[Team] = field(default=None, repr=False)
+    _cached_normalized_teams: dict[int, int] = field(default=None, repr=False)
+    _cached_hash: int = field(default=None, repr=False)
+    _cached_canonical_representation: tuple[tuple[int, ...], ...] = field(default=None, repr=False)
 
     team_identities: ClassVar[dict[int, int | str]]
 
@@ -79,12 +79,16 @@ class Schedule:
 
     def clone(self) -> Schedule:
         """Create a deep copy of the schedule."""
-        return Schedule(
+        clone = Schedule(
             teams={i: t.clone() for i, t in self.teams.items()},
             schedule=self.schedule.copy(),
             fitness=self.fitness,
             rank=self.rank,
+            ref_point=self.ref_point,
+            ref_point_distance=self.ref_point_distance,
         )
+        clone.clear_cache()
+        return clone
 
     def clear_cache(self) -> None:
         """Clear cached values to ensure fresh calculations."""

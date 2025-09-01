@@ -19,7 +19,11 @@ class LoggingObserver(GaObserver):
 
     def on_generation_end(self, generation: int, num_generations: int, best_fitness: tuple[float, ...]) -> None:
         """Log the end of a generation with population size and best fitness."""
-        logger.debug("Generation %d/%d | Best Fitness %s", generation, num_generations, best_fitness)
+        fitness_str = "N/A"
+        if best_fitness:
+            fitness_str = ", ".join([f"{s:.2f}" for s in best_fitness])
+            fitness_str += f" | Σ={sum(best_fitness):.2f} ({sum(best_fitness) / len(best_fitness):.1%})"
+        logger.debug("Fitness %s | Generation %d/%d", fitness_str, generation, num_generations)
 
     def on_finish(self, pop: Population, front: Population) -> None:
         """Log the completion of the genetic algorithm run."""

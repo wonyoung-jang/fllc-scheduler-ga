@@ -12,7 +12,7 @@ logger = getLogger(__name__)
 type RoundType = str
 
 
-@dataclass(slots=True, frozen=True)
+@dataclass(slots=True)
 class Round:
     """Representation of a round in the FLL tournament."""
 
@@ -26,9 +26,11 @@ class Round:
     num_teams: int
     location: str
     locations: list[Location]
+    num_timeslots: int = 0
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the round configuration."""
+        self.num_timeslots = self.get_num_slots()
         logger.debug("Round configuration loaded: %s", self)
 
     def __str__(self) -> str:
@@ -42,7 +44,7 @@ class Round:
             f"\n\t  start_time       : {self.start_time}"
             f"\n\t  stop_time        : {self.stop_time}"
             f"\n\t  duration_minutes : {self.duration_minutes}"
-            f"\n\t  num_timeslots    : {self.get_num_slots()}"
+            f"\n\t  num_timeslots    : {self.num_timeslots}"
             f"\n\t  num_teams        : {self.num_teams}"
             f"\n\t  location         : {self.location}"
             f"\n\t  locations        : {self.locations}"

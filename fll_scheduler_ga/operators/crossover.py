@@ -66,37 +66,49 @@ class Crossover(ABC):
     event_factory: EventFactory
     rng: Random
 
-    def crossover(self, parents: tuple[Schedule]) -> Iterator[Schedule]:
-        """Crossover two parents to produce a child."""
-        p1, p2 = parents
-        yield self._produce_child(p1, p2)
-        yield self._produce_child(p2, p1)
+    @abstractmethod
+    def produce_children(self, parents: tuple[Schedule]) -> Iterator[Schedule]:
+        """Produce child schedules from two parents.
 
-    def _transfer_genes_from_parent1(self, child: Schedule, parent: Schedule, events: Iterator[Event]) -> None:
+        Args:
+            parents (tuple[Schedule]): A tuple containing the first and second parent schedules.
+
+        Yields:
+            Schedule : The child schedule produced from crossover.
+
+        """
+        msg = "Subclasses must implement this method."
+        raise NotImplementedError(msg)
+
+    def cross(self, parents: tuple[Schedule]) -> Iterator[Schedule]:
+        """Crossover two parents to produce a child."""
+        yield from self.produce_children(parents=parents)
+
+    def _transfer_genes_from_parent1(self, c: Schedule, p1: Schedule, evts: Iterator[Event]) -> None:
         """Transfer genes from the first parent. Fewer checks needed."""
-        events_to_parent = ((e, e.paired, child.get_team(parent[e]), child.get_team(parent[e.paired])) for e in events)
+        events_to_parent = ((e, e.paired, c.get_team(p1[e]), c.get_team(p1[e.paired])) for e in evts)
         for e1, e2, t1, t2 in events_to_parent:
             if t1 is None:
                 continue
 
             if e2 is None:
-                child.assign_single(e1, t1)
+                c.assign_single(e1, t1)
             elif e2 and e1.location.side == 1 and t2:
-                child.assign_match(e1, e2, t1, t2)
+                c.assign_match(e1, e2, t1, t2)
 
-    def _transfer_genes_from_parent2(self, child: Schedule, parent: Schedule, events: Iterator[Event]) -> None:
+    def _transfer_genes_from_parent2(self, c: Schedule, p2: Schedule, evts: Iterator[Event]) -> None:
         """Transfer genes from the second parent."""
-        events_to_parent = ((e, e.paired, child.get_team(parent[e]), child.get_team(parent[e.paired])) for e in events)
+        events_to_parent = ((e, e.paired, c.get_team(p2[e]), c.get_team(p2[e.paired])) for e in evts)
         for e1, e2, t1, t2 in events_to_parent:
             if t1 is None or not t1.needs_round(e1.roundtype) or t1.conflicts(e1):
                 continue
 
             if e2 is None:
-                child.assign_single(e1, t1)
+                c.assign_single(e1, t1)
             elif e2 and e1.location.side == 1 and t2:
                 if not t2.needs_round(e2.roundtype) or t2.conflicts(e2):
                     continue
-                child.assign_match(e1, e2, t1, t2)
+                c.assign_match(e1, e2, t1, t2)
 
 
 @dataclass(slots=True)
@@ -126,23 +138,22 @@ class EventCrossover(Crossover):
         msg = "Subclasses must implement this method."
         raise NotImplementedError(msg)
 
-    def _produce_child(self, p1: Schedule, p2: Schedule) -> Schedule:
-        """Produce a child schedule from two parents.
-
-        Args:
-            p1 (Schedule): First parent schedule.
-            p2 (Schedule): Second parent schedule.
-
-        Returns:
-            Schedule : The child schedule produced from crossover.
-
-        """
-        child = Schedule(self.team_factory.build())
+    def produce_children(self, parents: tuple[Schedule]) -> Iterator[Schedule]:
+        """Produce child schedules from two parents."""
+        p1, p2 = parents
         p1_genes, p2_genes = self.get_genes()
-        self._transfer_genes_from_parent1(child, p1, p1_genes)
-        self._transfer_genes_from_parent2(child, p2, p2_genes)
-        child.clear_cache()
-        return child
+
+        c1 = Schedule(self.team_factory.build())
+        self._transfer_genes_from_parent1(c1, p1, p1_genes)
+        self._transfer_genes_from_parent2(c1, p2, p2_genes)
+        c1.clear_cache()
+        yield c1
+
+        c2 = Schedule(self.team_factory.build())
+        self._transfer_genes_from_parent1(c2, p2, p2_genes)
+        self._transfer_genes_from_parent2(c2, p1, p1_genes)
+        c2.clear_cache()
+        yield c2
 
 
 @dataclass(slots=True)
@@ -174,23 +185,24 @@ class TeamCrossover(Crossover):
         msg = "Subclasses must implement this method."
         raise NotImplementedError(msg)
 
-    def _produce_child(self, p1: Schedule, p2: Schedule) -> Schedule:
-        """Produce a child schedule from two parents.
-
-        Args:
-            p1 (Schedule): First parent schedule.
-            p2 (Schedule): Second parent schedule.
-
-        Returns:
-            Schedule : The child schedule produced from crossover.
-
-        """
-        child = Schedule(self.team_factory.build())
+    def produce_children(self, parents: tuple[Schedule]) -> Iterator[Schedule]:
+        """Produce child schedules from two parents."""
+        p1, p2 = parents
         p1_genes, p2_genes = self.get_genes(p1, p2)
-        self._transfer_genes_from_parent1(child, p1, p1_genes)
-        self._transfer_genes_from_parent2(child, p2, p2_genes)
-        child.clear_cache()
-        return child
+
+        c1 = Schedule(self.team_factory.build())
+        self._transfer_genes_from_parent1(c1, p1, p1_genes)
+        self._transfer_genes_from_parent2(c1, p2, p2_genes)
+        c1.clear_cache()
+        yield c1
+
+        p2_genes, p1_genes = self.get_genes(p2, p1)
+
+        c2 = Schedule(self.team_factory.build())
+        self._transfer_genes_from_parent1(c2, p2, p2_genes)
+        self._transfer_genes_from_parent2(c2, p1, p1_genes)
+        c2.clear_cache()
+        yield c2
 
 
 @dataclass(slots=True)
@@ -209,14 +221,16 @@ class KPoint(EventCrossover):
     def get_genes(self) -> Iterator[Iterator[Event]]:
         """Get the genes for KPoint crossover."""
         p1_genes, p2_genes = [], []
+        p1_extend = p1_genes.extend
+        p2_extend = p2_genes.extend
         evts = self.events
         ne = len(evts)
-        indices = (0, *sorted(self.rng.sample(range(1, ne), k=self.k)), ne)
+        indices = [0, *sorted(self.rng.sample(range(1, ne), k=self.k)), ne]
         for i, events in enumerate(evts[i:j] for i, j in pairwise(indices)):
             if i % 2 == 0:
-                p1_genes.extend(events)
+                p1_extend(events)
             else:
-                p2_genes.extend(events)
+                p2_extend(events)
         return p1_genes, p2_genes
 
 
@@ -230,9 +244,9 @@ class Scattered(EventCrossover):
     def get_genes(self) -> Iterator[Iterator[Event]]:
         """Get the genes for Scattered crossover."""
         evts = self.events
-        self.rng.shuffle(evts)
+        indices = self.rng.sample(range(len(evts)), k=len(evts))
         mid = len(evts) // 2
-        return evts[:mid], evts[mid:]
+        return [evts[i] for i in indices[:mid]], [evts[i] for i in indices[mid:]]
 
 
 @dataclass(slots=True)
@@ -247,13 +261,16 @@ class Uniform(EventCrossover):
     def get_genes(self) -> Iterator[Iterator[Event]]:
         """Get the genes for Uniform crossover."""
         p1_genes, p2_genes = [], []
+        randint = self.rng.randint
+        p1_append = p1_genes.append
+        p2_append = p2_genes.append
         evts = self.events
         for e in evts:
-            idx = self.rng.randint(1, 2)
+            idx = randint(1, 2)
             if idx == 1:
-                p1_genes.append(e)
+                p1_append(e)
             elif idx == 2:
-                p2_genes.append(e)
+                p2_append(e)
         return p1_genes, p2_genes
 
 
@@ -268,13 +285,16 @@ class Partial(EventCrossover):
     def get_genes(self) -> Iterator[Iterator[Event]]:
         """Get the genes for Partial crossover."""
         p1_genes, p2_genes = [], []
+        randint = self.rng.randint
+        p1_append = p1_genes.append
+        p2_append = p2_genes.append
         evts = self.events
         for e in evts:
-            idx = self.rng.randint(1, 3)
+            idx = randint(1, 5)
             if idx == 1:
-                p1_genes.append(e)
+                p1_append(e)
             elif idx == 2:
-                p2_genes.append(e)
+                p2_append(e)
         return p1_genes, p2_genes
 
 
@@ -288,12 +308,14 @@ class RoundTypeCrossover(EventCrossover):
     def get_genes(self) -> Iterator[Iterator[Event]]:
         """Get the genes for RoundType crossover."""
         p1_genes, p2_genes = [], []
-        evts = self.events
-        for i, rt in enumerate(self.event_factory.config.round_requirements.keys()):
-            if i % 2 != 0:
-                p1_genes.extend(e for e in evts if e.roundtype == rt)
+        p1_extend = p1_genes.extend
+        p2_extend = p2_genes.extend
+        evts_by_rt = self.event_factory.as_roundtypes()
+        for i, evts in enumerate(evts_by_rt.values()):
+            if i % 2 == 0:
+                p1_extend(evts)
             else:
-                p2_genes.extend(e for e in evts if e.roundtype == rt)
+                p2_extend(evts)
         return p1_genes, p2_genes
 
 
@@ -307,13 +329,14 @@ class TimeSlotCrossover(EventCrossover):
     def get_genes(self) -> Iterator[Iterator[Event]]:
         """Get the genes for TimeSlot crossover."""
         p1_genes, p2_genes = [], []
+        p1_extend = p1_genes.extend
+        p2_extend = p2_genes.extend
         evts_by_ts = self.event_factory.as_timeslots()
-        for evts in evts_by_ts.values():
-            idx = self.rng.randint(1, 2)
-            if idx == 1:
-                p1_genes.extend(evts)
-            elif idx == 2:
-                p2_genes.extend(evts)
+        for i, evts in enumerate(evts_by_ts.values()):
+            if i % 2 == 0:
+                p1_extend(evts)
+            else:
+                p2_extend(evts)
         return p1_genes, p2_genes
 
 
@@ -327,13 +350,14 @@ class LocationCrossover(EventCrossover):
     def get_genes(self) -> Iterator[Iterator[Event]]:
         """Get the genes for Location crossover."""
         p1_genes, p2_genes = [], []
+        p1_extend = p1_genes.extend
+        p2_extend = p2_genes.extend
         evts_by_loc = self.event_factory.as_locations()
-        for evts in evts_by_loc.values():
-            idx = self.rng.randint(1, 2)
-            if idx == 1:
-                p1_genes.extend(evts)
-            elif idx == 2:
-                p2_genes.extend(evts)
+        for i, evts in enumerate(evts_by_loc.values()):
+            if i % 2 == 0:
+                p1_extend(evts)
+            else:
+                p2_extend(evts)
         return p1_genes, p2_genes
 
 
@@ -346,15 +370,17 @@ class BestTeamCrossover(TeamCrossover):
 
     def get_genes(self, p1: Schedule, p2: Schedule) -> Iterator[Iterator[Event]]:
         """Get the genes for Team crossover."""
-        event_map = self.event_map
-        p1_teams_best = set()
-        p2_teams_best = set()
-        for t1, t2 in zip(p1.all_teams(), p2.all_teams(), strict=True):
-            t1_fit = sum(t1.fitness)
-            t2_fit = sum(t2.fitness)
+        evts_map = self.event_map
+        p1_best = set()
+        p2_best = set()
+        p1_update = p1_best.update
+        p2_update = p2_best.update
+        p1_data = ((sum(t.fitness), t.events) for t in p1.all_teams())
+        p2_data = ((sum(t.fitness), t.events) for t in p2.all_teams())
+        for (t1_fit, t1_events), (t2_fit, t2_events) in zip(p1_data, p2_data, strict=True):
             if t1_fit > t2_fit * 0.9:
-                p1_teams_best.update(t1.events)
-            elif t1_fit < t2_fit * 0.9:
-                p2_teams_best.update(t2.events)
-        yield (event_map[e] for e in p1_teams_best)
-        yield (event_map[e] for e in p2_teams_best.difference(p1_teams_best))
+                p1_update(t1_events)
+            elif t2_fit > t1_fit * 0.9:
+                p2_update(t2_events)
+        yield (evts_map[e] for e in p1_best)
+        yield (evts_map[e] for e in p2_best.difference(p1_best))

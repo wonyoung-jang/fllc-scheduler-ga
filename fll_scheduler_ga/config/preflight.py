@@ -34,7 +34,7 @@ def _check_total_capacity(config: TournamentConfig) -> None:
     for r in config.rounds:
         rt = r.roundtype
         required = (config.num_teams * r.rounds_per_team) / r.teams_per_round
-        available = r.get_num_slots() * (len(r.locations) // r.teams_per_round)
+        available = r.num_timeslots * (len(r.locations) // r.teams_per_round)
         if required > available:
             msg = (
                 f"Capacity impossible for Round '{rt}':\n"

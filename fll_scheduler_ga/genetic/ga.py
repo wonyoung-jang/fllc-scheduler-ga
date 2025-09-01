@@ -40,8 +40,8 @@ class GA:
 
     _seed_file: Path | None = field(default=None, init=False, repr=False)
     _offspring_ratio: Counter = field(default_factory=Counter, init=False, repr=False)
-    _crossover_ratio: dict = field(default_factory=dict, init=False, repr=False)
-    _mutation_ratio: dict = field(default_factory=dict, init=False, repr=False)
+    _crossover_ratio: dict[str, Counter] = field(default=None, init=False, repr=False)
+    _mutation_ratio: dict[str, Counter] = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
@@ -66,9 +66,9 @@ class GA:
             for i in range(1, self.ga_params.num_islands + 1)
         )
 
-        for tracker in ("success", "total"):
-            self._crossover_ratio[tracker] = {str(c): 0 for c in self.context.crossovers}
-            self._mutation_ratio[tracker] = {str(m): 0 for m in self.context.mutations}
+        trackers = ("success", "total")
+        self._crossover_ratio = {trckr: Counter({str(c): 0 for c in self.context.crossovers}) for trckr in trackers}
+        self._mutation_ratio = {trckr: Counter({str(m): 0 for m in self.context.mutations}) for trckr in trackers}
 
     def __len__(self) -> int:
         """Return the number of individuals in the population."""
@@ -88,7 +88,7 @@ class GA:
     def _get_this_gen_fitness(self) -> tuple[float, ...]:
         """Calculate the average fitness of the current generation."""
         return tuple(
-            sum(s) / len(self.islands)
+            sum(s) / self.ga_params.num_islands
             for s in zip(
                 *(i.get_last_gen_fitness() for i in self.islands),
                 strict=True,
@@ -101,8 +101,7 @@ class GA:
 
     def update_fitness_history(self) -> None:
         """Update the fitness history with the current generation's fitness."""
-        this_gen_fitness = self._get_this_gen_fitness()
-        self.fitness_history.append(this_gen_fitness)
+        self.fitness_history.append(self._get_this_gen_fitness())
 
     def run(self) -> None:
         """Run the genetic algorithm and return the best schedule found."""
@@ -111,7 +110,7 @@ class GA:
 
         try:
             self.initialize_population()
-            if not any(self.islands[i].selected for i in range(self.ga_params.num_islands)):
+            if not any(i.selected for i in self.islands):
                 logger.critical("No valid schedule meeting all hard constraints was found.")
                 return False
             self.run_epochs()
@@ -130,9 +129,9 @@ class GA:
         seed_path = self._seed_file
         if seed_path and seed_path.exists() and (seed_pop := self.retrieve_seed_population()):
             seed_pop.sort(key=lambda s: (s.rank, -sum(s.fitness)))
-            for spi, schedule in enumerate(seed_pop):
-                i = spi % self.ga_params.num_islands
-                self.islands[i].add_to_population(schedule)
+            n = self.ga_params.num_islands
+            for idx, schedule in enumerate(seed_pop):
+                self.islands[idx % n].add_to_population(schedule)
 
         logger.debug("Initializing %d islands...", self.ga_params.num_islands)
         for i in range(self.ga_params.num_islands):
@@ -144,34 +143,35 @@ class GA:
         try:
             with self._seed_file.open("rb") as f:
                 seed_data: dict[str, Any] = pickle.load(f)
-                seed_config: TournamentConfig | None = seed_data.get("config")
-                if not seed_config:
-                    logger.warning("Seed population is missing config. Using current...")
-                    return None
-
-                num_teams_changed = self.context.app_config.tournament.num_teams != seed_config.num_teams
-                rounds_changed = self.context.app_config.tournament.rounds != seed_config.rounds
-                if num_teams_changed or rounds_changed:
-                    logger.warning("Seed population does not match current config. Using current...")
-                    return None
-
-                population = seed_data.get("population")
-                if not population:
-                    logger.warning("Seed population is missing. Using current...")
-                    return None
-
-                return population
         except (OSError, pickle.PicklingError):
             logger.exception("Could not load or parse seed file. Starting with a fresh population.")
         except EOFError:
             logger.debug("Pickle file is empty")
+
+        seed_config: TournamentConfig | None = seed_data.get("config")
+        if not seed_config:
+            logger.warning("Seed population is missing config. Using current...")
+            return None
+
+        num_teams_changed = self.context.app_config.tournament.num_teams != seed_config.num_teams
+        rounds_changed = self.context.app_config.tournament.rounds != seed_config.rounds
+        if num_teams_changed or rounds_changed:
+            logger.warning("Seed population does not match current config. Using current...")
+            return None
+
+        population = seed_data.get("population")
+        if not population:
+            logger.warning("Seed population is missing. Using current...")
+            return None
+
+        return population
 
     def run_epochs(self) -> None:
         """Perform main evolution loop: generations and migrations."""
         num_generations = self.ga_params.generations
         for generation in range(1, num_generations + 1):
             self.migrate(generation)
-            self.run_single_epoch()
+            self.run_single_epoch(generation)
             self.update_fitness_history()
             self._notify_on_generation_end(
                 generation=generation,
@@ -179,25 +179,27 @@ class GA:
                 best_fitness=self._get_last_gen_fitness(),
             )
 
-    def run_single_epoch(self) -> None:
+    def run_single_epoch(self, generation: int) -> None:
         """Run a single epoch of the genetic algorithm."""
         for island in self.islands:
-            island.evolve()
+            island.evolve(generation)
             island.update_fitness_history()
 
     def migrate(self, generation: int) -> None:
         """Migrate the best individuals between islands using a random ring topology."""
-        if self.ga_params.migration_size <= 0 or generation % self.ga_params.migration_interval != 0:
+        num_islands = self.ga_params.num_islands
+        if not (
+            self.ga_params.migration_size > 0
+            and generation % self.ga_params.migration_interval == 0
+            and num_islands > 1
+        ):
             return
 
-        if (num_giving := len(self.islands)) < 2:
-            return
-
-        offset = self.rng.randrange(0, num_giving)  # Random offset
-        migrants = [i.get_migrants() for i in self.islands]
-        for i, island in enumerate(self.islands):
-            j = (i + offset) % num_giving
-            island.receive_migrants(migrants[j])
+        islands = self.islands
+        o = self.rng.randrange(0, num_islands)  # Random offset
+        for i, island in enumerate(islands):
+            j = (i + o) % num_islands
+            island.receive_migrants(islands[j].get_migrants())
 
     def _notify_on_start(self, num_generations: int) -> None:
         """Notify observers when the genetic algorithm run starts."""
@@ -222,10 +224,8 @@ class GA:
     def _deduplicate_population(self) -> None:
         """Remove duplicate individuals from the population."""
         unique_pop = list({ind for island in self.islands for ind in island.finalize_island()})
-        self.total_population = sorted(
-            self.context.nsga3.select(unique_pop, population_size=len(unique_pop)).values(),
-            key=lambda s: (s.rank, -sum(s.fitness)),
-        )
+        selected = self.context.nsga3.select(unique_pop, population_size=len(unique_pop))
+        self.total_population = sorted(selected.values(), key=lambda s: (s.rank, -sum(s.fitness)))
 
     def _aggregate_stats_from_islands(self) -> None:
         """Aggregate statistics from all islands."""
@@ -243,14 +243,16 @@ class GA:
 
     def _log_operators(self, name: str, ratios: dict[str, Counter], ops: tuple[Crossover | Mutation]) -> None:
         """Log statistics for crossover and mutation operators."""
+        if not (op_strings := [f"{op!s}" for op in ops]):
+            return
+
         log = f"{name.capitalize()} statistics:"
-        op_strings = [f"{op!s}" for op in ops]
-        max_len = max((len(op) for op in op_strings), default=0) + 1
+        max_len = max(len(s) for s in op_strings) + 1
         for op in op_strings:
             success = ratios.get("success", {}).get(op, 0)
             total = ratios.get("total", {}).get(op, 0)
-            ratio = success / total if total > 0 else 0.0
-            log += f"\n  {op:<{max_len}}: {success}/{total} ({ratio:.2%})"
+            rate = success / total if total > 0 else 0.0
+            log += f"\n  {op:<{max_len}}: {success}/{total} ({rate:.2%})"
         logger.debug(log)
 
     def _log_aggregate_stats(self) -> None:
@@ -282,9 +284,8 @@ class GA:
         unique_genes = Counter()
         for schedule in self.total_population:
             for team in schedule.all_teams():
-                unique_gene = tuple(sorted(team.events))
-                unique_genes[unique_gene] += 1
-        for gene, count in sorted(unique_genes.items(), key=lambda x: x[1], reverse=True):
+                unique_genes[tuple(sorted(team.events))] += 1
+        for gene, count in unique_genes.most_common(n=10):
             logger.debug("Event: %s, Count: %d", gene, count)
 
     def finalize(self, start_time: float) -> None:
