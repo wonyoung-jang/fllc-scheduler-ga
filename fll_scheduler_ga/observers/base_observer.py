@@ -1,9 +1,13 @@
 """Observers for the FLL Scheduler GA."""
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-from ..data_model.schedule import Population
+if TYPE_CHECKING:
+    from ..data_model.schedule import Population
 
 
 @dataclass(slots=True)

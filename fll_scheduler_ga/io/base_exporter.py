@@ -1,16 +1,21 @@
 """Base class for exporting schedules."""
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
 from dataclasses import dataclass
 from logging import getLogger
-from pathlib import Path
+from typing import TYPE_CHECKING
 
-from ..config.config import RoundType
-from ..data_model.location import Location
-from ..data_model.schedule import Individual, Schedule
-from ..data_model.team import Team
-from ..data_model.time import TimeSlot
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from pathlib import Path
+
+    from ..config.config import RoundType
+    from ..data_model.location import Location
+    from ..data_model.schedule import Individual, Schedule
+    from ..data_model.team import Team
+    from ..data_model.time import TimeSlot
 
 logger = getLogger(__name__)
 

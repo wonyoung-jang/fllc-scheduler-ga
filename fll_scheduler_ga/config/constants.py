@@ -1,5 +1,7 @@
 """Module to hold constants for the FLL Scheduler GA."""
 
+from __future__ import annotations
+
 from enum import StrEnum
 
 ASCII_OFFSET = 64

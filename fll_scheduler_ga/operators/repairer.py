@@ -1,14 +1,19 @@
 """A repairer for incomplete schedules."""
 
+from __future__ import annotations
+
 from collections import defaultdict
 from dataclasses import dataclass, field
 from logging import getLogger
-from random import Random
+from typing import TYPE_CHECKING
 
-from ..config.config import TournamentConfig
-from ..data_model.event import Event, EventFactory
-from ..data_model.schedule import Schedule
-from ..data_model.team import Team
+if TYPE_CHECKING:
+    from random import Random
+
+    from ..config.config import TournamentConfig
+    from ..data_model.event import Event, EventFactory
+    from ..data_model.schedule import Schedule
+    from ..data_model.team import Team
 
 logger = getLogger(__name__)
 

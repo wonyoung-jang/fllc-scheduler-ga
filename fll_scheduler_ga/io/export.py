@@ -1,19 +1,25 @@
 """Module for exporting schedules to different formats."""
 
-from argparse import Namespace
-from collections.abc import Iterator
+from __future__ import annotations
+
 from csv import writer
 from dataclasses import dataclass
 from logging import getLogger
 from pathlib import Path
 from shutil import rmtree
+from typing import TYPE_CHECKING
 
-from ..config.config import RoundType
 from ..config.constants import FitnessObjective
-from ..data_model.schedule import Individual, Population, Schedule
-from ..genetic.ga import GA
 from ..visualize.plot import Plot
 from .base_exporter import GridBasedExporter
+
+if TYPE_CHECKING:
+    from argparse import Namespace
+    from collections.abc import Iterator
+
+    from ..config.config import RoundType
+    from ..data_model.schedule import Individual, Population, Schedule
+    from ..genetic.ga import GA
 
 logger = getLogger(__name__)
 

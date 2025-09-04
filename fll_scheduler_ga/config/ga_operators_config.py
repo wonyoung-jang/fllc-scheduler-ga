@@ -1,9 +1,13 @@
 """Configuration for genetic algorithm operators."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from logging import getLogger
+from typing import TYPE_CHECKING
 
-from ..config.constants import CrossoverOp, MutationOp
+if TYPE_CHECKING:
+    from ..config.constants import CrossoverOp, MutationOp
 
 logger = getLogger(__name__)
 

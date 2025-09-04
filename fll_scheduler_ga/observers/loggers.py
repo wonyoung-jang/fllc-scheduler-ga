@@ -1,10 +1,15 @@
 """Observers for the FLL Scheduler GA."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from logging import getLogger
+from typing import TYPE_CHECKING
 
-from ..data_model.schedule import Population
 from .base_observer import GaObserver
+
+if TYPE_CHECKING:
+    from ..data_model.schedule import Population
 
 logger = getLogger(__name__)
 

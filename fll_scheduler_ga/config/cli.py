@@ -1,14 +1,16 @@
 """CLI argument parsing."""
 
-from argparse import ArgumentParser
+from __future__ import annotations
+
+from argparse import ArgumentParser, Namespace
 from importlib.metadata import version
 
 
-def create_parser() -> ArgumentParser:
+def create_parser() -> Namespace:
     """Create the argument parser for the application.
 
     Returns:
-        ArgumentParser: Configured argument parser.
+        Namespace(): Configured argument parser.
 
     """
     _default_values = {
@@ -170,4 +172,4 @@ def create_parser() -> ArgumentParser:
         help="Add imported schedule to the initial population.",
     )
 
-    return parser
+    return parser.parse_args()

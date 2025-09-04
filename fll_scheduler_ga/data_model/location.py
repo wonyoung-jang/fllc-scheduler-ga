@@ -1,5 +1,7 @@
 """Location data model for FLL Scheduler GA."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 
 from ..config.constants import ASCII_OFFSET

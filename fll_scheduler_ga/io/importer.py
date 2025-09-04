@@ -1,20 +1,25 @@
 # fll_scheduler_ga/score_from_csv.py
 """Evaluate an existing, grid-based CSV schedule against the GA's fitness metrics."""
 
+from __future__ import annotations
+
 import csv
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from logging import getLogger
-from pathlib import Path
-from typing import TextIO
+from typing import TYPE_CHECKING, TextIO
 
-from ..config.config import Round, RoundType, TournamentConfig
-from ..data_model.event import Event, EventFactory
 from ..data_model.location import Location
 from ..data_model.schedule import Schedule
 from ..data_model.team import TeamFactory
 from ..data_model.time import TimeSlot
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from ..config.config import Round, RoundType, TournamentConfig
+    from ..data_model.event import Event, EventFactory
 
 logger = getLogger(__name__)
 

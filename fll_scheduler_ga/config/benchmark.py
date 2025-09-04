@@ -6,6 +6,8 @@ for each combination. This helps identify the theoretically best and worst
 schedules a team could receive, independent of other teams.
 """
 
+from __future__ import annotations
+
 import pickle
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
@@ -14,11 +16,14 @@ from itertools import combinations, product
 from logging import getLogger
 from math import sqrt
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from ..data_model.event import EventFactory
-from ..data_model.time import TimeSlot
-from .config import TournamentConfig
 from .constants import FITNESS_PENALTY
+
+if TYPE_CHECKING:
+    from ..data_model.event import EventFactory
+    from ..data_model.time import TimeSlot
+    from .config import TournamentConfig
 
 logger = getLogger(__name__)
 

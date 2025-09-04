@@ -1,17 +1,22 @@
 """Fitness evaluator for the FLL Scheduler GA."""
 
+from __future__ import annotations
+
 from collections import Counter
-from collections.abc import Iterator
 from dataclasses import dataclass, field
 from logging import getLogger
 from math import sqrt
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ..config.benchmark import FitnessBenchmark
-from ..config.config import TournamentConfig
 from ..config.constants import FitnessObjective, HardConstraint
-from ..data_model.schedule import Schedule
-from ..data_model.team import Team
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from ..config.benchmark import FitnessBenchmark
+    from ..config.config import TournamentConfig
+    from ..data_model.schedule import Schedule
+    from ..data_model.team import Team
 
 logger = getLogger(__name__)
 

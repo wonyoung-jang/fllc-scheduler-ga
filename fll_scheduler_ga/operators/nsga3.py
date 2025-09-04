@@ -1,17 +1,21 @@
 """Tools for Non-dominated Sorting Genetic Algorithm III (NSGA-III)."""
 
-from collections.abc import Iterator
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from functools import cache
 from itertools import chain, combinations
 from logging import getLogger
 from math import comb
-from random import Random
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from ..data_model.schedule import Population, Schedule
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from random import Random
+
+    from ..data_model.schedule import Population, Schedule
 
 logger = getLogger(__name__)
 
@@ -22,18 +26,19 @@ class NSGA3:
 
     rng: Random
     num_objectives: int
-    population_size: int
+    total_size: int
+    island_size: int
     ref_points: np.ndarray = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to generate reference points."""
         self._initialize_reference_points()
 
-    def _gen_ref_points(self) -> Iterator[list[float]]:
+    def gen_ref_points(self) -> Iterator[list[float]]:
         """Generate a set of structured reference points."""
         m = self.num_objectives
         p = 1
-        while comb(p + m - 1, m - 1) < self.population_size:
+        while comb(p + m - 1, m - 1) < self.total_size:
             p += 1
 
         for c in combinations(range(p + m - 1), m - 1):
@@ -48,35 +53,36 @@ class NSGA3:
     def _initialize_reference_points(self) -> None:
         """Generate a set of structured reference points."""
         m = self.num_objectives
-        if not (pts := list(self._gen_ref_points())):
+        if not (pts := list(self.gen_ref_points())):
             pts = [[1.0 / m] * m]
         self.ref_points = np.asarray(pts, dtype=float)
         logger.debug("Generated %d reference points:\n%s", len(self.ref_points), self.ref_points)
 
-    def select(self, population: Population | Any, population_size: int) -> dict[int, Schedule]:
+    def select(self, population: Population | Any, size: int | None = None) -> dict[int, Schedule]:
         """Select the next generation using NSGA-III principles."""
+        size = size or self.island_size
         if not isinstance(population, list):
             population = list(population)
 
-        fronts = NSGA3.non_dominated_sort(population, population_size)
+        fronts = self.non_dominated_sort(population, size)
         last_front = fronts[-1] if fronts else []
         self.norm_and_associate(fronts, last_front)
         if len(fronts) == 1:
-            selected = list(chain.from_iterable(fronts))[:population_size]
+            selected = list(chain.from_iterable(fronts))[:size]
             return {hash(p): p for p in selected}
 
         selected = list(chain.from_iterable(fronts[:-1]))
+        counts = self.counts(p.ref_point for p in selected)
         selected.extend(
             self.niche(
-                counts=self.counts(p.ref_point for p in selected),
+                counts=counts,
                 last_front=last_front,
-                k=population_size - len(selected),
+                k=size - len(selected),
             )
         )
         return {hash(p): p for p in selected}
 
-    @staticmethod
-    def non_dominated_sort(pop: Population, pop_size: int) -> list[Population]:
+    def non_dominated_sort(self, pop: Population, size: int) -> list[Population]:
         """Perform non-dominated sorting on the population."""
         n = len(pop)
         dom_list: list[list[int]] = [[] for _ in range(n)]
@@ -101,7 +107,7 @@ class NSGA3:
 
         pop_count = len(fronts[0])
         curr = 0
-        while curr < len(fronts) and fronts[curr] and pop_count < pop_size:
+        while curr < len(fronts) and fronts[curr] and pop_count < size:
             next_front: list[int] = []
             for i in fronts[curr]:
                 for j in dom_list[i]:

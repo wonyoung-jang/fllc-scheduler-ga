@@ -1,18 +1,25 @@
 """Methods to create plots."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from logging import WARNING, getLogger
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from matplotlib.axes import Axes
-from matplotlib.figure import Figure
 
 from ..config.constants import FitnessObjective
-from ..genetic.ga import GA
+
+if TYPE_CHECKING:
+    from matplotlib.axes import Axes
+    from matplotlib.figure import Figure
+
+    from ..genetic.ga import GA
+
 
 logger = getLogger("visualize.plot")
 getLogger("matplotlib").setLevel(WARNING)

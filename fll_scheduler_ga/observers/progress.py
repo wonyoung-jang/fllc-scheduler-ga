@@ -1,11 +1,16 @@
 """Progress bar observer for the FLL Scheduler GA."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from tqdm import tqdm
 
-from ..data_model.schedule import Population
 from .base_observer import GaObserver
+
+if TYPE_CHECKING:
+    from ..data_model.schedule import Population
 
 
 @dataclass(slots=True)

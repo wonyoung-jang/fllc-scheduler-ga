@@ -1,12 +1,18 @@
 """Configuration for the tournament scheduler GA."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
 from logging import getLogger
 from math import ceil
+from typing import TYPE_CHECKING
 
-from ..data_model.location import Location
 from ..data_model.time import TimeSlot
+
+if TYPE_CHECKING:
+    from datetime import datetime, timedelta
+
+    from ..data_model.location import Location
 
 logger = getLogger(__name__)
 

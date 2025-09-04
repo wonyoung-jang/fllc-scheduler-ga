@@ -1,21 +1,36 @@
 """Configuration for the FLL Scheduler GA application."""
 
-from argparse import Namespace
-from collections.abc import Iterator
+from __future__ import annotations
+
 from configparser import ConfigParser
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from logging import getLogger
 from pathlib import Path
 from random import Random
+from typing import TYPE_CHECKING
 
+from ..data_model.event import EventFactory
 from ..data_model.location import Location
 from ..data_model.schedule import Schedule
+from ..data_model.team import TeamFactory
 from ..data_model.time import TimeSlot
+from ..genetic.fitness import FitnessEvaluator
+from ..operators.crossover import build_crossovers
+from ..operators.mutation import build_mutations
+from ..operators.nsga3 import NSGA3
+from ..operators.repairer import Repairer
+from ..operators.selection import RandomSelect
+from .benchmark import FitnessBenchmark
 from .config import Round, RoundType, TournamentConfig
 from .constants import RANDOM_SEED_RANGE, CrossoverOp, MutationOp
+from .ga_context import GaContext
 from .ga_operators_config import OperatorConfig
 from .ga_parameters import GaParameters
+
+if TYPE_CHECKING:
+    from argparse import Namespace
+    from collections.abc import Iterator
 
 logger = getLogger(__name__)
 
@@ -28,6 +43,43 @@ class AppConfig:
     operators: OperatorConfig
     ga_params: GaParameters
     rng: Random
+
+    def create_ga_context(self) -> GaContext:
+        """Create and return a GaContext with the provided configuration."""
+        rng = self.rng
+        tconfig = self.tournament
+        team_factory = TeamFactory(tconfig)
+        event_factory = EventFactory(tconfig)
+
+        repairer = Repairer(rng, tconfig, event_factory)
+        benchmark = FitnessBenchmark(tconfig, event_factory)
+        evaluator = FitnessEvaluator(tconfig, benchmark)
+
+        num_objectives = len(evaluator.objectives)
+        params = self.ga_params
+        pop_size_ref_points = params.population_size * params.num_islands
+        total_pop_size = pop_size_ref_points
+        nsga3 = NSGA3(
+            rng=rng,
+            num_objectives=num_objectives,
+            total_size=total_pop_size,
+            island_size=params.population_size,
+        )
+        selection = RandomSelect(rng)
+        crossovers = tuple(build_crossovers(self, team_factory, event_factory))
+        mutations = tuple(build_mutations(self, event_factory))
+
+        return GaContext(
+            app_config=self,
+            event_factory=event_factory,
+            team_factory=team_factory,
+            repairer=repairer,
+            evaluator=evaluator,
+            nsga3=nsga3,
+            selection=selection,
+            crossovers=crossovers,
+            mutations=mutations,
+        )
 
 
 def create_app_config(args: Namespace, path: Path | None = None) -> AppConfig:

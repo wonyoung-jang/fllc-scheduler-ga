@@ -1,26 +1,29 @@
 """Genetic algorithm for FLL Scheduler GA."""
 
+from __future__ import annotations
+
 import pickle
 from collections import Counter
 from dataclasses import dataclass, field
 from logging import getLogger
-from pathlib import Path
 from random import Random
 from time import time
 from typing import TYPE_CHECKING, Any
 
 from ..config.constants import RANDOM_SEED_RANGE
-from ..config.ga_context import GaContext
-from ..config.ga_parameters import GaParameters
-from ..data_model.schedule import Population
-from ..observers.base_observer import GaObserver
-from ..operators.crossover import Crossover
-from ..operators.mutation import Mutation
 from .builder import ScheduleBuilder
 from .island import Island
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from ..config.config import TournamentConfig
+    from ..config.ga_context import GaContext
+    from ..config.ga_parameters import GaParameters
+    from ..data_model.schedule import Population
+    from ..observers.base_observer import GaObserver
+    from ..operators.crossover import Crossover
+    from ..operators.mutation import Mutation
 
 logger = getLogger(__name__)
 
@@ -32,13 +35,13 @@ class GA:
     context: GaContext
     rng: Random
     observers: tuple[GaObserver]
+    seed_file: Path | None
 
     fitness_history: list[tuple] = field(default_factory=list, repr=False)
     total_population: Population = field(default_factory=list, repr=False)
     islands: list[Island] = field(default_factory=list, repr=False)
     ga_params: GaParameters = field(default=None, repr=False)
 
-    _seed_file: Path | None = field(default=None, repr=False)
     _offspring_ratio: Counter = field(default_factory=Counter, repr=False)
     _crossover_ratio: dict[str, Counter] = field(default=None, repr=False)
     _mutation_ratio: dict[str, Counter] = field(default=None, repr=False)
@@ -74,11 +77,6 @@ class GA:
         """Return the number of individuals in the population."""
         return sum(len(i) for i in self.islands)
 
-    def set_seed_file(self, file_path: str | Path | None) -> None:
-        """Set the file path for loading a seed population."""
-        if file_path:
-            self._seed_file = Path(file_path)
-
     def pareto_front(self) -> Population:
         """Get the Pareto front for each island in the population."""
         if not self.total_population:
@@ -102,7 +100,6 @@ class GA:
         """Run the genetic algorithm and return the best schedule found."""
         start_time = time()
         self._notify_on_start(self.ga_params.generations)
-
         try:
             self.initialize_population()
             if not any(i.selected for i in self.islands):
@@ -121,8 +118,8 @@ class GA:
 
     def initialize_population(self) -> None:
         """Initialize the population for each island."""
-        seed_path = self._seed_file
-        if seed_path and seed_path.exists() and (seed_pop := self.retrieve_seed_population()):
+        s_path = self.seed_file
+        if s_path and s_path.exists() and (seed_pop := self.retrieve_seed_population()):
             seed_pop.sort(key=lambda s: (s.rank, -sum(s.fitness)))
             n = self.ga_params.num_islands
             for idx, schedule in enumerate(seed_pop):
@@ -134,10 +131,10 @@ class GA:
 
     def retrieve_seed_population(self) -> Population | None:
         """Load and integrate a population from a seed file."""
-        logger.debug("Loading seed population from: %s", self._seed_file)
+        logger.debug("Loading seed population from: %s", self.seed_file)
         seed_data: dict[str, Any] = {}
         try:
-            with self._seed_file.open("rb") as f:
+            with self.seed_file.open("rb") as f:
                 seed_data = pickle.load(f)
         except (OSError, pickle.PicklingError):
             logger.exception("Could not load or parse seed file. Starting with a fresh population.")
@@ -218,7 +215,7 @@ class GA:
     def _deduplicate_population(self) -> None:
         """Remove duplicate individuals from the population."""
         unique_pop = list({ind for island in self.islands for ind in island.finalize_island()})
-        selected = self.context.nsga3.select(unique_pop, population_size=len(unique_pop))
+        selected = self.context.nsga3.select(unique_pop, size=len(unique_pop))
         self.total_population = sorted(selected.values(), key=lambda s: (s.rank, -sum(s.fitness)))
 
     def _aggregate_stats_from_islands(self) -> None:

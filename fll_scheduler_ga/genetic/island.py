@@ -1,22 +1,25 @@
 """Island structure for FLL Scheduler GA."""
 
+from __future__ import annotations
+
 from collections import Counter
-from collections.abc import Iterator
 from dataclasses import dataclass, field
 from logging import getLogger
 from random import Random
 from typing import TYPE_CHECKING
 
 from ..config.constants import ATTEMPTS_RANGE, RANDOM_SEED_RANGE
-from ..config.ga_context import GaContext
-from ..config.ga_parameters import GaParameters
-from ..data_model.schedule import Schedule
-from .builder import ScheduleBuilder
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from ..config.ga_context import GaContext
+    from ..config.ga_parameters import GaParameters
+    from ..data_model.schedule import Schedule
     from ..operators.crossover import Crossover
     from ..operators.mutation import Mutation
     from ..operators.selection import Selection
+    from .builder import ScheduleBuilder
 
 logger = getLogger(__name__)
 
@@ -94,10 +97,7 @@ class Island:
     def _nsga3_select(self) -> None:
         """NSGA-III selection."""
         population = list(self.selected.values())
-        self.selected = self.context.nsga3.select(
-            population=population,
-            population_size=self.ga_params.population_size,
-        )
+        self.selected = self.context.nsga3.select(population=population)
         self.handle_underpopulation()
 
     def initialize(self) -> None:
@@ -134,7 +134,7 @@ class Island:
         if created < needed:
             logger.warning("Island %d: only created %d/%d valid individuals.", self.identity, created, needed)
 
-    def mutate_child(self, child: Schedule, mutation: "Mutation", *, m_roll: bool) -> bool:
+    def mutate_child(self, child: Schedule, mutation: Mutation, *, m_roll: bool) -> bool:
         """Mutate a child schedule."""
         if not (m_roll and mutation):
             return False

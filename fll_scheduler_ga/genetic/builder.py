@@ -1,13 +1,19 @@
 """Builder for creating a valid schedule individual."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from logging import getLogger
-from random import Random
+from typing import TYPE_CHECKING
 
-from ..config.config import RoundType, TournamentConfig
-from ..data_model.event import Event, EventFactory
 from ..data_model.schedule import Schedule
-from ..data_model.team import Team, TeamFactory
+
+if TYPE_CHECKING:
+    from random import Random
+
+    from ..config.config import RoundType, TournamentConfig
+    from ..data_model.event import Event, EventFactory
+    from ..data_model.team import Team, TeamFactory
 
 logger = getLogger(__name__)
 
