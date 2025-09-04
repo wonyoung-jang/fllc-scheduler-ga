@@ -28,10 +28,6 @@ logger = getLogger(__name__)
 def build_selections(app_config: AppConfig) -> Iterator[Selection]:
     """Build and return a tuple of selection operators based on the configuration."""
     variant_map = {
-        SelectionOp.TOURNAMENT_SELECT: lambda: TournamentSelect(
-            app_config.rng,
-            app_config.ga_params.selection_size,
-        ),
         SelectionOp.RANDOM_SELECT: lambda: RandomSelect(
             app_config.rng,
         ),
@@ -68,21 +64,6 @@ class Selection(ABC):
             Schedule: The selected parent schedules.
 
         """
-
-
-@dataclass(slots=True)
-class TournamentSelect(Selection):
-    """Tournament selection for multi-objective problems using NSGA-III principles."""
-
-    tournament_size: int
-
-    def select(self, population: Population, parents: int = 2) -> Iterator[Schedule]:
-        """Select individuals from the population to form the next generation."""
-        tournament = sorted(
-            self.rng.sample(population, k=self.tournament_size),
-            key=lambda p: (p.rank, -sum(p.fitness)),
-        )
-        yield from tournament[:parents]
 
 
 @dataclass(slots=True)

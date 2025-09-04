@@ -11,7 +11,6 @@ RANDOM_SEED_RANGE = (1, 2**32 - 1)
 class SelectionOp(StrEnum):
     """Enum for selection operator keys."""
 
-    TOURNAMENT_SELECT = "TournamentSelect"
     RANDOM_SELECT = "RandomSelect"
 
 

@@ -58,17 +58,17 @@ class NSGA3:
         if not isinstance(population, list):
             population = list(population)
 
-        fronts = NSGA3._non_dominated_sort(population, population_size)
+        fronts = NSGA3.non_dominated_sort(population, population_size)
         last_front = fronts[-1] if fronts else []
-        self._normalize_then_associate(fronts, last_front)
+        self.norm_and_associate(fronts, last_front)
         if len(fronts) == 1:
             selected = list(chain.from_iterable(fronts))[:population_size]
             return {hash(p): p for p in selected}
 
         selected = list(chain.from_iterable(fronts[:-1]))
         selected.extend(
-            self._niching(
-                fronts=fronts,
+            self.niche(
+                counts=self.counts(p.ref_point for p in selected),
                 last_front=last_front,
                 k=population_size - len(selected),
             )
@@ -76,7 +76,7 @@ class NSGA3:
         return {hash(p): p for p in selected}
 
     @staticmethod
-    def _non_dominated_sort(pop: Population, pop_size: int) -> list[Population]:
+    def non_dominated_sort(pop: Population, pop_size: int) -> list[Population]:
         """Perform non-dominated sorting on the population."""
         n = len(pop)
         dom_list: list[list[int]] = [[] for _ in range(n)]
@@ -116,9 +116,8 @@ class NSGA3:
 
         return [[pop[i] for i in fr] for fr in fronts]
 
-    def _niching(self, fronts: list[Population], last_front: Population, k: int) -> Iterator[Schedule]:
+    def niche(self, counts: list[int], last_front: Population, k: int) -> Iterator[Schedule]:
         """Select k individuals from the last front using a niching mechanism."""
-        counts = self._count(p.ref_point for fr in fronts[:-1] for p in fr)
         pool: dict[int, Schedule] = dict(enumerate(last_front))
         selected = 0
 
@@ -147,7 +146,7 @@ class NSGA3:
                 if selected >= k:
                     break
 
-    def _normalize_then_associate(self, fronts: list[Population], last_front: Population) -> None:
+    def norm_and_associate(self, fronts: list[Population], last_front: Population) -> None:
         """Normalize objectives then associate individuals with nearest reference points."""
         all_schedules = list(chain.from_iterable(fronts))
         if not all_schedules:
@@ -182,7 +181,7 @@ class NSGA3:
             s.ref_point = int(self.rng.choice(candidates))
             s.ref_distance = float(min_vals[i])
 
-    def _count(self, idx_to_count: Iterator[int]) -> list[int]:
+    def counts(self, idx_to_count: Iterator[int]) -> list[int]:
         """Count how many individuals are associated with each reference point."""
         counts = [0] * len(self.ref_points)
         for idx in idx_to_count:

@@ -13,7 +13,6 @@ class GaParameters:
     population_size: int
     generations: int
     offspring_size: int
-    selection_size: int
     crossover_chance: float
     mutation_chance: float
     num_islands: int
@@ -32,7 +31,6 @@ class GaParameters:
             f"\n\t  population_size    : {self.population_size}"
             f"\n\t  generations        : {self.generations}"
             f"\n\t  offspring_size     : {self.offspring_size}"
-            f"\n\t  selection_size     : {self.selection_size}"
             f"\n\t  crossover_chance   : {self.crossover_chance:.2f}"
             f"\n\t  mutation_chance    : {self.mutation_chance:.2f}"
             f"\n\t  num_islands        : {self.num_islands}"
@@ -57,17 +55,6 @@ class GaParameters:
         if self.offspring_size < 0:
             self.offspring_size = 0
             logger.warning("Offspring size cannot be negative, defaulting to 0.")
-
-        if self.selection_size < 2:
-            self.selection_size = 2
-            logger.warning("Selection size must be at least 2, defaulting to 2.")
-
-        if self.selection_size >= self.population_size:
-            self.selection_size = max(2, self.population_size // 5)
-            logger.warning(
-                "Selection size must be less than population size, defaulting to max(2, 20%%): %i",
-                self.selection_size,
-            )
 
         if not (0.0 <= self.mutation_chance <= 1.0):
             self.mutation_chance = 0.05

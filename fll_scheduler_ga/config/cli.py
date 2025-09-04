@@ -109,11 +109,6 @@ def create_parser() -> ArgumentParser:
         help="Number of offspring individuals per generation.",
     )
     genetic_group.add_argument(
-        "--selection_size",
-        type=int,
-        help="Size of parent selection.",
-    )
-    genetic_group.add_argument(
         "--crossover_chance",
         type=float,
         help="Chance of crossover (0.0 to 1.0).",
