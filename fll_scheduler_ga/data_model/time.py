@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -15,7 +15,8 @@ class TimeSlot:
 
     start: datetime
     stop: datetime
-    time_fmt: str
+
+    time_fmt: ClassVar[str]
 
     def __post_init__(self) -> None:
         """Post-initialization processing."""
@@ -25,11 +26,16 @@ class TimeSlot:
 
     def __str__(self) -> str:
         """Get a string representation of the time slot."""
-        return f"{self.start.strftime(self.time_fmt)}-{self.stop.strftime(self.time_fmt)}"
+        return f"{self.start.strftime(TimeSlot.time_fmt)}-{self.stop.strftime(TimeSlot.time_fmt)}"
 
     def __lt__(self, other: TimeSlot) -> bool:
         """Less-than comparison based on start time."""
         return self.start < other.start
+
+    @classmethod
+    def set_time_format(cls, time_format: str) -> None:
+        """Set the time format for the time slot."""
+        cls.time_fmt = time_format
 
     def overlaps(self, other: TimeSlot) -> bool:
         """Check if this time slot overlaps with another."""

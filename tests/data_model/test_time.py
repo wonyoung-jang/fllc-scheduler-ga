@@ -15,7 +15,8 @@ def timeslot() -> TimeSlot:
     """Create a sample TimeSlot for testing."""
     start = datetime.strptime("09:00", FMT_24H).replace(tzinfo=UTC)
     stop = datetime.strptime("10:00", FMT_24H).replace(tzinfo=UTC)
-    return TimeSlot(start, stop, FMT_24H)
+    TimeSlot.set_time_format(FMT_24H)
+    return TimeSlot(start, stop)
 
 
 def _parse(dt_str: str, fmt: str) -> datetime:
@@ -34,7 +35,8 @@ def test_timeslot_str(start_str: str, stop_str: str, fmt: str, expected: str) ->
     """Parametrized tests for string representation of TimeSlot."""
     start = _parse(start_str, fmt)
     stop = _parse(stop_str, fmt)
-    timeslot = TimeSlot(start, stop, fmt)
+    TimeSlot.set_time_format(fmt)
+    timeslot = TimeSlot(start, stop)
     assert str(timeslot) == expected
 
 
@@ -52,7 +54,6 @@ def test_less_than_timeslot(timeslot: TimeSlot, delta_minutes: int, *, expect_lt
     other = TimeSlot(
         start=timeslot.start + timedelta(minutes=delta_minutes),
         stop=timeslot.stop + timedelta(minutes=delta_minutes),
-        time_fmt=timeslot.time_fmt,
     )
     assert (other < timeslot) is expect_lt
     assert (other > timeslot) is expect_gt
@@ -95,6 +96,5 @@ def test_overlaps_timeslot(timeslot: TimeSlot, start_offset_min: int, stop_offse
     other = TimeSlot(
         start=timeslot.start + timedelta(minutes=start_offset_min),
         stop=timeslot.stop + timedelta(minutes=stop_offset_min),
-        time_fmt=timeslot.time_fmt,
     )
     assert other.overlaps(timeslot) is expected

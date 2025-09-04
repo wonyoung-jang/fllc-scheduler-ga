@@ -57,10 +57,17 @@ class Selection(ABC):
     rng: Random
 
     @abstractmethod
-    def select(self, population: Population, num_parents: int) -> Iterator[Schedule]:
-        """Select individuals from the population to form the next generation."""
-        msg = "Subclasses must implement this method."
-        raise NotImplementedError(msg)
+    def select(self, population: Population, parents: int = 2) -> Iterator[Schedule]:
+        """Select individuals from the population to form the next generation.
+
+        Args:
+            population (Population): The current population of schedules.
+            parents (int): The number of parents to select.
+
+        Yields:
+            Schedule: The selected parent schedules.
+
+        """
 
 
 @dataclass(slots=True)
@@ -69,19 +76,19 @@ class TournamentSelect(Selection):
 
     tournament_size: int
 
-    def select(self, population: Population, num_parents: int = 2) -> Iterator[Schedule]:
-        """Select individuals using NSGA-III tournament selection."""
+    def select(self, population: Population, parents: int = 2) -> Iterator[Schedule]:
+        """Select individuals from the population to form the next generation."""
         tournament = sorted(
-            self.rng.sample(population, k=min(self.tournament_size, len(population))),
-            key=lambda p: (p.rank, self.rng.choice((True, False))),
+            self.rng.sample(population, k=self.tournament_size),
+            key=lambda p: (p.rank, -sum(p.fitness)),
         )
-        yield from tournament[:num_parents]
+        yield from tournament[:parents]
 
 
 @dataclass(slots=True)
 class RandomSelect(Selection):
     """Random selection of individuals from the population."""
 
-    def select(self, population: Population, num_parents: int = 2) -> Iterator[Schedule]:
-        """Select individuals randomly from the population."""
-        yield from self.rng.sample(population, k=num_parents)
+    def select(self, population: Population, parents: int = 2) -> Iterator[Schedule]:
+        """Select individuals from the population to form the next generation."""
+        yield from self.rng.sample(population, k=parents)

@@ -200,7 +200,7 @@ class GA:
         o = self.rng.randrange(0, num_islands)  # Random offset
         for i, island in enumerate(islands):
             j = (i + o) % num_islands
-            island.receive_migrants(islands[j].get_migrants())
+            island.receive_migrants(islands[j].give_migrants())
 
     def _notify_on_start(self, num_generations: int) -> None:
         """Notify observers when the genetic algorithm run starts."""

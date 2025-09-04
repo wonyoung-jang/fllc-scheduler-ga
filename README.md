@@ -141,11 +141,10 @@ identities =
 
 [fitness]
 ; Values of weights are porportional to each other, the following are the same: 
-; (1, 2, 3) == (50, 100, 150) == (0.01, 0.02, 0.03)
-; Each translates to: (1/6, 2/6, 3/6) ~~ (0.166, 0.333, 0.500)
+; (1, 2) == (50, 100) == (0.01, 0.02)
+; Each translates to: (1/6, 2/6) ~~ (0.333, 0.667)
 weight_mean = 3         ; Mean weight - The average fitness of all teams
 weight_variation = 1    ; Variation weight - How much the teams can vary in fitness
-weight_range = 1        ; Range weight - How far apart the best and worst teams are
 
 [location.room]
 name = Room

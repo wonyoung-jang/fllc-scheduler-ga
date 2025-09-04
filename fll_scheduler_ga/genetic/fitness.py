@@ -79,7 +79,6 @@ class FitnessEvaluator:
         Metrics:
             - Mean: Average score across all teams for each objective.
             - Coefficient of Variation: Variation relative to the mean for each objective.
-            - Range: Difference between the maximum and minimum scores for each objective.
 
         """
         if not self.check(schedule):
@@ -87,18 +86,11 @@ class FitnessEvaluator:
             return
 
         scores = self.aggregate_team_fitnesses(schedule.all_teams())
-        mean_scores = self.get_mean_scores(scores)
-        mw, vw, rw = self.config.weights
+        mean_s = self.get_mean_scores(scores)
+        vari_s = self.get_variation_scores(scores, mean_s)
+        mw, vw = self.config.weights
 
-        schedule.fitness = tuple(
-            (m * mw) + (v * vw) + (r * rw)
-            for m, v, r in zip(
-                mean_scores,
-                self.get_variation_scores(scores, mean_scores),
-                FitnessEvaluator.get_range_scores(scores),
-                strict=True,
-            )
-        )
+        schedule.fitness = tuple((m * mw) + (v * vw) for m, v in zip(mean_s, vari_s, strict=True))
 
     def aggregate_team_fitnesses(self, all_teams: list[Team]) -> tuple[list[float], ...]:
         """Aggregate fitness scores for all teams in the schedule."""
@@ -138,11 +130,6 @@ class FitnessEvaluator:
         )
         _coeff_of_vars = (std_dev / mean if mean else 0 for std_dev, mean in zip(_std_devs, means, strict=True))
         yield from (1 / (1 + coeff) if coeff else 1 for coeff in _coeff_of_vars)
-
-    @staticmethod
-    def get_range_scores(scores: tuple[list[float], ...]) -> Iterator[float]:
-        """Calculate the range of scores for each objective."""
-        yield from (1 / (1 + max(lst) - min(lst)) if lst else 1 for lst in scores)
 
     def cache_info(self) -> dict[FitnessObjective, Counter[str, int]]:
         """Get cache information for fitness evaluations."""

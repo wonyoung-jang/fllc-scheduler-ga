@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass, field
+from itertools import combinations, count
 from logging import getLogger
 from typing import TYPE_CHECKING
-
-from .time import TimeSlot
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -15,10 +14,9 @@ if TYPE_CHECKING:
 
     from ..config.config import Round, RoundType, TournamentConfig
     from .location import Location
+    from .time import TimeSlot
 
 logger = getLogger(__name__)
-
-type EventMap = dict[int, Event]
 
 
 @dataclass(slots=True)
@@ -40,16 +38,21 @@ class Event:
         """Get string representation of Event."""
         return f"{self.identity}, {self.roundtype}, {self.location}, {self.timeslot}"
 
+    def pair(self, other: Event) -> None:
+        """Pair this event with another event."""
+        self.paired = other
+        other.paired = self
+
 
 @dataclass(slots=True)
 class EventFactory:
     """Factory class to create Events based on Round configurations."""
 
     config: TournamentConfig
+    _id_counter: count = field(default_factory=count, repr=False)
+    _list: list[Event] = field(default_factory=list, repr=False)
     _cached_timeslots: dict[tuple[datetime, datetime], TimeSlot] = field(default_factory=dict, repr=False)
-    _cached_events: dict[RoundType, list[Event]] = field(default=None, repr=False)
-    _cached_list: list[Event] = field(default=None, repr=False)
-    _cached_mapping: EventMap = field(default=None, repr=False)
+    _cached_mapping: dict[int, Event] = field(default=None, repr=False)
     _cached_roundtypes: dict[RoundType, list[Event]] = field(default=None, repr=False)
     _cached_timeslots_list: dict[tuple[RoundType, TimeSlot], list[Event]] = field(default=None, repr=False)
     _cached_locations: dict[tuple[RoundType, Location], list[Event]] = field(default=None, repr=False)
@@ -57,32 +60,32 @@ class EventFactory:
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
+        next(self._id_counter)  # Iterate to "1" for initialization
+
         self.build()
-        self.as_list()
+        self.build_conflicts()
         self.as_mapping()
         self.as_timeslots()
         self.as_locations()
         self.as_matches()
         self.as_roundtypes()
-        self.build_conflicts()
 
-        for rt, events in self._cached_events.items():
-            round_events_str = f"{rt} Round has {len(events)} events:"
-            events_str = "\n\t  ".join(str(e) for e in events)
-            logger.debug("%s\n\t  %s", round_events_str, events_str)
+        for rt, events in self._cached_roundtypes.items():
+            round_events_str = f"{rt} Round has {len(events)} events."
+            logger.debug("%s", round_events_str)
 
-    def build(self) -> dict[RoundType, list[Event]]:
-        """Create and return all Events for the tournament.
-
-        Returns:
-            dict[RoundType, list[Event]]: A dictionary of all Events for the tournament.
-
-        """
-        if not self._cached_events:
-            self._cached_events = {
-                r.roundtype: list(self.create_events(r)) for r in sorted(self.config.rounds, key=lambda x: x.start_time)
-            }
-        return self._cached_events
+    def build(self) -> list[Event]:
+        """Create and return all Events for the tournament."""
+        if not self._list:
+            self._list.extend(
+                e
+                for r in sorted(
+                    self.config.rounds,
+                    key=lambda x: x.start_time,
+                )
+                for e in self.create_events(r)
+            )
+        return self._list
 
     def create_events(self, r: Round) -> Iterator[Event]:
         """Generate all possible Events for a given Round configuration.
@@ -94,56 +97,38 @@ class EventFactory:
             Event: An event for the round with a time slot and a location.
 
         """
-        time_fmt = self.config.time_fmt
-        locations = sorted(r.locations, key=lambda loc: (loc.identity, loc.side))
-        start = r.times[0] if r.times else r.start_time
-
-        for i in range(1, r.num_timeslots + 1):
-            if not r.times:
-                stop = start + r.duration_minutes
-            elif i < len(r.times):
-                stop = r.times[i]
-            elif i == len(r.times):
-                stop += r.duration_minutes
-
-            time_key = (start, stop)
-            timeslot = self._cached_timeslots.setdefault(time_key, TimeSlot(start, stop, time_fmt))
-            start = stop
-
+        for ts in r.timeslots:
             if r.teams_per_round == 1:
-                for loc in locations:
-                    event = Event(0, r.roundtype, timeslot, loc)
+                for loc in r.locations:
+                    event = Event(next(self._id_counter), r.roundtype, ts, loc)
                     yield event
             else:
-                for loc in locations:
+                for loc in r.locations:
                     if loc.side == 1:
-                        event1 = Event(0, r.roundtype, timeslot, loc)
+                        event1 = Event(next(self._id_counter), r.roundtype, ts, loc)
                     elif loc.side == 2:
-                        event2 = Event(0, r.roundtype, timeslot, loc)
-                        event1.paired = event2
-                        event2.paired = event1
+                        event2 = Event(next(self._id_counter), r.roundtype, ts, loc)
+                        event1.pair(event2)
                         yield from (event1, event2)
 
-    def as_list(self) -> list[Event]:
-        """Get a flat list of all Events across all RoundTypes."""
-        if self._cached_list is None:
-            self._cached_list = [e for el in self._cached_events.values() for e in el]
-            for i, e in enumerate(self._cached_list, start=1):
-                e.identity = i
-        return self._cached_list
+    def build_conflicts(self) -> None:
+        """Build a mapping of event identities to their conflicting events."""
+        for e1, e2 in combinations(self.build(), 2):
+            if e1.timeslot.overlaps(e2.timeslot):
+                e1.conflicts.add(e2.identity)
+                e2.conflicts.add(e1.identity)
 
-    def as_mapping(self) -> EventMap:
+    def as_mapping(self) -> dict[int, Event]:
         """Get a mapping of event identities to Event objects."""
         if self._cached_mapping is None:
-            as_list = self.as_list()
-            self._cached_mapping = {e.identity: e for e in as_list}
+            self._cached_mapping = {e.identity: e for e in self.build()}
         return self._cached_mapping
 
     def as_roundtypes(self) -> dict[RoundType, list[Event]]:
         """Get a mapping of RoundTypes to their Events."""
         if self._cached_roundtypes is None:
             self._cached_roundtypes = defaultdict(list)
-            for e in self.as_list():
+            for e in self.build():
                 self._cached_roundtypes[e.roundtype].append(e)
         return self._cached_roundtypes
 
@@ -151,7 +136,7 @@ class EventFactory:
         """Get a mapping of TimeSlots to their Events."""
         if self._cached_timeslots_list is None:
             self._cached_timeslots_list = defaultdict(list)
-            for e in self.as_list():
+            for e in self.build():
                 self._cached_timeslots_list[(e.roundtype, e.timeslot)].append(e)
         return self._cached_timeslots_list
 
@@ -159,7 +144,7 @@ class EventFactory:
         """Get a mapping of RoundTypes to their Locations."""
         if self._cached_locations is None:
             self._cached_locations = defaultdict(list)
-            for e in self.as_list():
+            for e in self.build():
                 if not e.paired or (e.paired and e.location.side == 1):
                     self._cached_locations[(e.roundtype, e.location)].append(e)
         return self._cached_locations
@@ -168,17 +153,8 @@ class EventFactory:
         """Get a mapping of RoundTypes to their matched Events."""
         if self._cached_matches is None:
             self._cached_matches = defaultdict(list)
-            for e in self.as_list():
+            for e in self.build():
                 if not e.paired or e.location.side != 1:
                     continue
                 self._cached_matches[e.roundtype].append((e, e.paired))
         return self._cached_matches
-
-    def build_conflicts(self) -> None:
-        """Build a mapping of event identities to their conflicting events."""
-        events = self.as_list()
-        for i, event in enumerate(events, start=1):
-            for other in events[i:]:
-                if event.timeslot.overlaps(other.timeslot):
-                    event.conflicts.add(other.identity)
-                    other.conflicts.add(event.identity)

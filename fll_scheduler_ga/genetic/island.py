@@ -60,7 +60,8 @@ class Island:
 
     def _get_this_gen_fitness(self) -> tuple[float, ...]:
         """Calculate the average fitness of the current generation."""
-        if not (pop := self.selected.values()):  # if not (pop := self.pareto_front()):
+        # if not (pop := self.pareto_front()):
+        if not (pop := self.selected.values()):
             return ()
 
         totals = (sum(vals) for vals in zip(*(p.fitness for p in pop), strict=True))
@@ -81,10 +82,12 @@ class Island:
 
     def add_to_population(self, schedule: Schedule, s_hash: int | None = None) -> bool:
         """Add a schedule to a specific island's population if it's not a duplicate."""
+        self.offspring_ratio["total"] += 1
         key = s_hash if s_hash is not None else hash(schedule)
         if key in self.selected:
             return False
         self.selected[key] = schedule
+        self.offspring_ratio["success"] += 1
         return True
 
     def _nsga3_select(self) -> None:
@@ -134,10 +137,13 @@ class Island:
         """Mutate a child schedule."""
         if not (m_roll and mutation):
             return False
+
         m_str = str(mutation)
         self.mutation_ratio["total"][m_str] += 1
+
         if not mutation.mutate(child):
             return False
+
         self.mutation_ratio["success"][m_str] += 1
         return True
 
@@ -161,7 +167,7 @@ class Island:
         mutation: Mutation = ctx.mutations[mi] if ctx.mutations else None
 
         while child_count < params.offspring_size:
-            parents = tuple(selection.select(pop))
+            parents = selection.select(pop, parents=2)
             children = []
             must_mutate = False
             c_roll = params.crossover_chance > self.rng.random()
@@ -182,24 +188,21 @@ class Island:
                 if not self.mutate_child(child, mutation, m_roll=m_roll) and must_mutate:
                     continue
 
-                self.offspring_ratio["total"] += 1
                 if not self.add_to_population(child):
                     continue
 
                 evaluate(child)
                 child_count += 1
-                self.offspring_ratio["success"] += 1
 
                 if child_count >= params.offspring_size:
                     break
 
         self._nsga3_select()
 
-    def get_migrants(self) -> Iterator[Schedule]:
+    def give_migrants(self) -> Iterator[Schedule]:
         """Randomly yield migrants from population."""
         keys = list(self.selected.keys())
-        k = min(self.ga_params.migration_size, len(keys))
-        for s_hash in self.rng.sample(keys, k=k):
+        for s_hash in self.rng.sample(keys, k=self.ga_params.migration_size):
             yield self.selected.pop(s_hash)
 
     def receive_migrants(self, migrants: Iterator[Schedule]) -> None:
@@ -222,6 +225,7 @@ class Island:
         mutations = ctx.mutations
         repair = ctx.repairer.repair
         evaluate = ctx.evaluator.evaluate
+
         while pop_size < target:
             chosen: Schedule
             if choice((True, False)) and self.selected and mutations:

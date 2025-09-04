@@ -59,7 +59,7 @@ class CsvImporter:
     def _initialize_caches(self) -> None:
         """Initialize caches for round configurations and event mappings."""
         self._round_configs = {r.roundtype: r for r in self.config.rounds}
-        self._rtl_map = {(e.roundtype, e.timeslot, e.location): e for e in self.event_factory.as_list()}
+        self._rtl_map = {(e.roundtype, e.timeslot, e.location): e for e in self.event_factory.build()}
 
     def import_schedule(self) -> None:
         """Import schedule from the CSV file."""
@@ -132,14 +132,14 @@ class CsvImporter:
                 - A dictionary to store created events for linking opponents.
 
         """
-        _time_fmt = self.config.time_fmt
+        time_fmt = self.config.time_fmt
         time_str = row[0]
         round_config: Round = self._round_configs[current_round_type]
         if not round_config.times:
-            start = datetime.strptime(time_str, _time_fmt).replace(tzinfo=UTC)
+            start = datetime.strptime(time_str, time_fmt).replace(tzinfo=UTC)
             stop = start + round_config.duration_minutes
         else:
-            start = datetime.strptime(time_str, _time_fmt).replace(tzinfo=UTC)
+            start = datetime.strptime(time_str, time_fmt).replace(tzinfo=UTC)
             start_index = round_config.times.index(start)
             stop = (
                 round_config.times[start_index + 1]
@@ -147,7 +147,8 @@ class CsvImporter:
                 else start + round_config.duration_minutes
             )
 
-        timeslot = TimeSlot(start, stop, _time_fmt)
+        TimeSlot.set_time_format(time_fmt)
+        timeslot = TimeSlot(start, stop)
 
         for i, team_id_str in enumerate(row[1:]):
             if not (team_id_str := team_id_str.strip()):

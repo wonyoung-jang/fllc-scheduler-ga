@@ -134,10 +134,12 @@ def create_ga_context(app_config: AppConfig) -> GaContext:
 
     num_objectives = len(evaluator.objectives)
     pop_size_ref_points = app_config.ga_params.population_size * app_config.ga_params.num_islands
+    population_size = pop_size_ref_points
+    # population_size = app_config.ga_params.population_size
     nsga3 = NSGA3(
         rng=app_config.rng,
         num_objectives=num_objectives,
-        population_size=pop_size_ref_points,
+        population_size=population_size,
     )
 
     selections = tuple(build_selections(app_config))

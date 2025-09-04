@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from random import Random
 
     from ..config.app_config import AppConfig
-    from ..data_model.event import Event, EventFactory, EventMap
+    from ..data_model.event import Event, EventFactory
     from ..data_model.team import TeamFactory
 
 logger = getLogger(__name__)
@@ -67,22 +67,16 @@ class Crossover(ABC):
     rng: Random
 
     @abstractmethod
-    def produce_children(self, parents: tuple[Schedule]) -> Iterator[Schedule]:
+    def cross(self, parents: Iterator[Schedule]) -> Iterator[Schedule]:
         """Produce child schedules from two parents.
 
         Args:
-            parents (tuple[Schedule]): A tuple containing the first and second parent schedules.
+            parents (Iterator[Schedule]): An iterator containing the first and second parent schedules.
 
         Yields:
             Schedule : The child schedule produced from crossover.
 
         """
-        msg = "Subclasses must implement this method."
-        raise NotImplementedError(msg)
-
-    def cross(self, parents: tuple[Schedule]) -> Iterator[Schedule]:
-        """Crossover two parents to produce a child."""
-        yield from self.produce_children(parents=parents)
 
     def _transfer_genes_from_parent1(self, c: Schedule, p1: Schedule, evts: Iterator[Event]) -> None:
         """Transfer genes from the first parent. Fewer checks needed."""
@@ -119,7 +113,7 @@ class EventCrossover(Crossover):
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the crossover operator."""
-        self.events = self.event_factory.as_list()
+        self.events = self.event_factory.build()
 
     def __str__(self) -> str:
         """Return a string representation of the crossover operator."""
@@ -135,10 +129,8 @@ class EventCrossover(Crossover):
             Iterator[Event]: Genes for each parents.
 
         """
-        msg = "Subclasses must implement this method."
-        raise NotImplementedError(msg)
 
-    def produce_children(self, parents: tuple[Schedule]) -> Iterator[Schedule]:
+    def cross(self, parents: Iterator[Schedule]) -> Iterator[Schedule]:
         """Produce child schedules from two parents."""
         p1, p2 = parents
         p1_genes, p2_genes = self.get_genes()
@@ -160,7 +152,7 @@ class EventCrossover(Crossover):
 class TeamCrossover(Crossover):
     """Abstract base class for team based crossover operators in the FLL Scheduler GA."""
 
-    event_map: EventMap = field(init=False, repr=False)
+    event_map: dict[int, Event] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the event map."""
@@ -182,10 +174,8 @@ class TeamCrossover(Crossover):
             Iterator[Event]: Genes from each parents.
 
         """
-        msg = "Subclasses must implement this method."
-        raise NotImplementedError(msg)
 
-    def produce_children(self, parents: tuple[Schedule]) -> Iterator[Schedule]:
+    def cross(self, parents: Iterator[Schedule]) -> Iterator[Schedule]:
         """Produce child schedules from two parents."""
         p1, p2 = parents
         p1_genes, p2_genes = self.get_genes(p1, p2)
@@ -225,7 +215,7 @@ class KPoint(EventCrossover):
         p2_extend = p2_genes.extend
         evts = self.events
         ne = len(evts)
-        indices = [0, *sorted(self.rng.sample(range(1, ne), k=self.k)), ne]
+        indices = sorted([0, *self.rng.sample(range(1, ne), k=self.k), ne])
         for i, events in enumerate(evts[i:j] for i, j in pairwise(indices)):
             if i % 2 == 0:
                 p1_extend(events)
@@ -290,7 +280,7 @@ class Partial(EventCrossover):
         p2_append = p2_genes.append
         evts = self.events
         for e in evts:
-            idx = randint(1, 5)
+            idx = randint(1, 3)
             if idx == 1:
                 p1_append(e)
             elif idx == 2:

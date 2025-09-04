@@ -201,7 +201,7 @@ def generate_pareto_summary(pop: Population, path: Path) -> None:
 
                 f.write(f"{sum(schedule.fitness):.4f}, ")
                 f.write(f"{schedule.ref_point if schedule.ref_point is not None else ''}, ")
-                f.write(f"{schedule.ref_point_distance if schedule.ref_point_distance is not None else ''}")
+                f.write(f"{schedule.ref_distance if schedule.ref_distance is not None else ''}")
                 f.write("\n")
     except OSError:
         logger.exception("Failed to write Pareto summary to file %s", path)

@@ -24,23 +24,21 @@ class ScheduleBuilder:
     def build(self, rng: Random | None = None) -> Schedule:
         """Construct and return the final schedule."""
         rng = self.rng if rng is None else rng
-        events = self.event_factory.build()
+        events = self.event_factory.as_roundtypes()
         for rt in events:
             rng.shuffle(events[rt])
 
+        num_teams = self.config.num_teams
         schedule = Schedule(self.team_factory.build())
-        teams = schedule.all_teams()
-        teams = rng.sample(teams, k=len(teams))
+        teams = rng.sample(schedule.all_teams(), k=num_teams)
 
-        _build_map = {
+        build_map = {
             1: self._build_singles,
             2: self._build_matches,
         }
-
-        for r in self.config.rounds:
-            rt = r.roundtype
-            evts = events.get(rt, [])
-            build_fn = _build_map.get(r.teams_per_round, None)
+        round_reqs = self.config.round_requirements
+        for rt, evts in events.items():
+            build_fn = build_map.get(round_reqs.get(rt))
             if build_fn:
                 build_fn(schedule, rt, evts, teams)
 

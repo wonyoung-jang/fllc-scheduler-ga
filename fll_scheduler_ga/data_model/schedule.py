@@ -27,7 +27,7 @@ class Schedule:
     rank: int = field(default=99)
 
     ref_point: int = field(default=None, repr=False)
-    ref_point_distance: float = field(default=None, repr=False)
+    ref_distance: float = field(default=None, repr=False)
 
     _cached_all_teams: list[Team] = field(default=None, repr=False)
     _cached_normalized_teams: dict[int, int] = field(default=None, repr=False)
@@ -81,11 +81,7 @@ class Schedule:
         """Create a deep copy of the schedule."""
         clone = Schedule(
             teams={i: t.clone() for i, t in self.teams.items()},
-            schedule=self.schedule.copy(),
-            fitness=self.fitness,
-            rank=self.rank,
-            ref_point=self.ref_point,
-            ref_point_distance=self.ref_point_distance,
+            schedule=dict(self.schedule.items()),
         )
         clone.clear_cache()
         return clone

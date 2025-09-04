@@ -122,7 +122,7 @@ class FitnessBenchmark:
 
         total_locations_possible = 0
         total_locations_required = 0
-        for rt, el in self.event_factory.build().items():
+        for rt, el in self.event_factory.as_roundtypes().items():
             if config_map[rt] == 2:
                 total_locations_possible = len(el)
                 total_locations_required += self.config.round_requirements[rt]
@@ -159,7 +159,7 @@ class FitnessBenchmark:
         logger.info("Running break time consistency benchmarks...")
         logger.debug("Finding timeslots per round type:")
         timeslots_by_round = defaultdict(list)
-        for rt, el in self.event_factory.build().items():
+        for rt, el in self.event_factory.as_roundtypes().items():
             timeslots_by_round[rt] = sorted({event.timeslot for event in el})
             logger.debug("  %s: %d unique timeslots", f"{rt:<10}", len(timeslots_by_round[rt]))
 
