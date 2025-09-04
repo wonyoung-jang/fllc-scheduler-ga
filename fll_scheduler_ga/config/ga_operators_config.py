@@ -25,7 +25,6 @@ class OperatorConfig:
         crossovers_str = f"{'\n\t\t'.join(str(c) for c in self.crossover_types)}"
         crossover_ks_str = f"{'\n\t\t'.join(str(k) for k in self.crossover_ks)}"
         mutations_str = f"{'\n\t\t'.join(str(m) for m in self.mutation_types)}"
-
         return (
             f"\n\tOperatorConfig:"
             f"\n\t  crossover_types:\n\t\t{crossovers_str}"

@@ -67,8 +67,8 @@ class GA:
         )
 
         trackers = ("success", "total")
-        self._crossover_ratio = {trckr: Counter({str(c): 0 for c in self.context.crossovers}) for trckr in trackers}
-        self._mutation_ratio = {trckr: Counter({str(m): 0 for m in self.context.mutations}) for trckr in trackers}
+        self._crossover_ratio = {tr: Counter({str(c): 0 for c in self.context.crossovers}) for tr in trackers}
+        self._mutation_ratio = {tr: Counter({str(m): 0 for m in self.context.mutations}) for tr in trackers}
 
     def __len__(self) -> int:
         """Return the number of individuals in the population."""
@@ -87,13 +87,8 @@ class GA:
 
     def _get_this_gen_fitness(self) -> tuple[float, ...]:
         """Calculate the average fitness of the current generation."""
-        return tuple(
-            sum(s) / self.ga_params.num_islands
-            for s in zip(
-                *(i.get_last_gen_fitness() for i in self.islands),
-                strict=True,
-            )
-        )
+        gen_fitness_iter = (i.get_last_gen_fitness() for i in self.islands)
+        return tuple(sum(s) / self.ga_params.num_islands for s in zip(*gen_fitness_iter, strict=True))
 
     def _get_last_gen_fitness(self) -> tuple[float, ...]:
         """Get the fitness of the last generation."""
@@ -134,8 +129,8 @@ class GA:
                 self.islands[idx % n].add_to_population(schedule)
 
         logger.debug("Initializing %d islands...", self.ga_params.num_islands)
-        for i in range(self.ga_params.num_islands):
-            self.islands[i].initialize()
+        for island in self.islands:
+            island.initialize()
 
     def retrieve_seed_population(self) -> Population | None:
         """Load and integrate a population from a seed file."""
@@ -154,9 +149,10 @@ class GA:
             logger.warning("Seed population is missing config. Using current...")
             return None
 
-        num_teams_changed = self.context.app_config.tournament.num_teams != seed_config.num_teams
-        rounds_changed = self.context.app_config.tournament.rounds != seed_config.rounds
-        if num_teams_changed or rounds_changed:
+        if (
+            self.context.app_config.tournament.num_teams != seed_config.num_teams
+            or self.context.app_config.tournament.rounds != seed_config.rounds
+        ):
             logger.warning("Seed population does not match current config. Using current...")
             return None
 
@@ -188,18 +184,15 @@ class GA:
 
     def migrate(self, generation: int) -> None:
         """Migrate the best individuals between islands using a random ring topology."""
-        num_islands = self.ga_params.num_islands
-        if not (
-            self.ga_params.migration_size > 0
-            and generation % self.ga_params.migration_interval == 0
-            and num_islands > 1
-        ):
+        params = self.ga_params
+        n = params.num_islands
+        if not (params.migration_size > 0 and generation % params.migration_interval == 0 and n > 1):
             return
 
         islands = self.islands
-        o = self.rng.randrange(0, num_islands)  # Random offset
+        o = self.rng.randrange(0, n)  # Random offset
         for i, island in enumerate(islands):
-            j = (i + o) % num_islands
+            j = (i + o) % n
             island.receive_migrants(islands[j].give_migrants())
 
     def _notify_on_start(self, num_generations: int) -> None:
@@ -232,13 +225,9 @@ class GA:
         """Aggregate statistics from all islands."""
         for island in self.islands:
             for tracker, crossovers in island.crossover_ratio.items():
-                for crossover, count in crossovers.items():
-                    self._crossover_ratio[tracker][crossover] += count
-
+                self._crossover_ratio[tracker].update(crossovers)
             for tracker, mutations in island.mutation_ratio.items():
-                for mutation, count in mutations.items():
-                    self._mutation_ratio[tracker][mutation] += count
-
+                self._mutation_ratio[tracker].update(mutations)
             for tracker, count in island.offspring_ratio.items():
                 self._offspring_ratio[tracker] += count
 
@@ -297,7 +286,7 @@ class GA:
         self._log_operators(name="crossover", ratios=self._crossover_ratio, ops=self.context.crossovers)
         self._log_operators(name="mutation", ratios=self._mutation_ratio, ops=self.context.mutations)
         self._log_aggregate_stats()
-        logger.debug("Fitness caches: %s", self.context.evaluator.cache_info())
+        logger.debug("Fitness caches: %s", self.context.evaluator.get_cache_info())
         logger.debug("GaParameter Values: %s", str(self.ga_params))
         for island in self.islands:
             logger.debug("Island %d Fitness: %.2f", island.identity, sum(island.get_last_gen_fitness()))

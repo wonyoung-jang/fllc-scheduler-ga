@@ -28,6 +28,10 @@ class Repairer:
         self.set_of_events = set(self.event_factory.build())
         self.rt_teams_needed = {rc.roundtype: rc.teams_per_round for rc in self.config.rounds}
 
+    def needs_repair(self, schedule: Schedule) -> bool:
+        """Check if the schedule needs repair."""
+        return len(schedule) != self.config.total_slots
+
     def repair(self, schedule: Schedule) -> bool:
         """Repair missing assignments in the schedule.
 
@@ -37,7 +41,7 @@ class Repairer:
             schedule (Schedule): The schedule to repair.
 
         """
-        if len(schedule) == self.config.total_slots:
+        if not self.needs_repair(schedule):
             return True
 
         tpr_assign_map = {
@@ -80,15 +84,15 @@ class Repairer:
                 )
 
         schedule.clear_cache()
-        return len(schedule) == self.config.total_slots
+        return not self.needs_repair(schedule)
 
     @staticmethod
     def _assign_singles(teams: dict[int, Team], events: dict[int, Event], schedule: Schedule) -> None:
         """Assign single-team events to teams that need them."""
-        for team in teams.values():
-            non_conflicting_events = ((i, e) for i, e in events.items() if not team.conflicts(e))
-            for i, event in non_conflicting_events:
-                schedule.assign_single(event, team)
+        for t in teams.values():
+            non_conflicting_events = ((i, e) for i, e in events.items() if not t.conflicts(e))
+            for i, e in non_conflicting_events:
+                schedule.assign_single(e, t)
                 events.pop(i)
                 break
 

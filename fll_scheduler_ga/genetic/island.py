@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from ..config.constants import ATTEMPTS_RANGE, RANDOM_SEED_RANGE
 from ..config.ga_context import GaContext
 from ..config.ga_parameters import GaParameters
-from ..data_model.schedule import Population, Schedule
+from ..data_model.schedule import Schedule
 from .builder import ScheduleBuilder
 
 if TYPE_CHECKING:
@@ -44,7 +44,6 @@ class Island:
         self.crossover_ratio = {tracker: Counter() for tracker in ("success", "total")}
         self.mutation_ratio = {tracker: Counter() for tracker in ("success", "total")}
         self._initialize_operator_maps()
-        self.initialize()
 
     def __len__(self) -> int:
         """Return the number of individuals in the island's population."""
@@ -54,8 +53,10 @@ class Island:
         """Create a mapping of generation to operator indices."""
         gens = self.ga_params.generations
         randrange = self.rng.randrange
-        self.op_map["crossovers"] = {g: randrange(len(self.context.crossovers)) for g in range(gens)}
-        self.op_map["mutations"] = {g: randrange(len(self.context.mutations)) for g in range(gens)}
+        len_crossovers = len(self.context.crossovers)
+        len_mutations = len(self.context.mutations)
+        self.op_map["crossovers"] = {g: randrange(len_crossovers) for g in range(gens)}
+        self.op_map["mutations"] = {g: randrange(len_mutations) for g in range(gens)}
 
     def _get_this_gen_fitness(self) -> tuple[float, ...]:
         """Calculate the average fitness of the current generation."""
@@ -63,7 +64,8 @@ class Island:
         if not (pop := self.selected.values()):
             return ()
 
-        totals = (sum(vals) for vals in zip(*(p.fitness for p in pop), strict=True))
+        gen_fit_iter = (p.fitness for p in pop)
+        totals = (sum(vals) for vals in zip(*gen_fit_iter, strict=True))
         n = len(pop)
         return tuple(total / n for total in totals)
 
@@ -75,9 +77,9 @@ class Island:
         """Update the fitness history with the current generation's fitness."""
         self.fitness_history.append(self._get_this_gen_fitness())
 
-    def pareto_front(self) -> Population:
+    def pareto_front(self) -> Iterator[Schedule]:
         """Get the Pareto front for each island in the population."""
-        return [p for p in self.selected.values() if p.rank == 0]
+        yield from (p for p in self.selected.values() if p.rank == 0)
 
     def add_to_population(self, schedule: Schedule, s_hash: int | None = None) -> bool:
         """Add a schedule to a specific island's population if it's not a duplicate."""
@@ -136,7 +138,13 @@ class Island:
         """Mutate a child schedule."""
         if not (m_roll and mutation):
             return False
-        return mutation.mutate(child)
+
+        m_str = str(mutation)
+        self.mutation_ratio["total"][m_str] += 1
+        if not mutation.mutate(child):
+            return False
+        self.mutation_ratio["success"][m_str] += 1
+        return True
 
     def evolve(self, generation: int) -> None:
         """Perform main evolution loop: generations and migrations."""
@@ -148,6 +156,7 @@ class Island:
         ctx = self.context
         evaluate = ctx.evaluator.evaluate
         repair = ctx.repairer.repair
+        random = self.rng.random
 
         selection: Selection = ctx.selection
 
@@ -160,7 +169,7 @@ class Island:
             parents = selection.select(pop, k=2)
             children = []
             must_mutate = False
-            c_roll = params.crossover_chance > self.rng.random()
+            c_roll = params.crossover_chance > random()
             if c_roll and crossover:
                 for child in crossover.cross(parents):
                     c_str = str(crossover)
@@ -174,12 +183,9 @@ class Island:
                 children.extend(p.clone() for p in parents)
 
             for child in children:
-                m_roll = must_mutate or params.mutation_chance > self.rng.random()
-                m_str = str(mutation)
+                m_roll = must_mutate or params.mutation_chance > random()
                 if not self.mutate_child(child, mutation, m_roll=m_roll) and must_mutate:
-                    self.mutation_ratio["total"][m_str] += 1
                     continue
-                self.mutation_ratio["success"][m_str] += 1
 
                 if not self.add_to_population(child):
                     continue

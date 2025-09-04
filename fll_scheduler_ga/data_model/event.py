@@ -97,17 +97,22 @@ class EventFactory:
             Event: An event for the round with a time slot and a location.
 
         """
-        for ts in r.timeslots:
-            if r.teams_per_round == 1:
-                for loc in r.locations:
-                    event = Event(next(self._id_counter), r.roundtype, ts, loc)
+        timeslots = r.timeslots
+        teams_per_round = r.teams_per_round
+        rt = r.roundtype
+        locations = r.locations
+        id_count = self._id_counter
+        for ts in timeslots:
+            if teams_per_round == 1:
+                for loc in locations:
+                    event = Event(next(id_count), rt, ts, loc)
                     yield event
             else:
-                for loc in r.locations:
+                for loc in locations:
                     if loc.side == 1:
-                        event1 = Event(next(self._id_counter), r.roundtype, ts, loc)
+                        event1 = Event(next(id_count), rt, ts, loc)
                     elif loc.side == 2:
-                        event2 = Event(next(self._id_counter), r.roundtype, ts, loc)
+                        event2 = Event(next(id_count), rt, ts, loc)
                         event1.pair(event2)
                         yield from (event1, event2)
 
