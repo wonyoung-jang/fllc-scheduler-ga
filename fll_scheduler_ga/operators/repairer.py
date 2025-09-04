@@ -37,7 +37,6 @@ class Repairer:
             schedule (Schedule): The schedule to repair.
 
         """
-        # self.clean(schedule)
         if len(schedule) == self.config.total_slots:
             return True
 

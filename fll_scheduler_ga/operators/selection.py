@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from logging import getLogger
 from typing import TYPE_CHECKING
 
 from ..config.constants import SelectionOp
@@ -19,31 +18,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from random import Random
 
-    from ..config.app_config import AppConfig
     from ..data_model.schedule import Population, Schedule
-
-logger = getLogger(__name__)
-
-
-def build_selections(app_config: AppConfig) -> Iterator[Selection]:
-    """Build and return a tuple of selection operators based on the configuration."""
-    variant_map = {
-        SelectionOp.RANDOM_SELECT: lambda: RandomSelect(
-            app_config.rng,
-        ),
-    }
-
-    if not app_config.operators.selection_types:
-        logger.warning("No selection types enabled in the configuration. Selection will not occur.")
-        return
-
-    for variant_name in app_config.operators.selection_types:
-        if variant_name not in variant_map:
-            msg = f"Unknown selection type in config: '{variant_name}'"
-            raise ValueError(msg)
-        else:
-            selection_factory = variant_map[variant_name]
-            yield selection_factory()
 
 
 @dataclass(slots=True)
@@ -53,12 +28,12 @@ class Selection(ABC):
     rng: Random
 
     @abstractmethod
-    def select(self, population: Population, parents: int = 2) -> Iterator[Schedule]:
+    def select(self, population: Population, k: int = 2) -> Iterator[Schedule]:
         """Select individuals from the population to form the next generation.
 
         Args:
             population (Population): The current population of schedules.
-            parents (int): The number of parents to select.
+            k (int): The number to select.
 
         Yields:
             Schedule: The selected parent schedules.
@@ -70,6 +45,10 @@ class Selection(ABC):
 class RandomSelect(Selection):
     """Random selection of individuals from the population."""
 
-    def select(self, population: Population, parents: int = 2) -> Iterator[Schedule]:
+    def __str__(self) -> str:
+        """Return a string representation of the selection operator."""
+        return SelectionOp.RANDOM_SELECT
+
+    def select(self, population: Population, k: int = 2) -> Iterator[Schedule]:
         """Select individuals from the population to form the next generation."""
-        yield from self.rng.sample(population, k=parents)
+        yield from self.rng.sample(population, k=k)

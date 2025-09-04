@@ -54,7 +54,6 @@ class Island:
         """Create a mapping of generation to operator indices."""
         gens = self.ga_params.generations
         randrange = self.rng.randrange
-        self.op_map["selections"] = {g: randrange(len(self.context.selections)) for g in range(gens)}
         self.op_map["crossovers"] = {g: randrange(len(self.context.crossovers)) for g in range(gens)}
         self.op_map["mutations"] = {g: randrange(len(self.context.mutations)) for g in range(gens)}
 
@@ -102,23 +101,23 @@ class Island:
     def initialize(self) -> None:
         """Initialize the population for each island."""
         pop_size = self.ga_params.population_size
-        to_create = pop_size - len(self.selected)
-        if to_create <= 0:
+        needed = pop_size - len(self.selected)
+        if needed <= 0:
             logger.debug("Initializing island %d with 0 individuals.", self.identity)
             return
 
-        logger.debug("Initializing island %d with %d individuals.", self.identity, to_create)
+        logger.debug("Initializing island %d with %d individuals.", self.identity, needed)
 
         seeder = Random(self.rng.randint(*RANDOM_SEED_RANGE))
         attempts, max_attempts = ATTEMPTS_RANGE
-        created = 0
 
         build = self.builder.build
         ctx = self.context
         evaluate = ctx.evaluator.evaluate
         repair = ctx.repairer.repair
 
-        while len(self.selected) < pop_size and attempts < max_attempts:
+        created = 0
+        while created < needed and attempts < max_attempts:
             schedule = build(rng=Random(seeder.randint(*RANDOM_SEED_RANGE)))
             if repair(schedule) and self.add_to_population(schedule):
                 evaluate(schedule)
@@ -130,22 +129,14 @@ class Island:
             msg = "Island %d: No valid individuals created after %d attempts. Try adjusting parameters."
             raise RuntimeError(msg % (self.identity, attempts))
 
-        if created < to_create:
-            logger.warning("Island %d: only created %d/%d valid individuals.", self.identity, created, to_create)
+        if created < needed:
+            logger.warning("Island %d: only created %d/%d valid individuals.", self.identity, created, needed)
 
     def mutate_child(self, child: Schedule, mutation: "Mutation", *, m_roll: bool) -> bool:
         """Mutate a child schedule."""
         if not (m_roll and mutation):
             return False
-
-        m_str = str(mutation)
-        self.mutation_ratio["total"][m_str] += 1
-
-        if not mutation.mutate(child):
-            return False
-
-        self.mutation_ratio["success"][m_str] += 1
-        return True
+        return mutation.mutate(child)
 
     def evolve(self, generation: int) -> None:
         """Perform main evolution loop: generations and migrations."""
@@ -158,16 +149,15 @@ class Island:
         evaluate = ctx.evaluator.evaluate
         repair = ctx.repairer.repair
 
-        si = self.op_map["selections"][generation]
+        selection: Selection = ctx.selection
+
         ci = self.op_map["crossovers"][generation]
         mi = self.op_map["mutations"][generation]
-
-        selection: Selection = ctx.selections[si] if ctx.selections else None
         crossover: Crossover = ctx.crossovers[ci] if ctx.crossovers else None
         mutation: Mutation = ctx.mutations[mi] if ctx.mutations else None
 
         while child_count < params.offspring_size:
-            parents = selection.select(pop, parents=2)
+            parents = selection.select(pop, k=2)
             children = []
             must_mutate = False
             c_roll = params.crossover_chance > self.rng.random()
@@ -184,9 +174,12 @@ class Island:
                 children.extend(p.clone() for p in parents)
 
             for child in children:
-                m_roll = True if must_mutate else params.mutation_chance > self.rng.random()
+                m_roll = must_mutate or params.mutation_chance > self.rng.random()
+                m_str = str(mutation)
                 if not self.mutate_child(child, mutation, m_roll=m_roll) and must_mutate:
+                    self.mutation_ratio["total"][m_str] += 1
                     continue
+                self.mutation_ratio["success"][m_str] += 1
 
                 if not self.add_to_population(child):
                     continue
@@ -201,9 +194,10 @@ class Island:
 
     def give_migrants(self) -> Iterator[Schedule]:
         """Randomly yield migrants from population."""
-        keys = list(self.selected.keys())
-        for s_hash in self.rng.sample(keys, k=self.ga_params.migration_size):
-            yield self.selected.pop(s_hash)
+        population = list(self.selected.values())
+        selection = self.context.selection
+        for s in selection.select(population, k=self.ga_params.migration_size):
+            yield self.selected.pop(hash(s))
 
     def receive_migrants(self, migrants: Iterator[Schedule]) -> None:
         """Receive migrants from another island and add them to the current island's population."""

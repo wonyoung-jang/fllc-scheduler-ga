@@ -23,7 +23,7 @@ from fll_scheduler_ga.operators.crossover import build_crossovers
 from fll_scheduler_ga.operators.mutation import build_mutations
 from fll_scheduler_ga.operators.nsga3 import NSGA3
 from fll_scheduler_ga.operators.repairer import Repairer
-from fll_scheduler_ga.operators.selection import build_selections
+from fll_scheduler_ga.operators.selection import RandomSelect
 
 logger = getLogger(__name__)
 
@@ -125,10 +125,11 @@ def initialize_logging(args: Namespace) -> None:
 
 def create_ga_context(app_config: AppConfig) -> GaContext:
     """Create and return a GaContext with the provided configuration."""
+    rng = app_config.rng
     team_factory = TeamFactory(app_config.tournament)
     event_factory = EventFactory(app_config.tournament)
 
-    repairer = Repairer(app_config.rng, app_config.tournament, event_factory)
+    repairer = Repairer(rng, app_config.tournament, event_factory)
     benchmark = FitnessBenchmark(app_config.tournament, event_factory)
     evaluator = FitnessEvaluator(app_config.tournament, benchmark)
 
@@ -137,12 +138,11 @@ def create_ga_context(app_config: AppConfig) -> GaContext:
     population_size = pop_size_ref_points
     # population_size = app_config.ga_params.population_size
     nsga3 = NSGA3(
-        rng=app_config.rng,
+        rng=rng,
         num_objectives=num_objectives,
         population_size=population_size,
     )
-
-    selections = tuple(build_selections(app_config))
+    selection = RandomSelect(rng)
     crossovers = tuple(build_crossovers(app_config, team_factory, event_factory))
     mutations = tuple(build_mutations(app_config, event_factory))
 
@@ -153,7 +153,7 @@ def create_ga_context(app_config: AppConfig) -> GaContext:
         repairer=repairer,
         evaluator=evaluator,
         nsga3=nsga3,
-        selections=selections,
+        selection=selection,
         crossovers=crossovers,
         mutations=mutations,
     )

@@ -13,7 +13,7 @@ from ..data_model.location import Location
 from ..data_model.schedule import Schedule
 from ..data_model.time import TimeSlot
 from .config import Round, RoundType, TournamentConfig
-from .constants import RANDOM_SEED_RANGE, CrossoverOp, MutationOp, SelectionOp
+from .constants import RANDOM_SEED_RANGE, CrossoverOp, MutationOp
 from .ga_operators_config import OperatorConfig
 from .ga_parameters import GaParameters
 
@@ -83,7 +83,6 @@ def load_operator_config(p: ConfigParser) -> OperatorConfig:
 
     """
     options = {
-        ("selection", "selection_types", "", ""): (s.value for s in SelectionOp),
         ("crossover", "crossover_types", "", ""): (c.value for c in CrossoverOp),
         ("crossover", "crossover_ks", "", "int"): (1, 2, 4, 8),
         ("mutation", "mutation_types", "", ""): (m.value for m in MutationOp),

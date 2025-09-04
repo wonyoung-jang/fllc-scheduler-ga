@@ -23,6 +23,6 @@ class GaContext:
     evaluator: FitnessEvaluator
     repairer: Repairer
     nsga3: NSGA3
-    selections: tuple[Selection, ...]
+    selection: Selection
     crossovers: tuple[Crossover, ...]
     mutations: tuple[Mutation, ...]
