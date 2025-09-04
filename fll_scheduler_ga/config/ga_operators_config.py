@@ -12,10 +12,10 @@ logger = getLogger(__name__)
 class OperatorConfig:
     """Configuration for the genetic algorithm operators."""
 
-    selection_types: list[SelectionOp | str]
-    crossover_types: list[CrossoverOp | str]
-    crossover_ks: list[int]
-    mutation_types: list[MutationOp | str]
+    selection_types: tuple[SelectionOp | str]
+    crossover_types: tuple[CrossoverOp | str]
+    crossover_ks: tuple[int]
+    mutation_types: tuple[MutationOp | str]
 
     def __post_init__(self) -> None:
         """Post-initialization for operator configuration."""
