@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from functools import cache
-from itertools import chain, combinations
+from itertools import combinations
 from logging import getLogger
 from math import comb
 from typing import TYPE_CHECKING, Any
@@ -28,19 +28,26 @@ class NSGA3:
     num_objectives: int
     total_size: int
     island_size: int
+    niche_counts: np.ndarray = field(default=None, repr=False)
     ref_points: np.ndarray = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to generate reference points."""
-        self._initialize_reference_points()
+        self.init_ref_points()
+        self.reset_counts()
 
-    def gen_ref_points(self) -> Iterator[list[float]]:
+    def reset_counts(self) -> None:
+        """Reset the counts for each reference point."""
+        self.niche_counts = np.zeros(len(self.ref_points), dtype=int)
+
+    def init_ref_points(self) -> None:
         """Generate a set of structured reference points."""
         m = self.num_objectives
         p = 1
         while comb(p + m - 1, m - 1) < self.total_size:
             p += 1
 
+        pts = []
         for c in combinations(range(p + m - 1), m - 1):
             coords = []
             prev = -1
@@ -48,13 +55,11 @@ class NSGA3:
                 coords.append(idx - prev - 1)
                 prev = idx
             coords.append(p + m - 1 - c[-1] - 1)
-            yield [x / p for x in coords]
+            pts.append([x / p for x in coords])
 
-    def _initialize_reference_points(self) -> None:
-        """Generate a set of structured reference points."""
-        m = self.num_objectives
-        if not (pts := list(self.gen_ref_points())):
+        if not pts:
             pts = [[1.0 / m] * m]
+
         self.ref_points = np.asarray(pts, dtype=float)
         logger.debug("Generated %d reference points:\n%s", len(self.ref_points), self.ref_points)
 
@@ -66,16 +71,15 @@ class NSGA3:
 
         fronts = self.non_dominated_sort(population, size)
         last_front = fronts[-1] if fronts else []
-        self.norm_and_associate(fronts, last_front)
+        self.norm_and_associate(fronts)
         if len(fronts) == 1:
-            selected = list(chain.from_iterable(fronts))[:size]
-            return {hash(p): p for p in selected}
+            selected = [p for f in fronts for p in f]
+            return {hash(p): p for p in selected[:size]}
 
-        selected = list(chain.from_iterable(fronts[:-1]))
-        counts = self.counts(p.ref_point for p in selected)
+        selected = [p for f in fronts[:-1] for p in f]
+        self.count(p.ref_point for p in selected)
         selected.extend(
             self.niche(
-                counts=counts,
                 last_front=last_front,
                 k=size - len(selected),
             )
@@ -86,12 +90,11 @@ class NSGA3:
         """Perform non-dominated sorting on the population."""
         n = len(pop)
         dom_list: list[list[int]] = [[] for _ in range(n)]
-        dom_count = [0] * n
+        dom_count = np.zeros(n, dtype=int)
         fits = [p.fitness for p in pop]
 
         for i, fi in enumerate(fits):
-            for j in range(i + 1, n):
-                fj = fits[j]
+            for j, fj in enumerate(fits[i + 1 :], start=i + 1):
                 if dominates(fi, fj):
                     dom_list[i].append(j)
                     dom_count[j] += 1
@@ -102,8 +105,8 @@ class NSGA3:
         fronts: list[list[int]] = [[]]
         for i in range(n):
             if dom_count[i] == 0:
-                pop[i].rank = 0
                 fronts[0].append(i)
+                pop[i].rank = 0
 
         pop_count = len(fronts[0])
         curr = 0
@@ -122,78 +125,74 @@ class NSGA3:
 
         return [[pop[i] for i in fr] for fr in fronts]
 
-    def niche(self, counts: list[int], last_front: Population, k: int) -> Iterator[Schedule]:
+    def niche(self, last_front: Population, k: int) -> Iterator[Schedule]:
         """Select k individuals from the last front using a niching mechanism."""
+        sample = self.rng.sample
+        choice = self.rng.choice
+        counts = self.niche_counts
         pool: dict[int, Schedule] = dict(enumerate(last_front))
         selected = 0
 
         while selected < k and pool:
-            pool_ref_points = {s.ref_point for s in pool.values()}
-            next_counts = [(i, counts[i]) for i in pool_ref_points]
-            if not next_counts:
+            available_refs = {s.ref_point for s in pool.values()}
+            available_counts = [(i, counts[i]) for i in available_refs]
+            min_count = min(c for _, c in available_counts)
+            min_refs = [i for i, c in available_counts if c == min_count]
+            if not min_refs:
                 break
 
-            min_count = min(c for _, c in next_counts)
-            min_refs = [i for i, c in next_counts if c == min_count]
-            self.rng.shuffle(min_refs)
-
-            for niche in min_refs:
-                cluster = sorted(
-                    ((idx, s) for idx, s in pool.items() if s.ref_point == niche),
-                    key=lambda idx_s: idx_s[1].ref_distance,
-                )
-                if not cluster:
+            for niche in sample(min_refs, len(min_refs)):
+                if not (
+                    cluster := sorted(
+                        ((i, s) for i, s in pool.items() if s.ref_point == niche),
+                        key=lambda k: k[1].ref_distance,
+                    )
+                ):
                     continue
 
-                pick_idx, _ = cluster[0] if counts[niche] == 0 else self.rng.choice(cluster)
-                yield pool.pop(pick_idx)
+                if counts[niche] == min_count:
+                    yield pool.pop(cluster[0][0])
+                else:
+                    yield pool.pop(choice(cluster)[0])
+
                 counts[niche] += 1
                 selected += 1
                 if selected >= k:
                     break
 
-    def norm_and_associate(self, fronts: list[Population], last_front: Population) -> None:
+    def norm_and_associate(self, fronts: list[Population]) -> None:
         """Normalize objectives then associate individuals with nearest reference points."""
-        all_schedules = list(chain.from_iterable(fronts))
-        if not all_schedules:
-            return
-
-        fits_all = np.asarray([p.fitness for p in all_schedules], dtype=float)
-        fits_last = np.asarray([p.fitness for p in last_front], dtype=float)
-
-        # Compute ideal (max) and nadir (min on the last front) and normalize
+        schedules = [p for f in fronts for p in f]
+        fits = np.asarray([p.fitness for p in schedules], dtype=float)
         epsilon = 1e-12
-        ideal = fits_all.max(axis=0)
-        nadir = fits_last.min(axis=0)
+        ideal = fits.max(axis=0)
+        nadir = fits.min(axis=0)
         span = ideal - nadir
         span[span == 0] = epsilon
-        norm_fits: np.ndarray = (fits_all - nadir) / span
+        norm = (fits - nadir) / span
 
-        ref_pts = self.ref_points
-        w_norm_sq = np.sum(ref_pts**2, axis=1)  # (H,)
-        w_norm_sq[w_norm_sq == 0] = epsilon
+        pts = self.ref_points
+        norm_sq = np.sum(pts**2, axis=1)  # (H,)
+        norm_sq[norm_sq == 0] = epsilon
 
-        dots = norm_fits @ ref_pts.T
-        coeffs = dots / w_norm_sq
-        proj = coeffs[:, :, None] * ref_pts[None, :, :]
-        f_expanded = norm_fits[:, None, :]
-        residuals = f_expanded - proj
+        coeffs = (norm @ pts.T) / norm_sq
+        proj = coeffs[:, :, None] * pts[None, :, :]
+        residuals = norm[:, None, :] - proj
+
         dists = np.linalg.norm(residuals, axis=2)
-        min_vals = dists.min(axis=1)
-        tie_mask = dists == min_vals[:, None]
+        min_dists = dists.min(axis=1)
+        ties = dists == min_dists[:, None]
+        choice = self.rng.choice
+        for i, s in enumerate(schedules):
+            candidates = np.nonzero(ties[i])[0]
+            s.ref_point = choice(candidates)
+            s.ref_distance = min_dists[i]
 
-        for i, s in enumerate(all_schedules):
-            candidates = np.nonzero(tie_mask[i])[0]
-            s.ref_point = int(self.rng.choice(candidates))
-            s.ref_distance = float(min_vals[i])
-
-    def counts(self, idx_to_count: Iterator[int]) -> list[int]:
+    def count(self, idx_to_count: Iterator[int]) -> None:
         """Count how many individuals are associated with each reference point."""
-        counts = [0] * len(self.ref_points)
         for idx in idx_to_count:
-            if 0 <= idx < len(counts):
-                counts[idx] += 1
-        return counts
+            if 0 <= idx < len(self.niche_counts):
+                self.niche_counts[idx] += 1
 
 
 @cache

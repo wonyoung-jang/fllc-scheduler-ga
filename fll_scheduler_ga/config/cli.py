@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from argparse import ArgumentParser, Namespace
 from importlib.metadata import version
+from logging import DEBUG, FileHandler, Formatter, StreamHandler, getLogger
 
 
-def create_parser() -> Namespace:
+def init_parser() -> Namespace:
     """Create the argument parser for the application.
 
     Returns:
@@ -26,7 +27,7 @@ def create_parser() -> Namespace:
     }
 
     parser = ArgumentParser(
-        description="Generate a tournament schedule using a Genetic Algorithm.",
+        description="Generate a tournament schedule using genetic algorithms.",
     )
 
     # General parameters
@@ -173,3 +174,27 @@ def create_parser() -> Namespace:
     )
 
     return parser.parse_args()
+
+
+def init_logging(args: Namespace) -> None:
+    """Initialize logging for the application."""
+    file = FileHandler(
+        filename=args.log_file,
+        mode="w",
+        encoding="utf-8",
+        delay=True,
+    )
+    file.setLevel(args.loglevel_file)
+    file.setFormatter(Formatter("[%(asctime)s] %(levelname)s[%(module)s] %(message)s"))
+
+    console = StreamHandler()
+    console.setLevel(args.loglevel_console)
+    console.setFormatter(Formatter("%(levelname)s[%(module)s] %(message)s"))
+
+    root = getLogger()
+    root.setLevel(DEBUG)
+    root.addHandler(file)
+    root.addHandler(console)
+
+    args_str = "\n\t".join(f"  {k}: {v}" for k, v in args.__dict__.items())
+    root.debug("Starting FLLC Scheduler with args:\n\targparse.Namespace\n\t%s", args_str)

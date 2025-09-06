@@ -36,6 +36,7 @@ class GA:
     rng: Random
     observers: tuple[GaObserver]
     seed_file: Path | None
+    save_front_only: bool
 
     fitness_history: list[tuple] = field(default_factory=list, repr=False)
     total_population: Population = field(default_factory=list, repr=False)
@@ -115,11 +116,12 @@ class GA:
         finally:
             self.finalize(start_time)
             self._notify_on_finish(self.total_population, self.pareto_front())
+            self.save()
 
     def initialize_population(self) -> None:
         """Initialize the population for each island."""
         s_path = self.seed_file
-        if s_path and s_path.exists() and (seed_pop := self.retrieve_seed_population()):
+        if s_path and s_path.exists() and (seed_pop := self.load()):
             seed_pop.sort(key=lambda s: (s.rank, -sum(s.fitness)))
             n = self.ga_params.num_islands
             for idx, schedule in enumerate(seed_pop):
@@ -129,41 +131,11 @@ class GA:
         for island in self.islands:
             island.initialize()
 
-    def retrieve_seed_population(self) -> Population | None:
-        """Load and integrate a population from a seed file."""
-        logger.debug("Loading seed population from: %s", self.seed_file)
-        seed_data: dict[str, Any] = {}
-        try:
-            with self.seed_file.open("rb") as f:
-                seed_data = pickle.load(f)
-        except (OSError, pickle.PicklingError):
-            logger.exception("Could not load or parse seed file. Starting with a fresh population.")
-        except EOFError:
-            logger.debug("Pickle file is empty")
-
-        seed_config: TournamentConfig | None = seed_data.get("config")
-        if not seed_config:
-            logger.warning("Seed population is missing config. Using current...")
-            return None
-
-        if (
-            self.context.app_config.tournament.num_teams != seed_config.num_teams
-            or self.context.app_config.tournament.rounds != seed_config.rounds
-        ):
-            logger.warning("Seed population does not match current config. Using current...")
-            return None
-
-        population = seed_data.get("population")
-        if not population:
-            logger.warning("Seed population is missing. Using current...")
-            return None
-
-        return population
-
     def run_epochs(self) -> None:
         """Perform main evolution loop: generations and migrations."""
         num_generations = self.ga_params.generations
         for generation in range(1, num_generations + 1):
+            self.context.nsga3.reset_counts()
             self.migrate(generation)
             self.run_single_epoch(generation - 1)
             self.update_fitness_history()
@@ -176,6 +148,7 @@ class GA:
     def run_single_epoch(self, generation: int) -> None:
         """Run a single epoch of the genetic algorithm."""
         for island in self.islands:
+            island.destroy()
             island.evolve(generation)
             island.update_fitness_history()
 
@@ -288,3 +261,56 @@ class GA:
         for island in self.islands:
             logger.debug("Island %d Fitness: %.2f", island.identity, sum(island.get_last_gen_fitness()))
         logger.debug("Total time taken: %.2f seconds", time() - start_time)
+
+    def load(self) -> Population | None:
+        """Load and integrate a population from a seed file."""
+        logger.debug("Loading seed population from: %s", self.seed_file)
+        seed_data: dict[str, Any] = {}
+        try:
+            with self.seed_file.open("rb") as f:
+                seed_data = pickle.load(f)
+        except (OSError, pickle.PicklingError):
+            logger.exception("Could not load or parse seed file. Starting with a fresh population.")
+        except EOFError:
+            logger.debug("Pickle file is empty")
+
+        seed_config: TournamentConfig | None = seed_data.get("config")
+        if not seed_config:
+            logger.warning("Seed population is missing config. Using current...")
+            return None
+
+        if (
+            self.context.app_config.tournament.num_teams != seed_config.num_teams
+            or self.context.app_config.tournament.rounds != seed_config.rounds
+        ):
+            logger.warning("Seed population does not match current config. Using current...")
+            return None
+
+        population = seed_data.get("population")
+        if not population:
+            logger.warning("Seed population is missing. Using current...")
+            return None
+
+        return population
+
+    def save(self) -> None:
+        """Save the final population to a file to be used as a seed for a future run."""
+        pop = self.pareto_front() if self.save_front_only else self.total_population
+
+        if not pop:
+            logger.warning("No population to save to seed file.")
+            return
+
+        data_to_cache = {
+            "population": pop,
+            "config": self.context.app_config.tournament,
+        }
+
+        path = self.seed_file
+        logger.debug("Saving final population of size %d to seed file: %s", len(pop), path)
+
+        try:
+            with path.open("wb") as f:
+                pickle.dump(data_to_cache, f)
+        except (OSError, pickle.PicklingError, EOFError):
+            logger.exception("Error saving population to seed file: %s", path)

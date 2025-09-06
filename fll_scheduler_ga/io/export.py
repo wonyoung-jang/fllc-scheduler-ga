@@ -197,7 +197,7 @@ def generate_pareto_summary(pop: Population, path: Path) -> None:
             for name in list(FitnessObjective):
                 f.write(f"{name}, ")
 
-            f.write("Sum, Ref Point Index, Distance")
+            f.write("Sum, Ref Point, Ref Distance")
             f.write("\n")
             for i, schedule in enumerate(sorted(pop, key=lambda s: (s.rank, -sum(s.fitness))), start=1):
                 f.write(f"{i:0{schedule_enum_digits}}, {id(schedule)}, {hash(schedule)}, {schedule.rank}, ")

@@ -63,8 +63,7 @@ class Island:
 
     def _get_this_gen_fitness(self) -> tuple[float, ...]:
         """Calculate the average fitness of the current generation."""
-        # if not (pop := self.pareto_front()):
-        if not (pop := self.selected.values()):
+        if not (pop := list(self.pareto_front())):
             return ()
 
         gen_fit_iter = (p.fitness for p in pop)
@@ -210,6 +209,15 @@ class Island:
         for migrant in migrants:
             self.add_to_population(migrant)
         self._nsga3_select()
+
+    def destroy(self) -> None:
+        """Clear the island's population."""
+        if self.rng.random() > 0.001:
+            return
+        to_destroy = self.rng.randint(1, len(self.selected))
+        for s in self.rng.sample(list(self.selected.keys()), k=to_destroy):
+            self.selected.pop(s)
+        self.handle_underpopulation()
 
     def handle_underpopulation(self) -> None:
         """Handle underpopulation by adding new individuals to the island."""

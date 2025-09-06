@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar
 
 from .event import Event
-from .team import Team, TeamMap
+from .team import Team
 
 if TYPE_CHECKING:
     from collections.abc import ItemsView, KeysView, ValuesView
@@ -21,7 +21,7 @@ type Match = tuple[Event, Event, Team, Team]
 class Schedule:
     """Represents a schedule (individual) with its associated fitness score."""
 
-    teams: TeamMap = field(default_factory=dict)
+    teams: dict[int, Team] = field(default_factory=dict)
     schedule: Individual = field(default_factory=dict)
     fitness: tuple[float, ...] | None = field(default=None)
     rank: int = field(default=99)

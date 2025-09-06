@@ -56,6 +56,7 @@ class GaContext:
             rng=rng,
             observers=observers,
             seed_file=Path(args.seed_file) if args.seed_file else None,
+            save_front_only=args.front_only,
         )
 
     def handle_seed_file(self, args: Namespace) -> None:

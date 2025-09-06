@@ -16,21 +16,10 @@ if TYPE_CHECKING:
 logger = getLogger(__name__)
 
 
-type TeamMap = dict[int, Team]
-
-
-@dataclass(slots=True, frozen=True)
-class TeamInfo:
-    """Data model for team information in the FLL Scheduler GA."""
-
-    identity: int
-
-
 @dataclass(slots=True)
 class Team:
     """Data model for a team in the FLL Scheduler GA."""
 
-    info: TeamInfo
     identity: int
     roundreqs: dict[RoundType, int]
     fitness: tuple[float, ...] = field(default=None)
@@ -46,7 +35,6 @@ class Team:
     def clone(self) -> Team:
         """Create a deep copy of the team."""
         return Team(
-            info=self.info,
             identity=self.identity,
             roundreqs=self.roundreqs.copy(),
             fitness=self.fitness,
@@ -148,24 +136,18 @@ class TeamFactory:
     """Factory class to create Team instances."""
 
     config: TournamentConfig
-    _base_teams_info: frozenset[TeamInfo] = field(init=False, repr=False)
 
-    def __post_init__(self) -> None:
-        """Post-initialization to set up the initial state."""
-        self._base_teams_info = frozenset(TeamInfo(i + 1) for i in range(self.config.num_teams))
-
-    def build(self) -> TeamMap:
+    def build(self) -> dict[int, Team]:
         """Create a mapping of team identities to Team instances.
 
         Returns:
-            TeamMap: A mapping of team identities to Team instances.
+            dict[int, Team]: A mapping of team identities to Team instances.
 
         """
         return {
-            info.identity: Team(
-                info=info,
-                identity=info.identity,
+            i: Team(
+                identity=i,
                 roundreqs=self.config.round_requirements.copy(),
             )
-            for info in self._base_teams_info
+            for i in range(1, self.config.num_teams + 1)
         }
