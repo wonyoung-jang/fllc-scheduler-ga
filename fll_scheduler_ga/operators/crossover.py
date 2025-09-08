@@ -27,7 +27,7 @@ def build_crossovers(
 ) -> Iterator[Crossover]:
     """Build and return a tuple of crossover operators based on the configuration."""
     rng = app_config.rng
-    variant_map = {
+    crossovers = {
         CrossoverOp.K_POINT: lambda k: KPoint(team_factory, event_factory, rng, k=k),
         CrossoverOp.SCATTERED: lambda: Scattered(team_factory, event_factory, rng),
         CrossoverOp.UNIFORM: lambda: Uniform(team_factory, event_factory, rng),
@@ -42,20 +42,19 @@ def build_crossovers(
         logger.warning("No crossover types enabled in the configuration. Crossover will not occur.")
         return
 
-    for variant_name in crossover_types:
-        if variant_name not in variant_map:
-            msg = f"Unknown crossover type in config: {variant_name}"
+    for crossover_name in crossover_types:
+        if crossover_name not in crossovers:
+            msg = f"Unknown crossover type in config: {crossover_name}"
             raise ValueError(msg)
-        else:
-            crossover_factory: Crossover = variant_map[variant_name]
-            if variant_name == CrossoverOp.K_POINT:
-                for k in app_config.operators.crossover_ks:
+        elif crossover_name == CrossoverOp.K_POINT:
+            if crossover_ks := app_config.operators.crossover_ks:
+                for k in crossover_ks:
                     if k <= 0:
                         msg = f"Invalid crossover k value: {k}. Must be greater than 0."
                         raise ValueError(msg)
-                    yield crossover_factory(k)
-            else:
-                yield crossover_factory()
+                    yield crossovers[crossover_name](k)
+        else:
+            yield crossovers[crossover_name]()
 
 
 @dataclass(slots=True)
@@ -77,6 +76,20 @@ class Crossover(ABC):
             Schedule : The child schedule produced from crossover.
 
         """
+
+    def _create_child(
+        self,
+        p1: Schedule,
+        p2: Schedule,
+        p1_genes: Iterator[Event],
+        p2_genes: Iterator[Event],
+    ) -> Schedule:
+        """Create a child schedule from two parents."""
+        c = Schedule(self.team_factory.build())
+        self._transfer_genes_from_parent1(c, p1, p1_genes)
+        self._transfer_genes_from_parent2(c, p2, p2_genes)
+        c.clear_cache()
+        return c
 
     def _transfer_genes_from_parent1(self, c: Schedule, p1: Schedule, evts: Iterator[Event]) -> None:
         """Transfer genes from the first parent. Fewer checks needed."""
@@ -134,18 +147,8 @@ class EventCrossover(Crossover):
         """Produce child schedules from two parents."""
         p1, p2 = parents
         p1_genes, p2_genes = self.get_genes()
-
-        c1 = Schedule(self.team_factory.build())
-        self._transfer_genes_from_parent1(c1, p1, p1_genes)
-        self._transfer_genes_from_parent2(c1, p2, p2_genes)
-        c1.clear_cache()
-        yield c1
-
-        c2 = Schedule(self.team_factory.build())
-        self._transfer_genes_from_parent1(c2, p2, p2_genes)
-        self._transfer_genes_from_parent2(c2, p1, p1_genes)
-        c2.clear_cache()
-        yield c2
+        yield self._create_child(p1, p2, p1_genes, p2_genes)
+        yield self._create_child(p2, p1, p2_genes, p1_genes)
 
 
 @dataclass(slots=True)
@@ -179,20 +182,9 @@ class TeamCrossover(Crossover):
         """Produce child schedules from two parents."""
         p1, p2 = parents
         p1_genes, p2_genes = self.get_genes(p1, p2)
-
-        c1 = Schedule(self.team_factory.build())
-        self._transfer_genes_from_parent1(c1, p1, p1_genes)
-        self._transfer_genes_from_parent2(c1, p2, p2_genes)
-        c1.clear_cache()
-        yield c1
-
+        yield self._create_child(p1, p2, p1_genes, p2_genes)
         p2_genes, p1_genes = self.get_genes(p2, p1)
-
-        c2 = Schedule(self.team_factory.build())
-        self._transfer_genes_from_parent1(c2, p2, p2_genes)
-        self._transfer_genes_from_parent2(c2, p1, p1_genes)
-        c2.clear_cache()
-        yield c2
+        yield self._create_child(p2, p1, p2_genes, p1_genes)
 
 
 @dataclass(slots=True)

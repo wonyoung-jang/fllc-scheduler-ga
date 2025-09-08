@@ -24,74 +24,74 @@ logger = getLogger(__name__)
 
 def build_mutations(app_config: AppConfig, event_factory: EventFactory) -> Iterator[Mutation]:
     """Build and return a tuple of mutation operators based on the configuration."""
-    variant_map = {
+    rng = app_config.rng
+    mutations = {
         # SwapMatchMutation variants
         MutationOp.SWAP_MATCH_CROSS_TIME_LOCATION: lambda: SwapMatchMutation(
-            rng=app_config.rng,
+            rng=rng,
             event_factory=event_factory,
             same_timeslot=False,
             same_location=False,
         ),
         MutationOp.SWAP_MATCH_SAME_LOCATION: lambda: SwapMatchMutation(
-            rng=app_config.rng,
+            rng=rng,
             event_factory=event_factory,
             same_timeslot=False,
             same_location=True,
         ),
         MutationOp.SWAP_MATCH_SAME_TIME: lambda: SwapMatchMutation(
-            rng=app_config.rng,
+            rng=rng,
             event_factory=event_factory,
             same_timeslot=True,
             same_location=False,
         ),
         # SwapTeamMutation variants
         MutationOp.SWAP_TEAM_CROSS_TIME_LOCATION: lambda: SwapTeamMutation(
-            rng=app_config.rng,
+            rng=rng,
             event_factory=event_factory,
             same_timeslot=False,
             same_location=False,
         ),
         MutationOp.SWAP_TEAM_SAME_LOCATION: lambda: SwapTeamMutation(
-            rng=app_config.rng,
+            rng=rng,
             event_factory=event_factory,
             same_timeslot=False,
             same_location=True,
         ),
         MutationOp.SWAP_TEAM_SAME_TIME: lambda: SwapTeamMutation(
-            rng=app_config.rng,
+            rng=rng,
             event_factory=event_factory,
             same_timeslot=True,
             same_location=False,
         ),
         # SwapTableSideMutation variant
         MutationOp.SWAP_TABLE_SIDE: lambda: SwapTableSideMutation(
-            rng=app_config.rng,
+            rng=rng,
             event_factory=event_factory,
             same_timeslot=True,
             same_location=True,
         ),
         # TimeSlotSequenceMutation variants
         MutationOp.INVERSION: lambda: InversionMutation(
-            rng=app_config.rng,
+            rng=rng,
             event_factory=event_factory,
         ),
         MutationOp.SCRAMBLE: lambda: ScrambleMutation(
-            rng=app_config.rng,
+            rng=rng,
             event_factory=event_factory,
         ),
     }
 
-    if not app_config.operators.mutation_types:
+    if not (mutation_types := app_config.operators.mutation_types):
         logger.warning("No mutation types enabled in the configuration. Mutation will not occur.")
         return
 
-    for variant_name in app_config.operators.mutation_types:
-        if variant_name not in variant_map:
-            msg = f"Unknown mutation type in config: '{variant_name}'"
+    for mutation_name in mutation_types:
+        if mutation_name not in mutations:
+            msg = f"Unknown mutation type in config: '{mutation_name}'"
             raise ValueError(msg)
         else:
-            mutation_factory = variant_map[variant_name]
-            yield mutation_factory()
+            yield mutations[mutation_name]()
 
 
 @dataclass(slots=True)

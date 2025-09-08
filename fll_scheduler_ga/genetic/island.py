@@ -210,15 +210,6 @@ class Island:
             self.add_to_population(migrant)
         self._nsga3_select()
 
-    def destroy(self) -> None:
-        """Clear the island's population."""
-        if self.rng.random() > 0.001:
-            return
-        to_destroy = self.rng.randint(1, len(self.selected))
-        for s in self.rng.sample(list(self.selected.keys()), k=to_destroy):
-            self.selected.pop(s)
-        self.handle_underpopulation()
-
     def handle_underpopulation(self) -> None:
         """Handle underpopulation by adding new individuals to the island."""
         pop_size = len(self.selected)
@@ -236,7 +227,7 @@ class Island:
 
         while pop_size < target:
             chosen: Schedule
-            if choice((True, False)) and self.selected and mutations:
+            if self.selected and mutations and choice((True, False)):
                 # clone & mutate existing individual
                 curr_pop = list(self.selected.values())
                 chosen = choice(curr_pop).clone()

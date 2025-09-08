@@ -37,13 +37,10 @@ class Repairer:
         """Check if the schedule needs repair."""
         return len(schedule) != self.config.total_slots
 
-    def repair(self, schedule: Schedule) -> bool:
+    def repair(self, schedule: Schedule, to_destroy_count: int = 1) -> bool:
         """Repair missing assignments in the schedule.
 
         Fills in missing events for teams by assigning them to available (unbooked) event slots.
-
-        Args:
-            schedule (Schedule): The schedule to repair.
 
         """
         if not self.needs_repair(schedule):
@@ -88,8 +85,34 @@ class Repairer:
                     schedule=schedule,
                 )
 
+        if not self.needs_repair(schedule):
+            # input(f"Schedule {id(schedule)} ({to_destroy_count}) success: {len(schedule)}\n")
+            schedule.clear_cache()
+            return True
+
+        # destroy some of the schedule and recurse
+        # print(f"Schedule {id(schedule)} ({to_destroy_count}) pre_destroy: {len(schedule)}")
+        events = list(schedule.keys())
+        for s1 in self.rng.sample(events, k=min(to_destroy_count, len(events))):
+            if (s2 := s1.paired) and s1.location.side == 1:
+                t1 = schedule[s1]
+                t2 = schedule[s2]
+                if t1 and t2:
+                    t1.remove_event(s1)
+                    t2.remove_event(s2)
+                    t1.remove_opponent(t2)
+                    t2.remove_opponent(t1)
+                    del schedule[s1]
+                    del schedule[s2]
+            elif not s2:
+                t = schedule[s1]
+                if t:
+                    t.remove_event(s1)
+                    del schedule[s1]
+
+        # print(f"Schedule {id(schedule)} ({to_destroy_count}) post_destroy: {len(schedule)}")
         schedule.clear_cache()
-        return not self.needs_repair(schedule)
+        return self.repair(schedule, to_destroy_count + 1)
 
     @staticmethod
     def _assign_singles(teams: dict[int, Team], events: dict[int, Event], schedule: Schedule) -> None:

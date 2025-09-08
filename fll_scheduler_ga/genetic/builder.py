@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 logger = getLogger(__name__)
 
 
-@dataclass(slots=True, frozen=True)
+@dataclass(slots=True)
 class ScheduleBuilder:
     """Builder for building a valid random schedule."""
 
@@ -42,9 +42,9 @@ class ScheduleBuilder:
             1: self._build_singles,
             2: self._build_matches,
         }
-        round_reqs = self.config.round_requirements
+        tpr_reqs = {rc.roundtype: rc.teams_per_round for rc in self.config.rounds}
         for rt, evts in events.items():
-            build_fn = build_map.get(round_reqs.get(rt))
+            build_fn = build_map.get(tpr_reqs.get(rt))
             if build_fn:
                 build_fn(schedule, rt, evts, teams)
 

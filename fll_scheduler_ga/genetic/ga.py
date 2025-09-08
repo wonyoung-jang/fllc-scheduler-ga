@@ -148,7 +148,6 @@ class GA:
     def run_single_epoch(self, generation: int) -> None:
         """Run a single epoch of the genetic algorithm."""
         for island in self.islands:
-            island.destroy()
             island.evolve(generation)
             island.update_fitness_history()
 

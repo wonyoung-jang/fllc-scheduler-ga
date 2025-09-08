@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from configparser import ConfigParser
-from dataclasses import dataclass
+from configparser import ConfigParser, SectionProxy
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from logging import getLogger
 from pathlib import Path
@@ -73,7 +73,7 @@ class AppConfig:
         num_objectives = len(evaluator.objectives)
         params = self.ga_params
         pop_size_ref_points = params.population_size * params.num_islands
-        total_pop_size = pop_size_ref_points
+        total_pop_size = min(1000, (pop_size_ref_points * 10))
         nsga3 = NSGA3(
             rng=rng,
             num_objectives=num_objectives,
@@ -102,7 +102,7 @@ class AppConfigParser(ConfigParser):
     """Parser for the application configuration."""
 
     args: Namespace
-    kwargs: dict[str, Any] = None
+    kwargs: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Post-initialization processing."""
@@ -149,38 +149,44 @@ class AppConfigParser(ConfigParser):
             weights=weights,
         )
 
+    def _get_section(self, section: str) -> SectionProxy:
+        """Get a section from the config as a dictionary."""
+        if not self.has_section(section):
+            msg = f"No '{section}' section found in the configuration file."
+            raise KeyError(msg)
+        return self[section]
+
+    def _iter_sections_prefix(self, prefix: str) -> Iterator[SectionProxy]:
+        """Iterate over sections with a specific prefix."""
+        yield from (self._get_section(s) for s in self.sections() if s.startswith(prefix))
+
+    def _parse_time(self, raw: str, fmt: str) -> datetime:
+        return datetime.strptime(raw.strip(), fmt).replace(tzinfo=UTC)
+
     def parse_teams_config(self) -> tuple[int, dict[int, int | str]]:
         """Parse and return a list of team IDs from the configuration."""
-        if not self.has_section("teams"):
-            msg = "No 'teams' section found in the configuration file."
-            raise KeyError(msg)
-
-        sec = self["teams"]
+        sec = self._get_section("teams")
         num_teams = sec.getint("num_teams", fallback=0)
-        identities_raw = sec.get("identities", fallback="").strip()
-        identities = [i.strip() for i in identities_raw.split(",") if i.strip()] if identities_raw else []
+        idents_raw = sec.get("identities", fallback="").strip()
+        idents = [i.strip() for i in idents_raw.split(",") if i.strip()] if idents_raw else []
 
-        if num_teams and not identities:
-            identities = [str(i) for i in range(1, num_teams + 1)]
-        if identities and not num_teams:
-            num_teams = len(identities)
+        if num_teams and not idents:
+            idents = [str(i) for i in range(1, num_teams + 1)]
 
-        if num_teams and identities and num_teams != len(identities):
-            msg = "Number of teams does not match number of identities."
+        if not num_teams and idents:
+            num_teams = len(idents)
+
+        if num_teams != len(idents):
+            msg = f"Number of teams ({num_teams}) does not match number of identities ({len(idents)})."
             raise ValueError(msg)
 
-        team_ids = {
-            i: (int(team_id) if team_id.isdigit() else team_id) for i, team_id in enumerate(identities, start=1)
-        }
+        team_ids = {i: (int(tid) if tid.isdigit() else tid) for i, tid in enumerate(idents, start=1)}
         return num_teams, team_ids
 
     def parse_time_config(self) -> str:
         """Parse and return the time format configuration."""
-        if not self.has_section("time"):
-            msg = "No 'time' section found in the configuration file."
-            raise KeyError(msg)
-
-        fmt_val = self["time"].getint("format", fallback=None)
+        sec = self._get_section("time")
+        fmt_val = sec.getint("format", fallback=None)
         fmt_map = {12: "%I:%M %p", 24: "%H:%M"}
         if fmt_val not in fmt_map:
             msg = "Invalid time format. Must be 12 or 24."
@@ -202,30 +208,27 @@ class AppConfigParser(ConfigParser):
         rounds: list[Round] = []
         roundreqs: dict[RoundType, int] = {}
         all_locations = self.load_location_config()
-        round_sections = (s for s in self.sections() if s.startswith("round"))
 
-        for section in round_sections:
-            self.validate_round_section(section)
-            sec = self[section]
-
+        for sec in self._iter_sections_prefix("round"):
+            self.validate_round_section(sec)
             roundtype = sec.get("round_type")
             rounds_per_team = sec.getint("rounds_per_team")
             teams_per_round = sec.getint("teams_per_round")
             duration_minutes = timedelta(minutes=sec.getint("duration_minutes"))
 
             if start_time := sec.get("start_time"):
-                start_time = datetime.strptime(start_time.strip(), time_fmt).replace(tzinfo=UTC)
+                start_time = self._parse_time(start_time, time_fmt)
 
             if stop_time := sec.get("stop_time"):
-                stop_time = datetime.strptime(stop_time.strip(), time_fmt).replace(tzinfo=UTC)
+                stop_time = self._parse_time(stop_time, time_fmt)
 
             if times := sec.get("times", fallback=[]):
-                times = [datetime.strptime(t.strip(), time_fmt).replace(tzinfo=UTC) for t in times.split(",")]
+                times = [self._parse_time(t, time_fmt) for t in times.split(",")]
                 start_time = times[0]
 
             location = sec.get("location")
             locations = sorted(
-                (loc for loc in all_locations.values() if loc.name == location),
+                (loc for loc in all_locations if loc.name == location),
                 key=lambda loc: (loc.identity, loc.side),
             )
 
@@ -252,35 +255,45 @@ class AppConfigParser(ConfigParser):
 
         return rounds, roundreqs
 
-    def load_location_config(self) -> dict[tuple[str, int | str, int, int], Location]:
-        """Parse and return a dictionary of location IDs to names from the configuration."""
-        locations = {}
-        for s in (s for s in self.sections() if s.startswith("location")):
-            sec = self[s]
+    def load_location_config(self) -> set[Location]:
+        """Parse and return a set of Location objects from the configuration."""
+        locations = set()
+        for sec in self._iter_sections_prefix("location"):
+            self.validate_location_section(sec)
             name = sec.get("name")
             sides = sec.getint("sides")
             teams_per_round = sec.getint("teams_per_round")
-            identities = sec.get("identities", "")
-            for i in (i.strip() for i in identities.split(",") if i.strip()):
-                identity = int(i) if i.isdigit() else i
+            identities_raw = sec.get("identities", "")
+            identities_iter = (i.strip() for i in identities_raw.split(",") if i.strip())
+            for ident in identities_iter:
+                identity = int(ident) if ident.isdigit() else ident
                 for j in range(1, sides + 1):
                     side = 0 if sides == 1 else j
-                    key = (name, identity, teams_per_round, side)
-                    locations[key] = Location(
-                        name=name,
-                        identity=identity,
-                        teams_per_round=teams_per_round,
-                        side=side,
+                    locations.add(
+                        Location(
+                            name=name,
+                            identity=identity,
+                            teams_per_round=teams_per_round,
+                            side=side,
+                        )
                     )
         return locations
 
-    def validate_round_section(self, section: str) -> None:
-        """Validate round sections in config file."""
-        if not self.has_section(section):
-            msg = f"Missing section: '{section}'"
-            raise KeyError(msg)
+    def validate_location_section(self, section: SectionProxy) -> None:
+        """Validate location sections in config file."""
+        required = (
+            "name",
+            "sides",
+            "teams_per_round",
+            "identities",
+        )
+        for option in required:
+            if not section.get(option):
+                msg = f"No '{option}' option found in section '{section.name}'."
+                raise KeyError(msg)
 
-        sec = self[section]
+    def validate_round_section(self, section: SectionProxy) -> None:
+        """Validate round sections in config file."""
         required = (
             "round_type",
             "rounds_per_team",
@@ -289,30 +302,26 @@ class AppConfigParser(ConfigParser):
             "location",
         )
         for option in required:
-            if not sec.get(option):
-                msg = f"No '{option}' option found in section '{section}'."
+            if not section.get(option):
+                msg = f"No '{option}' option found in section '{section.name}'."
                 raise KeyError(msg)
 
-        if not sec.get("start_time") and not sec.get("times"):
-            msg = f"Either 'start_time' or 'times' must be specified in section '{section}'."
+        if not section.get("start_time") and not section.get("times"):
+            msg = f"Either 'start_time' or 'times' must be specified in section '{section.name}'."
             raise KeyError(msg)
 
     def parse_fitness_config(self) -> tuple[float, float]:
         """Parse and return fitness-related configuration values."""
-        if not self.has_section("fitness"):
-            msg = "No 'fitness' section found in the configuration file."
-            raise KeyError(msg)
-
-        sec = self["fitness"]
+        sec = self._get_section("fitness")
         weights = (
             max(0, sec.getfloat("weight_mean", fallback=3)),
             max(0, sec.getfloat("weight_variation", fallback=1)),
             max(0, sec.getfloat("weight_range", fallback=1)),
         )
         total = sum(weights)
-        if total == 0:
-            logger.warning("All fitness weights are zero. Using equal weights.")
-            return (0.5, 0.5, 0.5)
+        if total == 0 or len(set(weights)) == 1:
+            logger.warning("All fitness weights are zero or identical. Using equal weights.")
+            return (1 / 3, 1 / 3, 1 / 3)
         return tuple(w / total for w in weights)
 
     def load_operator_config(self) -> OperatorConfig:
@@ -322,17 +331,16 @@ class AppConfigParser(ConfigParser):
             ("crossover", "crossover_ks", "", "int"): (1, 2, 4, 8),
             ("mutation", "mutation_types", "", ""): (m.value for m in MutationOp),
         }
-        operator_config = {}
-
+        params = {}
         for (section, opt, fallback, dtype), default in options.items():
             sec = f"genetic.operator.{section}"
             if self.has_option(sec, opt):
-                operator_config[opt] = tuple(self.parse_operator(sec, opt, fallback, dtype))
+                params[opt] = tuple(self.parse_operator(sec, opt, fallback, dtype))
             else:
-                operator_config[opt] = tuple(default)
+                params[opt] = tuple(default)
                 logger.warning("%s not found in config. Using defaults: %s", opt, default)
 
-        return OperatorConfig(**operator_config)
+        return OperatorConfig(**params)
 
     def parse_operator(self, section: str, option: str, fallback: str, dtype: str = "") -> Iterator[str]:
         """Parse a list of operator types from the configuration."""
@@ -344,38 +352,33 @@ class AppConfigParser(ConfigParser):
 
     def load_ga_parameters(self) -> GaParameters:
         """Build a GaParameters, overriding defaults with any provided CLI args."""
-        if not self.has_section("genetic"):
-            msg = "No 'genetic' section found in the configuration file."
-            raise KeyError(msg)
-
-        sec = self["genetic"]
-
+        sec = self._get_section("genetic")
         params = {
-            "population_size": sec.getint("population_size", fallback=16),
-            "generations": sec.getint("generations", fallback=128),
-            "offspring_size": sec.getint("offspring_size", fallback=12),
-            "crossover_chance": sec.getfloat("crossover_chance", fallback=0.5),
-            "mutation_chance": sec.getfloat("mutation_chance", fallback=0.5),
-            "num_islands": sec.getint("num_islands", fallback=10),
-            "migration_interval": sec.getint("migration_interval", fallback=10),
-            "migration_size": sec.getint("migration_size", fallback=4),
+            "population_size": sec.getint("population_size"),
+            "generations": sec.getint("generations"),
+            "offspring_size": sec.getint("offspring_size"),
+            "crossover_chance": sec.getfloat("crossover_chance"),
+            "mutation_chance": sec.getfloat("mutation_chance"),
+            "num_islands": sec.getint("num_islands"),
+            "migration_interval": sec.getint("migration_interval"),
+            "migration_size": sec.getint("migration_size"),
         }
 
-        for key in params:
-            if (cli_val := getattr(self.args, key, None)) is not None:
-                params[key] = cli_val
+        for k in params:
+            if v := getattr(self.args, k, None):
+                params[k] = v
 
         return GaParameters(**params)
 
     def load_rng(self) -> Random:
         """Set up the random number generator."""
+        sec = self._get_section("genetic")
         seed_val = ""
         if self.args.rng_seed is not None:
             seed_val = self.args.rng_seed
-        elif self.has_section("genetic") and self["genetic"].get("seed"):
-            seed_val = self["genetic"]["seed"].strip()
-
-        if not seed_val:
+        elif sec.get("seed"):
+            seed_val = sec["seed"].strip()
+        else:
             seed_val = Random().randint(*RANDOM_SEED_RANGE)
 
         try:

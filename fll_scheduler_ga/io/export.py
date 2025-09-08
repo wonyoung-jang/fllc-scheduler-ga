@@ -27,61 +27,42 @@ logger = getLogger(__name__)
 def generate_summary(args: Namespace, ga: GA) -> None:
     """Run the fll-scheduler-ga application and generate summary reports."""
     output_dir = Path(args.output_dir)
+    subdirs = setup_output_dirs(output_dir)
+    generate_plots(ga, output_dir, args)
+    schedules = ga.pareto_front() if args.front_only else ga.total_population
+    schedules.sort(key=lambda s: (s.rank, -sum(s.fitness)))
+    export_all_schedules(schedules, subdirs, ga)
+    generate_pareto_summary(ga.total_population, output_dir / "pareto_summary.csv")
+
+
+def setup_output_dirs(output_dir: Path) -> dict[str, Path]:
+    """Set up the output directories for the different export formats."""
     if output_dir.exists():
         logger.debug("Output directory %s already exists. Clearing contents.", output_dir)
         rmtree(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     logger.debug("Output directory: %s", output_dir)
 
-    generate_plots(ga, output_dir, args)
+    subdir_names = ("csv", "html", "txt", "team_schedules")
+    subdirs = {name: output_dir / name for name in subdir_names}
+    for sd in subdirs.values():
+        sd.mkdir(parents=True, exist_ok=True)
+    return subdirs
 
-    subdir_names = (
-        "csv",
-        "html",
-        "txt",
-        "team_schedules",
-    )
 
-    subdirs: dict[str, Path] = {}
-    for name in subdir_names:
-        subdirs[name] = output_dir / name
-        subdirs[name].mkdir(parents=True, exist_ok=True)
-
+def export_all_schedules(schedules: list[Schedule], subdirs: dict[str, Path], ga: GA) -> None:
+    """Export all schedules to the different formats."""
     time_fmt = ga.context.app_config.tournament.time_fmt
     csv_exporter = CsvExporter(time_fmt)
     html_exporter = HtmlExporter(time_fmt)
 
-    # Sorts by lowest rank, then highest sum of fitness
-    schedules = ga.pareto_front() if args.front_only else ga.total_population
-    schedules.sort(key=lambda s: (s.rank, -sum(s.fitness)))
-    for i, schedule in enumerate(schedules, start=1):
-        name = f"front_{schedule.rank}_schedule_{i}"
+    for i, sched in enumerate(schedules, start=1):
+        name = f"front_{sched.rank}_schedule_{i}"
 
-        csv_exporter.export(
-            schedule=schedule,
-            path=subdirs["csv"] / f"{name}.csv",
-        )
-
-        html_exporter.export(
-            schedule=schedule,
-            path=subdirs["html"] / f"{name}.html",
-        )
-
-        generate_summary_report(
-            schedule=schedule,
-            path=subdirs["txt"] / f"{name}_summary.txt",
-        )
-
-        generate_team_schedules(
-            schedule=schedule,
-            path=subdirs["team_schedules"] / f"{name}_team_schedule.csv",
-            ga=ga,
-        )
-
-    generate_pareto_summary(
-        pop=ga.total_population,
-        path=output_dir / "pareto_summary.csv",
-    )
+        csv_exporter.export(sched, subdirs["csv"] / f"{name}.csv")
+        html_exporter.export(sched, subdirs["html"] / f"{name}.html")
+        generate_summary_report(sched, subdirs["txt"] / f"{name}_summary.txt")
+        generate_team_schedules(sched, subdirs["team_schedules"] / f"{name}_team_schedule.csv", ga)
 
 
 def generate_plots(ga: GA, output_dir: Path, args: Namespace) -> None:

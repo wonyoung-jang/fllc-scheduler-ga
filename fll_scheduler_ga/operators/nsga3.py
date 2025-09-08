@@ -111,17 +111,17 @@ class NSGA3:
         pop_count = len(fronts[0])
         curr = 0
         while curr < len(fronts) and fronts[curr] and pop_count < size:
+            curr += 1
             next_front: list[int] = []
-            for i in fronts[curr]:
+            for i in fronts[curr - 1]:
                 for j in dom_list[i]:
                     dom_count[j] -= 1
                     if dom_count[j] == 0:
-                        pop[j].rank = curr + 1
+                        pop[j].rank = curr
                         next_front.append(j)
             if next_front:
                 fronts.append(next_front)
                 pop_count += len(next_front)
-            curr += 1
 
         return [[pop[i] for i in fr] for fr in fronts]
 
