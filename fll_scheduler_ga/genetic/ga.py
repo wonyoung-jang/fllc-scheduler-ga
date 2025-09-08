@@ -135,7 +135,6 @@ class GA:
         """Perform main evolution loop: generations and migrations."""
         num_generations = self.ga_params.generations
         for generation in range(1, num_generations + 1):
-            self.context.nsga3.reset_counts()
             self.migrate(generation)
             self.run_single_epoch(generation - 1)
             self.update_fitness_history()

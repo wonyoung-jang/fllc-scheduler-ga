@@ -73,11 +73,10 @@ class AppConfig:
         num_objectives = len(evaluator.objectives)
         params = self.ga_params
         pop_size_ref_points = params.population_size * params.num_islands
-        total_pop_size = min(1000, (pop_size_ref_points * 10))
         nsga3 = NSGA3(
             rng=rng,
             num_objectives=num_objectives,
-            total_size=total_pop_size,
+            total_size=pop_size_ref_points,
             island_size=params.population_size,
         )
         selection = RandomSelect(rng)

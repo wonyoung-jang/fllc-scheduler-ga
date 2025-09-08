@@ -93,12 +93,6 @@ class Island:
         self.offspring_ratio["success"] += 1
         return True
 
-    def _nsga3_select(self) -> None:
-        """NSGA-III selection."""
-        population = list(self.selected.values())
-        self.selected = self.context.nsga3.select(population=population)
-        self.handle_underpopulation()
-
     def initialize(self) -> None:
         """Initialize the population for each island."""
         pop_size = self.ga_params.population_size
@@ -195,7 +189,7 @@ class Island:
                 if child_count >= params.offspring_size:
                     break
 
-        self._nsga3_select()
+        self.selected = self.context.nsga3.select(self.selected.values())
 
     def give_migrants(self) -> Iterator[Schedule]:
         """Randomly yield migrants from population."""
@@ -208,42 +202,8 @@ class Island:
         """Receive migrants from another island and add them to the current island's population."""
         for migrant in migrants:
             self.add_to_population(migrant)
-        self._nsga3_select()
 
-    def handle_underpopulation(self) -> None:
-        """Handle underpopulation by adding new individuals to the island."""
-        pop_size = len(self.selected)
-        target = self.ga_params.population_size
-        if pop_size >= target:
-            return
-
-        choice = self.rng.choice
-        randint = self.rng.randint
-        build = self.builder.build
-        ctx = self.context
-        mutations = ctx.mutations
-        repair = ctx.repairer.repair
-        evaluate = ctx.evaluator.evaluate
-
-        while pop_size < target:
-            chosen: Schedule
-            if self.selected and mutations and choice((True, False)):
-                # clone & mutate existing individual
-                curr_pop = list(self.selected.values())
-                chosen = choice(curr_pop).clone()
-                for m in mutations:
-                    _m_str = str(m)
-                    self.mutation_ratio["total"][_m_str] += 1
-                    if m.mutate(chosen):
-                        self.mutation_ratio["success"][_m_str] += 1
-            else:
-                # brand new individual
-                seeder = Random(randint(*RANDOM_SEED_RANGE))
-                chosen = build(rng=Random(seeder.randint(*RANDOM_SEED_RANGE)))
-
-            if repair(chosen) and self.add_to_population(chosen):
-                evaluate(chosen)
-                pop_size += 1
+        self.selected = self.context.nsga3.select(self.selected.values())
 
     def finalize_island(self) -> Iterator[Schedule]:
         """Finalize the island's state after evolution."""

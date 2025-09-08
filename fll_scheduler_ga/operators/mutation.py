@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from itertools import combinations
 from logging import getLogger
 from typing import TYPE_CHECKING
 
@@ -148,22 +149,21 @@ class SwapMutation(Mutation):
         _same_timeslot = self.same_timeslot
         _same_location = self.same_location
         _match_pool = self._get_match_pool()
-        for i, match1_data in enumerate(_match_pool, start=1):
-            for match2_data in _match_pool[i:]:
-                _e1, _ = match1_data
-                _e2, _ = match2_data
-                _is_same_timeslot = _e1.timeslot == _e2.timeslot
-                _is_same_location = _e1.location == _e2.location
+        for match1_data, match2_data in combinations(_match_pool, 2):
+            _e1, _ = match1_data
+            _e2, _ = match2_data
+            _is_same_timeslot = _e1.timeslot == _e2.timeslot
+            _is_same_location = _e1.location == _e2.location
 
-                if not self._validate_swap(
-                    is_same_timeslot=_is_same_timeslot,
-                    is_same_location=_is_same_location,
-                    same_timeslot=_same_timeslot,
-                    same_location=_same_location,
-                ):
-                    continue
+            if not self._validate_swap(
+                is_same_timeslot=_is_same_timeslot,
+                is_same_location=_is_same_location,
+                same_timeslot=_same_timeslot,
+                same_location=_same_location,
+            ):
+                continue
 
-                yield match1_data, match2_data
+            yield match1_data, match2_data
 
     def _get_match_pool(self) -> list[tuple[Event, ...]]:
         """Get a pool of matches from the schedule."""
@@ -172,8 +172,9 @@ class SwapMutation(Mutation):
             return []
 
         _roundtype = self.rng.choice(list(_matches.keys()))
-        _match_pool = _matches[_roundtype]
-        return self.rng.sample(_match_pool, k=len(_match_pool))
+        match_pool = _matches[_roundtype]
+        self.rng.shuffle(match_pool)
+        return match_pool
 
     def _validate_swap(
         self,
@@ -307,11 +308,19 @@ class SwapMatchMutation(SwapMutation):
             e2a, e2b = match2_data
 
             t1a, t1b = schedule[e1a], schedule[e1b]
-            if None not in (t1a, t1b) and (t1a.conflicts(e2a, ignore=e1a) or t1b.conflicts(e2b, ignore=e1b)):
+
+            if None in (t1a, t1b):
+                continue
+
+            if t1a.conflicts(e2a, ignore=e1a) or t1b.conflicts(e2b, ignore=e1b):
                 continue
 
             t2a, t2b = schedule[e2a], schedule[e2b]
-            if None not in (t2a, t2b) and (t2a.conflicts(e1a, ignore=e2a) or t2b.conflicts(e1b, ignore=e2b)):
+
+            if None in (t2a, t2b):
+                continue
+
+            if t2a.conflicts(e1a, ignore=e2a) or t2b.conflicts(e1b, ignore=e2b):
                 continue
 
             return (e1a, e1b, t1a, t1b), (e2a, e2b, t2a, t2b)
@@ -328,12 +337,15 @@ class SwapTableSideMutation(SwapMutation):
 
     def mutate(self, schedule: Schedule) -> bool:
         """Swap the sides of two tables in a match."""
-        match_data = self.get_swap_candidates()
-
-        if match_data is None:
+        e1a, e1b = None, None
+        match_pool = self.get_swap_candidates()
+        for e1, e2 in match_pool:
+            if None not in (schedule[e1], schedule[e2]):
+                e1a, e1b = (e1, e2)
+                break
+        else:
             return False
 
-        e1a, e1b = match_data
         t1a, t1b = schedule[e1a], schedule[e1b]
 
         if None in (t1a, t1b):
@@ -351,8 +363,7 @@ class SwapTableSideMutation(SwapMutation):
 
     def get_swap_candidates(self) -> Match | None:
         """Get two matches to swap in the schedule schedule."""
-        next_swap = next(self.yield_swap_candidates(), None)
-        return self.rng.choice(next_swap) if next_swap is not None else None
+        return self._get_match_pool()
 
 
 @dataclass(slots=True)
@@ -390,11 +401,12 @@ class TimeSlotSequenceMutation(Mutation):
             chosen_rt_ts = chosen_key
 
         candidates = self._timeslot_event_map[chosen_rt_ts]
-        teams_per_round = candidates[0].location.teams_per_round
-        mutate_fn = {
+        tpr = candidates[0].location.teams_per_round
+        mutate_map = {
             1: self._mutate_singles,
             2: self._mutate_matches,
-        }.get(teams_per_round)
+        }
+        mutate_fn = mutate_map.get(tpr)
         if mutate_fn:
             return mutate_fn(schedule, candidates)
 

@@ -34,11 +34,6 @@ class NSGA3:
     def __post_init__(self) -> None:
         """Post-initialization to generate reference points."""
         self.init_ref_points()
-        self.reset_counts()
-
-    def reset_counts(self) -> None:
-        """Reset the counts for each reference point."""
-        self.niche_counts = np.zeros(len(self.ref_points), dtype=int)
 
     def init_ref_points(self) -> None:
         """Generate a set of structured reference points."""
@@ -69,14 +64,23 @@ class NSGA3:
         if not isinstance(population, list):
             population = list(population)
 
-        fronts = self.non_dominated_sort(population, size)
-        last_front = fronts[-1] if fronts else []
+        fronts = self.non_dominated_sort(population)
+        last_idx = 0
+        front_count = 0
+        for i, front in enumerate(fronts):
+            front_count += len(front)
+            if front_count >= size:
+                last_idx = i
+                break
+
+        last_front = fronts[last_idx] if fronts else []
         self.norm_and_associate(fronts)
         if len(fronts) == 1:
-            selected = [p for f in fronts for p in f]
-            return {hash(p): p for p in selected[:size]}
+            selected = [p for f in fronts for p in f[:size]]
+            return {hash(p): p for p in selected}
 
-        selected = [p for f in fronts[:-1] for p in f]
+        selected = [p for f in fronts[:last_idx] for p in f]
+        self.niche_counts = np.zeros(len(self.ref_points), dtype=int)
         self.count(p.ref_point for p in selected)
         selected.extend(
             self.niche(
@@ -86,7 +90,7 @@ class NSGA3:
         )
         return {hash(p): p for p in selected}
 
-    def non_dominated_sort(self, pop: Population, size: int) -> list[Population]:
+    def non_dominated_sort(self, pop: Population) -> list[Population]:
         """Perform non-dominated sorting on the population."""
         n = len(pop)
         dom_list: list[list[int]] = [[] for _ in range(n)]
@@ -108,9 +112,8 @@ class NSGA3:
                 fronts[0].append(i)
                 pop[i].rank = 0
 
-        pop_count = len(fronts[0])
         curr = 0
-        while curr < len(fronts) and fronts[curr] and pop_count < size:
+        while curr < len(fronts) and fronts[curr]:
             curr += 1
             next_front: list[int] = []
             for i in fronts[curr - 1]:
@@ -121,7 +124,6 @@ class NSGA3:
                         next_front.append(j)
             if next_front:
                 fronts.append(next_front)
-                pop_count += len(next_front)
 
         return [[pop[i] for i in fr] for fr in fronts]
 
@@ -159,6 +161,12 @@ class NSGA3:
                 selected += 1
                 if selected >= k:
                     break
+
+        if selected < k and pool:
+            remaining = k - selected
+            keys = list(pool.keys())
+            for key in sample(keys, min(remaining, len(keys))):
+                yield pool.pop(key)
 
     def norm_and_associate(self, fronts: list[Population]) -> None:
         """Normalize objectives then associate individuals with nearest reference points."""

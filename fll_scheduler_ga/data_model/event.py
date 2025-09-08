@@ -154,7 +154,7 @@ class EventFactory:
                     self._cached_locations[(e.roundtype, e.location)].append(e)
         return self._cached_locations
 
-    def as_matches(self) -> dict[RoundType, list[tuple[Event, ...]]]:
+    def as_matches(self) -> dict[RoundType, list[tuple[Event, Event]]]:
         """Get a mapping of RoundTypes to their matched Events."""
         if self._cached_matches is None:
             self._cached_matches = defaultdict(list)

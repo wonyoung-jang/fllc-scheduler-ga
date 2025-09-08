@@ -33,24 +33,8 @@ class Repairer:
         self.set_of_events = set(self.event_factory.build())
         self.rt_teams_needed = {rc.roundtype: rc.teams_per_round for rc in self.config.rounds}
 
-    def needs_repair(self, schedule: Schedule) -> bool:
-        """Check if the schedule needs repair."""
-        return len(schedule) != self.config.total_slots
-
-    def repair(self, schedule: Schedule, to_destroy_count: int = 1) -> bool:
-        """Repair missing assignments in the schedule.
-
-        Fills in missing events for teams by assigning them to available (unbooked) event slots.
-
-        """
-        if not self.needs_repair(schedule):
-            return True
-
-        tpr_assign_map = {
-            1: Repairer._assign_singles,
-            2: self._assign_matches,
-        }
-
+    def get_rt_tpr_maps(self, schedule: Schedule) -> tuple[dict[int, list[Team]], dict[int, list[Event]]]:
+        """Get the round type to team/player maps for the current schedule."""
         teams_by_rt_tpr: dict[tuple[int, int], dict[int, Team]] = defaultdict(list)
         teams = schedule.all_teams()
         for team in self.rng.sample(teams, k=len(teams)):
@@ -71,21 +55,41 @@ class Repairer:
             for key, value in dictionary.items():
                 dictionary[key] = dict(enumerate(value))
 
+        return teams_by_rt_tpr, events_by_rt_tpr
+
+    def repair(self, schedule: Schedule, to_destroy_count: int = 1) -> bool:
+        """Repair missing assignments in the schedule.
+
+        Fills in missing events for teams by assigning them to available (unbooked) event slots.
+
+        """
+        if len(schedule) == self.config.total_slots:
+            return True
+
+        assign_map = {
+            1: self._assign_singles,
+            2: self._assign_matches,
+        }
+
+        teams_by_rt_tpr, events_by_rt_tpr = self.get_rt_tpr_maps(schedule)
         for key, teams_for_rt in teams_by_rt_tpr.items():
             _, tpr = key
             if len(set(teams_for_rt)) < tpr:
                 break
 
-            events_for_rt = events_by_rt_tpr.get(key)
-            assign = tpr_assign_map.get(tpr)
-            if events_for_rt and assign:
-                assign(
-                    teams=teams_for_rt,
-                    events=events_for_rt,
-                    schedule=schedule,
-                )
+            if not (events_for_rt := events_by_rt_tpr.get(key)):
+                continue
 
-        if not self.needs_repair(schedule):
+            if not (assign_fn := assign_map.get(tpr)):
+                continue
+
+            assign_fn(
+                teams=teams_for_rt,
+                events=events_for_rt,
+                schedule=schedule,
+            )
+
+        if len(schedule) == self.config.total_slots:
             # input(f"Schedule {id(schedule)} ({to_destroy_count}) success: {len(schedule)}\n")
             schedule.clear_cache()
             return True
@@ -93,29 +97,14 @@ class Repairer:
         # destroy some of the schedule and recurse
         # print(f"Schedule {id(schedule)} ({to_destroy_count}) pre_destroy: {len(schedule)}")
         events = list(schedule.keys())
-        for s1 in self.rng.sample(events, k=min(to_destroy_count, len(events))):
-            if (s2 := s1.paired) and s1.location.side == 1:
-                t1 = schedule[s1]
-                t2 = schedule[s2]
-                if t1 and t2:
-                    t1.remove_event(s1)
-                    t2.remove_event(s2)
-                    t1.remove_opponent(t2)
-                    t2.remove_opponent(t1)
-                    del schedule[s1]
-                    del schedule[s2]
-            elif not s2:
-                t = schedule[s1]
-                if t:
-                    t.remove_event(s1)
-                    del schedule[s1]
+        for e in self.rng.sample(events, k=min(to_destroy_count, len(events))):
+            schedule.destroy_event(e)
 
         # print(f"Schedule {id(schedule)} ({to_destroy_count}) post_destroy: {len(schedule)}")
         schedule.clear_cache()
         return self.repair(schedule, to_destroy_count + 1)
 
-    @staticmethod
-    def _assign_singles(teams: dict[int, Team], events: dict[int, Event], schedule: Schedule) -> None:
+    def _assign_singles(self, teams: dict[int, Team], events: dict[int, Event], schedule: Schedule) -> None:
         """Assign single-team events to teams that need them."""
         for t in teams.values():
             non_conflicting_events = ((i, e) for i, e in events.items() if not t.conflicts(e))
@@ -133,12 +122,11 @@ class Repairer:
             t1 = teams.pop(self.rng.choice(list(teams.keys())))
             non_conflicting_teams = ((i, t2) for i, t2 in teams.items() if t1.identity != t2.identity)
             for i, t2 in non_conflicting_teams:
-                if Repairer._find_and_populate_match(t1, t2, events, schedule):
+                if self._find_and_populate_match(t1, t2, events, schedule):
                     teams.pop(i)
                     break
 
-    @staticmethod
-    def _find_and_populate_match(t1: Team, t2: Team, events: dict[int, Event], schedule: Schedule) -> bool:
+    def _find_and_populate_match(self, t1: Team, t2: Team, events: dict[int, Event], schedule: Schedule) -> bool:
         """Find an open match slot for two teams and populate it."""
         non_conflicting_events = (
             (i, e, e.paired)

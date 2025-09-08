@@ -119,6 +119,24 @@ class Schedule:
         self[event1] = team1
         self[event2] = team2
 
+    def destroy_event(self, e1: Event) -> None:
+        """Destroy an event and its pair if it exists."""
+        if (e2 := e1.paired) and e1.location.side == 1:
+            t1 = self[e1]
+            t2 = self[e2]
+            if t1 and t2:
+                t1.remove_event(e1)
+                t2.remove_event(e2)
+                t1.remove_opponent(t2)
+                t2.remove_opponent(t1)
+                del self[e1]
+                del self[e2]
+        elif not e2:
+            t1 = self[e1]
+            if t1:
+                t1.remove_event(e1)
+                del self[e1]
+
     def get_team(self, team_id: int | Team) -> Team | None:
         """Get a team object by its identity."""
         if isinstance(team_id, Team):
