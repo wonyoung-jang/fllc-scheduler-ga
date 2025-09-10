@@ -28,7 +28,6 @@ class NSGA3:
     num_objectives: int
     total_size: int
     island_size: int
-    niche_counts: np.ndarray = field(default=None, repr=False)
     ref_points: np.ndarray = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
@@ -58,6 +57,15 @@ class NSGA3:
         self.ref_points = np.asarray(pts, dtype=float)
         logger.debug("Generated %d reference points:\n%s", len(self.ref_points), self.ref_points)
 
+    def get_last_front_idx(self, fronts: list[Population], size: int) -> int:
+        """Determine which front is the last to be included."""
+        total = 0
+        for i, front in enumerate(fronts):
+            total += len(front)
+            if total >= size:
+                return i
+        return len(fronts) - 1
+
     def select(self, population: Population | Any, size: int | None = None) -> dict[int, Schedule]:
         """Select the next generation using NSGA-III principles."""
         size = size or self.island_size
@@ -65,25 +73,19 @@ class NSGA3:
             population = list(population)
 
         fronts = self.non_dominated_sort(population)
-        last_idx = 0
-        front_count = 0
-        for i, front in enumerate(fronts):
-            front_count += len(front)
-            if front_count >= size:
-                last_idx = i
-                break
-
-        last_front = fronts[last_idx] if fronts else []
-        self.norm_and_associate(fronts)
+        last_idx = self.get_last_front_idx(fronts, size)
+        pop = [p for f in fronts[: last_idx + 1] for p in f]
+        self.norm_and_associate(pop)
         if len(fronts) == 1:
-            selected = [p for f in fronts for p in f[:size]]
-            return {hash(p): p for p in selected}
+            selected = sorted(pop, key=lambda p: p.ref_distance)
+            return {hash(p): p for p in selected[:size]}
 
+        last_front = fronts[last_idx]
         selected = [p for f in fronts[:last_idx] for p in f]
-        self.niche_counts = np.zeros(len(self.ref_points), dtype=int)
-        self.count(p.ref_point for p in selected)
+        counts = self.count(p.ref_point for p in selected)
         selected.extend(
             self.niche(
+                counts=counts,
                 last_front=last_front,
                 k=size - len(selected),
             )
@@ -112,26 +114,26 @@ class NSGA3:
                 fronts[0].append(i)
                 pop[i].rank = 0
 
-        curr = 0
-        while curr < len(fronts) and fronts[curr]:
-            curr += 1
+        rank = 0
+        while rank < len(fronts) and fronts[rank]:
+            next_rank = rank + 1
             next_front: list[int] = []
-            for i in fronts[curr - 1]:
+            for i in fronts[rank]:
                 for j in dom_list[i]:
                     dom_count[j] -= 1
                     if dom_count[j] == 0:
-                        pop[j].rank = curr
+                        pop[j].rank = next_rank
                         next_front.append(j)
             if next_front:
                 fronts.append(next_front)
+            rank = next_rank
 
         return [[pop[i] for i in fr] for fr in fronts]
 
-    def niche(self, last_front: Population, k: int) -> Iterator[Schedule]:
+    def niche(self, counts: np.ndarray, last_front: Population, k: int) -> Iterator[Schedule]:
         """Select k individuals from the last front using a niching mechanism."""
         sample = self.rng.sample
         choice = self.rng.choice
-        counts = self.niche_counts
         pool: dict[int, Schedule] = dict(enumerate(last_front))
         selected = 0
 
@@ -168,10 +170,9 @@ class NSGA3:
             for key in sample(keys, min(remaining, len(keys))):
                 yield pool.pop(key)
 
-    def norm_and_associate(self, fronts: list[Population]) -> None:
+    def norm_and_associate(self, pop: Population) -> None:
         """Normalize objectives then associate individuals with nearest reference points."""
-        schedules = [p for f in fronts for p in f]
-        fits = np.asarray([p.fitness for p in schedules], dtype=float)
+        fits = np.asarray([p.fitness for p in pop], dtype=float)
         epsilon = 1e-12
         ideal = fits.max(axis=0)
         nadir = fits.min(axis=0)
@@ -191,16 +192,19 @@ class NSGA3:
         min_dists = dists.min(axis=1)
         ties = dists == min_dists[:, None]
         choice = self.rng.choice
-        for i, s in enumerate(schedules):
+        for i, s in enumerate(pop):
             candidates = np.nonzero(ties[i])[0]
             s.ref_point = choice(candidates)
             s.ref_distance = min_dists[i]
 
-    def count(self, idx_to_count: Iterator[int]) -> None:
+    def count(self, idx_to_count: Iterator[int]) -> np.ndarray:
         """Count how many individuals are associated with each reference point."""
+        counts = np.zeros(len(self.ref_points), dtype=int)
+        total = len(counts)
         for idx in idx_to_count:
-            if 0 <= idx < len(self.niche_counts):
-                self.niche_counts[idx] += 1
+            if 0 <= idx < total:
+                counts[idx] += 1
+        return counts
 
 
 @cache

@@ -30,17 +30,16 @@ class ScheduleBuilder:
     def build(self, rng: Random | None = None) -> Schedule:
         """Construct and return the final schedule."""
         rng = self.rng if rng is None else rng
-        events = self.event_factory.as_roundtypes()
-        for rt in events:
-            rng.shuffle(events[rt])
+        events = {}
+        for rt, evts in self.event_factory.as_roundtypes().items():
+            events[rt] = rng.sample(evts, k=len(evts))
 
-        num_teams = self.config.num_teams
-        schedule = Schedule(self.team_factory.build())
-        teams = rng.sample(schedule.all_teams(), k=num_teams)
+        schedule = Schedule(teams=self.team_factory.build(), origin="Builder")
+        teams = rng.sample(schedule.all_teams(), k=self.config.num_teams)
 
         build_map = {
-            1: self._build_singles,
-            2: self._build_matches,
+            1: self.build_singles,
+            2: self.build_matches,
         }
         tpr_reqs = {rc.roundtype: rc.teams_per_round for rc in self.config.rounds}
         for rt, evts in events.items():
@@ -51,7 +50,7 @@ class ScheduleBuilder:
         schedule.clear_cache()
         return schedule
 
-    def _build_singles(self, schedule: Schedule, rt: RoundType, events: list[Event], teams: list[Team]) -> None:
+    def build_singles(self, schedule: Schedule, rt: RoundType, events: list[Event], teams: list[Team]) -> None:
         """Book all judging events for a specific round type."""
         for event in events:
             available = (t for t in teams if t.needs_round(rt) and not t.conflicts(event))
@@ -59,7 +58,7 @@ class ScheduleBuilder:
             if team:
                 schedule.assign_single(event, team)
 
-    def _build_matches(self, schedule: Schedule, rt: RoundType, events: list[Event], teams: list[Team]) -> None:
+    def build_matches(self, schedule: Schedule, rt: RoundType, events: list[Event], teams: list[Team]) -> None:
         """Book all events for a specific round type."""
         for side1, side2 in ((e, e.paired) for e in events if e.location.side == 1):
             available = (t for t in teams if t.needs_round(rt) and not t.conflicts(side1))

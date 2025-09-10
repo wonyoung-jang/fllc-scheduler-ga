@@ -35,10 +35,12 @@ class Plot:
     save_dir: str | Path | None
     cmap_name: str
     objectives: list[FitnessObjective] = field(init=False)
+    ref_points: np.ndarray = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Post initializtion for Plot class."""
         self.objectives = list(FitnessObjective)
+        self.ref_points = self.ga.context.nsga3.ref_points
 
     def plot_fitness(self, title: str, xlabel: str, ylabel: str) -> None:
         """Create figure that summarizes how the average fitness of the first Pareto front evolved by generation.
@@ -108,6 +110,7 @@ class Plot:
             ax.scatter(dataframe[x_obj], dataframe[y_obj], c=ranks, cmap=self.cmap_name, s=60, alpha=0.8)
             ax.set(title=title, xlabel=x_obj, ylabel=y_obj)
             self._attach_colorbar(ax, ranks, label="Rank")
+            self.finalize(fig, f"pareto_scatter_{len_obj}d.png")
         elif len_obj == 3:
             fig, ax = plt.subplots(figsize=(10, 8), subplot_kw={"projection": "3d"})
             x_obj, y_obj, z_obj = self.objectives
@@ -115,8 +118,17 @@ class Plot:
             ax.scatter(dataframe[x_obj], dataframe[y_obj], dataframe[z_obj], c=ranks, cmap=self.cmap_name, s=60)
             ax.set(title=title, xlabel=x_obj, ylabel=y_obj, zlabel=z_obj, box_aspect=[1, 1, 1])
             self._attach_colorbar(ax, ranks, label="Rank")
-
-        self.finalize(fig, f"pareto_scatter_{len_obj}d.png")
+            self.finalize(fig, f"pareto_scatter_{len_obj}d.png")
+            ax.scatter(
+                self.ref_points[:, 0],
+                self.ref_points[:, 1],
+                self.ref_points[:, 2],
+                c="red",
+                s=30,
+                label="Reference Points",
+            )
+            ax.legend()
+            self.finalize(fig, f"pareto_scatter_{len_obj}d_ref.png")
 
     def finalize(self, fig: Figure, filename: str) -> None:
         """Finalize the plot by saving or showing it."""

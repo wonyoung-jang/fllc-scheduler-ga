@@ -85,7 +85,7 @@ class Crossover(ABC):
         p2_genes: Iterator[Event],
     ) -> Schedule:
         """Create a child schedule from two parents."""
-        c = Schedule(self.team_factory.build())
+        c = Schedule(teams=self.team_factory.build(), origin="Crossover")
         self._transfer_genes_from_parent1(c, p1, p1_genes)
         self._transfer_genes_from_parent2(c, p2, p2_genes)
         c.clear_cache()

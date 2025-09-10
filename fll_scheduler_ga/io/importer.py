@@ -43,7 +43,7 @@ class CsvImporter:
         self._validate_inputs()
         self._initialize_caches()
         team_factory = TeamFactory(self.config)
-        self.schedule = Schedule(team_factory.build())
+        self.schedule = Schedule(teams=team_factory.build(), origin="CSV Importer")
         self.import_schedule()
         self.schedule.clear_cache()
 

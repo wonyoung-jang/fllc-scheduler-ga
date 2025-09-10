@@ -23,16 +23,18 @@ class Schedule:
 
     teams: dict[int, Team] = field(default_factory=dict)
     schedule: Individual = field(default_factory=dict)
-    fitness: tuple[float, ...] | None = field(default=None)
-    rank: int = field(default=99)
+    fitness: tuple[float, ...] | None = None
+    rank: int = 99
+    ref_point: int = None
+    ref_distance: float = None
 
-    ref_point: int = field(default=None, repr=False)
-    ref_distance: float = field(default=None, repr=False)
+    origin: str = "Builder"
+    mutations: int = 0
 
-    _cached_all_teams: list[Team] = field(default=None, repr=False)
-    _cached_normalized_teams: dict[int, int] = field(default=None, repr=False)
-    _cached_hash: int = field(default=None, repr=False)
-    _cached_canonical_representation: tuple[tuple[int, ...], ...] = field(default=None, repr=False)
+    _cached_all_teams: list[Team] = None
+    _cached_normalized_teams: dict[int, int] = None
+    _cached_hash: int = None
+    _cached_canonical_representation: tuple[tuple[int, ...], ...] = None
 
     team_identities: ClassVar[dict[int, int | str]]
 
@@ -82,6 +84,8 @@ class Schedule:
         clone = Schedule(
             teams={i: t.clone() for i, t in self.teams.items()},
             schedule=dict(self.schedule.items()),
+            origin=self.origin,
+            mutations=self.mutations,
         )
         clone.clear_cache()
         return clone

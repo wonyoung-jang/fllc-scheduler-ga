@@ -11,6 +11,7 @@ from time import time
 from typing import TYPE_CHECKING, Any
 
 from ..config.constants import RANDOM_SEED_RANGE
+from ..operators.nsga3 import dominates
 from .builder import ScheduleBuilder
 from .island import Island
 
@@ -154,7 +155,7 @@ class GA:
         """Migrate the best individuals between islands using a random ring topology."""
         params = self.ga_params
         n = params.num_islands
-        if not (params.migration_size > 0 and generation % params.migration_interval == 0 and n > 1):
+        if not (n > 1 and params.migration_size > 0 and generation % params.migration_interval == 0):
             return
 
         islands = self.islands
@@ -254,6 +255,7 @@ class GA:
         self._log_operators(name="crossover", ratios=self._crossover_ratio, ops=self.context.crossovers)
         self._log_operators(name="mutation", ratios=self._mutation_ratio, ops=self.context.mutations)
         self._log_aggregate_stats()
+        logger.debug("Dominates cache: %s", dominates.cache_info())
         logger.debug("Fitness caches: %s", self.context.evaluator.get_cache_info())
         logger.debug("GaParameter Values: %s", str(self.ga_params))
         for island in self.islands:

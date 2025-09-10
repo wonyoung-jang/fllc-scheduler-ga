@@ -87,11 +87,11 @@ class Island:
         """Add a schedule to a specific island's population if it's not a duplicate."""
         self.offspring_ratio["total"] += 1
         key = s_hash if s_hash is not None else hash(schedule)
-        if key in self.selected:
-            return False
-        self.selected[key] = schedule
-        self.offspring_ratio["success"] += 1
-        return True
+        if key not in self.selected:
+            self.selected[key] = schedule
+            self.offspring_ratio["success"] += 1
+            return True
+        return False
 
     def initialize(self) -> None:
         """Initialize the population for each island."""
@@ -127,22 +127,25 @@ class Island:
         if created < needed:
             logger.warning("Island %d: only created %d/%d valid individuals.", self.identity, created, needed)
 
-    def mutate_child(self, child: Schedule, mutation: Mutation, *, m_roll: bool) -> bool:
+    def mutate_child(self, child: Schedule, mutation: Mutation, *, m_roll: bool = True) -> bool:
         """Mutate a child schedule."""
         if not (m_roll and mutation):
             return False
 
         m_str = str(mutation)
         self.mutation_ratio["total"][m_str] += 1
-        if not mutation.mutate(child):
-            return False
-        self.mutation_ratio["success"][m_str] += 1
-        return True
+        if mutation.mutate(child):
+            self.mutation_ratio["success"][m_str] += 1
+            child.mutations += 1
+            return True
+        return False
 
     def evolve(self, generation: int) -> None:
         """Perform main evolution loop: generations and migrations."""
         if not (pop := list(self.selected.values())):
             return
+
+        self.handle_underpopulation()
 
         child_count = 0
         params = self.ga_params
@@ -193,17 +196,29 @@ class Island:
 
     def give_migrants(self) -> Iterator[Schedule]:
         """Randomly yield migrants from population."""
-        population = list(self.selected.values())
+        keys = list(self.selected.keys())
         selection = self.context.selection
-        for s in selection.select(population, k=self.ga_params.migration_size):
-            yield self.selected.pop(hash(s))
+        for s in selection.select(keys, k=self.ga_params.migration_size):
+            yield self.selected.pop(s)
 
     def receive_migrants(self, migrants: Iterator[Schedule]) -> None:
         """Receive migrants from another island and add them to the current island's population."""
         for migrant in migrants:
             self.add_to_population(migrant)
 
-        self.selected = self.context.nsga3.select(self.selected.values())
+    def handle_underpopulation(self) -> None:
+        """Handle underpopulation by cloning existing individuals."""
+        if len(self.selected) >= self.ga_params.population_size:
+            return
+
+        ctx = self.context
+        evaluate = ctx.evaluator.evaluate
+        repair = ctx.repairer.repair
+        while len(self.selected) < self.ga_params.population_size:
+            new_sched = self.builder.build(rng=Random(self.rng.randint(*RANDOM_SEED_RANGE)))
+            if repair(new_sched):
+                evaluate(new_sched)
+                self.add_to_population(new_sched)
 
     def finalize_island(self) -> Iterator[Schedule]:
         """Finalize the island's state after evolution."""
