@@ -82,11 +82,10 @@ class Island:
             self.offspring_ratio["success"] += 1
             return True
 
-        mutation = self.rng.choice(self.context.mutations) if self.context.mutations else None
-        if mutation is None:
+        if not self.context.mutations:
             return False
 
-        self.mutate_schedule(schedule, mutation)
+        self.mutate_schedule(schedule)
         self.context.evaluator.evaluate(schedule)
         return self.add_to_population(schedule, s_hash=hash(schedule), recurse=True)
 
@@ -117,8 +116,10 @@ class Island:
         """Handle underpopulation by creating new individuals."""
         self.build_n_schedules(self.ga_params.population_size - len(self.selected))
 
-    def mutate_schedule(self, schedule: Schedule, mutation: Mutation, *, m_roll: bool = True) -> bool:
+    def mutate_schedule(self, schedule: Schedule, *, m_roll: bool = True) -> bool:
         """Mutate a child schedule."""
+        ctx = self.context
+        mutation: Mutation = self.rng.choice(ctx.mutations) if ctx.mutations else None
         if not (m_roll and mutation):
             return False
 
@@ -130,23 +131,20 @@ class Island:
             return True
         return False
 
-    def crossover_schedule(
-        self, parents: tuple[Schedule], crossover: Crossover, *, c_roll: bool = True
-    ) -> Iterator[Schedule]:
+    def crossover_schedule(self, parents: tuple[Schedule], *, c_roll: bool = True) -> Iterator[Schedule]:
         """Perform crossover between two parent schedules."""
+        ctx = self.context
+        crossover: Crossover = self.rng.choice(ctx.crossovers) if ctx.crossovers else None
         if not (c_roll and crossover):
             yield from (p.clone() for p in parents)
             return
 
-        ctx = self.context
-        check = ctx.checker.check
-        repair = ctx.repairer.repair
         c_str = str(crossover)
-        self.crossover_ratio["total"][c_str] += 1
         for child in crossover.cross(parents):
-            if check(child):
+            self.crossover_ratio["total"][c_str] += 1
+            if ctx.checker.check(child):
                 self.crossover_ratio["success"][c_str] += 1
-            repair(child)
+            ctx.repairer.repair(child)
             yield child
 
     def evolve(self) -> None:
@@ -155,21 +153,19 @@ class Island:
             return
 
         child_count = 0
-        params = self.ga_params
-        offspring_size = params.offspring_size
-        crossover_chance = params.crossover_chance
-        mutation_chance = params.mutation_chance
+        param = self.ga_params
+        offspring_size = param.offspring_size
+        crossover_chance = param.crossover_chance
+        mutation_chance = param.mutation_chance
         ctx = self.context
         evaluate = ctx.evaluator.evaluate
         random = self.rng.random
         select = ctx.selection.select
-        crossover: Crossover = self.rng.choice(ctx.crossovers) if ctx.crossovers else None
-        mutation: Mutation = self.rng.choice(ctx.mutations) if ctx.mutations else None
 
         while child_count < offspring_size:
             parents = select(pop, k=2)
-            for child in self.crossover_schedule(parents, crossover, c_roll=crossover_chance > random()):
-                self.mutate_schedule(child, mutation, m_roll=mutation_chance > random())
+            for child in self.crossover_schedule(parents, c_roll=crossover_chance > random()):
+                self.mutate_schedule(child, m_roll=mutation_chance > random())
                 evaluate(child)
                 self.add_to_population(child)
                 child_count += 1
@@ -209,7 +205,7 @@ class Island:
         if len(self.selected) < 2:
             return
 
-        num_to_mutate = max(len(self.selected) // 3, 1)
+        num_to_mutate = max(len(self.selected) // 5, 1)
         logger.debug(
             "Island %d: Stagnation detected. Triggering cataclysm, mutating %d individuals.",
             self.identity,
@@ -225,8 +221,8 @@ class Island:
                 del self.selected[key]
             else:
                 s = self.selected.pop(key)
-                for m in self.context.mutations:
-                    self.mutate_schedule(s, m, m_roll=True)
+                for _ in self.context.mutations:
+                    self.mutate_schedule(s, m_roll=True)
                 repair(s)
                 evaluate(s)
                 self.add_to_population(s)

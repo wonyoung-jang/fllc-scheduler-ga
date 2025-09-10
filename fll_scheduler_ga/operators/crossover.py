@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
     from ..config.app_config import AppConfig
     from ..data_model.event import Event, EventFactory
-    from ..data_model.team import TeamFactory
+    from ..data_model.team import Team, TeamFactory
 
 logger = getLogger(__name__)
 
@@ -86,36 +86,46 @@ class Crossover(ABC):
     ) -> Schedule:
         """Create a child schedule from two parents."""
         c = Schedule(teams=self.team_factory.build(), origin="Crossover")
-        self._transfer_genes_from_parent1(c, p1, p1_genes)
-        self._transfer_genes_from_parent2(c, p2, p2_genes)
+        self._transfer_genes(c, p1, p2, p1_genes, p2_genes)
         c.clear_cache()
         return c
 
-    def _transfer_genes_from_parent1(self, c: Schedule, p1: Schedule, evts: Iterator[Event]) -> None:
-        """Transfer genes from the first parent. Fewer checks needed."""
-        events_to_parent = ((e, e.paired, c.get_team(p1[e]), c.get_team(p1[e.paired])) for e in evts)
-        for e1, e2, t1, t2 in events_to_parent:
-            if t1 is None:
-                continue
+    def _transfer_genes(
+        self, c: Schedule, p1: Schedule, p2: Schedule, p1_genes: Iterator[Event], p2_genes: Iterator[Event]
+    ) -> None:
+        """Transfer genes from both parents."""
+        evts_from_p1 = ((e, e.paired, c.get_team(p1[e]), c.get_team(p1[e.paired])) for e in p1_genes)
+        evts_from_p2 = ((e, e.paired, c.get_team(p2[e]), c.get_team(p2[e.paired])) for e in p2_genes)
+        while True:
+            from_p1 = next(evts_from_p1, None)
+            from_p2 = next(evts_from_p2, None)
+            if from_p1 is None and from_p2 is None:
+                break
 
-            if e2 is None:
-                c.assign_single(e1, t1)
-            elif e2 and e1.location.side == 1 and t2:
-                c.assign_match(e1, e2, t1, t2)
+            self._assign_genes(c, from_p1)
+            self._assign_genes(c, from_p2)
 
-    def _transfer_genes_from_parent2(self, c: Schedule, p2: Schedule, evts: Iterator[Event]) -> None:
-        """Transfer genes from the second parent."""
-        events_to_parent = ((e, e.paired, c.get_team(p2[e]), c.get_team(p2[e.paired])) for e in evts)
-        for e1, e2, t1, t2 in events_to_parent:
-            if t1 is None or not t1.needs_round(e1.roundtype) or t1.conflicts(e1):
-                continue
+    def _assign_genes(self, c: Schedule, data: tuple[Event, Event, Team, Team] | None) -> None:
+        """Assign genes."""
+        if data is None:
+            return
 
-            if e2 is None:
-                c.assign_single(e1, t1)
-            elif e2 and e1.location.side == 1 and t2:
-                if not t2.needs_round(e2.roundtype) or t2.conflicts(e2):
-                    continue
-                c.assign_match(e1, e2, t1, t2)
+        e1, e2, t1, t2 = data
+
+        if t1 is None or not t1.needs_round(e1.roundtype) or t1.conflicts(e1):
+            return
+
+        if e2 is None:
+            c.assign_single(e1, t1)
+            return
+
+        if e1.location.side != 1:
+            return
+
+        if t2 is None or not t2.needs_round(e2.roundtype) or t2.conflicts(e2):
+            return
+
+        c.assign_match(e1, e2, t1, t2)
 
 
 @dataclass(slots=True)
@@ -359,16 +369,10 @@ class BestTeamCrossover(TeamCrossover):
         p2_update = p2_best.update
         p1_data = ((sum(t.fitness), t.events) for t in p1.all_teams())
         p2_data = ((sum(t.fitness), t.events) for t in p2.all_teams())
-        random = self.rng.random
         for (t1_fit, t1_events), (t2_fit, t2_events) in zip(p1_data, p2_data, strict=True):
             if t1_fit > t2_fit:
-                if random() > 0.1:
-                    p1_update(t1_events)
-                else:
-                    p2_update(t2_events)
-            elif random() > 0.1:
-                p2_update(t2_events)
-            else:
                 p1_update(t1_events)
+            elif t2_fit > t1_fit:
+                p2_update(t2_events)
         yield (evts_map[e] for e in p1_best)
         yield (evts_map[e] for e in p2_best.difference(p1_best))
