@@ -8,7 +8,7 @@ from logging import getLogger
 from random import Random
 from typing import TYPE_CHECKING
 
-from ..config.constants import ATTEMPTS_RANGE, RANDOM_SEED_RANGE
+from ..config.constants import RANDOM_SEED_RANGE
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -18,7 +18,6 @@ if TYPE_CHECKING:
     from ..data_model.schedule import Schedule
     from ..operators.crossover import Crossover
     from ..operators.mutation import Mutation
-    from ..operators.selection import Selection
     from .builder import ScheduleBuilder
 
 logger = getLogger(__name__)
@@ -40,26 +39,15 @@ class Island:
     crossover_ratio: dict = field(default=None, repr=False)
     mutation_ratio: dict = field(default=None, repr=False)
 
-    op_map: dict[str, dict[str, int]] = field(default_factory=dict, init=False, repr=False)
-
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
-        self.crossover_ratio = {tracker: Counter() for tracker in ("success", "total")}
-        self.mutation_ratio = {tracker: Counter() for tracker in ("success", "total")}
-        self._initialize_operator_maps()
+        trackers = ("success", "total")
+        self.crossover_ratio = {t: Counter() for t in trackers}
+        self.mutation_ratio = {t: Counter() for t in trackers}
 
     def __len__(self) -> int:
         """Return the number of individuals in the island's population."""
         return len(self.selected)
-
-    def _initialize_operator_maps(self) -> None:
-        """Create a mapping of generation to operator indices."""
-        gens = self.ga_params.generations
-        randrange = self.rng.randrange
-        len_crossovers = len(self.context.crossovers)
-        len_mutations = len(self.context.mutations)
-        self.op_map["crossovers"] = {g: randrange(len_crossovers) for g in range(gens)}
-        self.op_map["mutations"] = {g: randrange(len_mutations) for g in range(gens)}
 
     def _get_this_gen_fitness(self) -> tuple[float, ...]:
         """Calculate the average fitness of the current generation."""
@@ -83,114 +71,108 @@ class Island:
         """Get the Pareto front for each island in the population."""
         yield from (p for p in self.selected.values() if p.rank == 0)
 
-    def add_to_population(self, schedule: Schedule, s_hash: int | None = None) -> bool:
+    def add_to_population(self, schedule: Schedule, s_hash: int | None = None, *, recurse: bool = False) -> bool:
         """Add a schedule to a specific island's population if it's not a duplicate."""
-        self.offspring_ratio["total"] += 1
+        if not recurse:
+            self.offspring_ratio["total"] += 1
+
         key = s_hash if s_hash is not None else hash(schedule)
         if key not in self.selected:
             self.selected[key] = schedule
             self.offspring_ratio["success"] += 1
             return True
-        return False
+
+        mutation = self.rng.choice(self.context.mutations) if self.context.mutations else None
+        if mutation is None:
+            return False
+
+        self.mutate_schedule(schedule, mutation)
+        self.context.evaluator.evaluate(schedule)
+        return self.add_to_population(schedule, s_hash=hash(schedule), recurse=True)
+
+    def build_schedule(self) -> Schedule:
+        """Build a new offspring schedule."""
+        seed_x = self.rng.randint(*RANDOM_SEED_RANGE)
+        build_x = Random(seed_x).randint(*RANDOM_SEED_RANGE)
+        return self.builder.build(rng=Random(build_x))
+
+    def build_n_schedules(self, needed: int) -> None:
+        """Build a number of schedules."""
+        if needed == 0:
+            return
+
+        evaluate = self.context.evaluator.evaluate
+        repair = self.context.repairer.repair
+        for _ in range(needed):
+            schedule = self.build_schedule()
+            repair(schedule)
+            evaluate(schedule)
+            self.add_to_population(schedule)
 
     def initialize(self) -> None:
         """Initialize the population for each island."""
-        pop_size = self.ga_params.population_size
-        needed = pop_size - len(self.selected)
-        if needed <= 0:
-            logger.debug("Initializing island %d with 0 individuals.", self.identity)
-            return
+        self.build_n_schedules(self.ga_params.population_size - len(self.selected))
 
-        logger.debug("Initializing island %d with %d individuals.", self.identity, needed)
+    def handle_underpopulation(self) -> None:
+        """Handle underpopulation by creating new individuals."""
+        self.build_n_schedules(self.ga_params.population_size - len(self.selected))
 
-        seeder = Random(self.rng.randint(*RANDOM_SEED_RANGE))
-        attempts, max_attempts = ATTEMPTS_RANGE
-
-        build = self.builder.build
-        ctx = self.context
-        evaluate = ctx.evaluator.evaluate
-        repair = ctx.repairer.repair
-
-        created = 0
-        while created < needed and attempts < max_attempts:
-            schedule = build(rng=Random(seeder.randint(*RANDOM_SEED_RANGE)))
-            if repair(schedule) and self.add_to_population(schedule):
-                evaluate(schedule)
-                created += 1
-            elif created == 0:
-                attempts += 1
-
-        if created == 0:
-            msg = "Island %d: No valid individuals created after %d attempts. Try adjusting parameters."
-            raise RuntimeError(msg % (self.identity, attempts))
-
-        if created < needed:
-            logger.warning("Island %d: only created %d/%d valid individuals.", self.identity, created, needed)
-
-    def mutate_child(self, child: Schedule, mutation: Mutation, *, m_roll: bool = True) -> bool:
+    def mutate_schedule(self, schedule: Schedule, mutation: Mutation, *, m_roll: bool = True) -> bool:
         """Mutate a child schedule."""
         if not (m_roll and mutation):
             return False
 
         m_str = str(mutation)
         self.mutation_ratio["total"][m_str] += 1
-        if mutation.mutate(child):
+        if mutation.mutate(schedule):
             self.mutation_ratio["success"][m_str] += 1
-            child.mutations += 1
+            schedule.mutations += 1
             return True
         return False
 
-    def evolve(self, generation: int) -> None:
+    def crossover_schedule(
+        self, parents: tuple[Schedule], crossover: Crossover, *, c_roll: bool = True
+    ) -> Iterator[Schedule]:
+        """Perform crossover between two parent schedules."""
+        if not (c_roll and crossover):
+            yield from (p.clone() for p in parents)
+            return
+
+        ctx = self.context
+        check = ctx.checker.check
+        repair = ctx.repairer.repair
+        c_str = str(crossover)
+        self.crossover_ratio["total"][c_str] += 1
+        for child in crossover.cross(parents):
+            if check(child):
+                self.crossover_ratio["success"][c_str] += 1
+            repair(child)
+            yield child
+
+    def evolve(self) -> None:
         """Perform main evolution loop: generations and migrations."""
         if not (pop := list(self.selected.values())):
             return
 
-        self.handle_underpopulation()
-
         child_count = 0
         params = self.ga_params
+        offspring_size = params.offspring_size
+        crossover_chance = params.crossover_chance
+        mutation_chance = params.mutation_chance
         ctx = self.context
         evaluate = ctx.evaluator.evaluate
-        repair = ctx.repairer.repair
         random = self.rng.random
+        select = ctx.selection.select
+        crossover: Crossover = self.rng.choice(ctx.crossovers) if ctx.crossovers else None
+        mutation: Mutation = self.rng.choice(ctx.mutations) if ctx.mutations else None
 
-        selection: Selection = ctx.selection
-
-        ci = self.op_map["crossovers"][generation]
-        mi = self.op_map["mutations"][generation]
-        crossover: Crossover = ctx.crossovers[ci] if ctx.crossovers else None
-        mutation: Mutation = ctx.mutations[mi] if ctx.mutations else None
-
-        while child_count < params.offspring_size:
-            parents = selection.select(pop, k=2)
-            children = []
-            must_mutate = False
-            c_roll = params.crossover_chance > random()
-            if c_roll and crossover:
-                for child in crossover.cross(parents):
-                    c_str = str(crossover)
-                    self.crossover_ratio["total"][c_str] += 1
-                    if repair(child):
-                        self.crossover_ratio["success"][c_str] += 1
-                        evaluate(child)
-                        children.append(child)
-            else:
-                must_mutate = True  # If no crossover is performed, we must mutate clones of parents
-                children.extend(p.clone() for p in parents)
-
-            for child in children:
-                m_roll = must_mutate or params.mutation_chance > random()
-                if not self.mutate_child(child, mutation, m_roll=m_roll) and must_mutate:
-                    continue
-
-                if not self.add_to_population(child):
-                    continue
-
+        while child_count < offspring_size:
+            parents = select(pop, k=2)
+            for child in self.crossover_schedule(parents, crossover, c_roll=crossover_chance > random()):
+                self.mutate_schedule(child, mutation, m_roll=mutation_chance > random())
                 evaluate(child)
+                self.add_to_population(child)
                 child_count += 1
-
-                if child_count >= params.offspring_size:
-                    break
 
         self.selected = self.context.nsga3.select(self.selected.values())
 
@@ -206,22 +188,45 @@ class Island:
         for migrant in migrants:
             self.add_to_population(migrant)
 
-    def handle_underpopulation(self) -> None:
-        """Handle underpopulation by cloning existing individuals."""
-        if len(self.selected) >= self.ga_params.population_size:
-            return
-
-        ctx = self.context
-        evaluate = ctx.evaluator.evaluate
-        repair = ctx.repairer.repair
-        while len(self.selected) < self.ga_params.population_size:
-            new_sched = self.builder.build(rng=Random(self.rng.randint(*RANDOM_SEED_RANGE)))
-            if repair(new_sched):
-                evaluate(new_sched)
-                self.add_to_population(new_sched)
-
     def finalize_island(self) -> Iterator[Schedule]:
         """Finalize the island's state after evolution."""
         for sched in self.selected.values():
             self.context.evaluator.evaluate(sched)
             yield sched
+
+    def check_for_stagnation(self) -> bool:
+        """Check if the island's best fitness has stagnated."""
+        stagnation_len = min(self.ga_params.migration_interval, self.ga_params.generations // 5)
+        if len(self.fitness_history) < stagnation_len:
+            return False
+
+        last_fits = (sum(f) for f in self.fitness_history[-stagnation_len:])
+        first_fit = next(last_fits)
+        return not any(f > first_fit for f in last_fits)
+
+    def trigger_cataclysm(self) -> None:
+        """Heavily mutates a portion of the population to reintroduce diversity."""
+        if len(self.selected) < 2:
+            return
+
+        num_to_mutate = max(len(self.selected) // 3, 1)
+        logger.debug(
+            "Island %d: Stagnation detected. Triggering cataclysm, mutating %d individuals.",
+            self.identity,
+            num_to_mutate,
+        )
+        ctx = self.context
+        evaluate = ctx.evaluator.evaluate
+        repair = ctx.repairer.repair
+        choice = self.rng.choice
+        keys = list(self.selected.keys())
+        for key in self.rng.sample(keys, k=min(num_to_mutate, len(keys))):
+            if choice((True, False)):
+                del self.selected[key]
+            else:
+                s = self.selected.pop(key)
+                for m in self.context.mutations:
+                    self.mutate_schedule(s, m, m_roll=True)
+                repair(s)
+                evaluate(s)
+                self.add_to_population(s)

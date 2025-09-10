@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
     from ..data_model.event import EventFactory
     from ..data_model.team import TeamFactory
-    from ..genetic.fitness import FitnessEvaluator
+    from ..genetic.fitness import FitnessEvaluator, HardConstraintChecker
     from ..operators.crossover import Crossover
     from ..operators.mutation import Mutation
     from ..operators.nsga3 import NSGA3
@@ -39,6 +39,7 @@ class GaContext:
     event_factory: EventFactory
     team_factory: TeamFactory
     evaluator: FitnessEvaluator
+    checker: HardConstraintChecker
     repairer: Repairer
     nsga3: NSGA3
     selection: Selection

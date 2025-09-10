@@ -172,9 +172,7 @@ class SwapMutation(Mutation):
             return []
 
         _roundtype = self.rng.choice(list(_matches.keys()))
-        match_pool = _matches[_roundtype]
-        self.rng.shuffle(match_pool)
-        return match_pool
+        return self.rng.sample(_matches[_roundtype], k=len(_matches[_roundtype]))
 
     def _validate_swap(
         self,

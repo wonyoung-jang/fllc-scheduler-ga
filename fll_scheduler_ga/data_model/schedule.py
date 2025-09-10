@@ -84,7 +84,7 @@ class Schedule:
         clone = Schedule(
             teams={i: t.clone() for i, t in self.teams.items()},
             schedule=dict(self.schedule.items()),
-            origin=self.origin,
+            origin=f"(Clone) {self.origin}" if "(Clone)" not in self.origin else self.origin,
             mutations=self.mutations,
         )
         clone.clear_cache()
@@ -152,6 +152,10 @@ class Schedule:
         if self._cached_all_teams is None:
             self._cached_all_teams = list(self.teams.values())
         return self._cached_all_teams
+
+    def all_teams_needing_events(self) -> list[Team]:
+        """Return a list of all teams that need events."""
+        return [t for t in self.all_teams() if t.rounds_needed()]
 
     def canonical_representation(self) -> frozenset[frozenset[int]]:
         """Get a canonical representation of the schedule for hashing."""

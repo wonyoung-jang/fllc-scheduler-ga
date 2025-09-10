@@ -43,14 +43,6 @@ class MutationOp(StrEnum):
     SCRAMBLE = "Scramble"
 
 
-class HardConstraint(StrEnum):
-    """Enumeration of hard constraints for the FLL Scheduler GA."""
-
-    ALL_EVENTS_SCHEDULED = "AllEventsScheduled"
-    SCHEDULE_EXISTENCE = "ScheduleExistence"
-    TEAM_REQUIREMENTS_MET = "TeamRequirementsMet"
-
-
 class FitnessObjective(StrEnum):
     """Enumeration of fitness objectives for the FLL Scheduler GA."""
 

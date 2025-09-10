@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from hashlib import sha256
 from itertools import combinations, product
 from logging import getLogger
-from math import sqrt
+from math import exp, sqrt
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -186,8 +186,8 @@ class FitnessBenchmark:
             current_combination = [slot for combo in schedule_tuple for slot in combo]
             current_combination.sort(key=lambda ts: ts.start)
 
-            if not FitnessBenchmark._has_overlaps(current_combination):
-                score = FitnessBenchmark._score_break_time(current_combination, self.penalty)
+            if not self._has_overlaps(current_combination):
+                score = self._score_break_time(current_combination, self.penalty)
                 valid_scored_schedules.append([score, current_combination])
                 self.timeslots[frozenset(current_combination)] = score
 
@@ -221,13 +221,11 @@ class FitnessBenchmark:
         avg_score = total / 20
         logger.debug("Average score of top 20: %f", avg_score)
 
-    @staticmethod
-    def _has_overlaps(timeslots: list[TimeSlot]) -> bool:
+    def _has_overlaps(self, timeslots: list[TimeSlot]) -> bool:
         """Check if any timeslots in a sorted list overlap."""
         return any(timeslots[i + 1].overlaps(timeslots[i]) for i in range(len(timeslots) - 1))
 
-    @staticmethod
-    def _score_break_time(timeslots: list[TimeSlot], penalty: float) -> float:
+    def _score_break_time(self, timeslots: list[TimeSlot], penalty: float) -> float:
         """Calculate a break time fitness score for a non-overlapping combination of timeslots.
 
         A higher score is better.
@@ -262,6 +260,7 @@ class FitnessBenchmark:
         # The score is inverted so that a lower coefficient gives a higher score.
         coefficient = std_dev / mean_break
         ratio = 1 / (1 + coefficient)
+        mean_bonus = 0.1 * (1 / (1 + exp(-0.1 * (mean_break - 15))))
         zeros = breaks_in_minutes.count(0)
         b_penalty = penalty**zeros
-        return ratio * b_penalty
+        return (ratio * 0.9 + mean_bonus) * b_penalty

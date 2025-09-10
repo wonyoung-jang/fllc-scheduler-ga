@@ -67,21 +67,22 @@ def export_all_schedules(schedules: list[Schedule], subdirs: dict[str, Path], ga
 
 def generate_plots(ga: GA, output_dir: Path, args: Namespace) -> None:
     """Generate plots for the GA results."""
-    if not args.no_plotting and ga.total_population:
-        plot = Plot(ga, output_dir, args.cmap_name)
-        plot.plot_fitness("Fitness over time", xlabel="Generations", ylabel="Average fitnesses")
-        plot.plot_parallel("Trade-off parallel coordinates")
-        plot.plot_scatter(f"{len(ga.context.evaluator.objectives)}D scatter plot of schedules")
+    if args.no_plotting or not ga.total_population:
+        return
+
+    plot = Plot(ga, output_dir, args.cmap_name)
+    plot.plot_fitness("Fitness over time", xlabel="Generations", ylabel="Average fitnesses")
+    plot.plot_parallel("Trade-off parallel coordinates")
+    plot.plot_scatter(f"{len(ga.context.evaluator.objectives)}D scatter plot of schedules")
 
 
 def generate_summary_report(schedule: Schedule, path: Path) -> None:
     """Generate a text summary report for a single schedule."""
-    objectives = list(FitnessObjective)
-    len_objectives = [len(name) for name in objectives]
-    max_len_obj = max(len_objectives, default=0) + 1
-
     try:
         with path.open("w", encoding="utf-8") as f:
+            objectives = list(FitnessObjective)
+            len_objectives = [len(name) for name in objectives]
+            max_len_obj = max(len_objectives, default=0) + 1
             f.write(f"FLL Scheduler GA Summary Report (ID: {id(schedule)} | Hash: {hash(schedule)})\n")
 
             f.write("\n")
@@ -135,35 +136,35 @@ def generate_summary_report(schedule: Schedule, path: Path) -> None:
 
 def generate_team_schedules(schedule: Schedule, path: Path, ga: GA) -> None:
     """Generate a CSV file with team schedules, sorted by team IDs."""
-    event_factory = ga.context.event_factory
-    config = ga.context.app_config.tournament
-    event_map = event_factory.as_mapping()
-    rows = []
-    headers = ["Team"]
-
-    for r in sorted(config.rounds, key=lambda r: r.start_time):
-        rt = r.roundtype
-        count = config.round_requirements.get(rt, 0)
-        if count == 1:
-            headers.append(f"{rt.capitalize()}")
-            headers.append("")
-        else:
-            for i in range(1, count + 1):
-                headers.append(f"{rt.capitalize()} {i}")
-                headers.append("")
-
-    rows.append(headers)
-
-    for team in sorted(schedule.all_teams(), key=lambda x: x.identity):
-        row = [team.identity]
-        for event_id in sorted(team.events):
-            event = event_map.get(event_id)
-            row.append(str(event.timeslot))
-            row.append(str(event.location))
-        rows.append(row)
-
     try:
         with path.open("w", newline="", encoding="utf-8") as f:
+            event_factory = ga.context.event_factory
+            config = ga.context.app_config.tournament
+            event_map = event_factory.as_mapping()
+            rows = []
+            headers = ["Team"]
+
+            for r in sorted(config.rounds, key=lambda r: r.start_time):
+                rt = r.roundtype
+                count = config.round_requirements.get(rt, 0)
+                if count == 1:
+                    headers.append(f"{rt.capitalize()}")
+                    headers.append("")
+                else:
+                    for i in range(1, count + 1):
+                        headers.append(f"{rt.capitalize()} {i}")
+                        headers.append("")
+
+            rows.append(headers)
+
+            for team in sorted(schedule.all_teams(), key=lambda x: x.identity):
+                row = [team.identity]
+                for event_id in sorted(team.events):
+                    event = event_map.get(event_id)
+                    row.append(str(event.timeslot))
+                    row.append(str(event.location))
+                rows.append(row)
+
             writer(f).writerows(rows)
     except OSError:
         logger.exception("Failed to write team schedules to file %s", path)
@@ -178,7 +179,7 @@ def generate_pareto_summary(pop: Population, path: Path) -> None:
             for name in list(FitnessObjective):
                 f.write(f"{name}, ")
 
-            f.write("Sum, Ref Point, Ref Distance")
+            f.write("Sum, Ref Point, Ref Distance, Origin, Mutations")
             f.write("\n")
             for i, schedule in enumerate(sorted(pop, key=lambda s: (s.rank, -sum(s.fitness))), start=1):
                 f.write(f"{i:0{schedule_enum_digits}}, {id(schedule)}, {hash(schedule)}, {schedule.rank}, ")
@@ -188,7 +189,9 @@ def generate_pareto_summary(pop: Population, path: Path) -> None:
 
                 f.write(f"{sum(schedule.fitness):.4f}, ")
                 f.write(f"{schedule.ref_point if schedule.ref_point is not None else ''}, ")
-                f.write(f"{schedule.ref_distance if schedule.ref_distance is not None else ''}")
+                f.write(f"{schedule.ref_distance if schedule.ref_distance is not None else '':.3f}, ")
+                f.write(f"{schedule.origin if schedule.origin is not None else ''}, ")
+                f.write(f"{schedule.mutations if schedule.mutations is not None else ''}")
                 f.write("\n")
     except OSError:
         logger.exception("Failed to write Pareto summary to file %s", path)

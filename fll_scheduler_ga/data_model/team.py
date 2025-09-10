@@ -45,8 +45,8 @@ class Team:
         )
 
     def rounds_needed(self) -> bool:
-        """Get the total number of rounds still needed for the team."""
-        return sum(self.roundreqs.values()) > 0
+        """Check if any rounds still needed for the team."""
+        return any(v > 0 for v in self.roundreqs.values())
 
     def needs_round(self, round_type: RoundType) -> bool:
         """Check if the team still needs to participate in a given round type."""

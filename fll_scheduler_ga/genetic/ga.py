@@ -137,7 +137,7 @@ class GA:
         num_generations = self.ga_params.generations
         for generation in range(1, num_generations + 1):
             self.migrate(generation)
-            self.run_single_epoch(generation - 1)
+            self.run_single_epoch()
             self.update_fitness_history()
             self._notify_on_generation_end(
                 generation=generation,
@@ -145,11 +145,14 @@ class GA:
                 best_fitness=self._get_last_gen_fitness(),
             )
 
-    def run_single_epoch(self, generation: int) -> None:
+    def run_single_epoch(self) -> None:
         """Run a single epoch of the genetic algorithm."""
         for island in self.islands:
-            island.evolve(generation)
+            island.handle_underpopulation()
+            island.evolve()
             island.update_fitness_history()
+            if island.check_for_stagnation():
+                island.trigger_cataclysm()
 
     def migrate(self, generation: int) -> None:
         """Migrate the best individuals between islands using a random ring topology."""
@@ -159,7 +162,7 @@ class GA:
             return
 
         islands = self.islands
-        o = self.rng.randrange(0, n)  # Random offset
+        o = self.rng.randrange(1, n)  # Random offset
         for i, island in enumerate(islands):
             j = (i + o) % n
             island.receive_migrants(islands[j].give_migrants())

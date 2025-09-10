@@ -70,7 +70,8 @@ class Repairer:
             return True
 
         events = list(schedule.keys())
-        for e in self.rng.sample(events, k=min(to_destroy_count, len(events))):
+        max_events_to_destroy = len(events) // 20  # 5% of events max
+        for e in self.rng.sample(events, k=min(to_destroy_count, max_events_to_destroy)):
             schedule.destroy_event(e)
 
         schedule.clear_cache()
@@ -79,15 +80,13 @@ class Repairer:
     def get_rt_tpr_maps(self, schedule: Schedule) -> tuple[dict[int, list[Team]], dict[int, list[Event]]]:
         """Get the round type to team/player maps for the current schedule."""
         teams_by_rt_tpr: dict[tuple[int, int], dict[int, Team]] = defaultdict(list)
-        teams = schedule.all_teams()
-        for team in self.rng.sample(teams, k=len(teams)):
-            for rt, num_needed in ((rt, num) for rt, num in team.roundreqs.items() if num):
+        for t in schedule.all_teams_needing_events():
+            for rt, num_needed in ((rt, num) for rt, num in t.roundreqs.items() if num):
                 key = (rt, self.rt_teams_needed[rt])
-                teams_by_rt_tpr[key].extend(team for _ in range(num_needed))
+                teams_by_rt_tpr[key].extend(t for _ in range(num_needed))
 
         events_by_rt_tpr: dict[tuple[int, int], dict[int, Event]] = defaultdict(list)
-        events = self.set_of_events.difference(schedule.keys())
-        for e in events:
+        for e in self.set_of_events.difference(schedule.keys()):
             if (e.paired and e.location.side == 1) or e.paired is None:
                 rt = e.roundtype
                 key = (rt, self.rt_teams_needed[rt])
@@ -95,8 +94,9 @@ class Repairer:
                     events_by_rt_tpr[key].append(e)
 
         for rt_tpr in (teams_by_rt_tpr, events_by_rt_tpr):
-            for key, value in rt_tpr.items():
-                rt_tpr[key] = dict(enumerate(value))
+            for key, values in rt_tpr.items():
+                self.rng.shuffle(values)
+                rt_tpr[key] = dict(enumerate(values))
 
         return teams_by_rt_tpr, events_by_rt_tpr
 

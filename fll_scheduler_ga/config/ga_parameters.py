@@ -44,36 +44,36 @@ class GaParameters:
         """Validate the parameters."""
         if self.generations <= 0:
             self.generations = 128
-            logger.warning("Generations must be greater than 0, defaulting to 128.")
+            logger.warning("Generations must be greater than 0, defaulting to %d.", self.generations)
 
         if not (0.0 < self.crossover_chance <= 1.0):
-            self.crossover_chance = 0.5
-            logger.warning("Crossover chance must be between 0.0 and 1.0, defaulting to 0.5.")
+            self.crossover_chance = 0.6
+            logger.warning("Crossover chance must be between 0.0 and 1.0, defaulting to %f.", self.crossover_chance)
 
-        if self.population_size <= 2:
-            self.population_size = 3
-            logger.warning("Population size must be greater than 2, defaulting to 3.")
+        if self.population_size <= 1:
+            self.population_size = 2
+            logger.warning("Population size must be greater than 1, defaulting to %d.", self.population_size)
 
         if self.offspring_size < 0:
             self.offspring_size = 0
-            logger.warning("Offspring size cannot be negative, defaulting to 0.")
+            logger.warning("Offspring size cannot be negative, defaulting to %d.", self.offspring_size)
 
         if not (0.0 <= self.mutation_chance <= 1.0):
-            self.mutation_chance = 0.05
-            logger.warning("Mutation chance must be between 0.0 and 1.0, defaulting to 0.05.")
+            self.mutation_chance = 0.2
+            logger.warning("Mutation chance must be between 0.0 and 1.0, defaulting to %f.", self.mutation_chance)
 
         if self.num_islands < 1:
             self.num_islands = 1
-            logger.warning("Number of islands must be at least 1, defaulting to 1.")
+            logger.warning("Number of islands must be at least 1, defaulting to %d.", self.num_islands)
 
         if self.migration_interval <= 0:
-            self.migration_interval = 10
-            logger.warning("Migration interval must be positive, defaulting to 10.")
+            self.migration_interval = 15
+            logger.warning("Migration interval must be positive, defaulting to %d.", self.migration_interval)
 
         if self.migration_size < 0:
             self.migration_size = 0
-            logger.warning("Migration size cannot be negative, defaulting to 0.")
+            logger.warning("Migration size cannot be negative, defaulting to %d.", self.migration_size)
 
         if self.num_islands > 1 and self.migration_size >= self.population_size:
-            self.migration_size = max(1, self.population_size // 4)
-            logger.warning("Migration size is >= population size, defaulting to max(1, 25%%): %i", self.migration_size)
+            self.migration_size = max(1, self.population_size // 5)
+            logger.warning("Migration size is >= population size, defaulting to max(1, 20%%): %i", self.migration_size)

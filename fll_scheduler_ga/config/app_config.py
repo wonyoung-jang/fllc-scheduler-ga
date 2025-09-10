@@ -15,7 +15,7 @@ from ..data_model.location import Location
 from ..data_model.schedule import Schedule
 from ..data_model.team import TeamFactory
 from ..data_model.time import TimeSlot
-from ..genetic.fitness import FitnessEvaluator
+from ..genetic.fitness import FitnessEvaluator, HardConstraintChecker
 from ..operators.crossover import build_crossovers
 from ..operators.mutation import build_mutations
 from ..operators.nsga3 import NSGA3
@@ -69,6 +69,7 @@ class AppConfig:
         repairer = Repairer(rng, tconfig, event_factory)
         benchmark = FitnessBenchmark(tconfig, event_factory)
         evaluator = FitnessEvaluator(tconfig, benchmark)
+        checker = HardConstraintChecker(tconfig)
 
         num_objectives = len(evaluator.objectives)
         params = self.ga_params
@@ -89,6 +90,7 @@ class AppConfig:
             team_factory=team_factory,
             repairer=repairer,
             evaluator=evaluator,
+            checker=checker,
             nsga3=nsga3,
             selection=selection,
             crossovers=crossovers,

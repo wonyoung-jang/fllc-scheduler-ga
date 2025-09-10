@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from collections import Counter
 from dataclasses import dataclass, field
 from logging import getLogger
 from math import sqrt
 from typing import TYPE_CHECKING, Any
 
-from ..config.constants import FitnessObjective, HardConstraint
+from ..config.constants import FitnessObjective
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -22,43 +21,63 @@ logger = getLogger(__name__)
 
 
 @dataclass(slots=True)
+class HardConstraintChecker:
+    """Validates hard constraints for a schedule."""
+
+    config: TournamentConfig
+
+    def check(self, schedule: Schedule) -> bool:
+        """Check the hard constraints of a schedule."""
+        if not schedule:
+            return False
+
+        if len(schedule) != self.config.total_slots:
+            return False
+
+        return not any(team.rounds_needed() for team in schedule.all_teams())
+
+
+@dataclass(slots=True)
+class TwoTierCache:
+    """Two-tier cache for fitness evaluation."""
+
+    hot_cache: dict[Any, float] = field(default_factory=dict)
+    cold_cache: dict[Any, float] = field(default_factory=dict)
+    hits: int = 0
+    misses: int = 0
+
+    def get(self, key: Any) -> float | None:
+        """Get a value from the cache."""
+        if key in self.hot_cache:
+            self.hits += 1
+            return self.hot_cache[key]
+
+        if key in self.cold_cache:
+            self.misses += 1
+            value = self.cold_cache.pop(key)
+            self.hot_cache[key] = value
+            return value
+
+        return None
+
+
+@dataclass(slots=True)
 class FitnessEvaluator:
     """Calculates the fitness of a schedule."""
 
     config: TournamentConfig
     benchmark: FitnessBenchmark
-    bt_cache: dict[Any, float] = field(default=None, init=False, repr=False)
-    tc_cache: dict[Any, float] = field(default=None, init=False, repr=False)
-    ov_cache: dict[Any, float] = field(default=None, init=False, repr=False)
     objectives: list[FitnessObjective] = field(default_factory=list, init=False)
-    hit_bt_cache: dict[Any, float] = field(default_factory=dict, init=False, repr=False)
-    hit_tc_cache: dict[Any, float] = field(default_factory=dict, init=False, repr=False)
-    hit_ov_cache: dict[Any, float] = field(default_factory=dict, init=False, repr=False)
-    cache_info: dict[Any, Counter] = field(default_factory=dict, init=False, repr=False)
+    cache_map: dict[FitnessObjective, TwoTierCache] = None
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the configuration."""
         self.objectives.extend(list(FitnessObjective))
-        self.cache_info = {k: Counter() for k in self.objectives}
-        self.bt_cache = self.benchmark.timeslots
-        self.tc_cache = self.benchmark.locations
-        self.ov_cache = self.benchmark.opponents
-
-    def check(self, schedule: Schedule) -> bool:
-        """Check if the schedule meets hard constraints."""
-        if not schedule:
-            logger.debug("%s: %s", HardConstraint.SCHEDULE_EXISTENCE, "Schedule is empty")
-            return False
-
-        if len(schedule) < self.config.total_slots:
-            logger.debug("%s: %s", HardConstraint.ALL_EVENTS_SCHEDULED, "Not all events are scheduled")
-            return False
-
-        if any(team.rounds_needed() for team in schedule.all_teams()):
-            logger.debug("%s: %s", HardConstraint.TEAM_REQUIREMENTS_MET, "Some teams have unmet round requirements")
-            return False
-
-        return True
+        self.cache_map = {
+            FitnessObjective.BREAK_TIME: TwoTierCache(cold_cache=self.benchmark.timeslots),
+            FitnessObjective.LOCATION_CONSISTENCY: TwoTierCache(cold_cache=self.benchmark.locations),
+            FitnessObjective.OPPONENT_VARIETY: TwoTierCache(cold_cache=self.benchmark.opponents),
+        }
 
     def evaluate(self, schedule: Schedule) -> None:
         """Evaluate the fitness of a schedule.
@@ -76,10 +95,6 @@ class FitnessEvaluator:
             - Range: Difference between the maximum and minimum scores for each objective.
 
         """
-        if not self.check(schedule):
-            schedule.fitness = None
-            return
-
         scores = self.aggregate_team_fitnesses(schedule.all_teams())
         mean_s = self.get_mean_scores(scores)
         vari_s = self.get_variation_scores(scores, mean_s)
@@ -99,26 +114,20 @@ class FitnessEvaluator:
         """Aggregate fitness scores for all teams in the schedule."""
         objectives = self.objectives
         scores: dict[FitnessObjective, list[float]] = {obj: [] for obj in objectives}
-        cache_map = {
-            FitnessObjective.BREAK_TIME: (self.hit_bt_cache, self.bt_cache),
-            FitnessObjective.LOCATION_CONSISTENCY: (self.hit_tc_cache, self.tc_cache),
-            FitnessObjective.OPPONENT_VARIETY: (self.hit_ov_cache, self.ov_cache),
-        }
-        cache_info = self.cache_info
+        cache_map = self.cache_map
         for team in all_teams:
             keys = team.get_fitness_keys()
             vals = []
             for obj, key in zip(objectives, keys, strict=True):
-                hit_cache, main_cache = cache_map[obj]
-                if (val := hit_cache.get(key)) is None:
-                    val = hit_cache.setdefault(key, main_cache.pop(key))
-                    cache_info[obj]["miss"] += 1
-                else:
-                    cache_info[obj]["hit"] += 1
+                cache = cache_map[obj]
+                val = cache.get(key)
+                if val is None:
+                    logger.error("Fitness evaluation failed to retrieve value from cache for %s with key %s", obj, key)
+                    val = 0.0
                 scores[obj].append(val)
                 vals.append(val)
             team.fitness = tuple(vals)
-        return tuple(scores[obj] for obj in scores)
+        return tuple(scores.values())
 
     def get_mean_scores(self, scores: tuple[list[float], ...]) -> tuple[float, ...]:
         """Calculate the mean scores for each objective."""
@@ -140,6 +149,6 @@ class FitnessEvaluator:
         """Calculate the range of scores for each objective."""
         yield from (1 / (1 + max(lst) - min(lst)) if lst else 1 for lst in scores)
 
-    def get_cache_info(self) -> dict[FitnessObjective, Counter[str, int]]:
+    def get_cache_info(self) -> dict[FitnessObjective, str]:
         """Get cache information for fitness evaluations."""
-        return self.cache_info
+        return {obj: f"Hits: {cache.hits}, Misses: {cache.misses}" for obj, cache in self.cache_map.items()}

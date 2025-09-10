@@ -359,10 +359,16 @@ class BestTeamCrossover(TeamCrossover):
         p2_update = p2_best.update
         p1_data = ((sum(t.fitness), t.events) for t in p1.all_teams())
         p2_data = ((sum(t.fitness), t.events) for t in p2.all_teams())
+        random = self.rng.random
         for (t1_fit, t1_events), (t2_fit, t2_events) in zip(p1_data, p2_data, strict=True):
-            if t1_fit > t2_fit * 0.9:
-                p1_update(t1_events)
-            elif t2_fit > t1_fit * 0.9:
+            if t1_fit > t2_fit:
+                if random() > 0.1:
+                    p1_update(t1_events)
+                else:
+                    p2_update(t2_events)
+            elif random() > 0.1:
                 p2_update(t2_events)
+            else:
+                p1_update(t1_events)
         yield (evts_map[e] for e in p1_best)
         yield (evts_map[e] for e in p2_best.difference(p1_best))
