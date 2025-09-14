@@ -9,7 +9,7 @@ from .event import Event
 from .team import Team
 
 if TYPE_CHECKING:
-    from collections.abc import ItemsView, KeysView, ValuesView
+    from collections.abc import ItemsView, Iterator, KeysView, ValuesView
 
 
 type Population = list[Schedule]
@@ -30,6 +30,7 @@ class Schedule:
 
     origin: str = "Builder"
     mutations: int = 0
+    clones: int = 0
 
     _cached_all_teams: list[Team] = None
     _cached_normalized_teams: dict[int, int] = None
@@ -37,9 +38,6 @@ class Schedule:
     _cached_canonical_representation: tuple[tuple[int, ...], ...] = None
 
     team_identities: ClassVar[dict[int, int | str]]
-
-    def __post_init__(self) -> None:
-        """Post-initialization processing."""
 
     def __len__(self) -> int:
         """Return the number of scheduled events."""
@@ -84,8 +82,10 @@ class Schedule:
         clone = Schedule(
             teams={i: t.clone() for i, t in self.teams.items()},
             schedule=dict(self.schedule.items()),
-            origin=f"(Clone) {self.origin}" if "(Clone)" not in self.origin else self.origin,
+            origin=self.origin,
             mutations=self.mutations,
+            clones=self.clones + 1,
+            fitness=self.fitness,
         )
         clone.clear_cache()
         return clone
@@ -153,9 +153,9 @@ class Schedule:
             self._cached_all_teams = list(self.teams.values())
         return self._cached_all_teams
 
-    def all_teams_needing_events(self) -> list[Team]:
-        """Return a list of all teams that need events."""
-        return [t for t in self.all_teams() if t.rounds_needed()]
+    def all_teams_needing_events(self) -> Iterator[Team]:
+        """Yield all teams that need events."""
+        yield from (t for t in self.all_teams() if t.rounds_needed())
 
     def canonical_representation(self) -> frozenset[frozenset[int]]:
         """Get a canonical representation of the schedule for hashing."""

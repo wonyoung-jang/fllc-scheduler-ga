@@ -175,23 +175,24 @@ def generate_pareto_summary(pop: Population, path: Path) -> None:
     try:
         with path.open("w", encoding="utf-8") as f:
             schedule_enum_digits = len(str(len(pop)))
-            f.write("Schedule, ID, Hash, Rank, ")
+            f.write("Schedule,ID,Hash,Rank,")
             for name in list(FitnessObjective):
-                f.write(f"{name}, ")
+                f.write(f"{name},")
 
-            f.write("Sum, Ref Point, Ref Distance, Origin, Mutations")
+            f.write("Sum,Ref Point,Ref Distance,Origin,Mutations,Clones")
             f.write("\n")
             for i, schedule in enumerate(sorted(pop, key=lambda s: (s.rank, -sum(s.fitness))), start=1):
-                f.write(f"{i:0{schedule_enum_digits}}, {id(schedule)}, {hash(schedule)}, {schedule.rank}, ")
+                f.write(f"{i:0{schedule_enum_digits}},{id(schedule)},{hash(schedule)},{schedule.rank},")
 
                 for score in schedule.fitness:
-                    f.write(f"{score:.4f}, ")
+                    f.write(f"{score:.4f},")
 
-                f.write(f"{sum(schedule.fitness):.4f}, ")
-                f.write(f"{schedule.ref_point if schedule.ref_point is not None else ''}, ")
-                f.write(f"{schedule.ref_distance if schedule.ref_distance is not None else '':.3f}, ")
-                f.write(f"{schedule.origin if schedule.origin is not None else ''}, ")
-                f.write(f"{schedule.mutations if schedule.mutations is not None else ''}")
+                f.write(f"{sum(schedule.fitness):.4f},")
+                f.write(f"{schedule.ref_point if schedule.ref_point is not None else ''},")
+                f.write(f"{schedule.ref_distance if schedule.ref_distance is not None else '':.3f},")
+                f.write(f"{schedule.origin if schedule.origin is not None else ''},")
+                f.write(f"{schedule.mutations if schedule.mutations is not None else ''},")
+                f.write(f"{schedule.clones if schedule.clones is not None else ''}")
                 f.write("\n")
     except OSError:
         logger.exception("Failed to write Pareto summary to file %s", path)

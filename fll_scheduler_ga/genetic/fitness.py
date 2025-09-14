@@ -4,18 +4,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from logging import getLogger
-from math import sqrt
 from typing import TYPE_CHECKING, Any
+
+import numpy as np
 
 from ..config.constants import FitnessObjective
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
-
     from ..config.benchmark import FitnessBenchmark
     from ..config.config import TournamentConfig
     from ..data_model.schedule import Schedule
-    from ..data_model.team import Team
 
 logger = getLogger(__name__)
 
@@ -80,7 +78,11 @@ class FitnessEvaluator:
         }
 
     def evaluate(self, schedule: Schedule) -> None:
-        """Evaluate the fitness of a schedule.
+        """Evaluate the fitness of a schedule using vectorized NumPy operations.
+
+        This is the primary performance-critical function in the GA. By creating one
+        large NumPy array for all team scores, we can use fast, vectorized functions
+        to calculate mean, variation, and range, avoiding slow Python loops.
 
         Args:
             schedule (Schedule): The schedule to evaluate.
@@ -95,59 +97,49 @@ class FitnessEvaluator:
             - Range: Difference between the maximum and minimum scores for each objective.
 
         """
-        scores = self.aggregate_team_fitnesses(schedule.all_teams())
-        mean_s = self.get_mean_scores(scores)
-        vari_s = self.get_variation_scores(scores, mean_s)
-        rnge_s = self.get_range_scores(scores)
-        mw, vw, rw = self.config.weights
-        schedule.fitness = tuple(
-            (m * mw) + (v * vw) + (r * rw)
-            for m, v, r in zip(
-                mean_s,
-                vari_s,
-                rnge_s,
-                strict=True,
-            )
-        )
+        all_teams = schedule.all_teams()
+        num_teams = len(all_teams)
+        if num_teams == 0:
+            schedule.fitness = tuple([0.0] * len(self.objectives))
+            return
 
-    def aggregate_team_fitnesses(self, all_teams: list[Team]) -> tuple[list[float], ...]:
-        """Aggregate fitness scores for all teams in the schedule."""
-        objectives = self.objectives
-        scores: dict[FitnessObjective, list[float]] = {obj: [] for obj in objectives}
-        cache_map = self.cache_map
+        # Main "setup"
+        team_scores_list = []
         for team in all_teams:
-            keys = team.get_fitness_keys()
             vals = []
-            for obj, key in zip(objectives, keys, strict=True):
-                cache = cache_map[obj]
-                val = cache.get(key)
+            keys = team.get_fitness_keys()
+            for obj, key in zip(self.objectives, keys, strict=True):
+                val = self.cache_map[obj].get(key)
                 if val is None:
-                    logger.error("Fitness evaluation failed to retrieve value from cache for %s with key %s", obj, key)
+                    logger.error("Cache miss for %s with key %s", obj, key)
                     val = 0.0
-                scores[obj].append(val)
                 vals.append(val)
             team.fitness = tuple(vals)
-        return tuple(scores.values())
+            team_scores_list.append(vals)
 
-    def get_mean_scores(self, scores: tuple[list[float], ...]) -> tuple[float, ...]:
-        """Calculate the mean scores for each objective."""
-        return tuple(sum(s) / len(s) for s in scores)
+        # Shape (num_teams, num_objectives)
+        scores = np.array(team_scores_list, dtype=float)
 
-    def get_variation_scores(self, scores: tuple[list[float], ...], means: tuple[float, ...]) -> Iterator[float]:
-        """Calculate the coefficient of variation for each objective."""
-        for lst, mean in zip(scores, means, strict=True):
-            n = len(lst)
-            if n == 0 or mean == 0:
-                yield 1
-                continue
-            ss = sum((x - mean) ** 2 for x in lst)
-            std_dev = sqrt(ss / n)
-            coeff = std_dev / mean
-            yield 1 / (1 + coeff) if coeff else 1
+        # Calculate mean scores for each objective (column-wise mean)
+        mean_s = np.mean(scores, axis=0)
 
-    def get_range_scores(self, scores: tuple[list[float], ...]) -> Iterator[float]:
-        """Calculate the range of scores for each objective."""
-        yield from (1 / (1 + max(lst) - min(lst)) if lst else 1 for lst in scores)
+        # Calculate standard deviation for each objective
+        std_devs = np.std(scores, axis=0)
+
+        # Calculate Coefficient of Variation scores
+        epsilon = 1e-12  # Avoid division by zero
+        coeffs_of_variation = std_devs / (mean_s + epsilon)
+        vari_s = 1 / (1 + coeffs_of_variation)
+
+        # Calculate Range scores (vectorized)
+        ranges = np.ptp(scores, axis=0)  # ptp = "peak to peak" (max - min) for each objective
+        rnge_s = 1 / (1 + ranges)
+
+        # Combine weighted scores into the final fitness tuple
+        mw, vw, rw = self.config.weights
+        final_scores = (mean_s * mw) + (vari_s * vw) + (rnge_s * rw)
+
+        schedule.fitness = tuple(final_scores)
 
     def get_cache_info(self) -> dict[FitnessObjective, str]:
         """Get cache information for fitness evaluations."""

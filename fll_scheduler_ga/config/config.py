@@ -69,12 +69,7 @@ class Round:
             return 0
 
         total_teams = self.num_teams * self.rounds_per_team
-        min_slots = ceil(total_teams / len(self.locations))
-        if self.stop_time:
-            total_time = self.stop_time - self.start_time
-            slots_available = int(total_time / self.duration_minutes)
-            return max(min_slots, slots_available)
-        return min_slots
+        return ceil(total_teams / len(self.locations))
 
     def init_timeslots(self) -> None:
         """Initialize the timeslots for the round."""

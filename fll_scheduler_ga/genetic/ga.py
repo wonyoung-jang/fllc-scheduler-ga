@@ -66,7 +66,7 @@ class GA:
                 Random(seeder.randint(*RANDOM_SEED_RANGE)),
                 builder,
                 self.context,
-                self.ga_params,
+                self.ga_params.clone(),
             )
             for i in range(1, self.ga_params.num_islands + 1)
         )
@@ -136,8 +136,9 @@ class GA:
         """Perform main evolution loop: generations and migrations."""
         num_generations = self.ga_params.generations
         for generation in range(1, num_generations + 1):
-            self.migrate(generation)
-            self.run_single_epoch()
+            if self.migrate_condition(generation):
+                self.migrate()
+            self.run_generation()
             self.update_fitness_history()
             self._notify_on_generation_end(
                 generation=generation,
@@ -145,27 +146,34 @@ class GA:
                 best_fitness=self._get_last_gen_fitness(),
             )
 
-    def run_single_epoch(self) -> None:
+    def run_generation(self) -> None:
         """Run a single epoch of the genetic algorithm."""
         for island in self.islands:
             island.handle_underpopulation()
             island.evolve()
             island.update_fitness_history()
+
+    def migrate_condition(self, generation: int) -> bool:
+        """Check if migration should occur."""
+        return (
+            self.ga_params.num_islands > 1
+            and self.ga_params.migration_size > 0
+            and generation % self.ga_params.migration_interval == 0
+        )
+
+    def migrate(self) -> None:
+        """Migrate the best individuals between islands using a random 1 -> 2 ring topology."""
+        islands = self.islands
+        n = len(islands)
+        o1, o2 = self.rng.sample(range(1, n), k=2)
+        for i, island in enumerate(islands):
             if island.check_for_stagnation():
                 island.trigger_cataclysm()
 
-    def migrate(self, generation: int) -> None:
-        """Migrate the best individuals between islands using a random ring topology."""
-        params = self.ga_params
-        n = params.num_islands
-        if not (n > 1 and params.migration_size > 0 and generation % params.migration_interval == 0):
-            return
-
-        islands = self.islands
-        o = self.rng.randrange(1, n)  # Random offset
-        for i, island in enumerate(islands):
-            j = (i + o) % n
+            j = (i + o1) % n
+            k = (i + o2) % n
             island.receive_migrants(islands[j].give_migrants())
+            island.receive_migrants(islands[k].give_migrants())
 
     def _notify_on_start(self, num_generations: int) -> None:
         """Notify observers when the genetic algorithm run starts."""
@@ -260,7 +268,6 @@ class GA:
         self._log_aggregate_stats()
         logger.debug("Dominates cache: %s", dominates.cache_info())
         logger.debug("Fitness caches: %s", self.context.evaluator.get_cache_info())
-        logger.debug("GaParameter Values: %s", str(self.ga_params))
         for island in self.islands:
             logger.debug("Island %d Fitness: %.2f", island.identity, sum(island.get_last_gen_fitness()))
         logger.debug("Total time taken: %.2f seconds", time() - start_time)

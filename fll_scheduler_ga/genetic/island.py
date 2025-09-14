@@ -86,7 +86,6 @@ class Island:
             return False
 
         self.mutate_schedule(schedule)
-        self.context.evaluator.evaluate(schedule)
         return self.add_to_population(schedule, s_hash=hash(schedule), recurse=True)
 
     def build_schedule(self) -> Schedule:
@@ -110,6 +109,11 @@ class Island:
 
     def initialize(self) -> None:
         """Initialize the population for each island."""
+        logger.debug(
+            "Island %d: Initializing population with %d individuals",
+            self.identity,
+            self.ga_params.population_size - len(self.selected),
+        )
         self.build_n_schedules(self.ga_params.population_size - len(self.selected))
 
     def handle_underpopulation(self) -> None:
@@ -128,6 +132,7 @@ class Island:
         if mutation.mutate(schedule):
             self.mutation_ratio["success"][m_str] += 1
             schedule.mutations += 1
+            ctx.evaluator.evaluate(schedule)
             return True
         return False
 
@@ -145,6 +150,7 @@ class Island:
             if ctx.checker.check(child):
                 self.crossover_ratio["success"][c_str] += 1
             ctx.repairer.repair(child)
+            ctx.evaluator.evaluate(child)
             yield child
 
     def evolve(self) -> None:
@@ -152,25 +158,25 @@ class Island:
         if not (pop := list(self.selected.values())):
             return
 
-        child_count = 0
         param = self.ga_params
-        offspring_size = param.offspring_size
+        noffspring = param.offspring_size
         crossover_chance = param.crossover_chance
         mutation_chance = param.mutation_chance
         ctx = self.context
-        evaluate = ctx.evaluator.evaluate
         random = self.rng.random
         select = ctx.selection.select
 
-        while child_count < offspring_size:
-            parents = select(pop, k=2)
-            for child in self.crossover_schedule(parents, c_roll=crossover_chance > random()):
-                self.mutate_schedule(child, m_roll=mutation_chance > random())
-                evaluate(child)
-                self.add_to_population(child)
-                child_count += 1
+        nchild = 0
+        while nchild < noffspring:
+            for child in self.crossover_schedule(select(pop, k=2), c_roll=crossover_chance > random()):
+                if self.mutate_schedule(child, m_roll=mutation_chance > random()):
+                    self.add_to_population(child)
+                    nchild += 1
+                    if nchild >= noffspring:
+                        break
 
-        self.selected = self.context.nsga3.select(self.selected.values())
+        pop = list(self.selected.values())
+        self.selected = self.context.nsga3.select(pop)
 
     def give_migrants(self) -> Iterator[Schedule]:
         """Randomly yield migrants from population."""
@@ -197,8 +203,8 @@ class Island:
             return False
 
         last_fits = (sum(f) for f in self.fitness_history[-stagnation_len:])
-        first_fit = next(last_fits)
-        return not any(f > first_fit for f in last_fits)
+        first = next(last_fits)
+        return not any(f > first for f in last_fits)
 
     def trigger_cataclysm(self) -> None:
         """Heavily mutates a portion of the population to reintroduce diversity."""
@@ -211,18 +217,13 @@ class Island:
             self.identity,
             num_to_mutate,
         )
-        ctx = self.context
-        evaluate = ctx.evaluator.evaluate
-        repair = ctx.repairer.repair
-        choice = self.rng.choice
+        random = self.rng.random
         keys = list(self.selected.keys())
         for key in self.rng.sample(keys, k=min(num_to_mutate, len(keys))):
-            if choice((True, False)):
+            if random() < 0.05:
                 del self.selected[key]
             else:
-                s = self.selected.pop(key)
+                s = self.selected.pop(key) if random() < 0.5 else self.selected[key].clone()
                 for _ in self.context.mutations:
                     self.mutate_schedule(s, m_roll=True)
-                repair(s)
-                evaluate(s)
                 self.add_to_population(s)

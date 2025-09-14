@@ -33,7 +33,7 @@ class Repairer:
         self.set_of_events = set(self.event_factory.build())
         self.rt_teams_needed = {rc.roundtype: rc.teams_per_round for rc in self.config.rounds}
 
-    def repair(self, schedule: Schedule, to_destroy_count: int = 1) -> bool:
+    def repair(self, schedule: Schedule) -> bool:
         """Repair missing assignments in the schedule.
 
         Fills in missing events for teams by assigning them to available (unbooked) event slots.
@@ -70,12 +70,10 @@ class Repairer:
             return True
 
         events = list(schedule.keys())
-        max_events_to_destroy = len(events) // 20  # 5% of events max
-        for e in self.rng.sample(events, k=min(to_destroy_count, max_events_to_destroy)):
-            schedule.destroy_event(e)
-
+        e = self.rng.choice(events)
+        schedule.destroy_event(e)
         schedule.clear_cache()
-        return self.repair(schedule, to_destroy_count + 1)
+        return self.repair(schedule)
 
     def get_rt_tpr_maps(self, schedule: Schedule) -> tuple[dict[int, list[Team]], dict[int, list[Event]]]:
         """Get the round type to team/player maps for the current schedule."""

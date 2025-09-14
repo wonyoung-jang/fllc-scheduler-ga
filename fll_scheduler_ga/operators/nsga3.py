@@ -77,8 +77,8 @@ class NSGA3:
         pop = [p for f in fronts[: last_idx + 1] for p in f]
         self.norm_and_associate(pop)
         if len(fronts) == 1:
-            selected = sorted(pop, key=lambda p: p.ref_distance)
-            return {hash(p): p for p in selected[:size]}
+            selected = self.rng.sample(pop, k=size)
+            return {hash(p): p for p in selected}
 
         last_front = fronts[last_idx]
         selected = [p for f in fronts[:last_idx] for p in f]
@@ -97,8 +97,8 @@ class NSGA3:
         n = len(pop)
         dom_list: list[list[int]] = [[] for _ in range(n)]
         dom_count = np.zeros(n, dtype=int)
-        fits = [p.fitness for p in pop]
 
+        fits = [p.fitness for p in pop]
         for i, fi in enumerate(fits):
             for j, fj in enumerate(fits[i + 1 :], start=i + 1):
                 if dominates(fi, fj):
@@ -174,28 +174,35 @@ class NSGA3:
         """Normalize objectives then associate individuals with nearest reference points."""
         fits = np.asarray([p.fitness for p in pop], dtype=float)
         epsilon = 1e-12
+
         ideal = fits.max(axis=0)
         nadir = fits.min(axis=0)
+
         span = ideal - nadir
-        span[span == 0] = epsilon
-        norm = (fits - nadir) / span
+        span = np.where(span == 0.0, epsilon, span)
+
+        norm = (ideal - fits) / span
 
         pts = self.ref_points
-        norm_sq = np.sum(pts**2, axis=1)  # (H,)
-        norm_sq[norm_sq == 0] = epsilon
+        norm_sq = np.sum(pts**2, axis=1)
+        norm_sq = np.where(norm_sq == 0.0, epsilon, norm_sq)
 
         coeffs = (norm @ pts.T) / norm_sq
-        proj = coeffs[:, :, None] * pts[None, :, :]
-        residuals = norm[:, None, :] - proj
+        coeffs = np.maximum(coeffs, 0.0)
 
+        proj = coeffs[:, :, None] * pts[None, :, :]
+
+        residuals = norm[:, None, :] - proj
         dists = np.linalg.norm(residuals, axis=2)
+
         min_dists = dists.min(axis=1)
-        ties = dists == min_dists[:, None]
+        ties = np.isclose(dists, min_dists[:, None], atol=epsilon)
+        nonzero = np.nonzero
         choice = self.rng.choice
         for i, s in enumerate(pop):
-            candidates = np.nonzero(ties[i])[0]
-            s.ref_point = choice(candidates)
-            s.ref_distance = min_dists[i]
+            candidates = nonzero(ties[i])[0]
+            s.ref_point = int(choice(candidates))
+            s.ref_distance = float(min_dists[i])
 
     def count(self, idx_to_count: Iterator[int]) -> np.ndarray:
         """Count how many individuals are associated with each reference point."""
@@ -210,6 +217,8 @@ class NSGA3:
 @cache
 def dominates(fi: tuple[float, ...], fj: tuple[float, ...]) -> bool:
     """Check if schedule i dominates schedule j."""
+    # fi, fj = np.asarray(fi), np.asarray(fj)
+    # return np.all(fi >= fj) and np.any(fi > fj)
     better_in_any = False
     for si, sj in zip(fi, fj, strict=True):
         if si < sj:

@@ -97,38 +97,26 @@ class Team:
             bool: True if there is a conflict, False otherwise.
 
         """
-        _events = self.events
+        evts = self.events
 
-        if ignore and ignore.identity in _events:
-            _events.remove(ignore.identity)
+        if ignore and ignore.identity in evts:
+            evts.remove(ignore.identity)
 
-        conflict_found = new_event.identity in _events
+        conflict_found = new_event.identity in evts
 
-        if not conflict_found and new_event.conflicts and not _events.isdisjoint(new_event.conflicts):
+        if not conflict_found and new_event.conflicts and not evts.isdisjoint(new_event.conflicts):
             conflict_found = True
 
         if ignore:
-            _events.add(ignore.identity)
+            evts.add(ignore.identity)
 
         return conflict_found
 
     def get_fitness_keys(self) -> Iterator[frozenset[int], int, int]:
         """Get all keys used for fitness calculation."""
-        yield self.break_time_key()
-        yield self.table_consistency_key()
-        yield self.opponent_variety_key()
-
-    def break_time_key(self) -> frozenset[int]:
-        """Get a key for the break time cache based on the team's events."""
-        return frozenset(self.timeslots)
-
-    def table_consistency_key(self) -> int:
-        """Get a key for the table consistency cache based on the team's events."""
-        return len(set(self.tables))
-
-    def opponent_variety_key(self) -> int:
-        """Get a key for the opponent variety cache based on the team's events."""
-        return len(set(self.opponents))
+        yield frozenset(self.timeslots)
+        yield len(set(self.tables))
+        yield len(set(self.opponents))
 
 
 @dataclass(slots=True)

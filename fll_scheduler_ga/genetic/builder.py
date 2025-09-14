@@ -34,7 +34,10 @@ class ScheduleBuilder:
         for rt, evts in self.event_factory.as_roundtypes().items():
             events[rt] = rng.sample(evts, k=len(evts))
 
-        schedule = Schedule(teams=self.team_factory.build(), origin="Builder")
+        schedule = Schedule(
+            teams=self.team_factory.build(),
+            origin="Builder",
+        )
         teams = rng.sample(schedule.all_teams(), k=self.config.num_teams)
 
         build_map = {

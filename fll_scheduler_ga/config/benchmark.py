@@ -14,9 +14,10 @@ from dataclasses import dataclass, field
 from hashlib import sha256
 from itertools import combinations, product
 from logging import getLogger
-from math import exp, sqrt
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+import numpy as np
 
 from .constants import FITNESS_PENALTY
 
@@ -34,8 +35,8 @@ class FitnessBenchmark:
 
     config: TournamentConfig
     event_factory: EventFactory
-    cache_dir: Path = field(init=False, repr=False)
     penalty: float = FITNESS_PENALTY
+    cache_dir: Path = None
     timeslots: dict = field(default_factory=dict, init=False, repr=False)
     locations: dict = field(default_factory=dict, init=False, repr=False)
     opponents: dict = field(default_factory=dict, init=False, repr=False)
@@ -235,32 +236,24 @@ class FitnessBenchmark:
         if len(timeslots) < 2:
             return 1.0  # Perfect score if only one event or no events
 
-        # Assumes timeslots are already sorted by start time
-        breaks_in_minutes = []
-        for i in range(1, len(timeslots)):
-            break_duration = timeslots[i].start - timeslots[i - 1].stop
-            breaks_in_minutes.append(break_duration.total_seconds() / 60)
+        starts = np.array([ts.start.timestamp() for ts in timeslots])
+        stops = np.array([ts.stop.timestamp() for ts in timeslots])
 
-        # Check for negative breaks, which indicates an overlap that slipped through
-        if any(b < 0 for b in breaks_in_minutes):
+        breaks_in_minutes = (starts[1:] - stops[:-1]) / 60.0
+        if np.any(breaks_in_minutes < 0):
             return 0.0
 
-        if (n := len(breaks_in_minutes)) == 0:
+        if breaks_in_minutes.size == 0:
             return 1.0
 
-        if (mean_break := sum(breaks_in_minutes) / n) == 0:
+        mean_break = np.mean(breaks_in_minutes)
+        if mean_break == 0:
             return 0.0
 
-        # Calculate standard deviation to measure consistency
-        sum_sq_diff = sum((b - mean_break) ** 2 for b in breaks_in_minutes)
-        std_dev = sqrt(sum_sq_diff / n)
-
-        # Use coefficient of variation (std_dev / mean) to normalize.
-        # A lower coefficient is better (less variation relative to the average break).
-        # The score is inverted so that a lower coefficient gives a higher score.
+        std_dev = np.std(breaks_in_minutes)
         coefficient = std_dev / mean_break
         ratio = 1 / (1 + coefficient)
-        mean_bonus = 0.1 * (1 / (1 + exp(-0.1 * (mean_break - 15))))
-        zeros = breaks_in_minutes.count(0)
+        mean_bonus = 0.1 * (1 / (1 + np.exp(-0.1 * (mean_break - 15))))
+        zeros = np.count_nonzero(breaks_in_minutes == 0)
         b_penalty = penalty**zeros
         return (ratio * 0.9 + mean_bonus) * b_penalty

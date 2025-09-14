@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from random import Random
 
     from ..config.app_config import AppConfig
+    from ..config.config import RoundType
     from ..data_model.event import Event, EventFactory
     from ..data_model.schedule import Match, Schedule
     from ..data_model.team import Team
@@ -183,16 +184,9 @@ class SwapMutation(Mutation):
         same_location: bool,
     ) -> bool:
         """Check if the swap between two events is valid based on timeslot and location."""
-        if same_timeslot and not same_location:
-            return is_same_timeslot and not is_same_location
-
-        if same_location and not same_timeslot:
-            return is_same_location and not is_same_timeslot
-
-        if not same_timeslot and not same_location:
-            return not is_same_timeslot and not is_same_location
-
-        return same_timeslot and same_location
+        timeslot_condition = is_same_timeslot == same_timeslot
+        location_condition = is_same_location == same_location
+        return timeslot_condition and location_condition
 
 
 @dataclass(slots=True)
@@ -307,10 +301,7 @@ class SwapMatchMutation(SwapMutation):
 
             t1a, t1b = schedule[e1a], schedule[e1b]
 
-            if None in (t1a, t1b):
-                continue
-
-            if t1a.conflicts(e2a, ignore=e1a) or t1b.conflicts(e2b, ignore=e1b):
+            if None in (t1a, t1b) or t1a.conflicts(e2a, ignore=e1a) or t1b.conflicts(e2b, ignore=e1b):
                 continue
 
             t2a, t2b = schedule[e2a], schedule[e2b]
@@ -369,11 +360,13 @@ class TimeSlotSequenceMutation(Mutation):
     """Abstract base class for mutations that permute assignments within a single timeslot."""
 
     event_factory: EventFactory
-    _timeslot_event_map: dict[TimeSlot, list[Event]] = None
+    timeslot_event_map: dict[tuple[RoundType, TimeSlot], list[Event]] = None
+    timeslot_keys: list[tuple[RoundType, TimeSlot]] = None
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
-        self._timeslot_event_map = self.event_factory.as_timeslots()
+        self.timeslot_event_map = self.event_factory.as_timeslots()
+        self.timeslot_keys = list(self.timeslot_event_map.keys())
 
     @abstractmethod
     def _permute(self, items: list) -> list:
@@ -381,30 +374,34 @@ class TimeSlotSequenceMutation(Mutation):
         msg = "Subclasses must implement this method."
         raise NotImplementedError(msg)
 
-    def mutate(self, schedule: Schedule) -> bool:
-        """Find a suitable timeslot and round type, then permute assignments."""
-        chosen_key = self.rng.choice(list(self._timeslot_event_map.keys()))
+    def _get_candidates(self, schedule: Schedule) -> list[Event]:
+        """Get a list of candidate events for mutation within a specific timeslot."""
+        chosen_key = self.rng.choice(self.timeslot_keys)
         chosen_rt, _ = chosen_key
-        max_len_timeslot = max(len(v) for k, v in self._timeslot_event_map.items() if k[0] == chosen_rt)
+
+        ts_event_map = self.timeslot_event_map
+        max_len_timeslot = max(len(v) for k, v in ts_event_map.items() if k[0] == chosen_rt)
         schedule_events = schedule.keys()
+
         less_than_timeslots = [
             k
-            for k, _ in self._timeslot_event_map.items()
+            for k, _ in ts_event_map.items()
             if k[0] == chosen_rt and len([e for e in schedule_events if e.timeslot == k[1]]) < max_len_timeslot
         ]
 
         if less_than_timeslots and self.rng.choice((True, False)):
-            chosen_rt_ts = self.rng.choice(less_than_timeslots)
-        else:
-            chosen_rt_ts = chosen_key
+            chosen_key = self.rng.choice(less_than_timeslots)
 
-        candidates = self._timeslot_event_map[chosen_rt_ts]
+        return sorted(ts_event_map[chosen_key], key=lambda e: (e.location.identity, e.location.side))
+
+    def mutate(self, schedule: Schedule) -> bool:
+        """Find a suitable timeslot and round type, then permute assignments."""
+        candidates = self._get_candidates(schedule)
         tpr = candidates[0].location.teams_per_round
-        mutate_map = {
+        mutate_fn = {
             1: self._mutate_singles,
             2: self._mutate_matches,
-        }
-        mutate_fn = mutate_map.get(tpr)
+        }.get(tpr)
         if mutate_fn:
             return mutate_fn(schedule, candidates)
 
@@ -412,21 +409,17 @@ class TimeSlotSequenceMutation(Mutation):
 
     def _mutate_singles(self, schedule: Schedule, candidates: list[Event]) -> bool:
         """Permute team assignments for single-team events."""
-        candidates.sort(key=lambda e: (e.location.identity, e.location.side))
-        original_ids = [None if schedule[e] is None else schedule[e].identity for e in candidates]
-        permuted_ids = self._permute(original_ids)
-        for event, old_id, new_id in zip(candidates, original_ids, permuted_ids, strict=True):
+        old_ids = [None if schedule[e] is None else schedule[e].identity for e in candidates]
+        new_ids = self._permute(old_ids)
+        for event, old_id, new_id in zip(candidates, old_ids, new_ids, strict=True):
             if old_id == new_id:
                 continue
 
-            old_team = schedule.get_team(old_id)
-            new_team = schedule.get_team(new_id)
-
-            if old_team is not None:
+            if (old_team := schedule.get_team(old_id)) is not None:
                 old_team.remove_event(event)
                 del schedule[event]
 
-            if new_team is not None:
+            if (new_team := schedule.get_team(new_id)) is not None:
                 new_team.add_event(event)
                 schedule[event] = new_team
 
@@ -435,25 +428,23 @@ class TimeSlotSequenceMutation(Mutation):
 
     def _mutate_matches(self, schedule: Schedule, candidates: list[Event]) -> bool:
         """Permute team assignments for match-based events."""
-        event_pairs: list[tuple[Event, ...]] = []
+        matches: list[tuple[Event, ...]] = []
         teams: list[tuple[Team | None, ...]] = []
-        candidates.sort(key=lambda e: (e.location.identity, e.location.side))
-
         for e1 in candidates:
             if e1.location.side == 1 and (e2 := e1.paired):
                 t1, t2 = schedule[e1], schedule[e2]
-                event_pairs.append((e1, e2))
+                matches.append((e1, e2))
                 teams.append((t1, t2))
 
-        original_ids = [(None, None) if None in (t1, t2) else (t1.identity, t2.identity) for (t1, t2) in teams]
-        permuted_ids = self._permute(original_ids)
-        for event_pair, old_ids, new_ids in zip(event_pairs, original_ids, permuted_ids, strict=True):
-            if old_ids == new_ids:
+        old_ids = [(None, None) if None in (t1, t2) else (t1.identity, t2.identity) for (t1, t2) in teams]
+        new_ids = self._permute(old_ids)
+        for match, old_id_pair, new_id_pair in zip(matches, old_ids, new_ids, strict=True):
+            if old_id_pair == new_id_pair:
                 continue
 
-            e1, e2 = event_pair
-            old_t1, old_t2 = (schedule.get_team(i) for i in old_ids)
-            new_t1, new_t2 = (schedule.get_team(i) for i in new_ids)
+            e1, e2 = match
+            old_t1, old_t2 = (schedule.get_team(i) for i in old_id_pair)
+            new_t1, new_t2 = (schedule.get_team(i) for i in new_id_pair)
 
             if None not in (old_t1, old_t2):
                 old_t1.remove_event(e1)

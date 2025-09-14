@@ -5,7 +5,6 @@ from __future__ import annotations
 from enum import StrEnum
 
 ASCII_OFFSET = 64
-ATTEMPTS_RANGE = (0, 50)
 FITNESS_PENALTY = 0.5
 RANDOM_SEED_RANGE = (1, 2**32 - 1)
 
