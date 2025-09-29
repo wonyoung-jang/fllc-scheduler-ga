@@ -2,32 +2,32 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from ..config.constants import ASCII_OFFSET
 
 
-@dataclass(slots=True, frozen=True)
+@dataclass(slots=True)
 class Location:
     """Data model for a location in the FLL Scheduler GA."""
 
-    name: str
-    identity: int | str
+    idx: int
+
+    locationtype: str
+    name: int
+    side: int
     teams_per_round: int
-    side: int = field(default=0)
 
     def __str__(self) -> str:
         """Represent the Location as a string."""
-        if self.side:
-            if isinstance(self.identity, int):
-                return f"{self.name} {chr(ASCII_OFFSET + self.identity)}{self.side}"
-            if isinstance(self.identity, str):
-                return f"{self.name} {self.identity}{self.side}"
+        ltr_id = f"{chr(ASCII_OFFSET + self.name)}"
 
-        return f"{self.name} {self.identity}"
+        if self.side > 0:
+            return f"{self.locationtype} {ltr_id}{self.side}"
+        return f"{self.locationtype} {ltr_id}"
 
     def __hash__(self) -> int:
         """Hash the Room based on its identity."""
         if self.side:
-            return hash((self.identity, self.side))
-        return hash(self.identity)
+            return hash((self.name, self.side))
+        return hash(self.name)

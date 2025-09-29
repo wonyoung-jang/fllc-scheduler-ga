@@ -9,9 +9,9 @@ from typing import TYPE_CHECKING
 from ..data_model.schedule import Schedule
 
 if TYPE_CHECKING:
-    from random import Random
+    import numpy as np
 
-    from ..config.config import RoundType, TournamentConfig
+    from ..data_model.config import RoundType, TournamentConfig
     from ..data_model.event import Event, EventFactory
     from ..data_model.team import Team, TeamFactory
 
@@ -25,32 +25,30 @@ class ScheduleBuilder:
     team_factory: TeamFactory
     event_factory: EventFactory
     config: TournamentConfig
-    rng: Random
+    rng: np.random.Generator
+    roundtype_events: dict[RoundType, list[Event]] = None
 
-    def build(self, rng: Random | None = None) -> Schedule:
+    def __post_init__(self) -> None:
+        """Post-initialization to set up the random number generator."""
+        self.roundtype_events = self.event_factory.as_roundtypes()
+
+    def build(self) -> Schedule:
         """Construct and return the final schedule."""
-        rng = self.rng if rng is None else rng
         events = {}
-        for rt, evts in self.event_factory.as_roundtypes().items():
-            events[rt] = rng.sample(evts, k=len(evts))
+        for rt, evts in self.roundtype_events.items():
+            events[rt] = self.rng.permutation(evts)
 
         schedule = Schedule(
             teams=self.team_factory.build(),
             origin="Builder",
         )
-        teams = rng.sample(schedule.all_teams(), k=self.config.num_teams)
+        teams = self.rng.permutation(schedule.teams)
 
-        build_map = {
-            1: self.build_singles,
-            2: self.build_matches,
-        }
-        tpr_reqs = {rc.roundtype: rc.teams_per_round for rc in self.config.rounds}
         for rt, evts in events.items():
-            build_fn = build_map.get(tpr_reqs.get(rt))
-            if build_fn:
-                build_fn(schedule, rt, evts, teams)
-
-        schedule.clear_cache()
+            if self.config.round_to_tpr[rt] == 1:
+                self.build_singles(schedule, rt, evts, teams)
+            elif self.config.round_to_tpr[rt] == 2:
+                self.build_matches(schedule, rt, evts, teams)
         return schedule
 
     def build_singles(self, schedule: Schedule, rt: RoundType, events: list[Event], teams: list[Team]) -> None:

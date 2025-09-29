@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import itertools
 from configparser import ConfigParser, SectionProxy
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from logging import getLogger
+from math import ceil
 from pathlib import Path
-from random import Random
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
+
+from ..data_model.config import Round, RoundType, TournamentConfig
 from ..data_model.event import EventFactory
 from ..data_model.location import Location
 from ..data_model.schedule import Schedule
@@ -22,7 +26,6 @@ from ..operators.nsga3 import NSGA3
 from ..operators.repairer import Repairer
 from ..operators.selection import RandomSelect
 from .benchmark import FitnessBenchmark
-from .config import Round, RoundType, TournamentConfig
 from .constants import RANDOM_SEED_RANGE, CrossoverOp, MutationOp
 from .ga_context import GaContext
 from .ga_operators_config import OperatorConfig
@@ -42,7 +45,7 @@ class AppConfig:
     tournament: TournamentConfig
     operators: OperatorConfig
     ga_params: GaParameters
-    rng: Random
+    rng: np.random.Generator
 
     @classmethod
     def create_app_config(cls, args: Namespace, path: Path | None = None) -> AppConfig:
@@ -59,26 +62,24 @@ class AppConfig:
             rng=parser.load_rng(),
         )
 
-    def create_ga_context(self) -> GaContext:
+    def create_ga_context(self, args: Namespace) -> GaContext:
         """Create and return a GaContext with the provided configuration."""
         rng = self.rng
         tconfig = self.tournament
-        team_factory = TeamFactory(tconfig)
         event_factory = EventFactory(tconfig)
+        team_factory = TeamFactory(tconfig)
 
         repairer = Repairer(rng, tconfig, event_factory)
-        benchmark = FitnessBenchmark(tconfig, event_factory)
+        benchmark = FitnessBenchmark(tconfig, event_factory, flush=args.flush_benchmarks)
         evaluator = FitnessEvaluator(tconfig, benchmark)
         checker = HardConstraintChecker(tconfig)
 
         num_objectives = len(evaluator.objectives)
         params = self.ga_params
-        pop_size_ref_points = params.population_size * params.num_islands
         nsga3 = NSGA3(
             rng=rng,
-            num_objectives=num_objectives,
-            total_size=pop_size_ref_points,
-            island_size=params.population_size,
+            n_objectives=num_objectives,
+            n_total_pop=params.population_size * params.num_islands,
         )
         selection = RandomSelect(rng)
         crossovers = tuple(build_crossovers(self, team_factory, event_factory))
@@ -132,11 +133,13 @@ class AppConfigParser(ConfigParser):
         time_fmt = self.parse_time_config()
         TimeSlot.set_time_format(time_fmt)
 
-        rounds, round_requirements = self.parse_rounds_config(num_teams, time_fmt)
+        locations = self.parse_location_config()
+        rounds, roundreqs, round_to_int, round_to_tpr = self.parse_rounds_config(num_teams, time_fmt, locations)
 
-        all_rounds_per_team = [r.rounds_per_team for r in rounds]
-        total_slots = sum(num_teams * rpt for rpt in all_rounds_per_team)
-        unique_opponents_possible = 1 <= max(all_rounds_per_team) <= num_teams - 1
+        total_slots_possible = sum(len(r.timeslots) * len(r.locations) for r in rounds)
+        total_slots_required = sum(num_teams * r.rounds_per_team for r in rounds)
+        unique_opponents_possible = 1 <= max(r.rounds_per_team for r in rounds) <= num_teams - 1
+        Schedule.set_total_num_events(total_slots_possible)
 
         weights = self.parse_fitness_config()
 
@@ -144,10 +147,14 @@ class AppConfigParser(ConfigParser):
             num_teams=num_teams,
             time_fmt=time_fmt,
             rounds=rounds,
-            round_requirements=round_requirements,
-            total_slots=total_slots,
+            round_requirements=roundreqs,
+            round_to_int=round_to_int,
+            round_to_tpr=round_to_tpr,
+            total_slots_possible=total_slots_possible,
+            total_slots_required=total_slots_required,
             unique_opponents_possible=unique_opponents_possible,
             weights=weights,
+            locations=locations,
         )
 
     def _get_section(self, section: str) -> SectionProxy:
@@ -194,21 +201,26 @@ class AppConfigParser(ConfigParser):
             raise ValueError(msg)
         return fmt_map[fmt_val]
 
-    def parse_rounds_config(self, num_teams: int, time_fmt: str) -> tuple[list[Round], dict[RoundType, int]]:
+    def parse_rounds_config(
+        self, num_teams: int, time_fmt: str, locations: set[Location]
+    ) -> tuple[list[Round], dict[RoundType, int], dict[RoundType, int], dict[RoundType, int]]:
         """Parse and return a list of Round objects from the configuration.
 
         Args:
             num_teams (int): The total number of teams in the tournament.
             time_fmt (str): The time format string.
+            locations (set[Location]): A set of Location objects.
 
         Returns:
             list[Round]: A list of Round objects parsed from the configuration.
             dict[RoundType, int]: A dictionary mapping round types to the number of rounds per team.
+            dict[RoundType, int]: A mapping of round types to their index in the rounds list.
+            dict[RoundType, int]: A mapping of round types to their teams per round.
 
         """
         rounds: list[Round] = []
         roundreqs: dict[RoundType, int] = {}
-        all_locations = self.load_location_config()
+        timeslot_idx_iter = itertools.count()
 
         for sec in self._iter_sections_prefix("round"):
             self.validate_round_section(sec)
@@ -228,12 +240,25 @@ class AppConfigParser(ConfigParser):
                 start_time = times[0]
 
             location = sec.get("location")
-            locations = sorted(
-                (loc for loc in all_locations if loc.name == location),
-                key=lambda loc: (loc.identity, loc.side),
+            locations_in_sec = sorted(
+                (loc for loc in locations if loc.locationtype == location),
+                key=lambda loc: (loc.locationtype, loc.name, loc.side),
             )
 
-            roundreqs.setdefault(roundtype, rounds_per_team)
+            num_timeslots = self.calc_num_timeslots(times, locations_in_sec, num_teams, rounds_per_team)
+            timeslots = []
+            for start, stop in self.init_timeslots(times, duration_minutes, num_timeslots, start_time):
+                timeslots.append(
+                    TimeSlot(
+                        idx=next(timeslot_idx_iter),
+                        start=start,
+                        stop=stop,
+                    )
+                )
+            start_time = self.init_start_time(times, timeslots)
+            stop_time = self.init_stop_time(times, timeslots, duration_minutes)
+
+            roundreqs[roundtype] = rounds_per_team
 
             rounds.append(
                 Round(
@@ -246,7 +271,9 @@ class AppConfigParser(ConfigParser):
                     duration_minutes=duration_minutes,
                     num_teams=num_teams,
                     location=location,
-                    locations=locations,
+                    locations=locations_in_sec,
+                    num_timeslots=num_timeslots,
+                    timeslots=timeslots,
                 )
             )
 
@@ -254,30 +281,82 @@ class AppConfigParser(ConfigParser):
             msg = "No rounds defined in the configuration file."
             raise ValueError(msg)
 
-        return rounds, roundreqs
+        rounds.sort(key=lambda r: (r.start_time))
+        round_to_int = {r.roundtype: i for i, r in enumerate(rounds)}
+        round_to_tpr = {r.roundtype: r.teams_per_round for r in rounds}
+        return rounds, roundreqs, round_to_int, round_to_tpr
 
-    def load_location_config(self) -> set[Location]:
-        """Parse and return a set of Location objects from the configuration."""
-        locations = set()
+    def calc_num_timeslots(
+        self, times: list[datetime], locations: list[Location], num_teams: int, rounds_per_team: int
+    ) -> int:
+        """Calculate the number of timeslots needed for a round."""
+        if times:
+            return len(times)
+
+        if not locations:
+            return 0
+
+        total_teams = num_teams * rounds_per_team
+        return ceil(total_teams / len(locations))
+
+    def init_timeslots(
+        self, times: list[datetime], dur: timedelta, numslots: int, start: datetime
+    ) -> Iterator[tuple[datetime, datetime]]:
+        """Initialize the timeslots for the round."""
+        start = times[0] if times else start
+        for i in range(1, numslots + 1):
+            if not times:
+                stop = start + dur
+            elif i < len(times):
+                stop = times[i]
+            elif i == len(times):
+                stop += dur
+
+            yield (start, stop)
+            start = stop
+
+    def init_start_time(self, times: list[datetime], timeslots: list[TimeSlot]) -> datetime:
+        """Initialize the start time if not provided."""
+        if times:
+            return times[0]
+        return timeslots[0].start
+
+    def init_stop_time(self, times: list[datetime], timeslots: list[TimeSlot], duration: timedelta) -> datetime:
+        """Initialize the stop time if not provided."""
+        if times:
+            return times[-1] + duration
+        return timeslots[-1].stop
+
+    def parse_location_config(self) -> list[Location]:
+        """Parse and return a list of Location objects from the configuration."""
+        locations: list[Location] = []
+        location_idx_iter = itertools.count()
+
         for sec in self._iter_sections_prefix("location"):
             self.validate_location_section(sec)
             name = sec.get("name")
+
             sides = sec.getint("sides")
-            teams_per_round = sec.getint("teams_per_round")
-            identities_raw = sec.get("identities", "")
-            identities_iter = (i.strip() for i in identities_raw.split(",") if i.strip())
-            for ident in identities_iter:
-                identity = int(ident) if ident.isdigit() else ident
+            teams_per_round = sides
+
+            count = sec.getint("count")
+
+            for identifier in range(1, count + 1):
                 for j in range(1, sides + 1):
-                    side = 0 if sides == 1 else j
-                    locations.add(
+                    side = -1 if sides == 1 else j
+                    locations.append(
                         Location(
-                            name=name,
-                            identity=identity,
-                            teams_per_round=teams_per_round,
+                            idx=next(location_idx_iter),
+                            locationtype=name,
+                            name=identifier,
                             side=side,
+                            teams_per_round=teams_per_round,
                         )
                     )
+
+        locations.sort(key=lambda loc: (loc.locationtype, loc.name, loc.side))
+        locations_log_str = "\n".join(repr(loc) for loc in locations)
+        logger.debug("Loaded locations:\n%s", locations_log_str)
         return locations
 
     def validate_location_section(self, section: SectionProxy) -> None:
@@ -285,8 +364,7 @@ class AppConfigParser(ConfigParser):
         required = (
             "name",
             "sides",
-            "teams_per_round",
-            "identities",
+            "count",
         )
         for option in required:
             if not section.get(option):
@@ -314,6 +392,7 @@ class AppConfigParser(ConfigParser):
     def parse_fitness_config(self) -> tuple[float, float]:
         """Parse and return fitness-related configuration values."""
         sec = self._get_section("fitness")
+        self.validate_fitness_section(sec)
         weights = (
             max(0, sec.getfloat("weight_mean", fallback=3)),
             max(0, sec.getfloat("weight_variation", fallback=1)),
@@ -324,6 +403,18 @@ class AppConfigParser(ConfigParser):
             logger.warning("All fitness weights are zero or identical. Using equal weights.")
             return (1 / 3, 1 / 3, 1 / 3)
         return tuple(w / total for w in weights)
+
+    def validate_fitness_section(self, section: SectionProxy) -> None:
+        """Validate fitness sections in config file."""
+        required = (
+            "weight_mean",
+            "weight_variation",
+            "weight_range",
+        )
+        for option in required:
+            if not section.get(option):
+                msg = f"No '{option}' option found in section '{section.name}'."
+                raise KeyError(msg)
 
     def load_operator_config(self) -> OperatorConfig:
         """Parse and return the operator configuration from the provided ConfigParser."""
@@ -371,7 +462,7 @@ class AppConfigParser(ConfigParser):
 
         return GaParameters(**params)
 
-    def load_rng(self) -> Random:
+    def load_rng(self) -> np.random.Generator:
         """Set up the random number generator."""
         sec = self._get_section("genetic")
         seed_val = ""
@@ -380,7 +471,7 @@ class AppConfigParser(ConfigParser):
         elif sec.get("seed"):
             seed_val = sec["seed"].strip()
         else:
-            seed_val = Random().randint(*RANDOM_SEED_RANGE)
+            seed_val = np.random.default_rng().integers(*RANDOM_SEED_RANGE)
 
         try:
             seed = int(seed_val)
@@ -388,4 +479,4 @@ class AppConfigParser(ConfigParser):
             seed = abs(hash(seed_val)) % (RANDOM_SEED_RANGE[1] + 1)
 
         logger.debug("Using RNG seed: %d", seed)
-        return Random(seed)
+        return np.random.default_rng(seed)

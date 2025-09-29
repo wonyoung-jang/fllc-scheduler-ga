@@ -6,23 +6,22 @@ import pickle
 from collections import Counter
 from dataclasses import dataclass, field
 from logging import getLogger
-from random import Random
 from time import time
 from typing import TYPE_CHECKING, Any
 
-from ..config.constants import RANDOM_SEED_RANGE
-from ..operators.nsga3 import dominates
+import numpy as np
+
 from .builder import ScheduleBuilder
 from .island import Island
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from ..config.config import TournamentConfig
     from ..config.ga_context import GaContext
     from ..config.ga_parameters import GaParameters
+    from ..data_model.config import TournamentConfig
     from ..data_model.schedule import Population
-    from ..observers.base_observer import GaObserver
+    from ..observers.observers import GaObserver
     from ..operators.crossover import Crossover
     from ..operators.mutation import Mutation
 
@@ -34,69 +33,65 @@ class GA:
     """Genetic algorithm for the FLL Scheduler GA."""
 
     context: GaContext
-    rng: Random
+    rng: np.random.Generator
     observers: tuple[GaObserver]
     seed_file: Path | None
     save_front_only: bool
 
-    fitness_history: list[tuple] = field(default_factory=list, repr=False)
+    curr_gen: int = 0
+    fitness_history: np.ndarray = None
     total_population: Population = field(default_factory=list, repr=False)
     islands: list[Island] = field(default_factory=list, repr=False)
-    ga_params: GaParameters = field(default=None, repr=False)
+    ga_params: GaParameters = None
+
+    generations_array: np.ndarray = None
+    migrate_generations: np.ndarray = None
 
     _offspring_ratio: Counter = field(default_factory=Counter, repr=False)
-    _crossover_ratio: dict[str, Counter] = field(default=None, repr=False)
-    _mutation_ratio: dict[str, Counter] = field(default=None, repr=False)
+    _crossover_ratio: dict[str, Counter] = None
+    _mutation_ratio: dict[str, Counter] = None
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
         self.ga_params = self.context.app_config.ga_params
-        seeder = Random(self.rng.randint(*RANDOM_SEED_RANGE))
+        self.generations_array = np.arange(1, self.ga_params.generations + 1)
+        self.migrate_generations: np.ndarray = np.zeros(self.ga_params.generations + 1, dtype=int)
+        if self.ga_params.num_islands > 1 and self.ga_params.migration_size > 0:
+            self.migrate_generations[:: self.ga_params.migration_interval] = 1
+
+        self.fitness_history = np.zeros(
+            (self.ga_params.generations, len(self.context.evaluator.objectives)), dtype=float
+        )
+
         builder = ScheduleBuilder(
             team_factory=self.context.team_factory,
             event_factory=self.context.event_factory,
             config=self.context.app_config.tournament,
-            rng=Random(seeder.randint(*RANDOM_SEED_RANGE)),
-        )
-
-        self.context.repairer.rng = Random(seeder.randint(*RANDOM_SEED_RANGE))
-        self.islands.extend(
-            Island(
-                i,
-                Random(seeder.randint(*RANDOM_SEED_RANGE)),
-                builder,
-                self.context,
-                self.ga_params.clone(),
-            )
-            for i in range(1, self.ga_params.num_islands + 1)
+            rng=self.context.app_config.rng,
         )
 
         trackers = ("success", "total")
         self._crossover_ratio = {tr: Counter({str(c): 0 for c in self.context.crossovers}) for tr in trackers}
         self._mutation_ratio = {tr: Counter({str(m): 0 for m in self.context.mutations}) for tr in trackers}
 
+        # self.context.repairer.rng = Random(seeder.randint(*RANDOM_SEED_RANGE))
+        self.islands.extend(
+            Island(
+                i,
+                self.context.app_config.rng,
+                builder,
+                self.context,
+                self.ga_params.clone(),
+                self._offspring_ratio.copy(),
+                self._crossover_ratio.copy(),
+                self._mutation_ratio.copy(),
+            )
+            for i in range(self.ga_params.num_islands)
+        )
+
     def __len__(self) -> int:
         """Return the number of individuals in the population."""
         return sum(len(i) for i in self.islands)
-
-    def pareto_front(self) -> Population:
-        """Get the Pareto front for each island in the population."""
-        if not self.total_population:
-            return [p for i in self.islands for p in i.pareto_front()]
-        return [p for p in self.total_population if p.rank == 0]
-
-    def _get_this_gen_fitness(self) -> tuple[float, ...]:
-        """Calculate the average fitness of the current generation."""
-        gen_fitness_iter = (i.get_last_gen_fitness() for i in self.islands)
-        return tuple(sum(s) / self.ga_params.num_islands for s in zip(*gen_fitness_iter, strict=True))
-
-    def _get_last_gen_fitness(self) -> tuple[float, ...]:
-        """Get the fitness of the last generation."""
-        return self.fitness_history[-1] if self.fitness_history else ()
-
-    def update_fitness_history(self) -> None:
-        """Update the fitness history with the current generation's fitness."""
-        self.fitness_history.append(self._get_this_gen_fitness())
 
     def run(self) -> None:
         """Run the genetic algorithm and return the best schedule found."""
@@ -119,11 +114,30 @@ class GA:
             self._notify_on_finish(self.total_population, self.pareto_front())
             self.save()
 
+    def pareto_front(self) -> Population:
+        """Get the Pareto front for each island in the population."""
+        if not self.total_population:
+            return [p for i in self.islands for p in i.pareto_front()]
+        return [p for p in self.total_population if p.rank == 0]
+
+    def get_this_gen_fitness(self) -> tuple[float, ...]:
+        """Calculate the average fitness of the current generation."""
+        island_fitnesses = np.asarray([i.get_last_gen_fitness() for i in self.islands])
+        return island_fitnesses.mean(axis=0)
+
+    def get_last_gen_fitness(self) -> tuple[float, ...]:
+        """Get the fitness of the last generation."""
+        return self.fitness_history[self.curr_gen - 1] if self.curr_gen > 0 else ()
+
+    def update_fitness_history(self) -> None:
+        """Update the fitness history with the current generation's fitness."""
+        self.fitness_history[self.curr_gen] = self.get_this_gen_fitness()
+
     def initialize_population(self) -> None:
         """Initialize the population for each island."""
         s_path = self.seed_file
         if s_path and s_path.exists() and (seed_pop := self.load()):
-            seed_pop.sort(key=lambda s: (s.rank, -sum(s.fitness)))
+            self.rng.shuffle(seed_pop)
             n = self.ga_params.num_islands
             for idx, schedule in enumerate(seed_pop):
                 self.islands[idx % n].add_to_population(schedule)
@@ -131,19 +145,21 @@ class GA:
         logger.debug("Initializing %d islands...", self.ga_params.num_islands)
         for island in self.islands:
             island.initialize()
+            island.evaluate_pop()
 
     def run_epochs(self) -> None:
         """Perform main evolution loop: generations and migrations."""
-        num_generations = self.ga_params.generations
-        for generation in range(1, num_generations + 1):
-            if self.migrate_condition(generation):
+        for gen in self.generations_array:
+            if self.migrate_generations[gen]:
                 self.migrate()
             self.run_generation()
             self.update_fitness_history()
+            self.curr_gen += 1
             self._notify_on_generation_end(
-                generation=generation,
-                num_generations=num_generations,
-                best_fitness=self._get_last_gen_fitness(),
+                generation=gen,
+                num_generations=self.ga_params.generations,
+                best_fitness=self.get_last_gen_fitness(),
+                pop_size=len(self),
             )
 
     def run_generation(self) -> None:
@@ -152,28 +168,15 @@ class GA:
             island.handle_underpopulation()
             island.evolve()
             island.update_fitness_history()
-
-    def migrate_condition(self, generation: int) -> bool:
-        """Check if migration should occur."""
-        return (
-            self.ga_params.num_islands > 1
-            and self.ga_params.migration_size > 0
-            and generation % self.ga_params.migration_interval == 0
-        )
+            island.curr_gen += 1
 
     def migrate(self) -> None:
         """Migrate the best individuals between islands using a random 1 -> 2 ring topology."""
-        islands = self.islands
-        n = len(islands)
-        o1, o2 = self.rng.sample(range(1, n), k=2)
-        for i, island in enumerate(islands):
-            if island.check_for_stagnation():
-                island.trigger_cataclysm()
-
-            j = (i + o1) % n
-            k = (i + o2) % n
-            island.receive_migrants(islands[j].give_migrants())
-            island.receive_migrants(islands[k].give_migrants())
+        n = len(self.islands)
+        o = self.rng.integers(1, n)
+        for i, island in enumerate(self.islands):
+            j = (i + o) % n
+            island.receive_migrants(self.islands[j].give_migrants())
 
     def _notify_on_start(self, num_generations: int) -> None:
         """Notify observers when the genetic algorithm run starts."""
@@ -184,11 +187,12 @@ class GA:
         self,
         generation: int,
         num_generations: int,
-        best_fitness: tuple[float, ...],
+        best_fitness: np.ndarray[float],
+        pop_size: int,
     ) -> None:
         """Notify observers at the end of a generation."""
         for obs in self.observers:
-            obs.on_generation_end(generation, num_generations, best_fitness)
+            obs.on_generation_end(generation, num_generations, best_fitness, pop_size)
 
     def _notify_on_finish(self, pop: Population, pareto_front: Population) -> None:
         """Notify observers when the genetic algorithm run is finished."""
@@ -197,9 +201,22 @@ class GA:
 
     def _deduplicate_population(self) -> None:
         """Remove duplicate individuals from the population."""
-        unique_pop = list({ind for island in self.islands for ind in island.finalize_island()})
-        selected = self.context.nsga3.select(unique_pop, size=len(unique_pop))
-        self.total_population = sorted(selected.values(), key=lambda s: (s.rank, -sum(s.fitness)))
+        unique_pop = [ind for island in self.islands for ind in island.selected.values()]
+        pop_array = np.asarray([s.to_array() for island in self.islands for s in island.selected.values()])
+        schedule_fitness, team_fitnesses = self.context.evaluator.evaluate_population(pop_array, self.context)
+        fronts = self.context.nsga3.non_dominated_sort(schedule_fitness, len(pop_array))
+        selected = {}
+        for rank, front in enumerate(fronts):
+            for idx in front:
+                idx: int
+                sch = unique_pop[idx]
+                sch.fitness = schedule_fitness[idx]
+                sch.team_fitnesses = team_fitnesses[idx]
+                sch.rank = rank
+                for t, tf in zip(sch.teams, team_fitnesses[idx], strict=True):
+                    t.fitness = tf
+                selected[hash(sch)] = sch
+        self.total_population = sorted(selected.values(), key=lambda s: (s.rank, -s.fitness.sum()))
 
     def _aggregate_stats_from_islands(self) -> None:
         """Aggregate statistics from all islands."""
@@ -253,7 +270,7 @@ class GA:
         """Count unique event lists."""
         unique_genes = Counter()
         for schedule in self.total_population:
-            for team in schedule.all_teams():
+            for team in schedule.teams:
                 unique_genes[tuple(sorted(team.events))] += 1
         for gene, count in unique_genes.most_common(n=10):
             logger.debug("Event: %s, Count: %d", gene, count)
@@ -266,8 +283,6 @@ class GA:
         self._log_operators(name="crossover", ratios=self._crossover_ratio, ops=self.context.crossovers)
         self._log_operators(name="mutation", ratios=self._mutation_ratio, ops=self.context.mutations)
         self._log_aggregate_stats()
-        logger.debug("Dominates cache: %s", dominates.cache_info())
-        logger.debug("Fitness caches: %s", self.context.evaluator.get_cache_info())
         for island in self.islands:
             logger.debug("Island %d Fitness: %.2f", island.identity, sum(island.get_last_gen_fitness()))
         logger.debug("Total time taken: %.2f seconds", time() - start_time)

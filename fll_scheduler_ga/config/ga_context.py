@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import pickle
 from collections import defaultdict
 from dataclasses import dataclass
@@ -9,11 +10,12 @@ from logging import getLogger
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import numpy as np
+
 from ..genetic.ga import GA
 from ..io.export import generate_summary_report
 from ..io.importer import CsvImporter
-from ..observers.loggers import LoggingObserver
-from ..observers.progress import TqdmObserver
+from ..observers.observers import LoggingObserver, TqdmObserver
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -45,17 +47,43 @@ class GaContext:
     selection: Selection
     crossovers: tuple[Crossover, ...]
     mutations: tuple[Mutation, ...]
+    event_properties: np.ndarray = None
+    max_events_per_team: int = 0
+
+    def __post_init__(self) -> None:
+        """Post-initialization to validate the GA context."""
+        self.max_events_per_team = sum(r.rounds_per_team for r in self.app_config.tournament.rounds)
+        self.event_properties = self.build_event_properties()
+        self.run_preflight_checks()
+
+    def build_event_properties(self) -> np.ndarray:
+        """Build a numpy array of event properties for fast access during evaluation."""
+        num_events = self.app_config.tournament.total_slots_possible
+        event_map = self.event_factory.as_mapping()
+        round_to_int = self.app_config.tournament.round_to_int
+
+        # Shape: (num_events, num_properties)
+        event_props = np.zeros((num_events, 6), dtype=int)
+        for i in range(num_events):
+            event = event_map[i]
+            event_props[i] = [
+                int(event.timeslot.start.timestamp()),
+                int(event.timeslot.stop.timestamp()),
+                event.location.idx,
+                event.location.side,
+                round_to_int[event.roundtype],
+                event.paired.idx if event.paired else -1,
+            ]
+        logger.debug("Event properties array: %s", event_props)
+        return event_props
 
     def create_ga_instance(self, args: Namespace) -> GA:
         """Create and return a GA instance with the provided configuration."""
-        self.run_preflight_checks()
         self.handle_seed_file(args)
-        rng = self.app_config.rng
-        observers = (TqdmObserver(), LoggingObserver())
         return GA(
             context=self,
-            rng=rng,
-            observers=observers,
+            rng=self.app_config.rng,
+            observers=(TqdmObserver(), LoggingObserver()),
             seed_file=Path(args.seed_file) if args.seed_file else None,
             save_front_only=args.front_only,
         )
@@ -69,45 +97,54 @@ class GaContext:
             path.unlink(missing_ok=True)
         path.touch(exist_ok=True)
 
-        if args.import_file:
-            schedule_csv_path = Path(args.import_file).resolve()
-            csv_import = CsvImporter(schedule_csv_path, config, self.event_factory)
-            csv_schedule = csv_import.schedule
-            if self.evaluator.evaluate(csv_schedule):
-                csv_import.schedule.fitness = csv_schedule.fitness
-                parent_dir = schedule_csv_path.parent
-                parent_dir.mkdir(parents=True, exist_ok=True)
-                report_path = parent_dir / "report.txt"
-                generate_summary_report(
-                    csv_import.schedule,
-                    report_path,
-                )
+        if not args.import_file:
+            logger.debug("No import file specified, skipping import step.")
+            return
 
-            if args.add_import_to_population:
-                population = []
-                try:
-                    with path.open("rb") as f:
-                        seed_data = pickle.load(f)
-                        population.extend(seed_data.get("population", []))
-                except (OSError, pickle.PicklingError):
-                    logger.exception("Error loading seed file")
-                except EOFError:
-                    logger.debug("Pickle file is empty")
+        schedule_csv_path = Path(args.import_file).resolve()
+        csv_import = CsvImporter(schedule_csv_path, config, self.event_factory)
+        csv_schedule = csv_import.schedule
+        pop = np.array([s.to_array(self) for s in [csv_schedule]])
 
-                if csv_import.schedule not in population:
-                    population.append(csv_import.schedule)
+        if fits := self.evaluator.evaluate_population(pop):
+            csv_schedule.fitness = fits[0]
+            csv_import.schedule.fitness = csv_schedule.fitness
+            parent_dir = schedule_csv_path.parent
+            parent_dir.mkdir(parents=True, exist_ok=True)
+            report_path = parent_dir / "report.txt"
+            generate_summary_report(
+                csv_import.schedule,
+                report_path,
+            )
 
-                try:
-                    with path.open("wb") as f:
-                        data_to_cache = {
-                            "population": population,
-                            "config": self.app_config.tournament,
-                        }
-                        pickle.dump(data_to_cache, f)
-                except (OSError, pickle.PicklingError):
-                    logger.exception("Error loading seed file")
-                except EOFError:
-                    logger.debug("Pickle file is empty")
+        if not args.add_import_to_population:
+            logger.debug("Not adding imported schedule to population.")
+            return
+
+        population = []
+        try:
+            with path.open("rb") as f:
+                seed_data = pickle.load(f)
+                population.extend(seed_data.get("population", []))
+        except (OSError, pickle.PicklingError):
+            logger.exception("Error loading seed file")
+        except EOFError:
+            logger.debug("Pickle file is empty")
+
+        if csv_import.schedule not in population:
+            population.append(csv_import.schedule)
+
+        try:
+            with path.open("wb") as f:
+                data_to_cache = {
+                    "population": population,
+                    "config": self.app_config.tournament,
+                }
+                pickle.dump(data_to_cache, f)
+        except (OSError, pickle.PicklingError):
+            logger.exception("Error loading seed file")
+        except EOFError:
+            logger.debug("Pickle file is empty")
 
     def run_preflight_checks(self) -> None:
         """Run preflight checks on the tournament configuration."""
@@ -151,8 +188,9 @@ class GaContext:
         c = self.app_config.tournament
         ef = self.event_factory
         booked_slots = defaultdict(list)
+        event_idx_iter = itertools.count()
         for r in c.rounds:
-            for e in ef.create_events(r):
+            for e in ef.create_events(r, event_idx_iter):
                 loc_key = (type(e.location), e.location)
                 for existing_ts, existing_rt in booked_slots.get(loc_key, []):
                     if e.timeslot.overlaps(existing_ts):

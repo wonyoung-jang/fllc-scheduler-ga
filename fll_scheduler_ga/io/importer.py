@@ -18,7 +18,7 @@ from ..data_model.time import TimeSlot
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from ..config.config import Round, RoundType, TournamentConfig
+    from ..data_model.config import Round, RoundType, TournamentConfig
     from ..data_model.event import Event, EventFactory
 
 logger = getLogger(__name__)
@@ -45,7 +45,6 @@ class CsvImporter:
         team_factory = TeamFactory(self.config)
         self.schedule = Schedule(teams=team_factory.build(), origin="CSV Importer")
         self.import_schedule()
-        self.schedule.clear_cache()
 
         if not self.schedule:
             logger.error("Failed to reconstruct schedule from CSV. Aborting.")
@@ -117,7 +116,7 @@ class CsvImporter:
 
         self.link_opponents(created_events)
 
-        if any(t.rounds_needed() for t in self.schedule.all_teams()):
+        if any(t.rounds_needed() for t in self.schedule.teams):
             logger.warning("Some teams are missing required rounds defined in your config.")
 
     def parse_csv_data_row(
@@ -208,10 +207,8 @@ class CsvImporter:
                 e2.paired = e1
 
                 if e1 in self.schedule and e2 in self.schedule:
-                    team1 = self.schedule[e1]
-                    team2 = self.schedule[e2]
-                    team1.add_opponent(team2)
-                    team2.add_opponent(team1)
+                    self.schedule[e1]
+                    self.schedule[e2]
                 else:
                     logger.warning(
                         "Paired event %s exists but one team is missing from schedule.",

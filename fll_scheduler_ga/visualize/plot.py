@@ -52,7 +52,8 @@ class Plot:
             save_dir: Directory to save the figure. If None, the plot is shown.
 
         """
-        if not (history := self.ga.fitness_history):
+        history = self.ga.fitness_history
+        if not history.any():
             logger.error("Cannot plot fitness. No generation history was recorded.")
             return
 

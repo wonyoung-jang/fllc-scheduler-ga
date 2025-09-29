@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from argparse import Namespace
     from collections.abc import Iterator
 
-    from ..config.config import RoundType
+    from ..data_model.config import RoundType
     from ..data_model.schedule import Individual, Population, Schedule
     from ..genetic.ga import GA
 
@@ -53,8 +53,9 @@ def setup_output_dirs(output_dir: Path) -> dict[str, Path]:
 def export_all_schedules(schedules: list[Schedule], subdirs: dict[str, Path], ga: GA) -> None:
     """Export all schedules to the different formats."""
     time_fmt = ga.context.app_config.tournament.time_fmt
-    csv_exporter = CsvExporter(time_fmt)
-    html_exporter = HtmlExporter(time_fmt)
+    event_factory = ga.context.event_factory
+    csv_exporter = CsvExporter(time_fmt, event_factory)
+    html_exporter = HtmlExporter(time_fmt, event_factory)
 
     for i, sched in enumerate(schedules, start=1):
         name = f"front_{sched.rank}_schedule_{i}"
@@ -71,9 +72,9 @@ def generate_plots(ga: GA, output_dir: Path, args: Namespace) -> None:
         return
 
     plot = Plot(ga, output_dir, args.cmap_name)
-    plot.plot_fitness("Fitness over time", xlabel="Generations", ylabel="Average fitnesses")
-    plot.plot_parallel("Trade-off parallel coordinates")
-    plot.plot_scatter(f"{len(ga.context.evaluator.objectives)}D scatter plot of schedules")
+    plot.plot_fitness(title="Fitness over time", xlabel="Generations", ylabel="Average fitnesses")
+    plot.plot_parallel(title="Trade-off parallel coordinates")
+    plot.plot_scatter(title=f"{len(ga.context.evaluator.objectives)}D scatter plot of schedules")
 
 
 def generate_summary_report(schedule: Schedule, path: Path) -> None:
@@ -103,8 +104,8 @@ def generate_summary_report(schedule: Schedule, path: Path) -> None:
             f.write(f"{'Total':<{max_len_obj}}: {sum(schedule.fitness):.6f}\n")
             f.write(f"{'Percentage':<{max_len_obj}}: {sum(schedule.fitness) / len(schedule.fitness):.2%}\n")
 
-            all_teams = schedule.all_teams()
-            total_fitnesses = [sum(t.fitness) for t in all_teams]
+            all_teams = schedule.teams
+            total_fitnesses = [t.fitness.sum() for t in all_teams]
             max_team_f = max(total_fitnesses)
             min_team_f = min(total_fitnesses)
 
@@ -116,8 +117,6 @@ def generate_summary_report(schedule: Schedule, path: Path) -> None:
             f.write(f"Range   : {max_team_f - min_team_f:.6f}\n")
             f.write(f"Average : {sum(total_fitnesses) / len(total_fitnesses):.6f}\n")
 
-            normalized_teams = schedule.normalized_teams()
-
             f.write("\n")
             objectives_header = (f"{name:<{len_objectives[i] + 1}}" for i, name in enumerate(objectives))
             objectives_header_str = "|".join(objectives_header)
@@ -125,10 +124,11 @@ def generate_summary_report(schedule: Schedule, path: Path) -> None:
             f.write(header)
             f.write("-" * len(header) + "\n")
 
-            for t in sorted(all_teams, key=lambda x: -sum(x.fitness)):
+            normalized_teams = schedule.normalized_teams()
+            for t in sorted(all_teams, key=lambda x: -x.fitness.sum()):
                 fitness_row = (f"{score:<{len_objectives[i] + 1}.4f}" for i, score in enumerate(t.fitness))
                 fitness_str = "|".join(fitness_row)
-                team_id = normalized_teams.get(t.identity)
+                team_id = normalized_teams.get(t.idx)
                 f.write(f"{team_id:<5}|{fitness_str}|{sum(t.fitness):.4f}\n")
     except OSError:
         logger.exception("Failed to write summary report to file %s", path)
@@ -157,8 +157,8 @@ def generate_team_schedules(schedule: Schedule, path: Path, ga: GA) -> None:
 
             rows.append(headers)
 
-            for team in sorted(schedule.all_teams(), key=lambda x: x.identity):
-                row = [team.identity]
+            for team in sorted(schedule.teams, key=lambda x: x.idx):
+                row = [team.idx + 1]
                 for event_id in sorted(team.events):
                     event = event_map.get(event_id)
                     row.append(str(event.timeslot))
@@ -179,7 +179,7 @@ def generate_pareto_summary(pop: Population, path: Path) -> None:
             for name in list(FitnessObjective):
                 f.write(f"{name},")
 
-            f.write("Sum,Ref Point,Ref Distance,Origin,Mutations,Clones")
+            f.write("Sum,Origin,Mutations,Clones")
             f.write("\n")
             for i, schedule in enumerate(sorted(pop, key=lambda s: (s.rank, -sum(s.fitness))), start=1):
                 f.write(f"{i:0{schedule_enum_digits}},{id(schedule)},{hash(schedule)},{schedule.rank},")
@@ -188,8 +188,6 @@ def generate_pareto_summary(pop: Population, path: Path) -> None:
                     f.write(f"{score:.4f},")
 
                 f.write(f"{sum(schedule.fitness):.4f},")
-                f.write(f"{schedule.ref_point if schedule.ref_point is not None else ''},")
-                f.write(f"{schedule.ref_distance if schedule.ref_distance is not None else '':.3f},")
                 f.write(f"{schedule.origin if schedule.origin is not None else ''},")
                 f.write(f"{schedule.mutations if schedule.mutations is not None else ''},")
                 f.write(f"{schedule.clones if schedule.clones is not None else ''}")

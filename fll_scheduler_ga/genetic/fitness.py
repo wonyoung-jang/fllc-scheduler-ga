@@ -4,18 +4,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from logging import getLogger
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..config.constants import FitnessObjective
+from ..config.constants import EPSILON, FitnessObjective
 
 if TYPE_CHECKING:
     from ..config.benchmark import FitnessBenchmark
-    from ..config.config import TournamentConfig
+    from ..config.ga_context import GaContext
+    from ..data_model.config import TournamentConfig
     from ..data_model.schedule import Schedule
 
 logger = getLogger(__name__)
+
+# import sys
+# np.set_printoptions(threshold=sys.maxsize, linewidth=200, edgeitems=30)
 
 
 @dataclass(slots=True)
@@ -29,34 +33,10 @@ class HardConstraintChecker:
         if not schedule:
             return False
 
-        if len(schedule) != self.config.total_slots:
+        if len(schedule) != self.config.total_slots_required:
             return False
 
-        return not any(team.rounds_needed() for team in schedule.all_teams())
-
-
-@dataclass(slots=True)
-class TwoTierCache:
-    """Two-tier cache for fitness evaluation."""
-
-    hot_cache: dict[Any, float] = field(default_factory=dict)
-    cold_cache: dict[Any, float] = field(default_factory=dict)
-    hits: int = 0
-    misses: int = 0
-
-    def get(self, key: Any) -> float | None:
-        """Get a value from the cache."""
-        if key in self.hot_cache:
-            self.hits += 1
-            return self.hot_cache[key]
-
-        if key in self.cold_cache:
-            self.misses += 1
-            value = self.cold_cache.pop(key)
-            self.hot_cache[key] = value
-            return value
-
-        return None
+        return not any(team.rounds_needed() for team in schedule.teams)
 
 
 @dataclass(slots=True)
@@ -66,81 +46,179 @@ class FitnessEvaluator:
     config: TournamentConfig
     benchmark: FitnessBenchmark
     objectives: list[FitnessObjective] = field(default_factory=list, init=False)
-    cache_map: dict[FitnessObjective, TwoTierCache] = None
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the configuration."""
         self.objectives.extend(list(FitnessObjective))
-        self.cache_map = {
-            FitnessObjective.BREAK_TIME: TwoTierCache(cold_cache=self.benchmark.timeslots),
-            FitnessObjective.LOCATION_CONSISTENCY: TwoTierCache(cold_cache=self.benchmark.locations),
-            FitnessObjective.OPPONENT_VARIETY: TwoTierCache(cold_cache=self.benchmark.opponents),
-        }
 
-    def evaluate(self, schedule: Schedule) -> None:
-        """Evaluate the fitness of a schedule using vectorized NumPy operations.
-
-        This is the primary performance-critical function in the GA. By creating one
-        large NumPy array for all team scores, we can use fast, vectorized functions
-        to calculate mean, variation, and range, avoiding slow Python loops.
+    def evaluate_population(self, population_array: np.ndarray, context: GaContext) -> tuple[np.ndarray, np.ndarray]:
+        """Evaluate an entire population of schedules.
 
         Args:
-            schedule (Schedule): The schedule to evaluate.
+            population_array (np.ndarray): Shape (pop_size, num_events). The core data.
+            context (GaContext): Holds static lookup arrays like event_properties.
 
-        Objectives:
-            - (bt) Break Time: Break time consistency across all teams.
-            - (tc) Table Consistency: Table consistency across all teams.
-            - (ov) Opponent Variety: Opponent variety across all teams.
-        Metrics:
-            - Mean: Average score across all teams for each objective.
-            - Coefficient of Variation: Variation relative to the mean for each objective.
-            - Range: Difference between the maximum and minimum scores for each objective.
+        Returns:
+            np.ndarray: Final fitness scores for the population. Shape (pop_size, num_objectives).
+            np.ndarray: All team scores for the population. Shape (pop_size, num_teams, num_objectives).
 
         """
-        all_teams = schedule.all_teams()
-        num_teams = len(all_teams)
-        if num_teams == 0:
-            schedule.fitness = tuple([0.0] * len(self.objectives))
-            return
-
-        # Main "setup"
-        team_scores_list = []
-        for team in all_teams:
-            vals = []
-            keys = team.get_fitness_keys()
-            for obj, key in zip(self.objectives, keys, strict=True):
-                val = self.cache_map[obj].get(key)
-                if val is None:
-                    logger.error("Cache miss for %s with key %s", obj, key)
-                    val = 0.0
-                vals.append(val)
-            team.fitness = tuple(vals)
-            team_scores_list.append(vals)
-
-        # Shape (num_teams, num_objectives)
-        scores = np.array(team_scores_list, dtype=float)
-
-        # Calculate mean scores for each objective (column-wise mean)
-        mean_s = np.mean(scores, axis=0)
-
-        # Calculate standard deviation for each objective
-        std_devs = np.std(scores, axis=0)
-
-        # Calculate Coefficient of Variation scores
-        epsilon = 1e-12  # Avoid division by zero
-        coeffs_of_variation = std_devs / (mean_s + epsilon)
-        vari_s = 1 / (1 + coeffs_of_variation)
-
-        # Calculate Range scores (vectorized)
-        ranges = np.ptp(scores, axis=0)  # ptp = "peak to peak" (max - min) for each objective
-        rnge_s = 1 / (1 + ranges)
-
-        # Combine weighted scores into the final fitness tuple
+        # Dims for reference
+        n_pop = population_array.shape[0]
+        n_teams = self.config.num_teams
+        n_objs = len(self.objectives)
+        # Preallocate arrays
+        team_fitnesses = np.zeros((n_pop, n_teams, n_objs), dtype=float)
+        # Get team-events mapping for the entire population
+        team_events_pop = self.get_team_events_from_population(population_array, context)
+        # Prepare lookup arrays
+        valid_events_mask, lookup_events = self.prepare_lookup(team_events_pop)
+        # Calculate scores for each objective
+        team_fitnesses[:, :, 0] = self.calc_break_time_scores(context, valid_events_mask, lookup_events)
+        team_fitnesses[:, :, 1] = self.calc_location_consistency_scores(context, valid_events_mask, lookup_events)
+        team_fitnesses[:, :, 2] = self.calc_opponent_variety_scores(
+            context, valid_events_mask, lookup_events, team_events_pop, population_array
+        )
+        # Aggregate team scores into schedule scores
+        mean_s = team_fitnesses.mean(axis=1)
+        std_devs = team_fitnesses.std(axis=1)
+        coeffs_of_variation = std_devs / (mean_s + EPSILON)
+        vari_s = 1.0 / (1.0 + coeffs_of_variation)
+        ranges = np.ptp(team_fitnesses, axis=1)
+        rnge_s = 1.0 / (1.0 + ranges)
         mw, vw, rw = self.config.weights
-        final_scores = (mean_s * mw) + (vari_s * vw) + (rnge_s * rw)
+        schedule_fitnesses = (mean_s * mw) + (vari_s * vw) + (rnge_s * rw)
+        return schedule_fitnesses, team_fitnesses
 
-        schedule.fitness = tuple(final_scores)
+    def get_team_events_from_population(self, population_array: np.ndarray, context: GaContext) -> np.ndarray:
+        """Invert the (event -> team) mapping to a (team -> events) mapping for the entire population."""
+        n_pop = population_array.shape[0]
+        n_teams = self.config.num_teams
+        max_events_per_team = context.max_events_per_team
+        team_events_pop = np.full((n_pop, n_teams, max_events_per_team), -1, dtype=int)
+        sched_indices, event_indices = np.where(population_array >= 0)
+        team_indices = population_array[sched_indices, event_indices]
+        if sched_indices.size > 0:
+            keys = (sched_indices * n_teams) + team_indices
+            order = np.lexsort((event_indices, keys))
+            keys_sorted = keys[order]
+            group_starts = np.r_[0, np.flatnonzero(keys_sorted[1:] != keys_sorted[:-1]) + 1]
+            group_lengths = np.diff(np.r_[group_starts, keys_sorted.size])
+            within_sorted = np.arange(keys_sorted.size, dtype=int) - np.repeat(group_starts, group_lengths)
+            within = np.empty_like(within_sorted)
+            within[order] = within_sorted
+            valid_mask = within < max_events_per_team
+            if np.any(valid_mask):
+                team_events_pop[
+                    sched_indices[valid_mask],
+                    team_indices[valid_mask],
+                    within[valid_mask],
+                ] = event_indices[valid_mask]
+        return team_events_pop
 
-    def get_cache_info(self) -> dict[FitnessObjective, str]:
-        """Get cache information for fitness evaluations."""
-        return {obj: f"Hits: {cache.hits}, Misses: {cache.misses}" for obj, cache in self.cache_map.items()}
+    def prepare_lookup(self, team_events_pop: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Prepare lookup arrays for fitness calculations."""
+        valid_events_mask = team_events_pop >= 0
+        lookup_events = np.where(valid_events_mask, team_events_pop, 0)
+        return valid_events_mask, lookup_events
+
+    def calc_break_time_scores(
+        self,
+        context: GaContext,
+        valid_events_mask: np.ndarray,
+        lookup_events: np.ndarray,
+    ) -> np.ndarray:
+        """Vectorized break time scoring."""
+        max_int = np.iinfo(np.int64).max
+        # Get start and stop times for each event
+        starts = context.event_properties[lookup_events, 0]
+        stops = context.event_properties[lookup_events, 1]
+        # Mask invalids with max int
+        starts[~valid_events_mask] = max_int
+        stops[~valid_events_mask] = max_int
+        # Sort events by start time
+        order = np.argsort(starts, axis=2)
+        starts_sorted = np.take_along_axis(starts, order, axis=2)
+        stops_sorted = np.take_along_axis(stops, order, axis=2)
+        # Calculate breaks between consecutive events
+        start_next = starts_sorted[:, :, 1:]
+        stop_curr = stops_sorted[:, :, :-1]
+        # Valid consecutive events must have valid start and stop times
+        valid_consecutive = (start_next < max_int) & (stop_curr < max_int)
+
+        breaks = start_next - stop_curr
+        breaks_in_minutes = breaks / 60.0
+        breaks_in_minutes[~valid_consecutive] = np.nan
+
+        # Identify overlaps
+        overlap_mask = np.any(breaks_in_minutes < 0, axis=2)
+
+        mean_break = np.nanmean(breaks_in_minutes, axis=2)
+        std_dev = np.nanstd(breaks_in_minutes, axis=2)
+
+        mean_break = np.nan_to_num(mean_break, nan=0.0)
+        std_dev = np.nan_to_num(std_dev, nan=0.0)
+
+        coefficient = std_dev / (mean_break + EPSILON)
+        ratio = 1.0 / (1.0 + coefficient)
+
+        zeros = np.sum(breaks_in_minutes == 0, axis=2)
+        b_penalty = self.benchmark.penalty**zeros
+
+        final_scores = ratio * b_penalty
+        final_scores[overlap_mask] = 0.0
+        final_scores /= self.benchmark.best_timeslot_score
+        return final_scores
+
+    def calc_location_consistency_scores(
+        self,
+        context: GaContext,
+        valid_events_mask: np.ndarray,
+        lookup_events: np.ndarray,
+    ) -> np.ndarray:
+        """Vectorized location consistency scoring."""
+        locations = context.event_properties[lookup_events, 2]
+        locations[~valid_events_mask] = -1
+
+        loc_sorted = np.sort(locations, axis=2)
+
+        valid_mask = loc_sorted[:, :, :-1] >= 0
+        changes = np.diff(loc_sorted, axis=2) != 0
+        meaningful_changes = np.sum(changes & valid_mask, axis=2)
+
+        has_at_least_one = loc_sorted[:, :, 0] >= 0
+        unique_counts = np.where(has_at_least_one, meaningful_changes, 0)
+
+        return self.benchmark.locations[unique_counts]
+
+    def calc_opponent_variety_scores(
+        self,
+        context: GaContext,
+        valid_events_mask: np.ndarray,
+        lookup_events: np.ndarray,
+        team_events_pop: np.ndarray,
+        population_array: np.ndarray,
+    ) -> np.ndarray:
+        """Vectorized opponent variety scoring."""
+        pop_size = team_events_pop.shape[0]
+
+        paired_event_ids = context.event_properties[lookup_events, 5]
+        paired_event_ids[~valid_events_mask] = -1
+
+        valid_opp = paired_event_ids >= 0
+        lookup_opp_events = np.where(valid_opp, paired_event_ids, 0)
+
+        schedule_indices = np.arange(pop_size)[:, None, None]
+        opponents = population_array[schedule_indices, lookup_opp_events]
+        opponents[~valid_opp] = -1
+
+        opponents_sorted = np.sort(opponents, axis=2)
+
+        valid_mask = opponents_sorted[:, :, :-1] >= 0
+        changes = np.diff(opponents_sorted, axis=2) != 0
+        meaningful_changes = np.sum(changes & valid_mask, axis=2)
+
+        has_at_least_one = opponents_sorted[:, :, 1] >= 0
+        unique_counts = np.where(has_at_least_one, meaningful_changes + 1, 0)
+
+        return self.benchmark.opponents[unique_counts]

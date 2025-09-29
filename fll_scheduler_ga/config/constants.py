@@ -7,6 +7,7 @@ from enum import StrEnum
 ASCII_OFFSET = 64
 FITNESS_PENALTY = 0.5
 RANDOM_SEED_RANGE = (1, 2**32 - 1)
+EPSILON = 1e-12
 
 
 class SelectionOp(StrEnum):
@@ -21,11 +22,9 @@ class CrossoverOp(StrEnum):
     K_POINT = "KPoint"
     SCATTERED = "Scattered"
     UNIFORM = "Uniform"
-    PARTIAL = "Partial"
     ROUND_TYPE_CROSSOVER = "RoundTypeCrossover"
     TIMESLOT_CROSSOVER = "TimeSlotCrossover"
     LOCATION_CROSSOVER = "LocationCrossover"
-    BEST_TEAM_CROSSOVER = "BestTeamCrossover"
 
 
 class MutationOp(StrEnum):

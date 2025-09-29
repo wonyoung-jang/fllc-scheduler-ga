@@ -25,7 +25,7 @@ def setup_environment() -> tuple[Namespace, GA]:
         args = init_parser()
         init_logging(args)
         app_config = AppConfig.create_app_config(args, Path(args.config_file))
-        ga_context = app_config.create_ga_context()
+        ga_context = app_config.create_ga_context(args)
         ga = ga_context.create_ga_instance(args)
     except (FileNotFoundError, KeyError):
         logger.exception("Error loading configuration")

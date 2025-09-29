@@ -4,20 +4,20 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from itertools import pairwise
 from logging import getLogger
 from typing import TYPE_CHECKING
+
+import numpy as np
 
 from ..config.constants import CrossoverOp
 from ..data_model.schedule import Schedule
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
-    from random import Random
 
     from ..config.app_config import AppConfig
     from ..data_model.event import Event, EventFactory
-    from ..data_model.team import Team, TeamFactory
+    from ..data_model.team import TeamFactory
 
 logger = getLogger(__name__)
 
@@ -31,11 +31,9 @@ def build_crossovers(
         CrossoverOp.K_POINT: lambda k: KPoint(team_factory, event_factory, rng, k=k),
         CrossoverOp.SCATTERED: lambda: Scattered(team_factory, event_factory, rng),
         CrossoverOp.UNIFORM: lambda: Uniform(team_factory, event_factory, rng),
-        CrossoverOp.PARTIAL: lambda: Partial(team_factory, event_factory, rng),
         CrossoverOp.ROUND_TYPE_CROSSOVER: lambda: RoundTypeCrossover(team_factory, event_factory, rng),
         CrossoverOp.TIMESLOT_CROSSOVER: lambda: TimeSlotCrossover(team_factory, event_factory, rng),
         CrossoverOp.LOCATION_CROSSOVER: lambda: LocationCrossover(team_factory, event_factory, rng),
-        CrossoverOp.BEST_TEAM_CROSSOVER: lambda: BestTeamCrossover(team_factory, event_factory, rng),
     }
 
     if not (crossover_types := app_config.operators.crossover_types):
@@ -63,7 +61,16 @@ class Crossover(ABC):
 
     team_factory: TeamFactory
     event_factory: EventFactory
-    rng: Random
+    rng: np.random.Generator
+    events: list[Event] = field(init=False, repr=False)
+    n_evts: int = field(init=False, repr=False)
+    indices: np.ndarray = None
+
+    def __post_init__(self) -> None:
+        """Post-initialization to validate the crossover operator."""
+        self.events = self.event_factory.build_singles_or_side1()
+        self.n_evts = len(self.events)
+        self.indices = np.arange(self.n_evts)
 
     @abstractmethod
     def cross(self, parents: Iterator[Schedule]) -> Iterator[Schedule]:
@@ -86,68 +93,46 @@ class Crossover(ABC):
     ) -> Schedule:
         """Create a child schedule from two parents."""
         c = Schedule(teams=self.team_factory.build(), origin=f"(C | {self!s})")
-        self._transfer_genes(c, p1, p2, p1_genes, p2_genes)
-        c.clear_cache()
+        self.assign_from_p1(c, p1, p1_genes)
+        self.assign_from_p2(c, p2, p2_genes)
         return c
 
-    def _transfer_genes(
-        self,
-        c: Schedule,
-        p1: Schedule,
-        p2: Schedule,
-        p1_genes: Iterator[Event],
-        p2_genes: Iterator[Event],
-    ) -> None:
-        """Transfer genes from both parents."""
-        evts_from_p1 = ((e, e.paired, c.get_team(p1[e]), c.get_team(p1[e.paired])) for e in p1_genes)
-        evts_from_p2 = ((e, e.paired, c.get_team(p2[e]), c.get_team(p2[e.paired])) for e in p2_genes)
-        while True:
-            from_p1 = next(evts_from_p1, None)
-            from_p2 = next(evts_from_p2, None)
-            if from_p1 is None and from_p2 is None:
-                break
-
-            self._assign_genes(c, from_p1)
-            self._assign_genes(c, from_p2)
-
-    def _assign_genes(
-        self,
-        c: Schedule,
-        data: tuple[Event, Event, Team, Team] | None,
-    ) -> None:
+    def assign_from_p1(self, c: Schedule, p: Schedule, p1_genes: Iterator[int]) -> None:
         """Assign genes."""
-        if data is None:
-            return
+        for i in p1_genes:
+            e1 = self.events[i]
+            if (pt1 := p[e1]) is None:
+                continue
 
-        e1, e2, t1, t2 = data
+            t1 = c.get_team(pt1.idx)
+            if (e2 := e1.paired) is None:
+                c.assign_single(e1, t1)
+            elif (pt2 := p[e2]) is not None:
+                t2 = c.get_team(pt2.idx)
+                c.assign_match(e1, e2, t1, t2)
 
-        if t1 is None or not t1.needs_round(e1.roundtype) or t1.conflicts(e1):
-            return
+    def assign_from_p2(self, c: Schedule, p: Schedule, p2_genes: Iterator[int]) -> None:
+        """Assign genes."""
+        for i in p2_genes:
+            e1 = self.events[i]
+            if (pt1 := p[e1]) is None:
+                continue
 
-        if e2 is None:
-            c.assign_single(e1, t1)
-            return
+            t1 = c.get_team(pt1.idx)
+            if not t1.needs_round(e1.roundtype) or t1.conflicts(e1):
+                continue
 
-        if e1.location.side != 1:
-            return
-
-        if t2 is None or not t2.needs_round(e2.roundtype) or t2.conflicts(e2):
-            return
-
-        c.assign_match(e1, e2, t1, t2)
+            if (e2 := e1.paired) is None:
+                c.assign_single(e1, t1)
+            elif (pt2 := p[e2]) is not None:
+                t2 = c.get_team(pt2.idx)
+                if t2.needs_round(e2.roundtype) and not t2.conflicts(e2):
+                    c.assign_match(e1, e2, t1, t2)
 
 
 @dataclass(slots=True)
 class EventCrossover(Crossover):
     """Abstract base class for crossover operators in the FLL Scheduler GA."""
-
-    events: list[Event] = field(init=False, repr=False)
-    n_evts: int = field(init=False, repr=False)
-
-    def __post_init__(self) -> None:
-        """Post-initialization to validate the crossover operator."""
-        self.events = self.event_factory.build()
-        self.n_evts = len(self.events)
 
     def __str__(self) -> str:
         """Return a string representation of the crossover operator."""
@@ -156,11 +141,11 @@ class EventCrossover(Crossover):
         return f"{self.__class__.__name__}"
 
     @abstractmethod
-    def get_genes(self) -> Iterator[Iterator[Event]]:
+    def get_genes(self) -> Iterator[Iterator[int]]:
         """Get the genes for the crossover.
 
         Yields:
-            Iterator[Event]: Genes for each parents.
+            Iterator[int]: Genes for each parents.
 
         """
 
@@ -185,17 +170,14 @@ class KPoint(EventCrossover):
             msg = "k must be between 1 and the number of events."
             raise ValueError(msg)
 
-    def get_genes(self) -> Iterator[Iterator[Event]]:
+    def get_genes(self) -> Iterator[Iterator[int]]:
         """Get the genes for KPoint crossover."""
-        p1_genes, p2_genes = [], []
-        p1_extend, p2_extend = p1_genes.extend, p2_genes.extend
-        indices = sorted([0, *self.rng.sample(range(1, self.n_evts), k=self.k), self.n_evts])
-        for i, events in enumerate(self.events[i:j] for i, j in pairwise(indices)):
-            if i % 2 == 0:
-                p1_extend(events)
-            else:
-                p2_extend(events)
-        return p1_genes, p2_genes
+        # Select k random split points from the middle of the indices.
+        splits = self.rng.choice(self.indices[1:-1], size=self.k, replace=False)
+        splits.sort()
+        # Create segments and alternate between parents.
+        segments = np.split(self.indices, splits)
+        return np.concatenate(segments[::2]), np.concatenate(segments[1::2])
 
 
 @dataclass(slots=True)
@@ -205,13 +187,11 @@ class Scattered(EventCrossover):
     Shuffled indices split parent 50/50.
     """
 
-    def get_genes(self) -> Iterator[Iterator[Event]]:
+    def get_genes(self) -> Iterator[Iterator[int]]:
         """Get the genes for Scattered crossover."""
-        evts = self.events
-        ne = self.n_evts
-        indices = self.rng.sample(range(ne), k=ne)
-        mid = ne // 2
-        return [evts[i] for i in indices[:mid]], [evts[i] for i in indices[mid:]]
+        # Shuffle all indices and split in half.
+        permuted_indices = self.rng.permutation(self.indices)
+        return np.array_split(permuted_indices, 2)
 
 
 @dataclass(slots=True)
@@ -223,39 +203,11 @@ class Uniform(EventCrossover):
     Uniform may result in more imbalanced splits.
     """
 
-    def get_genes(self) -> Iterator[Iterator[Event]]:
+    def get_genes(self) -> Iterator[Iterator[int]]:
         """Get the genes for Uniform crossover."""
-        p1_genes, p2_genes = [], []
-        p1_append, p2_append = p1_genes.append, p2_genes.append
-        randint = self.rng.randint
-        for e in self.events:
-            if randint(1, 2) == 1:
-                p1_append(e)
-            else:
-                p2_append(e)
-        return p1_genes, p2_genes
-
-
-@dataclass(slots=True)
-class Partial(EventCrossover):
-    """Partial crossover operator for genetic algorithms.
-
-    Each gene is chosen from either parent by flipping a 3 sided coin for each gene.
-    The third side is left unselected, leaving the repairer to fix the schedule.
-    """
-
-    def get_genes(self) -> Iterator[Iterator[Event]]:
-        """Get the genes for Partial crossover."""
-        p1_genes, p2_genes = [], []
-        p1_append, p2_append = p1_genes.append, p2_genes.append
-        randint = self.rng.randint
-        for e in self.events:
-            idx = randint(1, 3)
-            if idx == 1:
-                p1_append(e)
-            elif idx == 2:
-                p2_append(e)
-        return p1_genes, p2_genes
+        # Create a mask for selecting genes from each parent.
+        mask = self.rng.integers(0, 2, size=self.n_evts, dtype=bool)
+        return self.indices[mask], self.indices[~mask]
 
 
 @dataclass(slots=True)
@@ -265,16 +217,34 @@ class RoundTypeCrossover(EventCrossover):
     Each gene is chosen based on the round type of the event.
     """
 
+    roundtype_indices: np.ndarray[int] = None
+    roundtype_array: np.ndarray = None
+
+    def __post_init__(self) -> None:
+        """Post-initialization to set up the initial state."""
+        super(RoundTypeCrossover, self).__post_init__()
+        roundtypes = list(self.event_factory.as_roundtypes().keys())
+        roundtype_event_map = {rt: [] for rt in roundtypes}
+        for i, event in enumerate(self.events):
+            roundtype_event_map[event.roundtype].append(i)
+
+        roundtype_array = np.full(
+            (len(roundtypes), max(len(evts) for evts in roundtype_event_map.values())), -1, dtype=int
+        )
+        for j, rt in enumerate(roundtypes):
+            evts = roundtype_event_map[rt]
+            roundtype_array[j, : len(evts)] = evts
+
+        self.roundtype_indices = np.array(range(len(roundtypes)))
+        self.roundtype_array = roundtype_array
+
     def get_genes(self) -> Iterator[Iterator[Event]]:
         """Get the genes for RoundType crossover."""
-        p1_genes, p2_genes = [], []
-        p1_extend, p2_extend = p1_genes.extend, p2_genes.extend
-        for i, evts in enumerate(self.event_factory.as_roundtypes().values()):
-            if i % 2 == 0:
-                p1_extend(evts)
-            else:
-                p2_extend(evts)
-        return p1_genes, p2_genes
+        self.rng.shuffle(self.roundtype_indices)
+        mid = len(self.roundtype_indices) // 2
+        p1_indices = self.roundtype_array[self.roundtype_indices[:mid]]
+        p2_indices = self.roundtype_array[self.roundtype_indices[mid:]]
+        return p1_indices[p1_indices >= 0], p2_indices[p2_indices >= 0]
 
 
 @dataclass(slots=True)
@@ -284,16 +254,35 @@ class TimeSlotCrossover(EventCrossover):
     Each gene is chosen based on the time slot of the event.
     """
 
-    def get_genes(self) -> Iterator[Iterator[Event]]:
+    timeslot_indices: np.ndarray[int] = None
+    timeslot_array: np.ndarray = None
+
+    def __post_init__(self) -> None:
+        """Post-initialization to set up the initial state."""
+        super(TimeSlotCrossover, self).__post_init__()
+        timeslot_ids = np.array(list({t[1].idx for t in self.event_factory.as_timeslots()}))
+        timeslot_event_map = {ts_id: [] for ts_id in timeslot_ids}
+        for i, event in enumerate(self.events):
+            timeslot_event_map[event.timeslot.idx].append(i)
+
+        # convert lists to numpy arrays for faster indexing, need to handle unevent lengths
+        timeslot_array = np.full(
+            (len(timeslot_ids), max(len(evts) for evts in timeslot_event_map.values())), -1, dtype=int
+        )
+        for j, ts_id in enumerate(timeslot_ids):
+            evts = timeslot_event_map[ts_id]
+            timeslot_array[j, : len(evts)] = evts
+
+        self.timeslot_indices = np.array(range(len(timeslot_ids)))
+        self.timeslot_array = timeslot_array
+
+    def get_genes(self) -> Iterator[Iterator[int]]:
         """Get the genes for TimeSlot crossover."""
-        p1_genes, p2_genes = [], []
-        p1_extend, p2_extend = p1_genes.extend, p2_genes.extend
-        for i, evts in enumerate(self.event_factory.as_timeslots().values()):
-            if i % 2 == 0:
-                p1_extend(evts)
-            else:
-                p2_extend(evts)
-        return p1_genes, p2_genes
+        self.rng.shuffle(self.timeslot_indices)
+        mid = len(self.timeslot_indices) // 2
+        p1_indices = self.timeslot_array[self.timeslot_indices[:mid]]
+        p2_indices = self.timeslot_array[self.timeslot_indices[mid:]]
+        return p1_indices[p1_indices >= 0], p2_indices[p2_indices >= 0]
 
 
 @dataclass(slots=True)
@@ -303,74 +292,31 @@ class LocationCrossover(EventCrossover):
     Each gene is chosen based on the location of the event.
     """
 
-    def get_genes(self) -> Iterator[Iterator[Event]]:
-        """Get the genes for Location crossover."""
-        p1_genes, p2_genes = [], []
-        p1_extend, p2_extend = p1_genes.extend, p2_genes.extend
-        for i, evts in enumerate(self.event_factory.as_locations().values()):
-            if i % 2 == 0:
-                p1_extend(evts)
-            else:
-                p2_extend(evts)
-        return p1_genes, p2_genes
-
-
-@dataclass(slots=True)
-class TeamCrossover(Crossover):
-    """Abstract base class for team based crossover operators in the FLL Scheduler GA."""
-
-    event_map: dict[int, Event] = field(init=False, repr=False)
+    location_indices: np.ndarray[int] = None
+    location_array: np.ndarray = None
 
     def __post_init__(self) -> None:
-        """Post-initialization to set up the event map."""
-        self.event_map = self.event_factory.as_mapping()
+        """Post-initialization to set up the initial state."""
+        super(LocationCrossover, self).__post_init__()
+        location_ids = np.array(list({loc[1].idx for loc in self.event_factory.as_locations()}))
+        location_event_map = {loc_id: [] for loc_id in location_ids}
+        for i, event in enumerate(self.events):
+            location_event_map[event.location.idx].append(i)
 
-    def __str__(self) -> str:
-        """Return a string representation of the crossover operator."""
-        return f"{self.__class__.__name__}"
+        location_array = np.full(
+            (len(location_ids), max(len(evts) for evts in location_event_map.values())), -1, dtype=int
+        )
+        for j, loc_id in enumerate(location_ids):
+            evts = location_event_map[loc_id]
+            location_array[j, : len(evts)] = evts
 
-    @abstractmethod
-    def get_genes(self, p1: Schedule, p2: Schedule) -> Iterator[Iterator[Event]]:
-        """Get the genes for the crossover.
+        self.location_indices = np.array(range(len(location_ids)))
+        self.location_array = location_array
 
-        Args:
-            p1 (Schedule): First parent schedule.
-            p2 (Schedule): Second parent schedule.
-
-        Yields:
-            Iterator[Event]: Genes from each parents.
-
-        """
-
-    def cross(self, parents: Iterator[Schedule]) -> Iterator[Schedule]:
-        """Produce child schedules from two parents."""
-        p1, p2 = parents
-        p1_genes, p2_genes = self.get_genes(p1, p2)
-        yield self._create_child(p1, p2, p1_genes, p2_genes)
-        p2_genes, p1_genes = self.get_genes(p2, p1)
-        yield self._create_child(p2, p1, p2_genes, p1_genes)
-
-
-@dataclass(slots=True)
-class BestTeamCrossover(TeamCrossover):
-    """Team crossover operator for genetic algorithms.
-
-    This operator combines events from two parent schedules based on team assignments.
-    """
-
-    def get_genes(self, p1: Schedule, p2: Schedule) -> Iterator[Iterator[Event]]:
-        """Get the genes for Team crossover."""
-        evts_map = self.event_map
-        p1_best = set()
-        p2_best = set()
-        p1_update = p1_best.update
-        p2_update = p2_best.update
-        p1_data = ((sum(t.fitness), t.events) for t in p1.all_teams())
-        p2_data = ((sum(t.fitness), t.events) for t in p2.all_teams())
-        for (t1_fit, t1_events), (t2_fit, t2_events) in zip(p1_data, p2_data, strict=True):
-            if t1_fit > t2_fit:
-                p1_update(t1_events)
-            elif t2_fit > t1_fit:
-                p2_update(t2_events)
-        yield (evts_map[e] for e in p1_best)
-        yield (evts_map[e] for e in p2_best.difference(p1_best))
+    def get_genes(self) -> Iterator[Iterator[Event]]:
+        """Get the genes for Location crossover."""
+        self.rng.shuffle(self.location_indices)
+        mid = len(self.location_indices) // 2
+        p1_indices = self.location_array[self.location_indices[:mid]]
+        p2_indices = self.location_array[self.location_indices[mid:]]
+        return p1_indices[p1_indices >= 0], p2_indices[p2_indices >= 0]

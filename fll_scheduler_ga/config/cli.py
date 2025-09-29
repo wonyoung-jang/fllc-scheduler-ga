@@ -49,6 +49,12 @@ def init_parser() -> Namespace:
         default=None,
         help="Random seed for reproducibility.",
     )
+    general_group.add_argument(
+        "--flush_benchmarks",
+        action="store_true",
+        default=False,
+        help="Flush fitness benchmarks at beginning of run (for testing and development use).",
+    )
 
     # Output parameters
     output_group = parser.add_argument_group("Output Parameters")

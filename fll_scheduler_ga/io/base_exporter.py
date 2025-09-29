@@ -11,10 +11,10 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
 
-    from ..config.config import RoundType
+    from ..data_model.config import RoundType
+    from ..data_model.event import EventFactory
     from ..data_model.location import Location
     from ..data_model.schedule import Individual, Schedule
-    from ..data_model.team import Team
     from ..data_model.time import TimeSlot
 
 logger = getLogger(__name__)
@@ -23,6 +23,9 @@ logger = getLogger(__name__)
 @dataclass(slots=True)
 class Exporter(ABC):
     """Abstract base class for exporting schedules."""
+
+    time_fmt: str
+    event_factory: EventFactory
 
     def export(self, schedule: Schedule, path: Path) -> None:
         """Export the schedule to a given filename."""
@@ -42,7 +45,15 @@ class Exporter(ABC):
         """Group the schedule by round type."""
         grouped = {}
         normalized_teams = schedule.normalized_teams()
-        for event, team in sorted(schedule.items(), key=lambda item: (item[0].identity)):
+        event_map = self.event_factory.as_mapping()
+        for i, team in enumerate(schedule.schedule):
+            if team == -1:
+                continue
+
+            event = event_map.get(i)
+            if not event:
+                continue
+
             grouped.setdefault(event.roundtype, {})
             grouped[event.roundtype][event] = normalized_teams.get(team)
         return grouped
@@ -60,11 +71,9 @@ class Exporter(ABC):
 class GridBasedExporter(Exporter):
     """Base class for exporters that render a grid-based schedule."""
 
-    time_fmt: str
-
     def _build_grid_data(
-        self, schedule: Schedule
-    ) -> tuple[list[TimeSlot], list[Location], dict[tuple[TimeSlot, Location], Team]]:
+        self, schedule: Individual
+    ) -> tuple[list[TimeSlot], list[Location], dict[tuple[TimeSlot, Location], int]]:
         """Build the common grid data structure from a schedule."""
         grid_lookup = {(e.timeslot, e.location): team for e, team in schedule.items()}
         timeslots = sorted(
@@ -74,7 +83,7 @@ class GridBasedExporter(Exporter):
         locations = sorted(
             {i[1] for i in grid_lookup},
             key=lambda loc: (
-                loc.identity,
+                loc.name,
                 loc.side if loc.side else 0,
             ),
         )

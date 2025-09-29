@@ -15,28 +15,25 @@ from typing import TYPE_CHECKING
 from ..config.constants import SelectionOp
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
-    from random import Random
-
-    from ..data_model.schedule import Population, Schedule
+    import numpy as np
 
 
 @dataclass(slots=True)
 class Selection(ABC):
     """Abstract base class for selection operators in genetic algorithms."""
 
-    rng: Random
+    rng: np.random.Generator
 
     @abstractmethod
-    def select(self, population: Population, k: int = 2) -> Iterator[Schedule]:
+    def select(self, n: int, k: int = 2) -> np.ndarray[int]:
         """Select individuals from the population to form the next generation.
 
         Args:
-            population (Population): The current population of schedules.
+            n (int): The population size to select from.
             k (int): The number to select.
 
-        Yields:
-            Schedule: The selected parent schedules.
+        Returns:
+            np.ndarray[int]: The indices of the selected individuals.
 
         """
 
@@ -49,6 +46,6 @@ class RandomSelect(Selection):
         """Return a string representation of the selection operator."""
         return SelectionOp.RANDOM_SELECT
 
-    def select(self, population: Population, k: int = 2) -> Iterator[Schedule]:
+    def select(self, n: int, k: int = 2) -> np.ndarray[int]:
         """Select individuals from the population to form the next generation."""
-        yield from self.rng.sample(population, k=k)
+        return self.rng.choice(n, size=k, replace=False)

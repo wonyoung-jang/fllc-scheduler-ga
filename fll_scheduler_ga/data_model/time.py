@@ -9,9 +9,11 @@ if TYPE_CHECKING:
     from datetime import datetime
 
 
-@dataclass(slots=True, frozen=True)
+@dataclass(slots=True, unsafe_hash=True)
 class TimeSlot:
     """Data model for a time slot in the FLL Scheduler GA."""
+
+    idx: int
 
     start: datetime
     stop: datetime
