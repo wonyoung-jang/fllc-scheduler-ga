@@ -12,7 +12,6 @@ import numpy as np
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
-    from datetime import datetime
 
     from .config import Round, RoundType, TournamentConfig
     from .location import Location
@@ -55,7 +54,6 @@ class EventFactory:
     _list: list[Event] = field(default_factory=list, repr=False)
     _list_singles_or_side1: list[Event] = None
     _conflict_matrix: np.ndarray = None
-    _cached_timeslots: dict[tuple[datetime, datetime], TimeSlot] = field(default_factory=dict, repr=False)
     _cached_mapping: dict[int, Event] = None
     _cached_roundtypes: dict[RoundType, list[Event]] = None
     _cached_timeslots_list: dict[tuple[RoundType, TimeSlot], list[Event]] = None
@@ -177,8 +175,8 @@ class EventFactory:
         """Get a mapping of RoundTypes to their matched Events."""
         if self._cached_matches is None:
             self._cached_matches = defaultdict(list)
-            for e in self.build():
-                if e.paired is None or (e.paired and e.location.side != 1):
+            for e in self.build_singles_or_side1():
+                if e.paired is None:
                     continue
                 self._cached_matches[e.roundtype].append((e, e.paired))
         return self._cached_matches

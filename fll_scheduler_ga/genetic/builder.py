@@ -54,7 +54,7 @@ class ScheduleBuilder:
     def build_singles(self, schedule: Schedule, rt: RoundType, events: list[Event], teams: list[Team]) -> None:
         """Book all judging events for a specific round type."""
         for event in events:
-            available = (t for t in teams if t.needs_round(rt) and not t.conflicts(event))
+            available = (t for t in teams if schedule.team_needs_round(t, rt) and not schedule.conflicts(t, event))
             team = next(available, None)
             if team:
                 schedule.assign_single(event, team)
@@ -62,7 +62,7 @@ class ScheduleBuilder:
     def build_matches(self, schedule: Schedule, rt: RoundType, events: list[Event], teams: list[Team]) -> None:
         """Book all events for a specific round type."""
         for side1, side2 in ((e, e.paired) for e in events if e.location.side == 1):
-            available = (t for t in teams if t.needs_round(rt) and not t.conflicts(side1))
+            available = (t for t in teams if schedule.team_needs_round(t, rt) and not schedule.conflicts(t, side1))
             team1 = next(available, None)
             team2 = next(available, None)
             if team1 and team2:

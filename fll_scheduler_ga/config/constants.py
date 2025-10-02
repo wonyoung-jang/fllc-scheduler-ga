@@ -47,3 +47,4 @@ class FitnessObjective(StrEnum):
     BREAK_TIME = "BreakTime"
     LOCATION_CONSISTENCY = "LocationConsistency"
     OPPONENT_VARIETY = "OpponentVariety"
+    # CONFLICTS = "Conflicts"

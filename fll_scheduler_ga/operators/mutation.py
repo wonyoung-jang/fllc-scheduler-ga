@@ -204,8 +204,8 @@ class SwapTeamMutation(SwapMutation):
         e1a, _, t1a, _ = match1_data
         e2a, _, t2a, _ = match2_data
 
-        t1a.switch_event(e1a, e2a)
-        t2a.switch_event(e2a, e1a)
+        schedule.switch_team_event(t1a, e1a, e2a)
+        schedule.switch_team_event(t2a, e2a, e1a)
 
         schedule[e1a] = t2a
         schedule[e2a] = t1a
@@ -229,7 +229,11 @@ class SwapTeamMutation(SwapMutation):
                 continue
 
             match_team_ids = {t1a.idx, t1b.idx, t2a.idx, t2b.idx}
-            if len(match_team_ids) < 4 or t1a.conflicts(e2a, ignore=e1a) or t2a.conflicts(e1a, ignore=e2a):
+            if (
+                len(match_team_ids) < 4
+                or schedule.conflicts(t1a, e2a, ignore=e1a)
+                or schedule.conflicts(t2a, e1a, ignore=e2a)
+            ):
                 continue
 
             return (e1a, e1b, t1a, t1b), (e2a, e2b, t2a, t2b)
@@ -265,8 +269,8 @@ class SwapMatchMutation(SwapMutation):
             return False
 
         if is_match1_teams:
-            t1a.switch_event(e1a, e2a)
-            t1b.switch_event(e1b, e2b)
+            schedule.switch_team_event(t1a, e1a, e2a)
+            schedule.switch_team_event(t1b, e1b, e2b)
             schedule[e2a] = t1a
             schedule[e2b] = t1b
             if not is_match2_teams:
@@ -274,8 +278,8 @@ class SwapMatchMutation(SwapMutation):
                 del schedule[e1b]
 
         if is_match2_teams:
-            t2a.switch_event(e2a, e1a)
-            t2b.switch_event(e2b, e1b)
+            schedule.switch_team_event(t2a, e2a, e1a)
+            schedule.switch_team_event(t2b, e2b, e1b)
             schedule[e1a] = t2a
             schedule[e1b] = t2b
             if not is_match1_teams:
@@ -296,11 +300,15 @@ class SwapMatchMutation(SwapMutation):
             e2a, e2b = match2_data
 
             t1a, t1b = schedule[e1a], schedule[e1b]
-            if None not in (t1a, t1b) and (t1a.conflicts(e2a, ignore=e1a) or t1b.conflicts(e2b, ignore=e1b)):
+            if None not in (t1a, t1b) and (
+                schedule.conflicts(t1a, e2a, ignore=e1a) or schedule.conflicts(t1b, e2b, ignore=e1b)
+            ):
                 continue
 
             t2a, t2b = schedule[e2a], schedule[e2b]
-            if None not in (t2a, t2b) and (t2a.conflicts(e1a, ignore=e2a) or t2b.conflicts(e1b, ignore=e2b)):
+            if None not in (t2a, t2b) and (
+                schedule.conflicts(t2a, e1a, ignore=e2a) or schedule.conflicts(t2b, e1b, ignore=e2b)
+            ):
                 continue
 
             return (e1a, e1b, t1a, t1b), (e2a, e2b, t2a, t2b)
@@ -322,9 +330,8 @@ class SwapTableSideMutation(SwapMutation):
             return False
 
         e1a, e1b, t1a, t1b = match_data
-        t1a.switch_event(e1a, e1b)
-        t1b.switch_event(e1b, e1a)
-
+        schedule.switch_team_event(t1a, e1a, e1b)
+        schedule.switch_team_event(t1b, e1b, e1a)
         schedule[e1a] = t1b
         schedule[e1b] = t1a
 
@@ -369,30 +376,15 @@ class TimeSlotSequenceMutation(Mutation):
         msg = "Subclasses must implement this method."
         raise NotImplementedError(msg)
 
-    def get_candidates(self, schedule: Schedule) -> list[Event]:
+    def get_candidates(self) -> list[Event]:
         """Get a list of candidate events for mutation within a specific timeslot."""
-        chosen_key_i = self.rng.integers(0, len(self.timeslot_keys))
-        chosen_key = self.timeslot_keys[chosen_key_i]
-        chosen_rt, _ = chosen_key
-
-        max_len_timeslot = max(len(v) for k, v in self.timeslot_event_map.items() if k[0] == chosen_rt)
-        s_indices = schedule.scheduled_event_indices()
-        schedule_events = (self.event_map[i] for i in s_indices)
-        less_than_timeslots = [
-            k
-            for k, _ in self.timeslot_event_map.items()
-            if k[0] == chosen_rt and len([e for e in schedule_events if e.timeslot == k[1]]) < max_len_timeslot
-        ]
-
-        if less_than_timeslots and self.rng.random() < 0.5:
-            chosen_key_i = self.rng.integers(0, len(less_than_timeslots))
-            chosen_key = less_than_timeslots[chosen_key_i]
-
-        return sorted(self.timeslot_event_map[chosen_key], key=lambda e: e.location.idx)
+        idx = self.rng.integers(0, len(self.timeslot_keys))
+        key = self.timeslot_keys[idx]
+        return sorted(self.timeslot_event_map[key], key=lambda e: e.location.idx)
 
     def mutate(self, schedule: Schedule) -> bool:
         """Find a suitable timeslot and round type, then permute assignments."""
-        candidates = self.get_candidates(schedule)
+        candidates = self.get_candidates()
         tpr = candidates[0].location.teams_per_round
         if tpr == 1:
             return self.mutate_singles(schedule, candidates)
@@ -409,11 +401,11 @@ class TimeSlotSequenceMutation(Mutation):
                 continue
 
             if old_id is not None and (old_team := schedule.get_team(old_id)):
-                old_team.remove_event(event)
+                schedule.remove_team_event(old_team, event)
                 del schedule[event]
 
             if new_id is not None and (new_team := schedule.get_team(new_id)):
-                new_team.add_event(event)
+                schedule.add_team_event(new_team, event)
                 schedule[event] = new_team
 
         return True
@@ -438,21 +430,17 @@ class TimeSlotSequenceMutation(Mutation):
 
             e1, e2 = match
 
-            if None in old_id_pair:
-                old_t1, old_t2 = old_id_pair
-            else:
+            if None not in old_id_pair:
                 old_t1, old_t2 = (schedule.get_team(i) for i in old_id_pair)
-                old_t1.remove_event(e1)
-                old_t2.remove_event(e2)
+                schedule.remove_team_event(old_t1, e1)
+                schedule.remove_team_event(old_t2, e2)
                 del schedule[e1]
                 del schedule[e2]
 
-            if None in new_id_pair:
-                new_t1, new_t2 = new_id_pair
-            else:
+            if None not in new_id_pair:
                 new_t1, new_t2 = (schedule.get_team(i) for i in new_id_pair)
-                new_t1.add_event(e1)
-                new_t2.add_event(e2)
+                schedule.add_team_event(new_t1, e1)
+                schedule.add_team_event(new_t2, e2)
                 schedule[e1] = new_t1
                 schedule[e2] = new_t2
 

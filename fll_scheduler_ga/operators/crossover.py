@@ -119,14 +119,14 @@ class Crossover(ABC):
                 continue
 
             t1 = c.get_team(pt1.idx)
-            if not t1.needs_round(e1.roundtype) or t1.conflicts(e1):
+            if not c.team_needs_round(t1, e1.roundtype) or c.conflicts(t1, e1):
                 continue
 
             if (e2 := e1.paired) is None:
                 c.assign_single(e1, t1)
             elif (pt2 := p[e2]) is not None:
                 t2 = c.get_team(pt2.idx)
-                if t2.needs_round(e2.roundtype) and not t2.conflicts(e2):
+                if c.team_needs_round(t2, e2.roundtype) and not c.conflicts(t2, e2):
                     c.assign_match(e1, e2, t1, t2)
 
 
@@ -211,14 +211,29 @@ class Uniform(EventCrossover):
 
 
 @dataclass(slots=True)
-class RoundTypeCrossover(EventCrossover):
+class StructureCrossover(EventCrossover):
+    """Structure-based crossover operator for genetic algorithms.
+
+    Each gene is chosen based on a specific structure of the event.
+    """
+
+    array: np.ndarray = None
+    mid: int = None
+
+    def get_genes(self) -> Iterator[Iterator[int]]:
+        """Get the genes for Structure-based crossover."""
+        self.rng.shuffle(self.indices)
+        p1_indices = self.array[self.indices[: self.mid]]
+        p2_indices = self.array[self.indices[self.mid :]]
+        return p1_indices[p1_indices >= 0], p2_indices[p2_indices >= 0]
+
+
+@dataclass(slots=True)
+class RoundTypeCrossover(StructureCrossover):
     """Round type crossover operator for genetic algorithms.
 
     Each gene is chosen based on the round type of the event.
     """
-
-    roundtype_indices: np.ndarray[int] = None
-    roundtype_array: np.ndarray = None
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
@@ -228,34 +243,21 @@ class RoundTypeCrossover(EventCrossover):
         for i, event in enumerate(self.events):
             roundtype_event_map[event.roundtype].append(i)
 
-        roundtype_array = np.full(
-            (len(roundtypes), max(len(evts) for evts in roundtype_event_map.values())), -1, dtype=int
-        )
+        self.array = np.full((len(roundtypes), max(len(evts) for evts in roundtype_event_map.values())), -1, dtype=int)
         for j, rt in enumerate(roundtypes):
             evts = roundtype_event_map[rt]
-            roundtype_array[j, : len(evts)] = evts
+            self.array[j, : len(evts)] = evts
 
-        self.roundtype_indices = np.array(range(len(roundtypes)))
-        self.roundtype_array = roundtype_array
-
-    def get_genes(self) -> Iterator[Iterator[Event]]:
-        """Get the genes for RoundType crossover."""
-        self.rng.shuffle(self.roundtype_indices)
-        mid = len(self.roundtype_indices) // 2
-        p1_indices = self.roundtype_array[self.roundtype_indices[:mid]]
-        p2_indices = self.roundtype_array[self.roundtype_indices[mid:]]
-        return p1_indices[p1_indices >= 0], p2_indices[p2_indices >= 0]
+        self.indices = np.array(range(len(roundtypes)))
+        self.mid = len(self.indices) // 2
 
 
 @dataclass(slots=True)
-class TimeSlotCrossover(EventCrossover):
+class TimeSlotCrossover(StructureCrossover):
     """Time slot crossover operator for genetic algorithms.
 
     Each gene is chosen based on the time slot of the event.
     """
-
-    timeslot_indices: np.ndarray[int] = None
-    timeslot_array: np.ndarray = None
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
@@ -265,35 +267,21 @@ class TimeSlotCrossover(EventCrossover):
         for i, event in enumerate(self.events):
             timeslot_event_map[event.timeslot.idx].append(i)
 
-        # convert lists to numpy arrays for faster indexing, need to handle unevent lengths
-        timeslot_array = np.full(
-            (len(timeslot_ids), max(len(evts) for evts in timeslot_event_map.values())), -1, dtype=int
-        )
+        self.array = np.full((len(timeslot_ids), max(len(evts) for evts in timeslot_event_map.values())), -1, dtype=int)
         for j, ts_id in enumerate(timeslot_ids):
             evts = timeslot_event_map[ts_id]
-            timeslot_array[j, : len(evts)] = evts
+            self.array[j, : len(evts)] = evts
 
-        self.timeslot_indices = np.array(range(len(timeslot_ids)))
-        self.timeslot_array = timeslot_array
-
-    def get_genes(self) -> Iterator[Iterator[int]]:
-        """Get the genes for TimeSlot crossover."""
-        self.rng.shuffle(self.timeslot_indices)
-        mid = len(self.timeslot_indices) // 2
-        p1_indices = self.timeslot_array[self.timeslot_indices[:mid]]
-        p2_indices = self.timeslot_array[self.timeslot_indices[mid:]]
-        return p1_indices[p1_indices >= 0], p2_indices[p2_indices >= 0]
+        self.indices = np.array(range(len(timeslot_ids)))
+        self.mid = len(self.indices) // 2
 
 
 @dataclass(slots=True)
-class LocationCrossover(EventCrossover):
+class LocationCrossover(StructureCrossover):
     """Location crossover operator for genetic algorithms.
 
     Each gene is chosen based on the location of the event.
     """
-
-    location_indices: np.ndarray[int] = None
-    location_array: np.ndarray = None
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
@@ -303,20 +291,10 @@ class LocationCrossover(EventCrossover):
         for i, event in enumerate(self.events):
             location_event_map[event.location.idx].append(i)
 
-        location_array = np.full(
-            (len(location_ids), max(len(evts) for evts in location_event_map.values())), -1, dtype=int
-        )
+        self.array = np.full((len(location_ids), max(len(evts) for evts in location_event_map.values())), -1, dtype=int)
         for j, loc_id in enumerate(location_ids):
             evts = location_event_map[loc_id]
-            location_array[j, : len(evts)] = evts
+            self.array[j, : len(evts)] = evts
 
-        self.location_indices = np.array(range(len(location_ids)))
-        self.location_array = location_array
-
-    def get_genes(self) -> Iterator[Iterator[Event]]:
-        """Get the genes for Location crossover."""
-        self.rng.shuffle(self.location_indices)
-        mid = len(self.location_indices) // 2
-        p1_indices = self.location_array[self.location_indices[:mid]]
-        p2_indices = self.location_array[self.location_indices[mid:]]
-        return p1_indices[p1_indices >= 0], p2_indices[p2_indices >= 0]
+        self.indices = np.array(range(len(location_ids)))
+        self.mid = len(self.indices) // 2

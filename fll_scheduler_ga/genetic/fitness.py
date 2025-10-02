@@ -36,7 +36,7 @@ class HardConstraintChecker:
         if len(schedule) != self.config.total_slots_required:
             return False
 
-        return not any(team.rounds_needed() for team in schedule.teams)
+        return not any(schedule.team_rounds_needed(team) for team in schedule.teams)
 
 
 @dataclass(slots=True)

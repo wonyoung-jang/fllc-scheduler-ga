@@ -115,8 +115,7 @@ class CsvImporter:
                 )
 
         self.link_opponents(created_events)
-
-        if any(t.rounds_needed() for t in self.schedule.teams):
+        if any(self.schedule.team_rounds_needed(t) for t in self.schedule.teams):
             logger.warning("Some teams are missing required rounds defined in your config.")
 
     def parse_csv_data_row(

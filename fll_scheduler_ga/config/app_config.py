@@ -79,7 +79,7 @@ class AppConfig:
         nsga3 = NSGA3(
             rng=rng,
             n_objectives=num_objectives,
-            n_total_pop=params.population_size * params.num_islands,
+            n_total_pop=params.population_size,  # * params.num_islands,
         )
         selection = RandomSelect(rng)
         crossovers = tuple(build_crossovers(self, team_factory, event_factory))
@@ -140,6 +140,7 @@ class AppConfigParser(ConfigParser):
         total_slots_required = sum(num_teams * r.rounds_per_team for r in rounds)
         unique_opponents_possible = 1 <= max(r.rounds_per_team for r in rounds) <= num_teams - 1
         Schedule.set_total_num_events(total_slots_possible)
+        Schedule.set_team_roundreqs(roundreqs)
 
         weights = self.parse_fitness_config()
 
@@ -291,13 +292,12 @@ class AppConfigParser(ConfigParser):
     ) -> int:
         """Calculate the number of timeslots needed for a round."""
         if times:
-            return len(times)
-
-        if not locations:
-            return 0
-
-        total_teams = num_teams * rounds_per_team
-        return ceil(total_teams / len(locations))
+            num_timeslots = len(times)
+        elif not locations:
+            num_timeslots = 0
+        else:
+            num_timeslots = ceil((num_teams * rounds_per_team) / len(locations))
+        return num_timeslots
 
     def init_timeslots(
         self, times: list[datetime], dur: timedelta, numslots: int, start: datetime

@@ -113,7 +113,8 @@ class Repairer:
         rt_tpr_config = self.rt_teams_needed
         teams_by_rt_tpr: dict[tuple[str, int], list[Team]] = defaultdict(list)
         for t in schedule.teams:
-            for rt, n in ((rt, n) for rt, n in t.roundreqs.items() if n):
+            roundreqs = schedule.team_rounds[t.idx]
+            for rt, n in ((rt, n) for rt, n in roundreqs.items() if n):
                 k = (rt, rt_tpr_config[rt])
                 teams_by_rt_tpr[k].extend(t for _ in range(n))
 
@@ -138,7 +139,7 @@ class Repairer:
             tkey = self.rng.choice(team_keys)
             t = teams.pop(tkey)
             for i, e in events.items():
-                if t.conflicts(e):
+                if schedule.conflicts(t, e):
                     continue
 
                 schedule.assign_single(e, t)
@@ -178,7 +179,7 @@ class Repairer:
         """Find an open match slot for two teams and populate it."""
         for i, e1 in events.items():
             e2 = e1.paired
-            if t1.conflicts(e1) or t2.conflicts(e2):
+            if schedule.conflicts(t1, e1) or schedule.conflicts(t2, e2):
                 continue
 
             schedule.assign_match(e1, e2, t1, t2)

@@ -74,7 +74,6 @@ class GA:
         self._crossover_ratio = {tr: Counter({str(c): 0 for c in self.context.crossovers}) for tr in trackers}
         self._mutation_ratio = {tr: Counter({str(m): 0 for m in self.context.mutations}) for tr in trackers}
 
-        # self.context.repairer.rng = Random(seeder.randint(*RANDOM_SEED_RANGE))
         self.islands.extend(
             Island(
                 i,
@@ -213,8 +212,6 @@ class GA:
                 sch.fitness = schedule_fitness[idx]
                 sch.team_fitnesses = team_fitnesses[idx]
                 sch.rank = rank
-                for t, tf in zip(sch.teams, team_fitnesses[idx], strict=True):
-                    t.fitness = tf
                 selected[hash(sch)] = sch
         self.total_population = sorted(selected.values(), key=lambda s: (s.rank, -s.fitness.sum()))
 
@@ -270,8 +267,10 @@ class GA:
         """Count unique event lists."""
         unique_genes = Counter()
         for schedule in self.total_population:
-            for team in schedule.teams:
-                unique_genes[tuple(sorted(team.events))] += 1
+            for events in schedule.team_events.values():
+                unique_genes[tuple(sorted(events))] += 1
+            # for team in schedule.teams:
+            #     unique_genes[tuple(sorted(team.events))] += 1
         for gene, count in unique_genes.most_common(n=10):
             logger.debug("Event: %s, Count: %d", gene, count)
 

@@ -68,13 +68,8 @@ def export_all_schedules(schedules: list[Schedule], subdirs: dict[str, Path], ga
 
 def generate_plots(ga: GA, output_dir: Path, args: Namespace) -> None:
     """Generate plots for the GA results."""
-    if args.no_plotting or not ga.total_population:
-        return
-
-    plot = Plot(ga, output_dir, args.cmap_name)
-    plot.plot_fitness(title="Fitness over time", xlabel="Generations", ylabel="Average fitnesses")
-    plot.plot_parallel(title="Trade-off parallel coordinates")
-    plot.plot_scatter(title=f"{len(ga.context.evaluator.objectives)}D scatter plot of schedules")
+    if not args.no_plotting and ga.total_population:
+        Plot(ga, output_dir, args.cmap_name).plot()
 
 
 def generate_summary_report(schedule: Schedule, path: Path) -> None:
@@ -105,7 +100,8 @@ def generate_summary_report(schedule: Schedule, path: Path) -> None:
             f.write(f"{'Percentage':<{max_len_obj}}: {sum(schedule.fitness) / len(schedule.fitness):.2%}\n")
 
             all_teams = schedule.teams
-            total_fitnesses = [t.fitness.sum() for t in all_teams]
+            team_fits = schedule.team_fitnesses
+            total_fitnesses = team_fits.sum(axis=1)
             max_team_f = max(total_fitnesses)
             min_team_f = min(total_fitnesses)
 
@@ -125,11 +121,12 @@ def generate_summary_report(schedule: Schedule, path: Path) -> None:
             f.write("-" * len(header) + "\n")
 
             normalized_teams = schedule.normalized_teams()
-            for t in sorted(all_teams, key=lambda x: -x.fitness.sum()):
-                fitness_row = (f"{score:<{len_objectives[i] + 1}.4f}" for i, score in enumerate(t.fitness))
+            # use the numpy array
+            for t, fit in sorted(zip(all_teams, team_fits, strict=True), key=lambda x: -x[1].sum()):
+                fitness_row = (f"{score:<{len_objectives[i] + 1}.4f}" for i, score in enumerate(fit))
                 fitness_str = "|".join(fitness_row)
                 team_id = normalized_teams.get(t.idx)
-                f.write(f"{team_id:<5}|{fitness_str}|{sum(t.fitness):.4f}\n")
+                f.write(f"{team_id:<5}|{fitness_str}|{sum(fit):.4f}\n")
     except OSError:
         logger.exception("Failed to write summary report to file %s", path)
 
@@ -157,13 +154,21 @@ def generate_team_schedules(schedule: Schedule, path: Path, ga: GA) -> None:
 
             rows.append(headers)
 
-            for team in sorted(schedule.teams, key=lambda x: x.idx):
-                row = [team.idx + 1]
-                for event_id in sorted(team.events):
+            for team_id, events in sorted(schedule.team_events.items()):
+                row = [team_id + 1]
+                for event_id in sorted(events):
                     event = event_map.get(event_id)
                     row.append(str(event.timeslot))
                     row.append(str(event.location))
                 rows.append(row)
+
+            # for team in sorted(schedule.teams, key=lambda x: x.idx):
+            #     row = [team.idx + 1]
+            #     for event_id in sorted(team.events):
+            #         event = event_map.get(event_id)
+            #         row.append(str(event.timeslot))
+            #         row.append(str(event.location))
+            #     rows.append(row)
 
             writer(f).writerows(rows)
     except OSError:

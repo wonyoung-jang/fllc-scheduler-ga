@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from logging import WARNING, getLogger
+import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -21,9 +21,9 @@ if TYPE_CHECKING:
     from ..genetic.ga import GA
 
 
-logger = getLogger("visualize.plot")
-getLogger("matplotlib").setLevel(WARNING)
-getLogger("PIL").setLevel(WARNING)
+logger = logging.getLogger("visualize.plot")
+logging.getLogger("matplotlib").setLevel(logging.WARNING)
+logging.getLogger("PIL").setLevel(logging.WARNING)
 plt.style.use("seaborn-v0_8-whitegrid")
 
 
@@ -34,15 +34,22 @@ class Plot:
     ga: GA
     save_dir: str | Path | None
     cmap_name: str
-    objectives: list[FitnessObjective] = field(init=False)
-    ref_points: np.ndarray = field(init=False, repr=False)
+
+    objectives: list[FitnessObjective] = None
+    ref_points: np.ndarray = None
 
     def __post_init__(self) -> None:
         """Post initializtion for Plot class."""
         self.objectives = list(FitnessObjective)
         self.ref_points = self.ga.context.nsga3.ref_points
 
-    def plot_fitness(self, title: str, xlabel: str, ylabel: str) -> None:
+    def plot(self) -> None:
+        """Create all plots."""
+        self.plot_fitness()
+        self.plot_parallel()
+        self.plot_scatter()
+
+    def plot_fitness(self) -> None:
         """Create figure that summarizes how the average fitness of the first Pareto front evolved by generation.
 
         Args:
@@ -69,12 +76,12 @@ class Plot:
             p = np.poly1d(z)
             ax.plot(x, p(x), linestyle="--", linewidth=0.8, label=f"{col} Trend (deg={len(z) - 1})")
 
-        ax.set(title=title, xlabel=xlabel, ylabel=ylabel)
+        ax.set(title="Fitness over time", xlabel="Generations", ylabel="Average fitnesses")
         ax.legend(title="Objectives", fontsize=10)
         fig.tight_layout()
         self.finalize(fig, "fitness_vs_generation.png")
 
-    def plot_parallel(self, title: str) -> None:
+    def plot_parallel(self) -> None:
         """Create the parallel coordinates plot."""
         data = [[p.fitness[i] for i, _ in enumerate(self.objectives)] + [p.rank] for p in self.ga.total_population]
         objectives = [*self.objectives, "Rank"]
@@ -88,14 +95,14 @@ class Plot:
             alpha=0.7,
             colormap=self.cmap_name,
         )
-        ax.set(title=title, xlabel="Objectives", ylabel="Score")
+        ax.set(title="Trade-off parallel coordinates", xlabel="Objectives", ylabel="Score")
         ax.get_legend().remove()
         plt.xticks(rotation=15, ha="right")
         ranks = dataframe[objectives[-1]].tolist()
         self._attach_colorbar(ax, ranks, label="Rank")
         self.finalize(fig, "pareto_parallel.png")
 
-    def plot_scatter(self, title: str) -> None:
+    def plot_scatter(self) -> None:
         """Create a 2D or 3D scatter plot of the Pareto front."""
         len_obj = len(self.objectives)
         if len_obj not in (2, 3):
@@ -109,7 +116,11 @@ class Plot:
             fig, ax = plt.subplots(figsize=(10, 8))
             x_obj, y_obj = self.objectives
             ax.scatter(dataframe[x_obj], dataframe[y_obj], c=ranks, cmap=self.cmap_name, s=60, alpha=0.8)
-            ax.set(title=title, xlabel=x_obj, ylabel=y_obj)
+            ax.set(
+                title=f"{len(self.ga.context.evaluator.objectives)}D scatter plot of schedules",
+                xlabel=x_obj,
+                ylabel=y_obj,
+            )
             self._attach_colorbar(ax, ranks, label="Rank")
             self.finalize(fig, f"pareto_scatter_{len_obj}d.png")
         elif len_obj == 3:
@@ -117,7 +128,13 @@ class Plot:
             x_obj, y_obj, z_obj = self.objectives
             ax.view_init(azim=45, elev=40)
             ax.scatter(dataframe[x_obj], dataframe[y_obj], dataframe[z_obj], c=ranks, cmap=self.cmap_name, s=60)
-            ax.set(title=title, xlabel=x_obj, ylabel=y_obj, zlabel=z_obj, box_aspect=[1, 1, 1])
+            ax.set(
+                title=f"{len(self.ga.context.evaluator.objectives)}D scatter plot of schedules",
+                xlabel=x_obj,
+                ylabel=y_obj,
+                zlabel=z_obj,
+                box_aspect=[1, 1, 1],
+            )
             self._attach_colorbar(ax, ranks, label="Rank")
             self.finalize(fig, f"pareto_scatter_{len_obj}d.png")
             ax.scatter(
