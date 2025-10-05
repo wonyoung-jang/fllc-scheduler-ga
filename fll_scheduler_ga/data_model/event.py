@@ -30,7 +30,7 @@ class Event:
     timeslot: TimeSlot
     location: Location
     paired: Event | None = field(default=None, repr=False, compare=False)
-    conflicts: set[int] = field(default_factory=set, repr=False)
+    conflicts: list[int] = field(default_factory=list, repr=False)
 
     def __hash__(self) -> int:
         """Use the unique identity for hashing."""
@@ -123,8 +123,11 @@ class EventFactory:
         """Build a mapping of event identities to their conflicting events."""
         for e1, e2 in itertools.combinations(self.build(), 2):
             if e1.timeslot.overlaps(e2.timeslot):
-                e1.conflicts.add(e2.idx)
-                e2.conflicts.add(e1.idx)
+                e1.conflicts.append(e2.idx)
+                e2.conflicts.append(e1.idx)
+
+        for e in self.build():
+            e.conflicts = sorted(set(e.conflicts))
 
     def build_conflict_matrix(self) -> np.ndarray:
         """Build a conflict matrix for all events."""
@@ -137,7 +140,7 @@ class EventFactory:
                     self._conflict_matrix[e2.idx, e1.idx] = True
             for i in range(n):
                 self._conflict_matrix[i, i] = True  # An event conflicts with itself
-            # logger.debug("Conflict matrix:\n%s", self._conflict_matrix)
+            logger.debug("Conflict matrix:\n%s", self._conflict_matrix)
         return self._conflict_matrix
 
     def as_mapping(self) -> dict[int, Event]:

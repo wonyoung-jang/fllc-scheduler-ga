@@ -10,9 +10,11 @@ from datetime import UTC, datetime
 from logging import getLogger
 from typing import TYPE_CHECKING, TextIO
 
-from ..data_model.location import Location
+import numpy as np
+
+from ..config.constants import ASCII_OFFSET
 from ..data_model.schedule import Schedule
-from ..data_model.team import TeamFactory
+from ..data_model.team import Team, TeamFactory
 from ..data_model.time import TimeSlot
 
 if TYPE_CHECKING:
@@ -42,8 +44,8 @@ class CsvImporter:
         """Post-initialization to validate the CSV file."""
         self._validate_inputs()
         self._initialize_caches()
-        team_factory = TeamFactory(self.config)
-        self.schedule = Schedule(teams=team_factory.build(), origin="CSV Importer")
+        team_factory = TeamFactory(np.array([Team(idx=i) for i in range(self.config.num_teams)]))
+        self.schedule = Schedule(teams=team_factory.teams, origin="CSV Importer")
         self.import_schedule()
 
         if not self.schedule:
@@ -63,7 +65,14 @@ class CsvImporter:
     def _initialize_caches(self) -> None:
         """Initialize caches for round configurations and event mappings."""
         self._round_configs = {r.roundtype: r for r in self.config.rounds}
-        self._rtl_map = {(e.roundtype, e.timeslot, e.location): e for e in self.event_factory.build()}
+        self._rtl_map = {
+            (
+                e.roundtype,
+                (e.timeslot.start, e.timeslot.stop),
+                (e.location.locationtype, e.location.name, e.location.teams_per_round, e.location.side),
+            ): e
+            for e in self.event_factory.build()
+        }
 
     def import_schedule(self) -> None:
         """Import schedule from the CSV file."""
@@ -114,14 +123,14 @@ class CsvImporter:
                     created_events,
                 )
 
-        self.link_opponents(created_events)
         if any(self.schedule.team_rounds_needed(t) for t in self.schedule.teams):
+            logger.warning("Schedule: %s", self.schedule)
             logger.warning("Some teams are missing required rounds defined in your config.")
 
     def parse_csv_data_row(
         self,
         row: list[str],
-        current_round_type: RoundType,
+        curr_rt: RoundType,
         header_locations: list[str],
         created_events: dict[tuple[RoundType, str, str], Event],
     ) -> None:
@@ -129,7 +138,7 @@ class CsvImporter:
 
         Args:
             row: list[str] - A row from the CSV file.
-            current_round_type: RoundType - The current round type being processed.
+            curr_rt: RoundType - The current round type being processed.
             header_locations: list[str] - The list of location headers from the CSV.
             created_events: dict[tuple[RoundType, str, str], Event]
                 - A dictionary to store created events for linking opponents.
@@ -137,21 +146,17 @@ class CsvImporter:
         """
         time_fmt = self.config.time_fmt
         time_str = row[0]
-        round_config: Round = self._round_configs[current_round_type]
-        if not round_config.times:
+        rc: Round = self._round_configs[curr_rt]
+        if not rc.times:
             start = datetime.strptime(time_str, time_fmt).replace(tzinfo=UTC)
-            stop = start + round_config.duration_minutes
+            stop = start + rc.duration_minutes
         else:
             start = datetime.strptime(time_str, time_fmt).replace(tzinfo=UTC)
-            start_index = round_config.times.index(start)
-            stop = (
-                round_config.times[start_index + 1]
-                if start_index + 1 < len(round_config.times)
-                else start + round_config.duration_minutes
-            )
+            start_index = rc.times.index(start)
+            stop = rc.times[start_index + 1] if start_index + 1 < len(rc.times) else start + rc.duration_minutes
 
         TimeSlot.set_time_format(time_fmt)
-        timeslot = TimeSlot(start, stop)
+        timeslot_t = (start, stop)
 
         for i, team_id_str in enumerate(row[1:]):
             if not (team_id_str := team_id_str.strip()):
@@ -161,55 +166,28 @@ class CsvImporter:
 
             loc_name_full = header_locations[i]
             loc_name_split = loc_name_full.split(" ")
-            loc_name = loc_name_split[0].strip()
+            loctype = loc_name_split[0].strip()
             loc_identifier = loc_name_split[1].strip()
             if len(loc_identifier) == 1:
                 isdigit = loc_identifier.isdigit()
-                identity = int(loc_identifier) if isdigit else loc_identifier
-                location = Location(loc_name, identity, round_config.teams_per_round, 0)
+                locname = int(loc_identifier) if isdigit else ord(loc_identifier) - ASCII_OFFSET
+                location_t = (loctype, locname, rc.teams_per_round, -1)
             else:
-                identity, side = loc_identifier[::2], loc_identifier[1::2]
-                isdigit = identity.isdigit()
-                identity = int(identity) if isdigit else identity
-                location = Location(loc_name, identity, round_config.teams_per_round, int(side))
+                locname, side = loc_identifier[::2], loc_identifier[1::2]
+                isdigit = locname.isdigit()
+                locname = int(locname) if isdigit else ord(locname) - ASCII_OFFSET
+                location_t = (loctype, locname, rc.teams_per_round, int(side))
 
-            rtl_event_key = (current_round_type, timeslot, location)
+            rtl_event_key = (curr_rt, timeslot_t, location_t)
             event = self._rtl_map.get(rtl_event_key)
 
-            created_event_key = (current_round_type, time_str, loc_name_full)
+            created_event_key = (curr_rt, time_str, loc_name_full)
             created_events[created_event_key] = event
 
-            team = self.schedule.get_team(team_id)
+            team = self.schedule.get_team(team_id - 1)
             if not team:
                 logger.error("Team ID %d from CSV not found.", team_id)
                 continue
 
-            self.schedule.assign_single(event, team)
-
-    def link_opponents(self, created_events: dict[tuple[RoundType, str, str], Event]) -> None:
-        """Iterate through created events and link paired tables as opponents.
-
-        Args:
-            created_events: A dictionary of all dynamically created events.
-
-        """
-        logger.info("Linking opponents for match rounds...")
-        for (rt, t_str, l_str), e1 in created_events.items():
-            if e1.location.teams_per_round == 2 and e1.location.side == 1:
-                partner_loc_str = l_str[:-1] + "2"  # Replace side '1' with '2'
-                partner_key = (rt, t_str, partner_loc_str)
-                e2: Event = created_events.get(partner_key)
-                if not e2:
-                    continue
-
-                e1.paired = e2
-                e2.paired = e1
-
-                if e1 in self.schedule and e2 in self.schedule:
-                    self.schedule[e1]
-                    self.schedule[e2]
-                else:
-                    logger.warning(
-                        "Paired event %s exists but one team is missing from schedule.",
-                        partner_key,
-                    )
+            if event:
+                self.schedule.assign(team, event)

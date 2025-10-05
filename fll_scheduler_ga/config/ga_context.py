@@ -63,19 +63,27 @@ class GaContext:
         round_to_int = self.app_config.tournament.round_to_int
 
         # Shape: (num_events, num_properties)
-        event_props = np.zeros((num_events, 6), dtype=int)
+        event_prop_dtype = np.dtype(
+            [
+                ("start", int),
+                ("stop", int),
+                ("loc_idx", int),
+                ("loc_side", int),
+                ("roundtype", int),
+                ("paired_idx", int),
+            ]
+        )
+        event_properties = np.zeros(num_events, dtype=event_prop_dtype)
         for i in range(num_events):
             event = event_map[i]
-            event_props[i] = [
-                int(event.timeslot.start.timestamp()),
-                int(event.timeslot.stop.timestamp()),
-                event.location.idx,
-                event.location.side,
-                round_to_int[event.roundtype],
-                event.paired.idx if event.paired else -1,
-            ]
-        logger.debug("Event properties array: %s", event_props)
-        return event_props
+            event_properties[i]["start"] = int(event.timeslot.start.timestamp())
+            event_properties[i]["stop"] = int(event.timeslot.stop.timestamp())
+            event_properties[i]["loc_idx"] = event.location.idx
+            event_properties[i]["loc_side"] = event.location.side
+            event_properties[i]["roundtype"] = round_to_int[event.roundtype]
+            event_properties[i]["paired_idx"] = event.paired.idx if event.paired else -1
+        logger.debug("Event properties array: %s", event_properties)
+        return event_properties
 
     def create_ga_instance(self, args: Namespace) -> GA:
         """Create and return a GA instance with the provided configuration."""
@@ -104,11 +112,14 @@ class GaContext:
         schedule_csv_path = Path(args.import_file).resolve()
         csv_import = CsvImporter(schedule_csv_path, config, self.event_factory)
         csv_schedule = csv_import.schedule
-        pop = np.array([s.to_array(self) for s in [csv_schedule]])
+        pop = np.asarray([csv_schedule.schedule])
 
-        if fits := self.evaluator.evaluate_population(pop):
-            csv_schedule.fitness = fits[0]
+        if fits := self.evaluator.evaluate_population(pop, self):
+            sched_fits, team_fits = fits
+            csv_schedule.fitness = sched_fits[0]
+            csv_schedule.team_fitnesses = team_fits[0]
             csv_import.schedule.fitness = csv_schedule.fitness
+            csv_import.schedule.team_fitnesses = csv_schedule.team_fitnesses
             parent_dir = schedule_csv_path.parent
             parent_dir.mkdir(parents=True, exist_ok=True)
             report_path = parent_dir / "report.txt"

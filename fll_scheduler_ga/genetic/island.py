@@ -35,7 +35,7 @@ class Island:
     crossover_ratio: dict[str, Counter]
     mutation_ratio: dict[str, Counter]
 
-    selected: dict[int, Schedule] = field(default_factory=dict, repr=False)
+    selected: list[Schedule] = field(default_factory=list, repr=False)
 
     curr_gen: int = 0
     fitness_history: np.ndarray = None
@@ -62,16 +62,15 @@ class Island:
 
     def pareto_front(self) -> list[Schedule]:
         """Get the Pareto front for each island in the population."""
-        return [s for s in self.selected.values() if s.rank == 0]
+        return [s for s in self.selected if s.rank == 0]
 
     def add_to_population(self, schedule: Schedule, *, recurse: bool = False) -> bool:
         """Add a schedule to a specific island's population if it's not a duplicate."""
         if not recurse:
             self.offspring_ratio["total"] += 1
 
-        key = hash(schedule)
-        if key not in self.selected:
-            self.selected[key] = schedule
+        if schedule not in self.selected:
+            self.selected.append(schedule)
             self.offspring_ratio["success"] += 1
             return True
 
@@ -141,7 +140,7 @@ class Island:
 
     def evolve(self) -> None:
         """Perform main evolution loop: generations and migrations."""
-        if not (pop := list(self.selected.values())):
+        if not (pop := self.selected):
             return
 
         created = 0
@@ -162,27 +161,27 @@ class Island:
 
         n_pop = self.ga_params.population_size
         schedule_fitnesses, _ = self.evaluate_pop()
-        pop_to_select: list[Schedule] = list(self.selected.values())
+        pop_to_select: list[Schedule] = self.selected
         fronts = self.context.nsga3.select(
             fits=schedule_fitnesses,
             n=n_pop,
         )
         self.curr_schedule_fitnesses = schedule_fitnesses
-        self.selected = {}
+        self.selected = []
         for front in fronts:
             for idx in front:
                 self.add_to_population(pop_to_select[idx])
 
     def evaluate_pop(self) -> tuple[np.ndarray[float], np.ndarray[np.ndarray[float]]]:
         """Evaluate the entire population."""
-        pop_array = np.asarray([s.to_array() for s in self.selected.values()])
+        pop_array = np.asarray([s.schedule for s in self.selected])
         return self.context.evaluator.evaluate_population(pop_array, self.context)
 
     def give_migrants(self) -> Iterator[Schedule]:
         """Randomly yield migrants from population."""
-        popkeys = list(self.selected.keys())
-        for i in self.context.selection.select(len(popkeys), k=self.ga_params.migration_size):
-            yield self.selected.pop(popkeys[i])
+        for _ in range(self.ga_params.migration_size):
+            i = self.rng.integers(0, len(self.selected))
+            yield self.selected.pop(i)
 
     def receive_migrants(self, migrants: Iterator[Schedule]) -> None:
         """Receive migrants from another island and add them to the current island's population."""

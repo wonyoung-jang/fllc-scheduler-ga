@@ -70,14 +70,28 @@ class FitnessEvaluator:
         # Preallocate arrays
         team_fitnesses = np.zeros((n_pop, n_teams, n_objs), dtype=float)
         # Get team-events mapping for the entire population
+        # Shape: (n_pop, n_teams, max_events_per_team)
         team_events_pop = self.get_team_events_from_population(population_array, context)
         # Prepare lookup arrays
         valid_events_mask, lookup_events = self.prepare_lookup(team_events_pop)
         # Calculate scores for each objective
-        team_fitnesses[:, :, 0] = self.calc_break_time_scores(context, valid_events_mask, lookup_events)
-        team_fitnesses[:, :, 1] = self.calc_location_consistency_scores(context, valid_events_mask, lookup_events)
+        event_props = context.event_properties
+        team_fitnesses[:, :, 0] = self.calc_break_time_scores(
+            event_props,
+            valid_events_mask,
+            lookup_events,
+        )
+        team_fitnesses[:, :, 1] = self.calc_location_consistency_scores(
+            event_props,
+            valid_events_mask,
+            lookup_events,
+        )
         team_fitnesses[:, :, 2] = self.calc_opponent_variety_scores(
-            context, valid_events_mask, lookup_events, team_events_pop, population_array
+            event_props,
+            valid_events_mask,
+            lookup_events,
+            team_events_pop,
+            population_array,
         )
         # Aggregate team scores into schedule scores
         mean_s = team_fitnesses.mean(axis=1)
@@ -124,15 +138,15 @@ class FitnessEvaluator:
 
     def calc_break_time_scores(
         self,
-        context: GaContext,
+        event_properties: np.ndarray,
         valid_events_mask: np.ndarray,
         lookup_events: np.ndarray,
     ) -> np.ndarray:
         """Vectorized break time scoring."""
         max_int = np.iinfo(np.int64).max
         # Get start and stop times for each event
-        starts = context.event_properties[lookup_events, 0]
-        stops = context.event_properties[lookup_events, 1]
+        starts = event_properties[lookup_events]["start"]
+        stops = event_properties[lookup_events]["stop"]
         # Mask invalids with max int
         starts[~valid_events_mask] = max_int
         stops[~valid_events_mask] = max_int
@@ -146,38 +160,41 @@ class FitnessEvaluator:
         # Valid consecutive events must have valid start and stop times
         valid_consecutive = (start_next < max_int) & (stop_curr < max_int)
 
-        breaks = start_next - stop_curr
-        breaks_in_minutes = breaks / 60.0
-        breaks_in_minutes[~valid_consecutive] = np.nan
+        breaks_seconds = start_next - stop_curr
+        breaks_minutes = breaks_seconds / 60.0
+        breaks_minutes[~valid_consecutive] = np.nan
 
         # Identify overlaps
-        overlap_mask = np.any(breaks_in_minutes < 0, axis=2)
+        overlap_mask = np.any(breaks_minutes < 0, axis=2)
 
-        mean_break = np.nanmean(breaks_in_minutes, axis=2)
-        std_dev = np.nanstd(breaks_in_minutes, axis=2)
-
-        mean_break = np.nan_to_num(mean_break, nan=0.0)
-        std_dev = np.nan_to_num(std_dev, nan=0.0)
+        mean_break = np.nan_to_num(
+            np.nanmean(breaks_minutes, axis=2),
+            nan=0.0,
+        )
+        std_dev = np.nan_to_num(
+            np.nanstd(breaks_minutes, axis=2),
+            nan=0.0,
+        )
 
         coefficient = std_dev / (mean_break + EPSILON)
         ratio = 1.0 / (1.0 + coefficient)
 
-        zeros = np.sum(breaks_in_minutes == 0, axis=2)
+        zeros = np.sum(breaks_minutes == 0, axis=2)
         b_penalty = self.benchmark.penalty**zeros
 
         final_scores = ratio * b_penalty
-        final_scores[overlap_mask] = 0.0
+        final_scores[overlap_mask] = -1.0
         final_scores /= self.benchmark.best_timeslot_score
         return final_scores
 
     def calc_location_consistency_scores(
         self,
-        context: GaContext,
+        event_properties: np.ndarray,
         valid_events_mask: np.ndarray,
         lookup_events: np.ndarray,
     ) -> np.ndarray:
         """Vectorized location consistency scoring."""
-        locations = context.event_properties[lookup_events, 2]
+        locations = event_properties[lookup_events]["loc_idx"]
         locations[~valid_events_mask] = -1
 
         loc_sorted = np.sort(locations, axis=2)
@@ -193,7 +210,7 @@ class FitnessEvaluator:
 
     def calc_opponent_variety_scores(
         self,
-        context: GaContext,
+        event_properties: np.ndarray,
         valid_events_mask: np.ndarray,
         lookup_events: np.ndarray,
         team_events_pop: np.ndarray,
@@ -202,7 +219,7 @@ class FitnessEvaluator:
         """Vectorized opponent variety scoring."""
         pop_size = team_events_pop.shape[0]
 
-        paired_event_ids = context.event_properties[lookup_events, 5]
+        paired_event_ids = event_properties[lookup_events]["paired_idx"]
         paired_event_ids[~valid_events_mask] = -1
 
         valid_opp = paired_event_ids >= 0

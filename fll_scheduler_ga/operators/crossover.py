@@ -23,7 +23,9 @@ logger = getLogger(__name__)
 
 
 def build_crossovers(
-    app_config: AppConfig, team_factory: TeamFactory, event_factory: EventFactory
+    app_config: AppConfig,
+    team_factory: TeamFactory,
+    event_factory: EventFactory,
 ) -> Iterator[Crossover]:
     """Build and return a tuple of crossover operators based on the configuration."""
     rng = app_config.rng
@@ -62,8 +64,9 @@ class Crossover(ABC):
     team_factory: TeamFactory
     event_factory: EventFactory
     rng: np.random.Generator
-    events: list[Event] = field(init=False, repr=False)
-    n_evts: int = field(init=False, repr=False)
+
+    events: list[Event] = None
+    n_evts: int = None
     indices: np.ndarray = None
 
     def __post_init__(self) -> None:
@@ -92,7 +95,7 @@ class Crossover(ABC):
         p2_genes: Iterator[Event],
     ) -> Schedule:
         """Create a child schedule from two parents."""
-        c = Schedule(teams=self.team_factory.build(), origin=f"(C | {self!s})")
+        c = Schedule(teams=self.team_factory.teams, origin=f"(C | {self!s})")
         self.assign_from_p1(c, p1, p1_genes)
         self.assign_from_p2(c, p2, p2_genes)
         return c
@@ -106,10 +109,11 @@ class Crossover(ABC):
 
             t1 = c.get_team(pt1.idx)
             if (e2 := e1.paired) is None:
-                c.assign_single(e1, t1)
+                c.assign(t1, e1)
             elif (pt2 := p[e2]) is not None:
                 t2 = c.get_team(pt2.idx)
-                c.assign_match(e1, e2, t1, t2)
+                c.assign(t1, e1)
+                c.assign(t2, e2)
 
     def assign_from_p2(self, c: Schedule, p: Schedule, p2_genes: Iterator[int]) -> None:
         """Assign genes."""
@@ -119,15 +123,16 @@ class Crossover(ABC):
                 continue
 
             t1 = c.get_team(pt1.idx)
-            if not c.team_needs_round(t1, e1.roundtype) or c.conflicts(t1, e1):
+            if not c.needs_round(t1, e1.roundtype) or c.conflicts(t1, e1):
                 continue
 
             if (e2 := e1.paired) is None:
-                c.assign_single(e1, t1)
+                c.assign(t1, e1)
             elif (pt2 := p[e2]) is not None:
                 t2 = c.get_team(pt2.idx)
-                if c.team_needs_round(t2, e2.roundtype) and not c.conflicts(t2, e2):
-                    c.assign_match(e1, e2, t1, t2)
+                if c.needs_round(t2, e2.roundtype) and not c.conflicts(t2, e2):
+                    c.assign(t1, e1)
+                    c.assign(t2, e2)
 
 
 @dataclass(slots=True)
@@ -239,13 +244,13 @@ class RoundTypeCrossover(StructureCrossover):
         """Post-initialization to set up the initial state."""
         super(RoundTypeCrossover, self).__post_init__()
         roundtypes = list(self.event_factory.as_roundtypes().keys())
-        roundtype_event_map = {rt: [] for rt in roundtypes}
-        for i, event in enumerate(self.events):
-            roundtype_event_map[event.roundtype].append(i)
+        eventmap = {rt: [] for rt in roundtypes}
+        for i, e in enumerate(self.events):
+            eventmap[e.roundtype].append(i)
 
-        self.array = np.full((len(roundtypes), max(len(evts) for evts in roundtype_event_map.values())), -1, dtype=int)
+        self.array = np.full((len(roundtypes), max(len(evts) for evts in eventmap.values())), -1, dtype=int)
         for j, rt in enumerate(roundtypes):
-            evts = roundtype_event_map[rt]
+            evts = eventmap[rt]
             self.array[j, : len(evts)] = evts
 
         self.indices = np.array(range(len(roundtypes)))
@@ -263,13 +268,13 @@ class TimeSlotCrossover(StructureCrossover):
         """Post-initialization to set up the initial state."""
         super(TimeSlotCrossover, self).__post_init__()
         timeslot_ids = np.array(list({t[1].idx for t in self.event_factory.as_timeslots()}))
-        timeslot_event_map = {ts_id: [] for ts_id in timeslot_ids}
-        for i, event in enumerate(self.events):
-            timeslot_event_map[event.timeslot.idx].append(i)
+        eventmap = {ts_id: [] for ts_id in timeslot_ids}
+        for i, e in enumerate(self.events):
+            eventmap[e.timeslot.idx].append(i)
 
-        self.array = np.full((len(timeslot_ids), max(len(evts) for evts in timeslot_event_map.values())), -1, dtype=int)
+        self.array = np.full((len(timeslot_ids), max(len(evts) for evts in eventmap.values())), -1, dtype=int)
         for j, ts_id in enumerate(timeslot_ids):
-            evts = timeslot_event_map[ts_id]
+            evts = eventmap[ts_id]
             self.array[j, : len(evts)] = evts
 
         self.indices = np.array(range(len(timeslot_ids)))
@@ -287,13 +292,13 @@ class LocationCrossover(StructureCrossover):
         """Post-initialization to set up the initial state."""
         super(LocationCrossover, self).__post_init__()
         location_ids = np.array(list({loc[1].idx for loc in self.event_factory.as_locations()}))
-        location_event_map = {loc_id: [] for loc_id in location_ids}
-        for i, event in enumerate(self.events):
-            location_event_map[event.location.idx].append(i)
+        eventmap = {loc_id: [] for loc_id in location_ids}
+        for i, e in enumerate(self.events):
+            eventmap[e.location.idx].append(i)
 
-        self.array = np.full((len(location_ids), max(len(evts) for evts in location_event_map.values())), -1, dtype=int)
+        self.array = np.full((len(location_ids), max(len(evts) for evts in eventmap.values())), -1, dtype=int)
         for j, loc_id in enumerate(location_ids):
-            evts = location_event_map[loc_id]
+            evts = eventmap[loc_id]
             self.array[j, : len(evts)] = evts
 
         self.indices = np.array(range(len(location_ids)))

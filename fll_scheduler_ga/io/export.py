@@ -126,6 +126,8 @@ def generate_summary_report(schedule: Schedule, path: Path) -> None:
                 fitness_row = (f"{score:<{len_objectives[i] + 1}.4f}" for i, score in enumerate(fit))
                 fitness_str = "|".join(fitness_row)
                 team_id = normalized_teams.get(t.idx)
+                if team_id is None:
+                    team_id = -1
                 f.write(f"{team_id:<5}|{fitness_str}|{sum(fit):.4f}\n")
     except OSError:
         logger.exception("Failed to write summary report to file %s", path)
@@ -161,14 +163,6 @@ def generate_team_schedules(schedule: Schedule, path: Path, ga: GA) -> None:
                     row.append(str(event.timeslot))
                     row.append(str(event.location))
                 rows.append(row)
-
-            # for team in sorted(schedule.teams, key=lambda x: x.idx):
-            #     row = [team.idx + 1]
-            #     for event_id in sorted(team.events):
-            #         event = event_map.get(event_id)
-            #         row.append(str(event.timeslot))
-            #         row.append(str(event.location))
-            #     rows.append(row)
 
             writer(f).writerows(rows)
     except OSError:

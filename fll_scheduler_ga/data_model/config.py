@@ -18,18 +18,6 @@ type RoundType = str
 
 
 @dataclass(slots=True, frozen=True)
-class RoundTypeClass:
-    """Class to represent a round type."""
-
-    idx: int
-    name: str
-
-    def __str__(self) -> str:
-        """Represent the RoundTypeClass."""
-        return f"{self.name}({self.idx})"
-
-
-@dataclass(slots=True, frozen=True)
 class Round:
     """Representation of a round in the FLL tournament."""
 

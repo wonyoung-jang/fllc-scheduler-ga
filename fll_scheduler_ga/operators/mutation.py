@@ -197,32 +197,24 @@ class SwapTeamMutation(SwapMutation):
     def mutate(self, schedule: Schedule) -> bool:
         """Swap one team from two different matches."""
         match1_data, match2_data = self.get_swap_candidates(schedule)
-
         if match1_data is None:
             return False
 
         e1a, _, t1a, _ = match1_data
         e2a, _, t2a, _ = match2_data
-
-        schedule.switch_team_event(t1a, e1a, e2a)
-        schedule.switch_team_event(t2a, e2a, e1a)
-
-        schedule[e1a] = t2a
-        schedule[e2a] = t1a
-
+        schedule.swap_assignment(t1a, e1a, e2a)
+        schedule.swap_assignment(t2a, e2a, e1a)
         return True
 
-    def get_swap_candidates(self, schedule: Schedule) -> tuple[Match, ...]:
+    def get_swap_candidates(self, schedule: Schedule) -> tuple[Match | None, ...]:
         """Get two matches to swap in the schedule schedule."""
         if not self.swap_candidates:
-            return None
+            return None, None
 
-        n_candidates = len(self.swap_candidates)
-        for idx in self.rng.permutation(n_candidates):
+        for idx in self.rng.permutation(len(self.swap_candidates)):
             match1_data, match2_data = self.swap_candidates[idx]
             e1a, e1b = match1_data
             e2a, e2b = match2_data
-
             t1a, t1b = schedule[e1a], schedule[e1b]
             t2a, t2b = schedule[e2a], schedule[e2b]
             if None in (t1a, t1b, t2a, t2b):
@@ -262,39 +254,31 @@ class SwapMatchMutation(SwapMutation):
 
         e1a, e1b, t1a, t1b = match1_data
         e2a, e2b, t2a, t2b = match2_data
-        is_match1_teams = None not in (t1a, t1b)
-        is_match2_teams = None not in (t2a, t2b)
+        none_in_m1 = None in (t1a, t1b)
+        none_in_m2 = None in (t2a, t2b)
 
-        if not is_match1_teams and not is_match2_teams:
-            return False
-
-        if is_match1_teams:
-            schedule.switch_team_event(t1a, e1a, e2a)
-            schedule.switch_team_event(t1b, e1b, e2b)
-            schedule[e2a] = t1a
-            schedule[e2b] = t1b
-            if not is_match2_teams:
+        if not none_in_m1:
+            schedule.swap_assignment(t1a, e1a, e2a)
+            schedule.swap_assignment(t1b, e1b, e2b)
+            if not none_in_m2:
                 del schedule[e1a]
                 del schedule[e1b]
 
-        if is_match2_teams:
-            schedule.switch_team_event(t2a, e2a, e1a)
-            schedule.switch_team_event(t2b, e2b, e1b)
-            schedule[e1a] = t2a
-            schedule[e1b] = t2b
-            if not is_match1_teams:
+        if not none_in_m2:
+            schedule.swap_assignment(t2a, e2a, e1a)
+            schedule.swap_assignment(t2b, e2b, e1b)
+            if not none_in_m1:
                 del schedule[e2a]
                 del schedule[e2b]
 
         return True
 
-    def get_swap_candidates(self, schedule: Schedule) -> tuple[Match | None]:
+    def get_swap_candidates(self, schedule: Schedule) -> tuple[Match | None, ...]:
         """Get two matches to swap in the schedule schedule."""
         if not self.swap_candidates:
-            return None
+            return None, None
 
-        n_candidates = len(self.swap_candidates)
-        for idx in self.rng.permutation(n_candidates):
+        for idx in self.rng.permutation(len(self.swap_candidates)):
             match1_data, match2_data = self.swap_candidates[idx]
             e1a, e1b = match1_data
             e2a, e2b = match2_data
@@ -328,13 +312,9 @@ class SwapTableSideMutation(SwapMutation):
         match_data = self.get_swap_candidates(schedule)
         if match_data is None:
             return False
-
         e1a, e1b, t1a, t1b = match_data
-        schedule.switch_team_event(t1a, e1a, e1b)
-        schedule.switch_team_event(t1b, e1b, e1a)
-        schedule[e1a] = t1b
-        schedule[e1b] = t1a
-
+        schedule.swap_assignment(t1a, e1a, e1b)
+        schedule.swap_assignment(t1b, e1b, e1a)
         return True
 
     def get_swap_candidates(self, schedule: Schedule) -> Match | None:
@@ -342,16 +322,12 @@ class SwapTableSideMutation(SwapMutation):
         if not self.swap_candidates:
             return None
 
-        n_candidates = len(self.swap_candidates)
-        for idx in self.rng.permutation(n_candidates):
+        for idx in self.rng.permutation(len(self.swap_candidates)):
             match_data, _ = self.swap_candidates[idx]
             e1, e2 = match_data
-
             t1, t2 = schedule[e1], schedule[e2]
-            if None in (t1, t2):
-                continue
-
-            return e1, e2, t1, t2
+            if None not in (t1, t2):
+                return e1, e2, t1, t2
         return None
 
 
@@ -380,7 +356,9 @@ class TimeSlotSequenceMutation(Mutation):
         """Get a list of candidate events for mutation within a specific timeslot."""
         idx = self.rng.integers(0, len(self.timeslot_keys))
         key = self.timeslot_keys[idx]
-        return sorted(self.timeslot_event_map[key], key=lambda e: e.location.idx)
+        candidates = self.timeslot_event_map[key]
+        candidates = [e for e in candidates if e.location.side == 1 or e.paired is None]
+        return sorted(candidates, key=lambda e: e.location.idx)
 
     def mutate(self, schedule: Schedule) -> bool:
         """Find a suitable timeslot and round type, then permute assignments."""
@@ -394,55 +372,44 @@ class TimeSlotSequenceMutation(Mutation):
 
     def mutate_singles(self, schedule: Schedule, candidates: list[Event]) -> bool:
         """Permute team assignments for single-team events."""
-        old_ids = [None if schedule[e] is None else schedule[e].idx for e in candidates]
+        old_ids = [schedule[e] for e in candidates]
         new_ids = self.permute(old_ids)
-        for event, old_id, new_id in zip(candidates, old_ids, new_ids, strict=True):
-            if old_id == new_id:
+        for event, old_team, new_team in zip(candidates, old_ids, new_ids, strict=True):
+            if old_team == new_team:
                 continue
 
-            if old_id is not None and (old_team := schedule.get_team(old_id)):
-                schedule.remove_team_event(old_team, event)
-                del schedule[event]
+            if old_team:
+                schedule.unassign(old_team, event)
 
-            if new_id is not None and (new_team := schedule.get_team(new_id)):
-                schedule.add_team_event(new_team, event)
-                schedule[event] = new_team
+            if new_team:
+                schedule.assign(new_team, event)
 
         return True
 
     def mutate_matches(self, schedule: Schedule, candidates: list[Event]) -> bool:
         """Permute team assignments for match-based events."""
         matches: list[tuple[Event, ...]] = []
-        teams: list[tuple[Team | None, ...]] = []
+        old_ids: list[tuple[Team | None, ...]] = []
         for e1 in candidates:
-            if e1.location.side == 1 and (e2 := e1.paired):
-                t1, t2 = schedule[e1], schedule[e2]
-                matches.append((e1, e2))
-                teams.append((t1, t2))
+            e2 = e1.paired
+            t1, t2 = schedule[e1], schedule[e2]
+            matches.append((e1, e2))
+            old_ids.append((t1, t2))
 
-        old_ids: list[tuple[int | None, ...]] = [
-            (t1, t2) if None in (t1, t2) else (t1.idx, t2.idx) for (t1, t2) in teams
-        ]
         new_ids = self.permute(old_ids)
-        for match, old_id_pair, new_id_pair in zip(matches, old_ids, new_ids, strict=True):
+        for (e1, e2), old_id_pair, new_id_pair in zip(matches, old_ids, new_ids, strict=True):
             if old_id_pair == new_id_pair:
                 continue
 
-            e1, e2 = match
-
             if None not in old_id_pair:
-                old_t1, old_t2 = (schedule.get_team(i) for i in old_id_pair)
-                schedule.remove_team_event(old_t1, e1)
-                schedule.remove_team_event(old_t2, e2)
-                del schedule[e1]
-                del schedule[e2]
+                old_t1, old_t2 = old_id_pair
+                schedule.unassign(old_t1, e1)
+                schedule.unassign(old_t2, e2)
 
             if None not in new_id_pair:
-                new_t1, new_t2 = (schedule.get_team(i) for i in new_id_pair)
-                schedule.add_team_event(new_t1, e1)
-                schedule.add_team_event(new_t2, e2)
-                schedule[e1] = new_t1
-                schedule[e2] = new_t2
+                new_t1, new_t2 = new_id_pair
+                schedule.assign(new_t1, e1)
+                schedule.assign(new_t2, e2)
 
         return True
 
@@ -456,8 +423,8 @@ class InversionMutation(TimeSlotSequenceMutation):
         return MutationOp.INVERSION
 
     def permute(
-        self, items: list[int | None | tuple[list | None, ...]]
-    ) -> Iterator[int | None | tuple[list | None, ...]]:
+        self, items: list[Team | None | tuple[Team | None, ...]]
+    ) -> Iterator[Team | None | tuple[Team | None, ...]]:
         """Invert a random sub-sequence of the items."""
         if len(items) <= 1:
             return iter(items)
@@ -477,8 +444,8 @@ class ScrambleMutation(TimeSlotSequenceMutation):
         return MutationOp.SCRAMBLE
 
     def permute(
-        self, items: list[int | None | tuple[list | None, ...]]
-    ) -> Iterator[int | None | tuple[list | None, ...]]:
+        self, items: list[Team | None | tuple[Team | None, ...]]
+    ) -> Iterator[Team | None | tuple[Team | None, ...]]:
         """Scramble a random sub-sequence of the items."""
         if len(items) <= 1:
             return iter(items)

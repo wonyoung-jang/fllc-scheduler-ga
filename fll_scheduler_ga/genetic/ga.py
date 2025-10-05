@@ -200,8 +200,8 @@ class GA:
 
     def _deduplicate_population(self) -> None:
         """Remove duplicate individuals from the population."""
-        unique_pop = [ind for island in self.islands for ind in island.selected.values()]
-        pop_array = np.asarray([s.to_array() for island in self.islands for s in island.selected.values()])
+        unique_pop = [ind for island in self.islands for ind in island.selected]
+        pop_array = np.asarray([s.schedule for island in self.islands for s in island.selected])
         schedule_fitness, team_fitnesses = self.context.evaluator.evaluate_population(pop_array, self.context)
         fronts = self.context.nsga3.non_dominated_sort(schedule_fitness, len(pop_array))
         selected = {}

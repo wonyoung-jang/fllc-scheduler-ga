@@ -39,7 +39,7 @@ class ScheduleBuilder:
             events[rt] = self.rng.permutation(evts)
 
         schedule = Schedule(
-            teams=self.team_factory.build(),
+            teams=self.team_factory.teams,
             origin="Builder",
         )
         teams = self.rng.permutation(schedule.teams)
@@ -54,16 +54,17 @@ class ScheduleBuilder:
     def build_singles(self, schedule: Schedule, rt: RoundType, events: list[Event], teams: list[Team]) -> None:
         """Book all judging events for a specific round type."""
         for event in events:
-            available = (t for t in teams if schedule.team_needs_round(t, rt) and not schedule.conflicts(t, event))
+            available = (t for t in teams if schedule.needs_round(t, rt) and not schedule.conflicts(t, event))
             team = next(available, None)
             if team:
-                schedule.assign_single(event, team)
+                schedule.assign(team, event)
 
     def build_matches(self, schedule: Schedule, rt: RoundType, events: list[Event], teams: list[Team]) -> None:
         """Book all events for a specific round type."""
         for side1, side2 in ((e, e.paired) for e in events if e.location.side == 1):
-            available = (t for t in teams if schedule.team_needs_round(t, rt) and not schedule.conflicts(t, side1))
+            available = (t for t in teams if schedule.needs_round(t, rt) and not schedule.conflicts(t, side1))
             team1 = next(available, None)
             team2 = next(available, None)
             if team1 and team2:
-                schedule.assign_match(side1, side2, team1, team2)
+                schedule.assign(team1, side1)
+                schedule.assign(team2, side2)
