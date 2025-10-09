@@ -10,14 +10,13 @@ from typing import TYPE_CHECKING, ClassVar
 import numpy as np
 
 from .event import Event
-from .team import Team
 
 if TYPE_CHECKING:
     from .config import RoundType
 
 type Population = list[Schedule]
 type Individual = dict[Event, int]
-type Match = tuple[Event, Event, Team, Team]
+type Match = tuple[Event, Event, int, int]
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +25,7 @@ logger = logging.getLogger(__name__)
 class Schedule:
     """Represents a schedule (individual) with its associated fitness score."""
 
-    teams: list[Team] = None
+    teams: np.ndarray[int] = None
     schedule: np.ndarray[int] = None
     fitness: np.ndarray[float] = None
     team_fitnesses: np.ndarray[float] = None
@@ -55,21 +54,21 @@ class Schedule:
             self.team_events = defaultdict(set)
 
         if self.team_rounds is None:
-            self.team_rounds = {team.idx: Schedule.team_roundreqs.copy() for team in self.teams}
+            self.team_rounds = {team: Schedule.team_roundreqs.copy() for team in self.teams}
 
     def __len__(self) -> int:
         """Return the number of scheduled events."""
         return self.schedule.size - np.count_nonzero(self.schedule == -1)
 
-    def __getitem__(self, event: Event) -> Team | None:
+    def __getitem__(self, event: Event) -> int | None:
         """Get the team assigned to a specific event."""
         if (team_id := self.schedule[event.idx]) == -1:
             return None
         return self.teams[team_id]
 
-    def __setitem__(self, event: Event, team: Team) -> None:
+    def __setitem__(self, event: Event, team: int) -> None:
         """Assign a team to a specific event."""
-        self.schedule[event.idx] = team.idx
+        self.schedule[event.idx] = team
         self._hash = None
 
     def __delitem__(self, event: Event) -> None:
@@ -113,42 +112,40 @@ class Schedule:
         """Set the conflict matrix for the schedule."""
         cls.conflict_matrix = matrix
 
-    def swap_assignment(self, team: Team, old_event: Event, new_event: Event) -> None:
+    def swap_assignment(self, team: int, old_event: Event, new_event: Event) -> None:
         """Switch an event for a team in the schedule."""
         self.unassign(team, old_event)
         self.assign(team, new_event)
 
-    def assign(self, team: Team, event: Event) -> None:
+    def assign(self, team: int, event: Event) -> None:
         """Add an event to a team's scheduled events."""
-        ti = team.idx
         ei = event.idx
-        self.team_events[ti].add(ei)
-        self.team_rounds[ti][event.roundtype] -= 1
-        self.schedule[ei] = ti
+        self.team_events[team].add(ei)
+        self.team_rounds[team][event.roundtype] -= 1
+        self.schedule[ei] = team
         self._hash = None
 
-    def unassign(self, team: Team, event: Event) -> None:
+    def unassign(self, team: int, event: Event) -> None:
         """Remove an event from a team's scheduled events."""
-        ti = team.idx
         ei = event.idx
-        self.team_events[ti].remove(ei)
-        self.team_rounds[ti][event.roundtype] += 1
+        self.team_events[team].remove(ei)
+        self.team_rounds[team][event.roundtype] += 1
         self.schedule[ei] = -1
         self._hash = None
 
-    def team_rounds_needed(self, team: Team) -> bool:
+    def team_rounds_needed(self, team: int) -> bool:
         """Check if any rounds still needed for the team."""
-        return sum(self.team_rounds[team.idx].values()) > 0
+        return sum(self.team_rounds[team].values()) > 0
 
-    def needs_round(self, team: Team, roundtype: RoundType) -> bool:
+    def needs_round(self, team: int, roundtype: RoundType) -> bool:
         """Check if a team still needs to participate in a given round type."""
-        return self.team_rounds[team.idx][roundtype] > 0
+        return self.team_rounds[team][roundtype] > 0
 
-    def conflicts(self, team: Team, new_event: Event, *, ignore: Event = None) -> bool:
+    def conflicts(self, team: int, new_event: Event, *, ignore: Event = None) -> bool:
         """Check if adding a new event would cause a time conflict.
 
         Args:
-            team (Team): The team to check for conflicts.
+            team (int): The team to check for conflicts.
             new_event (Event): The new event to check for conflicts.
             ignore (Event): An event to ignore when checking for conflicts.
 
@@ -156,7 +153,7 @@ class Schedule:
             bool: True if there is a conflict, False otherwise.
 
         """
-        team_events = self.team_events[team.idx]
+        team_events = self.team_events[team]
         events_to_check = team_events
 
         if ignore and ignore.idx in team_events:
@@ -167,13 +164,13 @@ class Schedule:
         if conflict_found:
             return True
 
-        new_conflicts = set(new_event.conflicts)
+        new_conflicts = new_event.conflicts
         return bool(not conflict_found and new_conflicts and not events_to_check.isdisjoint(new_conflicts))
 
     def clone(self) -> Schedule:
         """Create a deep copy of the schedule."""
         return Schedule(
-            teams=self.teams.copy(),
+            teams=self.teams,
             schedule=self.schedule.copy(),
             fitness=self.fitness.copy() if self.fitness is not None else None,
             team_fitnesses=self.team_fitnesses.copy() if self.team_fitnesses is not None else None,
@@ -202,10 +199,6 @@ class Schedule:
                 self.unassign(team2, event2)
         elif team := self[event1]:
             self.unassign(team, event1)
-
-    def get_team(self, team_id: int) -> Team:
-        """Get a team object by its identity."""
-        return self.teams[team_id]
 
     def normalized_teams(self) -> dict[int, int]:
         """Normalize the schedule by reassigning team identities."""

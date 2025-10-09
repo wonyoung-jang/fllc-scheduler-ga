@@ -134,7 +134,6 @@ class Island:
             self.crossover_ratio["total"][c_str] += 1
             if self.context.checker.check(child):
                 self.crossover_ratio["success"][c_str] += 1
-
             if self.context.repairer.repair(child):
                 yield child
 

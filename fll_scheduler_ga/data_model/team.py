@@ -13,14 +13,7 @@ logger = getLogger(__name__)
 
 
 @dataclass(slots=True)
-class Team:
-    """Data model for a team in the FLL Scheduler GA."""
-
-    idx: int
-
-
-@dataclass(slots=True)
 class TeamFactory:
-    """Factory class to create Team instances."""
+    """Factory class to create Team indices."""
 
-    teams: np.ndarray[Team]
+    teams: np.ndarray[int]

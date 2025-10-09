@@ -150,15 +150,13 @@ class FitnessBenchmark:
         minimum_score = cache_scorer[max_matches_required]
         diff = maximum_score - minimum_score
 
-        locations_arr = np.zeros(max_matches_required + non_matches_required + 1)
-        opponents_arr = np.zeros(max_matches_required + non_matches_required + 1)
+        self.locations = np.zeros(max_matches_required + non_matches_required + 1)
+        self.opponents = np.zeros(max_matches_required + non_matches_required + 1)
         for num_loc, raw_score in cache_scorer.items():
             if raw_score == 0:
                 continue
-            locations_arr[num_loc] = abs((raw_score - minimum_score) / diff) if diff else 1
-            opponents_arr[num_loc] = abs((raw_score - maximum_score) / diff) if diff else 1
-        self.locations = locations_arr
-        self.opponents = opponents_arr
+            self.locations[num_loc] = abs((raw_score - minimum_score) / diff) if diff else 1
+            self.opponents[num_loc] = abs((raw_score - maximum_score) / diff) if diff else 1
 
         for k, v in enumerate(self.locations):
             logger.debug("Location consistency score for %d location(s): %.6f", k, v)
@@ -220,14 +218,13 @@ class FitnessBenchmark:
         valid_scored_schedules.sort(key=lambda x: x[0], reverse=True)
 
         # Normalize scores for better comparison
-        if (best_score := valid_scored_schedules[0][0]) == 0:
-            best_score = 1  # Avoid division by zero
-
-        self.best_timeslot_score = best_score
+        self.best_timeslot_score = valid_scored_schedules[0][0]
+        if self.best_timeslot_score == 0:
+            self.best_timeslot_score = 1  # Avoid division by zero
 
         for i, (score, indices) in enumerate(valid_scored_schedules):
-            valid_scored_schedules[i][0] = score / best_score
-            self.timeslots[frozenset(indices)] /= best_score
+            valid_scored_schedules[i][0] = score / self.best_timeslot_score
+            self.timeslots[frozenset(indices)] /= self.best_timeslot_score
 
         unique_scores = Counter(score for score, _ in valid_scored_schedules)
         logger.debug("Unique scores found: %d", len(unique_scores))

@@ -14,7 +14,7 @@ import numpy as np
 
 from ..config.constants import ASCII_OFFSET
 from ..data_model.schedule import Schedule
-from ..data_model.team import Team, TeamFactory
+from ..data_model.team import TeamFactory
 from ..data_model.time import TimeSlot
 
 if TYPE_CHECKING:
@@ -44,7 +44,7 @@ class CsvImporter:
         """Post-initialization to validate the CSV file."""
         self._validate_inputs()
         self._initialize_caches()
-        team_factory = TeamFactory(np.array([Team(idx=i) for i in range(self.config.num_teams)]))
+        team_factory = TeamFactory(np.arange(self.config.num_teams))
         self.schedule = Schedule(teams=team_factory.teams, origin="CSV Importer")
         self.import_schedule()
 
@@ -184,7 +184,7 @@ class CsvImporter:
             created_event_key = (curr_rt, time_str, loc_name_full)
             created_events[created_event_key] = event
 
-            team = self.schedule.get_team(team_id - 1)
+            team = self.schedule.teams[team_id - 1]
             if not team:
                 logger.error("Team ID %d from CSV not found.", team_id)
                 continue

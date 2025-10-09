@@ -10,8 +10,8 @@ from shutil import rmtree
 from typing import TYPE_CHECKING
 
 from ..config.constants import FitnessObjective
-from ..visualize.plot import Plot
 from .base_exporter import GridBasedExporter
+from .plot import Plot
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -125,7 +125,7 @@ def generate_summary_report(schedule: Schedule, path: Path) -> None:
             for t, fit in sorted(zip(all_teams, team_fits, strict=True), key=lambda x: -x[1].sum()):
                 fitness_row = (f"{score:<{len_objectives[i] + 1}.4f}" for i, score in enumerate(fit))
                 fitness_str = "|".join(fitness_row)
-                team_id = normalized_teams.get(t.idx)
+                team_id = normalized_teams.get(t)
                 if team_id is None:
                     team_id = -1
                 f.write(f"{team_id:<5}|{fitness_str}|{sum(fit):.4f}\n")

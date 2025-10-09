@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..config.constants import EPSILON, FitnessObjective
+from ..config.constants import EPSILON, FITNESS_PENALTY, FitnessObjective
 
 if TYPE_CHECKING:
     from ..config.benchmark import FitnessBenchmark
@@ -71,9 +71,9 @@ class FitnessEvaluator:
         team_fitnesses = np.zeros((n_pop, n_teams, n_objs), dtype=float)
         # Get team-events mapping for the entire population
         # Shape: (n_pop, n_teams, max_events_per_team)
-        team_events_pop = self.get_team_events_from_population(population_array, context)
-        # Prepare lookup arrays
-        valid_events_mask, lookup_events = self.prepare_lookup(team_events_pop)
+        team_events_pop, valid_events_mask, lookup_events = self.get_team_events_from_population(
+            population_array, context
+        )
         # Calculate scores for each objective
         event_props = context.event_properties
         team_fitnesses[:, :, 0] = self.calc_break_time_scores(
@@ -104,12 +104,18 @@ class FitnessEvaluator:
         schedule_fitnesses = (mean_s * mw) + (vari_s * vw) + (rnge_s * rw)
         return schedule_fitnesses, team_fitnesses
 
-    def get_team_events_from_population(self, population_array: np.ndarray, context: GaContext) -> np.ndarray:
+    def get_team_events_from_population(
+        self,
+        population_array: np.ndarray,
+        context: GaContext,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Invert the (event -> team) mapping to a (team -> events) mapping for the entire population."""
         n_pop = population_array.shape[0]
         n_teams = self.config.num_teams
         max_events_per_team = context.max_events_per_team
+
         team_events_pop = np.full((n_pop, n_teams, max_events_per_team), -1, dtype=int)
+
         sched_indices, event_indices = np.where(population_array >= 0)
         team_indices = population_array[sched_indices, event_indices]
         if sched_indices.size > 0:
@@ -121,6 +127,7 @@ class FitnessEvaluator:
             within_sorted = np.arange(keys_sorted.size, dtype=int) - np.repeat(group_starts, group_lengths)
             within = np.empty_like(within_sorted)
             within[order] = within_sorted
+
             valid_mask = within < max_events_per_team
             if np.any(valid_mask):
                 team_events_pop[
@@ -128,13 +135,9 @@ class FitnessEvaluator:
                     team_indices[valid_mask],
                     within[valid_mask],
                 ] = event_indices[valid_mask]
-        return team_events_pop
-
-    def prepare_lookup(self, team_events_pop: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        """Prepare lookup arrays for fitness calculations."""
         valid_events_mask = team_events_pop >= 0
-        lookup_events = np.where(valid_events_mask, team_events_pop, 0)
-        return valid_events_mask, lookup_events
+        lookup_events = np.where(valid_events_mask, team_events_pop, -1)
+        return team_events_pop, valid_events_mask, lookup_events
 
     def calc_break_time_scores(
         self,
@@ -167,22 +170,19 @@ class FitnessEvaluator:
         # Identify overlaps
         overlap_mask = np.any(breaks_minutes < 0, axis=2)
 
-        mean_break = np.nan_to_num(
-            np.nanmean(breaks_minutes, axis=2),
-            nan=0.0,
-        )
-        std_dev = np.nan_to_num(
-            np.nanstd(breaks_minutes, axis=2),
-            nan=0.0,
-        )
+        mean_break = np.nanmean(breaks_minutes, axis=2)
+        mean_break = np.nan_to_num(mean_break, nan=0.0)
+
+        std_dev = np.nanstd(breaks_minutes, axis=2)
+        std_dev = np.nan_to_num(std_dev, nan=0.0)
 
         coefficient = std_dev / (mean_break + EPSILON)
         ratio = 1.0 / (1.0 + coefficient)
 
         zeros = np.sum(breaks_minutes == 0, axis=2)
-        b_penalty = self.benchmark.penalty**zeros
+        zeros_penalty = FITNESS_PENALTY**zeros
 
-        final_scores = ratio * b_penalty
+        final_scores = ratio * zeros_penalty
         final_scores[overlap_mask] = -1.0
         final_scores /= self.benchmark.best_timeslot_score
         return final_scores
@@ -203,7 +203,7 @@ class FitnessEvaluator:
         changes = np.diff(loc_sorted, axis=2) != 0
         meaningful_changes = np.sum(changes & valid_mask, axis=2)
 
-        has_at_least_one = loc_sorted[:, :, 0] >= 0
+        has_at_least_one = loc_sorted[:, :, -1] >= 0
         unique_counts = np.where(has_at_least_one, meaningful_changes, 0)
 
         return self.benchmark.locations[unique_counts]
@@ -217,6 +217,7 @@ class FitnessEvaluator:
         population_array: np.ndarray,
     ) -> np.ndarray:
         """Vectorized opponent variety scoring."""
+        max_int = np.iinfo(np.int64).max
         pop_size = team_events_pop.shape[0]
 
         paired_event_ids = event_properties[lookup_events]["paired_idx"]
@@ -227,7 +228,7 @@ class FitnessEvaluator:
 
         schedule_indices = np.arange(pop_size)[:, None, None]
         opponents = population_array[schedule_indices, lookup_opp_events]
-        opponents[~valid_opp] = -1
+        opponents[~valid_opp] = max_int
 
         opponents_sorted = np.sort(opponents, axis=2)
 
@@ -235,7 +236,7 @@ class FitnessEvaluator:
         changes = np.diff(opponents_sorted, axis=2) != 0
         meaningful_changes = np.sum(changes & valid_mask, axis=2)
 
-        has_at_least_one = opponents_sorted[:, :, 1] >= 0
-        unique_counts = np.where(has_at_least_one, meaningful_changes + 1, 0)
+        has_any = opponents_sorted[:, :, 0] >= 0
+        unique_counts = np.where(has_any, meaningful_changes, 0)
 
         return self.benchmark.opponents[unique_counts]

@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from ..config.ga_parameters import GaParameters
     from ..data_model.config import TournamentConfig
     from ..data_model.schedule import Population
-    from ..observers.observers import GaObserver
+    from ..io.observers import GaObserver
     from ..operators.crossover import Crossover
     from ..operators.mutation import Mutation
 

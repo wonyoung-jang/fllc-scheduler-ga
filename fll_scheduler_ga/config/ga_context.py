@@ -15,7 +15,7 @@ import numpy as np
 from ..genetic.ga import GA
 from ..io.export import generate_summary_report
 from ..io.importer import CsvImporter
-from ..observers.observers import LoggingObserver, TqdmObserver
+from ..io.observers import LoggingObserver, TqdmObserver
 
 if TYPE_CHECKING:
     from argparse import Namespace

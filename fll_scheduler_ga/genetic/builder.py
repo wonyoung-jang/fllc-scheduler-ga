@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
     from ..data_model.config import RoundType, TournamentConfig
     from ..data_model.event import Event, EventFactory
-    from ..data_model.team import Team, TeamFactory
+    from ..data_model.team import TeamFactory
 
 logger = getLogger(__name__)
 
@@ -51,7 +51,7 @@ class ScheduleBuilder:
                 self.build_matches(schedule, rt, evts, teams)
         return schedule
 
-    def build_singles(self, schedule: Schedule, rt: RoundType, events: list[Event], teams: list[Team]) -> None:
+    def build_singles(self, schedule: Schedule, rt: RoundType, events: list[Event], teams: list[int]) -> None:
         """Book all judging events for a specific round type."""
         for event in events:
             available = (t for t in teams if schedule.needs_round(t, rt) and not schedule.conflicts(t, event))
@@ -59,7 +59,7 @@ class ScheduleBuilder:
             if team:
                 schedule.assign(team, event)
 
-    def build_matches(self, schedule: Schedule, rt: RoundType, events: list[Event], teams: list[Team]) -> None:
+    def build_matches(self, schedule: Schedule, rt: RoundType, events: list[Event], teams: list[int]) -> None:
         """Book all events for a specific round type."""
         for side1, side2 in ((e, e.paired) for e in events if e.location.side == 1):
             available = (t for t in teams if schedule.needs_round(t, rt) and not schedule.conflicts(t, side1))

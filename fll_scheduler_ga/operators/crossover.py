@@ -71,7 +71,7 @@ class Crossover(ABC):
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the crossover operator."""
-        self.events = self.event_factory.build_singles_or_side1()
+        self.events = np.asarray(self.event_factory.build_singles_or_side1())
         self.n_evts = len(self.events)
         self.indices = np.arange(self.n_evts)
 
@@ -91,8 +91,8 @@ class Crossover(ABC):
         self,
         p1: Schedule,
         p2: Schedule,
-        p1_genes: Iterator[Event],
-        p2_genes: Iterator[Event],
+        p1_genes: Iterator[int],
+        p2_genes: Iterator[int],
     ) -> Schedule:
         """Create a child schedule from two parents."""
         c = Schedule(teams=self.team_factory.teams, origin=f"(C | {self!s})")
@@ -104,14 +104,12 @@ class Crossover(ABC):
         """Assign genes."""
         for i in p1_genes:
             e1 = self.events[i]
-            if (pt1 := p[e1]) is None:
+            if (t1 := p[e1]) is None:
                 continue
 
-            t1 = c.get_team(pt1.idx)
             if (e2 := e1.paired) is None:
                 c.assign(t1, e1)
-            elif (pt2 := p[e2]) is not None:
-                t2 = c.get_team(pt2.idx)
+            elif (t2 := p[e2]) is not None:
                 c.assign(t1, e1)
                 c.assign(t2, e2)
 
@@ -119,18 +117,18 @@ class Crossover(ABC):
         """Assign genes."""
         for i in p2_genes:
             e1 = self.events[i]
-            if (pt1 := p[e1]) is None:
+            if (t1 := p[e1]) is None:
                 continue
 
-            t1 = c.get_team(pt1.idx)
-            if not c.needs_round(t1, e1.roundtype) or c.conflicts(t1, e1):
+            t1_needs_round = c.team_rounds[t1][e1.roundtype] > 0
+            if not t1_needs_round or c.conflicts(t1, e1):
                 continue
 
             if (e2 := e1.paired) is None:
                 c.assign(t1, e1)
-            elif (pt2 := p[e2]) is not None:
-                t2 = c.get_team(pt2.idx)
-                if c.needs_round(t2, e2.roundtype) and not c.conflicts(t2, e2):
+            elif (t2 := p[e2]) is not None:
+                t2_needs_round = c.team_rounds[t2][e2.roundtype] > 0
+                if t2_needs_round and not c.conflicts(t2, e2):
                     c.assign(t1, e1)
                     c.assign(t2, e2)
 
@@ -211,7 +209,7 @@ class Uniform(EventCrossover):
     def get_genes(self) -> Iterator[Iterator[int]]:
         """Get the genes for Uniform crossover."""
         # Create a mask for selecting genes from each parent.
-        mask = self.rng.integers(0, 2, size=self.n_evts, dtype=bool)
+        mask = self.rng.choice([True, False], size=self.n_evts)
         return self.indices[mask], self.indices[~mask]
 
 
@@ -224,6 +222,15 @@ class StructureCrossover(EventCrossover):
 
     array: np.ndarray = None
     mid: int = None
+
+    def __post_init__(self) -> None:
+        """Post-initialization to set up the initial state."""
+        super(StructureCrossover, self).__post_init__()
+        self.initialize_attributes()
+
+    @abstractmethod
+    def initialize_attributes(self) -> None:
+        """Initialize attributes specific to the structure crossover."""
 
     def get_genes(self) -> Iterator[Iterator[int]]:
         """Get the genes for Structure-based crossover."""
@@ -240,9 +247,8 @@ class RoundTypeCrossover(StructureCrossover):
     Each gene is chosen based on the round type of the event.
     """
 
-    def __post_init__(self) -> None:
+    def initialize_attributes(self) -> None:
         """Post-initialization to set up the initial state."""
-        super(RoundTypeCrossover, self).__post_init__()
         roundtypes = list(self.event_factory.as_roundtypes().keys())
         eventmap = {rt: [] for rt in roundtypes}
         for i, e in enumerate(self.events):
@@ -264,9 +270,8 @@ class TimeSlotCrossover(StructureCrossover):
     Each gene is chosen based on the time slot of the event.
     """
 
-    def __post_init__(self) -> None:
+    def initialize_attributes(self) -> None:
         """Post-initialization to set up the initial state."""
-        super(TimeSlotCrossover, self).__post_init__()
         timeslot_ids = np.array(list({t[1].idx for t in self.event_factory.as_timeslots()}))
         eventmap = {ts_id: [] for ts_id in timeslot_ids}
         for i, e in enumerate(self.events):
@@ -288,9 +293,8 @@ class LocationCrossover(StructureCrossover):
     Each gene is chosen based on the location of the event.
     """
 
-    def __post_init__(self) -> None:
+    def initialize_attributes(self) -> None:
         """Post-initialization to set up the initial state."""
-        super(LocationCrossover, self).__post_init__()
         location_ids = np.array(list({loc[1].idx for loc in self.event_factory.as_locations()}))
         eventmap = {loc_id: [] for loc_id in location_ids}
         for i, e in enumerate(self.events):

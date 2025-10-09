@@ -19,7 +19,6 @@ if TYPE_CHECKING:
     from ..data_model.config import RoundType
     from ..data_model.event import Event, EventFactory
     from ..data_model.schedule import Match, Schedule
-    from ..data_model.team import Team
     from ..data_model.time import TimeSlot
 
 logger = getLogger(__name__)
@@ -196,6 +195,9 @@ class SwapTeamMutation(SwapMutation):
 
     def mutate(self, schedule: Schedule) -> bool:
         """Swap one team from two different matches."""
+        if not self.swap_candidates:
+            return False
+
         match1_data, match2_data = self.get_swap_candidates(schedule)
         if match1_data is None:
             return False
@@ -208,9 +210,6 @@ class SwapTeamMutation(SwapMutation):
 
     def get_swap_candidates(self, schedule: Schedule) -> tuple[Match | None, ...]:
         """Get two matches to swap in the schedule schedule."""
-        if not self.swap_candidates:
-            return None, None
-
         for idx in self.rng.permutation(len(self.swap_candidates)):
             match1_data, match2_data = self.swap_candidates[idx]
             e1a, e1b = match1_data
@@ -220,7 +219,7 @@ class SwapTeamMutation(SwapMutation):
             if None in (t1a, t1b, t2a, t2b):
                 continue
 
-            match_team_ids = {t1a.idx, t1b.idx, t2a.idx, t2b.idx}
+            match_team_ids = {t1a, t1b, t2a, t2b}
             if (
                 len(match_team_ids) < 4
                 or schedule.conflicts(t1a, e2a, ignore=e1a)
@@ -247,8 +246,10 @@ class SwapMatchMutation(SwapMutation):
 
     def mutate(self, schedule: Schedule) -> bool:
         """Swap two entire matches."""
-        match1_data, match2_data = self.get_swap_candidates(schedule)
+        if not self.swap_candidates:
+            return False
 
+        match1_data, match2_data = self.get_swap_candidates(schedule)
         if match1_data is None:
             return False
 
@@ -275,9 +276,6 @@ class SwapMatchMutation(SwapMutation):
 
     def get_swap_candidates(self, schedule: Schedule) -> tuple[Match | None, ...]:
         """Get two matches to swap in the schedule schedule."""
-        if not self.swap_candidates:
-            return None, None
-
         for idx in self.rng.permutation(len(self.swap_candidates)):
             match1_data, match2_data = self.swap_candidates[idx]
             e1a, e1b = match1_data
@@ -296,7 +294,6 @@ class SwapMatchMutation(SwapMutation):
                 continue
 
             return (e1a, e1b, t1a, t1b), (e2a, e2b, t2a, t2b)
-
         return None, None
 
 
@@ -309,6 +306,9 @@ class SwapTableSideMutation(SwapMutation):
 
     def mutate(self, schedule: Schedule) -> bool:
         """Swap the sides of two tables in a match."""
+        if not self.swap_candidates:
+            return False
+
         match_data = self.get_swap_candidates(schedule)
         if match_data is None:
             return False
@@ -319,9 +319,6 @@ class SwapTableSideMutation(SwapMutation):
 
     def get_swap_candidates(self, schedule: Schedule) -> Match | None:
         """Get two matches to swap in the schedule schedule."""
-        if not self.swap_candidates:
-            return None
-
         for idx in self.rng.permutation(len(self.swap_candidates)):
             match_data, _ = self.swap_candidates[idx]
             e1, e2 = match_data
@@ -389,7 +386,7 @@ class TimeSlotSequenceMutation(Mutation):
     def mutate_matches(self, schedule: Schedule, candidates: list[Event]) -> bool:
         """Permute team assignments for match-based events."""
         matches: list[tuple[Event, ...]] = []
-        old_ids: list[tuple[Team | None, ...]] = []
+        old_ids: list[tuple[int | None, ...]] = []
         for e1 in candidates:
             e2 = e1.paired
             t1, t2 = schedule[e1], schedule[e2]
@@ -423,8 +420,8 @@ class InversionMutation(TimeSlotSequenceMutation):
         return MutationOp.INVERSION
 
     def permute(
-        self, items: list[Team | None | tuple[Team | None, ...]]
-    ) -> Iterator[Team | None | tuple[Team | None, ...]]:
+        self, items: list[int | None | tuple[int | None, ...]]
+    ) -> Iterator[int | None | tuple[int | None, ...]]:
         """Invert a random sub-sequence of the items."""
         if len(items) <= 1:
             return iter(items)
@@ -444,8 +441,8 @@ class ScrambleMutation(TimeSlotSequenceMutation):
         return MutationOp.SCRAMBLE
 
     def permute(
-        self, items: list[Team | None | tuple[Team | None, ...]]
-    ) -> Iterator[Team | None | tuple[Team | None, ...]]:
+        self, items: list[int | None | tuple[int | None, ...]]
+    ) -> Iterator[int | None | tuple[int | None, ...]]:
         """Scramble a random sub-sequence of the items."""
         if len(items) <= 1:
             return iter(items)

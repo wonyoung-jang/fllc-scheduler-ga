@@ -66,9 +66,9 @@ class GaParameters:
             self.num_islands = 1
             logger.warning("Number of islands must be at least 1, defaulting to %d.", self.num_islands)
 
-        if self.migration_interval <= 0:
-            self.migration_interval = 15
-            logger.warning("Migration interval must be positive, defaulting to %d.", self.migration_interval)
+        if self.migration_interval < 0:
+            self.migration_interval = 0
+            logger.warning("Migration interval must not be negative, defaulting to %d.", self.migration_interval)
 
         if self.migration_size < 0:
             self.migration_size = 0

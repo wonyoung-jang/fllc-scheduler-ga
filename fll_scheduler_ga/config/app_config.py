@@ -17,7 +17,7 @@ from ..data_model.config import Round, RoundType, TournamentConfig
 from ..data_model.event import EventFactory
 from ..data_model.location import Location
 from ..data_model.schedule import Schedule
-from ..data_model.team import Team, TeamFactory
+from ..data_model.team import TeamFactory
 from ..data_model.time import TimeSlot
 from ..genetic.fitness import FitnessEvaluator, HardConstraintChecker
 from ..operators.crossover import build_crossovers
@@ -67,7 +67,7 @@ class AppConfig:
         rng = self.rng
         tconfig = self.tournament
         event_factory = EventFactory(tconfig)
-        team_factory = TeamFactory(np.array([Team(idx=i) for i in range(tconfig.num_teams)]))
+        team_factory = TeamFactory(np.arange(tconfig.num_teams, dtype=int))
         Schedule.set_conflict_matrix(event_factory.build_conflict_matrix())
 
         repairer = Repairer(rng, tconfig, event_factory)
