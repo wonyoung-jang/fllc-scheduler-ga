@@ -50,7 +50,7 @@ class NSGA3:
         logger.debug("Generated %d reference points:\n%s", len(ref_pts), ref_pts)
         return ref_pts
 
-    def select(self, fits: np.ndarray[float], n: int) -> list[np.ndarray[int]]:
+    def select(self, fits: np.ndarray, n: int) -> list[np.ndarray]:
         """Select the next generation using NSGA-III principles."""
         fronts = self.non_dominated_sort(fits, n)
         last_idx = len(fronts) - 1
@@ -82,7 +82,7 @@ class NSGA3:
         fronts.append(last_front_indices)
         return fronts
 
-    def non_dominated_sort(self, fits: np.ndarray[float], n: int) -> list[np.ndarray[int]]:
+    def non_dominated_sort(self, fits: np.ndarray, n: int) -> list[np.ndarray]:
         """Perform non-dominated sorting on the population."""
         n_pop = fits.shape[0]
         if n_pop == 0:
@@ -97,7 +97,7 @@ class NSGA3:
         dom_count = np.sum(dom, axis=0)
         # Adjacency lists: who each i dominates
         assigned = np.zeros(n_pop, dtype=bool)
-        fronts: list[np.ndarray[int]] = []
+        fronts: list[np.ndarray] = []
 
         # Initial front: those not dominated by anybody
         current_front = np.where(dom_count == 0)[0]
@@ -129,7 +129,7 @@ class NSGA3:
         n_remaining: int,
         niche_refs: np.ndarray,
         niche_dists: np.ndarray,
-    ) -> np.ndarray[int]:
+    ) -> np.ndarray:
         """Select k individuals from the last front using a niching mechanism."""
         shuffle = self.rng.shuffle
         permutation = self.rng.permutation
@@ -161,7 +161,7 @@ class NSGA3:
         # Return the masked indices
         return np.where(~mask)[0]
 
-    def norm_and_associate(self, fits: np.ndarray[float]) -> tuple[np.ndarray, np.ndarray]:
+    def norm_and_associate(self, fits: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Normalize objectives then associate individuals with nearest reference points."""
         ideal = fits.max(axis=0)
         nadir = fits.min(axis=0)
@@ -189,7 +189,7 @@ class NSGA3:
 
         return chosen_refs, min_dists
 
-    def count(self, idx_to_count: np.ndarray[int]) -> np.ndarray[int]:
+    def count(self, idx_to_count: np.ndarray) -> np.ndarray:
         """Count how many individuals are associated with each reference point."""
         counts = np.zeros(len(self.ref_points), dtype=int)
         if idx_to_count.size > 0:

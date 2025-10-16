@@ -189,7 +189,7 @@ class GA:
         self,
         generation: int,
         num_generations: int,
-        best_fitness: np.ndarray[float],
+        best_fitness: np.ndarray,
         pop_size: int,
     ) -> None:
         """Notify observers at the end of a generation."""

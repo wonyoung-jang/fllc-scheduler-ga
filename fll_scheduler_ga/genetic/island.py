@@ -172,7 +172,7 @@ class Island:
             for idx in front:
                 self.add_to_population(pop_to_select[idx])
 
-    def evaluate_pop(self) -> tuple[np.ndarray[float], np.ndarray[np.ndarray[float]]]:
+    def evaluate_pop(self) -> tuple[np.ndarray, np.ndarray]:
         """Evaluate the entire population."""
         pop_array = np.array([s.schedule for s in self.selected], dtype=int)
         return self.context.evaluator.evaluate_population(pop_array)

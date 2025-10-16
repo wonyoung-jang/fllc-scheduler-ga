@@ -19,9 +19,9 @@ logger = logging.getLogger(__name__)
 class Schedule:
     """Represents a schedule (individual) with its associated fitness score."""
 
-    schedule: np.ndarray[int] = None
-    fitness: np.ndarray[float] = None
-    team_fitnesses: np.ndarray[float] = None
+    schedule: np.ndarray = None
+    fitness: np.ndarray = None
+    team_fitnesses: np.ndarray = None
     rank: int = -1
 
     origin: str = "Builder"

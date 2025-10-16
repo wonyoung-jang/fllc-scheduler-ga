@@ -25,7 +25,7 @@ class Selection(ABC):
     rng: np.random.Generator
 
     @abstractmethod
-    def select(self, n: int, k: int = 2) -> np.ndarray[int]:
+    def select(self, n: int, k: int = 2) -> np.ndarray:
         """Select individuals from the population to form the next generation.
 
         Args:
@@ -33,7 +33,7 @@ class Selection(ABC):
             k (int): The number to select.
 
         Returns:
-            np.ndarray[int]: The indices of the selected individuals.
+            np.ndarray: The indices of the selected individuals.
 
         """
 
@@ -46,6 +46,6 @@ class RandomSelect(Selection):
         """Return a string representation of the selection operator."""
         return SelectionOp.RANDOM_SELECT
 
-    def select(self, n: int, k: int = 2) -> np.ndarray[int]:
+    def select(self, n: int, k: int = 2) -> np.ndarray:
         """Select individuals from the population to form the next generation."""
         return self.rng.choice(n, size=k, replace=False)

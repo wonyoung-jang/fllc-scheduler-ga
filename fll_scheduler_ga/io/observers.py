@@ -31,7 +31,7 @@ class GaObserver(ABC):
         self,
         generation: int,
         num_generations: int,
-        best_fitness: np.ndarray[float],
+        best_fitness: np.ndarray,
         pop_size: int,
     ) -> None:
         """Call at the end of each generation to report status."""
@@ -53,7 +53,7 @@ class LoggingObserver(GaObserver):
         self,
         generation: int,
         num_generations: int,
-        best_fitness: np.ndarray[float],
+        best_fitness: np.ndarray,
         pop_size: int,
     ) -> None:
         """Log the end of a generation with population size and best fitness."""
@@ -94,7 +94,7 @@ class TqdmObserver(GaObserver):
         self,
         generation: int,
         num_generations: int,
-        best_fitness: np.ndarray[float],
+        best_fitness: np.ndarray,
         pop_size: int,
     ) -> None:
         """Update progress bar with no new best."""
