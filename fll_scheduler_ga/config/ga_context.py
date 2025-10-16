@@ -14,7 +14,6 @@ import numpy as np
 
 from ..data_model.event import EventFactory, EventProperties
 from ..data_model.schedule import Schedule
-from ..data_model.team import TeamFactory
 from ..genetic.builder import ScheduleBuilder
 from ..genetic.fitness import FitnessEvaluator, HardConstraintChecker
 from ..io.export import generate_summary_report
@@ -44,7 +43,6 @@ class GaContext:
     app_config: AppConfig
     event_factory: EventFactory
     event_properties: EventProperties
-    team_factory: TeamFactory
     evaluator: FitnessEvaluator
     checker: HardConstraintChecker
     builder: ScheduleBuilder
@@ -69,15 +67,17 @@ class GaContext:
             num_events=tournament_config.total_slots_possible,
             event_map=event_factory.as_mapping(),
         )
-        team_factory = TeamFactory(np.arange(tournament_config.num_teams, dtype=int))
 
+        Schedule.set_teams_list(np.arange(tournament_config.num_teams, dtype=int))
         Schedule.set_conflict_matrix(event_factory.build_conflict_matrix())
         Schedule.set_event_properties(event_properties)
         Schedule.set_event_map(event_factory.as_mapping())
 
+        max_events_per_team = sum(r.rounds_per_team for r in tournament_config.rounds)
+
         repairer = Repairer(rng, tournament_config, event_factory, event_properties)
         benchmark = FitnessBenchmark(tournament_config, event_factory, flush=args.flush_benchmarks)
-        evaluator = FitnessEvaluator(tournament_config, benchmark)
+        evaluator = FitnessEvaluator(tournament_config, benchmark, event_properties, max_events_per_team)
         checker = HardConstraintChecker(tournament_config)
 
         num_objectives = len(evaluator.objectives)
@@ -88,12 +88,10 @@ class GaContext:
             n_total_pop=params.population_size,  # * params.num_islands,
         )
         selection = RandomSelect(rng)
-        crossovers = tuple(build_crossovers(app_config, team_factory, event_factory, event_properties))
+        crossovers = tuple(build_crossovers(app_config, event_factory, event_properties))
         mutations = tuple(build_mutations(app_config, event_factory))
-        max_events_per_team = sum(r.rounds_per_team for r in tournament_config.rounds)
 
         builder = ScheduleBuilder(
-            team_factory=team_factory,
             event_factory=event_factory,
             event_properties=event_properties,
             config=tournament_config,
@@ -104,7 +102,6 @@ class GaContext:
             app_config=app_config,
             event_factory=event_factory,
             event_properties=event_properties,
-            team_factory=team_factory,
             builder=builder,
             repairer=repairer,
             evaluator=evaluator,
@@ -134,7 +131,7 @@ class GaContext:
         csv_schedule = csv_import.schedule
         pop = np.asarray([csv_schedule.schedule])
 
-        if fits := self.evaluator.evaluate_population(pop, self):
+        if fits := self.evaluator.evaluate_population(pop):
             sched_fits, team_fits = fits
             csv_schedule.fitness = sched_fits[0]
             csv_schedule.team_fitnesses = team_fits[0]

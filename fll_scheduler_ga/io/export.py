@@ -18,8 +18,8 @@ if TYPE_CHECKING:
     from argparse import Namespace
     from collections.abc import Iterator
 
-    from ..data_model.config import RoundType
-    from ..data_model.schedule import Individual, Population, Schedule
+    from ..data_model.event import Event
+    from ..data_model.schedule import Schedule
     from ..genetic.ga import GA
 
 logger = getLogger(__name__)
@@ -176,7 +176,7 @@ def generate_team_schedules(schedule: Schedule, path: Path, ga: GA) -> None:
         logger.exception("Failed to write team schedules to file %s", path)
 
 
-def generate_pareto_summary(pop: Population, path: Path) -> None:
+def generate_pareto_summary(pop: list[Schedule], path: Path) -> None:
     """Generate a summary of the Pareto front."""
     try:
         with path.open("w", encoding="utf-8") as f:
@@ -206,7 +206,7 @@ def generate_pareto_summary(pop: Population, path: Path) -> None:
 class CsvExporter(GridBasedExporter):
     """Exporter for schedules in CSV format."""
 
-    def render_grid(self, schedule_by_type: dict[RoundType, Individual]) -> Iterator[list[str]]:
+    def render_grid(self, schedule_by_type: dict[str, dict[Event, int]]) -> Iterator[list[str]]:
         """Write a single schedule grid to a CSV writer."""
         for title, schedule in schedule_by_type.items():
             yield [title]
@@ -226,7 +226,7 @@ class CsvExporter(GridBasedExporter):
                 yield r
             yield []
 
-    def write_to_file(self, schedule_by_type: dict[RoundType, Individual], filename: Path) -> None:
+    def write_to_file(self, schedule_by_type: dict[str, dict[Event, int]], filename: Path) -> None:
         """Write the schedule to a file."""
         with filename.open("w", newline="", encoding="utf-8") as csvfile:
             writer(csvfile).writerows(self.render_grid(schedule_by_type))
@@ -236,7 +236,7 @@ class CsvExporter(GridBasedExporter):
 class HtmlExporter(GridBasedExporter):
     """Exporter for schedules in HTML format."""
 
-    def render_grid(self, schedule_by_type: dict[RoundType, Individual]) -> Iterator[str]:
+    def render_grid(self, schedule_by_type: dict[str, dict[Event, int]]) -> Iterator[str]:
         """Render a single schedule grid as an HTML table."""
         yield """
             <!DOCTYPE html>
@@ -302,7 +302,7 @@ class HtmlExporter(GridBasedExporter):
                 yield "</tr>"
             yield "</tbody></table>"
 
-    def write_to_file(self, schedule_by_type: dict[RoundType, Individual], filename: Path) -> None:
+    def write_to_file(self, schedule_by_type: dict[str, dict[Event, int]], filename: Path) -> None:
         """Write the schedule to a file."""
         with filename.open("w", encoding="utf-8") as f:
             f.write("".join(self.render_grid(schedule_by_type)))

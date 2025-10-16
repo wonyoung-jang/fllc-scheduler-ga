@@ -13,7 +13,6 @@ if TYPE_CHECKING:
 
     from ..data_model.config import TournamentConfig
     from ..data_model.event import EventFactory, EventProperties
-    from ..data_model.team import TeamFactory
 
 logger = getLogger(__name__)
 
@@ -22,7 +21,6 @@ logger = getLogger(__name__)
 class ScheduleBuilder:
     """Builder for building a valid random schedule."""
 
-    team_factory: TeamFactory
     event_factory: EventFactory
     event_properties: EventProperties
     config: TournamentConfig
@@ -35,32 +33,30 @@ class ScheduleBuilder:
 
     def build(self) -> Schedule:
         """Construct and return the final schedule."""
-        events = {}
-        for rt, evts in self.roundtype_events.items():
-            events[rt] = self.rng.permutation(evts)
+        schedule = Schedule(origin="Builder")
 
-        schedule = Schedule(
-            teams=self.team_factory.teams,
-            origin="Builder",
-        )
-        for rt, evts in events.items():
-            if self.config.round_idx_to_tpr[rt] == 1:
-                self.build_singles(schedule, evts, rt)
-            elif self.config.round_idx_to_tpr[rt] == 2:
-                self.build_matches(schedule, evts, rt)
+        for roundtype, evts in self.roundtype_events.items():
+            events = self.rng.permutation(evts)
+            if self.config.round_idx_to_tpr[roundtype] == 1:
+                self.build_singles(schedule, events, roundtype)
+            elif self.config.round_idx_to_tpr[roundtype] == 2:
+                self.build_matches(schedule, events, roundtype)
+
         return schedule
 
-    def build_singles(self, schedule: Schedule, events: list[int], roundtype: int) -> None:
+    def build_singles(self, schedule: Schedule, events: np.ndarray, roundtype: int) -> None:
         """Book all judging events for a specific round type."""
         for event in events:
-            needs_rounds = schedule.all_rounds_needed(roundtype)
-            self.rng.shuffle(needs_rounds)
-            available = (t for t in needs_rounds if not schedule.conflicts(t, event))
+            available = (
+                t
+                for t in self.rng.permutation(schedule.all_rounds_needed(roundtype))
+                if not schedule.conflicts(t, event)
+            )
             team = next(available, None)
             if team:
                 schedule.assign(team, event)
 
-    def build_matches(self, schedule: Schedule, events: list[int], roundtype: int) -> None:
+    def build_matches(self, schedule: Schedule, events: np.ndarray, roundtype: int) -> None:
         """Book all events for a specific round type."""
         for e1 in events:
             e2 = self.event_properties.paired_idx[e1]

@@ -16,10 +16,11 @@ if TYPE_CHECKING:
     import numpy as np
 
     from ..config.app_config import AppConfig
-    from ..data_model.config import RoundType
     from ..data_model.event import Event, EventFactory
-    from ..data_model.schedule import Match, Schedule
+    from ..data_model.schedule import Schedule
     from ..data_model.time import TimeSlot
+
+type Match = tuple[int, int, int, int]
 
 logger = getLogger(__name__)
 
@@ -340,8 +341,8 @@ class TimeSlotSequenceMutation(Mutation):
 
     event_factory: EventFactory
     event_map: dict[int, Event] = None
-    timeslot_event_map: dict[tuple[RoundType, TimeSlot], list[Event]] = None
-    timeslot_keys: list[tuple[RoundType, TimeSlot]] = None
+    timeslot_event_map: dict[tuple[str, TimeSlot], list[Event]] = None
+    timeslot_keys: list[tuple[str, TimeSlot]] = None
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""

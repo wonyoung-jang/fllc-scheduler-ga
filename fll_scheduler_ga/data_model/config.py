@@ -14,14 +14,12 @@ if TYPE_CHECKING:
 
 logger = getLogger(__name__)
 
-type RoundType = str
-
 
 @dataclass(slots=True, frozen=True)
 class Round:
     """Representation of a round in the FLL tournament."""
 
-    roundtype: RoundType
+    roundtype: str
     roundtype_idx: int
     rounds_per_team: int
     teams_per_round: int
@@ -66,9 +64,9 @@ class TournamentConfig:
     num_teams: int
     time_fmt: str
     rounds: list[Round]
-    round_requirements: dict[RoundType, int]
-    round_to_int: dict[RoundType, int]
-    round_to_tpr: dict[RoundType, int]
+    round_requirements: dict[str, int]
+    round_to_int: dict[str, int]
+    round_to_tpr: dict[str, int]
     round_idx_to_tpr: dict[int, int]
     total_slots_possible: int
     total_slots_required: int

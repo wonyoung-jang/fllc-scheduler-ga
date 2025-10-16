@@ -11,10 +11,9 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
 
-    from ..data_model.config import RoundType
-    from ..data_model.event import EventFactory
+    from ..data_model.event import Event, EventFactory
     from ..data_model.location import Location
-    from ..data_model.schedule import Individual, Schedule
+    from ..data_model.schedule import Schedule
     from ..data_model.time import TimeSlot
 
 logger = getLogger(__name__)
@@ -41,7 +40,7 @@ class Exporter(ABC):
         except OSError:
             logger.exception("Failed to export schedule to %s", path)
 
-    def _group_by_type(self, schedule: Schedule) -> dict[RoundType, Individual]:
+    def _group_by_type(self, schedule: Schedule) -> dict[str, dict[Event, int]]:
         """Group the schedule by round type."""
         grouped = {}
         normalized_teams = schedule.normalized_teams()
@@ -59,11 +58,11 @@ class Exporter(ABC):
         return grouped
 
     @abstractmethod
-    def write_to_file(self, schedule_by_type: dict[RoundType, Individual], filename: Path) -> None:
+    def write_to_file(self, schedule_by_type: dict[str, dict[Event, int]], filename: Path) -> None:
         """Write the schedule to a file."""
 
     @abstractmethod
-    def render_grid(self, schedule_by_type: dict[RoundType, Individual]) -> Iterator[str | Iterator[str]]:
+    def render_grid(self, schedule_by_type: dict[str, dict[Event, int]]) -> Iterator[str | Iterator[str]]:
         """Render a schedule grid for a specific round type."""
 
 
@@ -72,7 +71,7 @@ class GridBasedExporter(Exporter):
     """Base class for exporters that render a grid-based schedule."""
 
     def _build_grid_data(
-        self, schedule: Individual
+        self, schedule: dict[Event, int]
     ) -> tuple[list[TimeSlot], list[Location], dict[tuple[TimeSlot, Location], int]]:
         """Build the common grid data structure from a schedule."""
         grid_lookup = {(e.timeslot, e.location): team for e, team in schedule.items()}

@@ -10,17 +10,14 @@ from datetime import UTC, datetime
 from logging import getLogger
 from typing import TYPE_CHECKING, TextIO
 
-import numpy as np
-
 from ..config.constants import ASCII_OFFSET
 from ..data_model.schedule import Schedule
-from ..data_model.team import TeamFactory
 from ..data_model.time import TimeSlot
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from ..data_model.config import Round, RoundType, TournamentConfig
+    from ..data_model.config import Round, TournamentConfig
     from ..data_model.event import Event, EventFactory
 
 logger = getLogger(__name__)
@@ -37,18 +34,14 @@ class CsvImporter:
     config: TournamentConfig
     event_factory: EventFactory
     schedule: Schedule = field(init=False, repr=False)
-    _round_configs: dict[RoundType, Round] = field(init=False, repr=False)
-    _rtl_map: dict[tuple[RoundType, TimeSlot, str], Event] = field(init=False, repr=False)
+    _round_configs: dict[str, Round] = field(init=False, repr=False)
+    _rtl_map: dict[tuple[str, TimeSlot, str], Event] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the CSV file."""
         self._validate_inputs()
         self._initialize_caches()
-        team_factory = TeamFactory(np.arange(self.config.num_teams))
-        self.schedule = Schedule(
-            teams=team_factory.teams,
-            origin="CSV Importer",
-        )
+        self.schedule = Schedule(origin="CSV Importer")
         self.import_schedule()
 
         if not self.schedule:
@@ -96,7 +89,7 @@ class CsvImporter:
             csv_file: An open text file stream for the CSV.
 
         """
-        current_round_type: RoundType = ""
+        current_round_type: str = ""
         header_locations: list[str] = []
         created_events = {}
         reader = csv.reader(csv_file)
@@ -133,17 +126,17 @@ class CsvImporter:
     def parse_csv_data_row(
         self,
         row: list[str],
-        curr_rt: RoundType,
+        curr_rt: str,
         header_locations: list[str],
-        created_events: dict[tuple[RoundType, str, str], Event],
+        created_events: dict[tuple[str, str, str], Event],
     ) -> None:
         """Parse a single data row from the CSV and update the schedule.
 
         Args:
             row: list[str] - A row from the CSV file.
-            curr_rt: RoundType - The current round type being processed.
+            curr_rt: str - The current round type being processed.
             header_locations: list[str] - The list of location headers from the CSV.
-            created_events: dict[tuple[RoundType, str, str], Event]
+            created_events: dict[tuple[str, str, str], Event]
                 - A dictionary to store created events for linking opponents.
 
         """

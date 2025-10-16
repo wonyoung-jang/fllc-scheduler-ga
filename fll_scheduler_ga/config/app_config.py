@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from ..data_model.config import Round, RoundType, TournamentConfig
+from ..data_model.config import Round, TournamentConfig
 from ..data_model.location import Location
 from ..data_model.schedule import Schedule
 from ..data_model.time import TimeSlot
@@ -168,7 +168,7 @@ class AppConfigParser(ConfigParser):
 
     def parse_rounds_config(
         self, num_teams: int, time_fmt: str, locations: set[Location]
-    ) -> tuple[list[Round], dict[RoundType, int], dict[RoundType, int], dict[RoundType, int]]:
+    ) -> tuple[list[Round], dict[str, int], dict[str, int], dict[str, int]]:
         """Parse and return a list of Round objects from the configuration.
 
         Args:
@@ -178,13 +178,13 @@ class AppConfigParser(ConfigParser):
 
         Returns:
             list[Round]: A list of Round objects parsed from the configuration.
-            dict[RoundType, int]: A dictionary mapping round types to the number of rounds per team.
-            dict[RoundType, int]: A mapping of round types to their index in the rounds list.
-            dict[RoundType, int]: A mapping of round types to their teams per round.
+            dict[str, int]: A dictionary mapping round types to the number of rounds per team.
+            dict[str, int]: A mapping of round types to their index in the rounds list.
+            dict[str, int]: A mapping of round types to their teams per round.
 
         """
         rounds: list[Round] = []
-        roundreqs: dict[RoundType, int] = {}
+        roundreqs: dict[str, int] = {}
         timeslot_idx_iter = itertools.count()
 
         for rti, sec in enumerate(self._iter_sections_prefix("round")):

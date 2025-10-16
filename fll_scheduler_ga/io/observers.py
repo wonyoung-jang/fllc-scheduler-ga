@@ -12,7 +12,8 @@ from tqdm import tqdm
 if TYPE_CHECKING:
     import numpy as np
 
-    from ..data_model.schedule import Population
+    from ..data_model.schedule import Schedule
+
 
 logger = getLogger(__name__)
 
@@ -36,7 +37,7 @@ class GaObserver(ABC):
         """Call at the end of each generation to report status."""
 
     @abstractmethod
-    def on_finish(self, pop: Population, front: Population) -> None:
+    def on_finish(self, pop: list[Schedule], front: list[Schedule]) -> None:
         """Call when the genetic algorithm run is finished."""
 
 
@@ -62,7 +63,7 @@ class LoggingObserver(GaObserver):
             fitness_str += f" | Σ={sum(best_fitness):.2f} ({sum(best_fitness) / len(best_fitness):.1%})"
         logger.debug("Fitness %s | Generation %d/%d", fitness_str, generation, num_generations)
 
-    def on_finish(self, pop: Population, front: Population) -> None:
+    def on_finish(self, pop: list[Schedule], front: list[Schedule]) -> None:
         """Log the completion of the genetic algorithm run."""
         logger.debug("Genetic algorithm run completed.")
         if not pop:
@@ -103,6 +104,6 @@ class TqdmObserver(GaObserver):
             self._progress_bar.set_description(f"{pop_size} | Fitness: {fitness_str}")
         self._progress_bar.update()
 
-    def on_finish(self, pop: Population, front: Population) -> None:
+    def on_finish(self, pop: list[Schedule], front: list[Schedule]) -> None:
         """Close the progress bar."""
         self._progress_bar.close()

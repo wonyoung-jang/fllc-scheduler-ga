@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from ..config.ga_context import GaContext
     from ..config.ga_parameters import GaParameters
     from ..data_model.config import TournamentConfig
-    from ..data_model.schedule import Population
+    from ..data_model.schedule import Schedule
     from ..io.observers import GaObserver
     from ..operators.crossover import Crossover
     from ..operators.mutation import Mutation
@@ -41,7 +41,7 @@ class GA:
 
     curr_gen: int = 0
     fitness_history: np.ndarray = None
-    total_population: Population = field(default_factory=list, repr=False)
+    total_population: list[Schedule] = field(default_factory=list, repr=False)
     islands: list[Island] = field(default_factory=list, repr=False)
     ga_params: GaParameters = None
 
@@ -116,7 +116,7 @@ class GA:
             self._notify_on_finish(self.total_population, self.pareto_front())
             self.save()
 
-    def pareto_front(self) -> Population:
+    def pareto_front(self) -> list[Schedule]:
         """Get the Pareto front for each island in the population."""
         if not self.total_population:
             return [p for i in self.islands for p in i.pareto_front()]
@@ -196,7 +196,7 @@ class GA:
         for obs in self.observers:
             obs.on_generation_end(generation, num_generations, best_fitness, pop_size)
 
-    def _notify_on_finish(self, pop: Population, pareto_front: Population) -> None:
+    def _notify_on_finish(self, pop: list[Schedule], pareto_front: list[Schedule]) -> None:
         """Notify observers when the genetic algorithm run is finished."""
         for obs in self.observers:
             obs.on_finish(pop, pareto_front)
@@ -205,7 +205,7 @@ class GA:
         """Remove duplicate individuals from the population."""
         unique_pop = [ind for island in self.islands for ind in island.selected]
         pop_array = np.asarray([s.schedule for island in self.islands for s in island.selected])
-        schedule_fitness, team_fitnesses = self.context.evaluator.evaluate_population(pop_array, self.context)
+        schedule_fitness, team_fitnesses = self.context.evaluator.evaluate_population(pop_array)
         fronts = self.context.nsga3.non_dominated_sort(schedule_fitness, len(pop_array))
         selected = {}
         for rank, front in enumerate(fronts):
@@ -293,7 +293,7 @@ class GA:
             logger.debug("Island %d Fitness: %.2f", island.identity, sum(island.get_last_gen_fitness()))
         logger.debug("Total time taken: %.2f seconds", time() - start_time)
 
-    def load(self) -> Population | None:
+    def load(self) -> list[Schedule] | None:
         """Load and integrate a population from a seed file."""
         logger.debug("Loading seed population from: %s", self.seed_file)
         seed_data: dict[str, Any] = {}

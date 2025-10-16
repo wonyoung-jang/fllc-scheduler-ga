@@ -5,15 +5,12 @@ from __future__ import annotations
 import logging
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
 
-from .event import Event, EventProperties
-
-type Population = list[Schedule]
-type Individual = dict[Event, int]
-type Match = tuple[int, int, int, int]
+if TYPE_CHECKING:
+    from .event import Event, EventProperties
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +19,6 @@ logger = logging.getLogger(__name__)
 class Schedule:
     """Represents a schedule (individual) with its associated fitness score."""
 
-    teams: np.ndarray[int] = None
     schedule: np.ndarray[int] = None
     fitness: np.ndarray[float] = None
     team_fitnesses: np.ndarray[float] = None
@@ -38,6 +34,7 @@ class Schedule:
     team_rounds: np.ndarray = None
 
     # Class variables
+    teams: ClassVar[np.ndarray]
     event_map: ClassVar[dict[int, Event]]
     event_properties: ClassVar[EventProperties]
     team_roundreqs_array: ClassVar[np.ndarray]
@@ -96,6 +93,11 @@ class Schedule:
             # self._hash = hash(frozenset(frozenset(events) for events in team_events.values()))
             self._hash = hash(frozenset(frozenset(events) for events in self.team_events.values()))
         return self._hash
+
+    @classmethod
+    def set_teams_list(cls, teams: np.ndarray) -> None:
+        """Set the teams list for the schedule."""
+        cls.teams = teams
 
     @classmethod
     def set_team_identities(cls, identities: dict[int, int | str]) -> None:
@@ -197,7 +199,6 @@ class Schedule:
     def clone(self) -> Schedule:
         """Create a deep copy of the schedule."""
         return Schedule(
-            teams=self.teams,
             schedule=self.schedule.copy(),
             fitness=self.fitness.copy() if self.fitness is not None else None,
             team_fitnesses=self.team_fitnesses.copy() if self.team_fitnesses is not None else None,

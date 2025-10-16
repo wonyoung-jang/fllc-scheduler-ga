@@ -175,7 +175,7 @@ class Island:
     def evaluate_pop(self) -> tuple[np.ndarray[float], np.ndarray[np.ndarray[float]]]:
         """Evaluate the entire population."""
         pop_array = np.array([s.schedule for s in self.selected], dtype=int)
-        return self.context.evaluator.evaluate_population(pop_array, self.context)
+        return self.context.evaluator.evaluate_population(pop_array)
 
     def give_migrants(self) -> Iterator[Schedule]:
         """Randomly yield migrants from population."""

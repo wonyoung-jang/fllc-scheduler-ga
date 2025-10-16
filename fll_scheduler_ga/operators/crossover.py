@@ -17,14 +17,12 @@ if TYPE_CHECKING:
 
     from ..config.app_config import AppConfig
     from ..data_model.event import Event, EventFactory, EventProperties
-    from ..data_model.team import TeamFactory
 
 logger = getLogger(__name__)
 
 
 def build_crossovers(
     app_config: AppConfig,
-    team_factory: TeamFactory,
     event_factory: EventFactory,
     event_properties: EventProperties,
 ) -> Iterator[Crossover]:
@@ -32,38 +30,32 @@ def build_crossovers(
     rng = app_config.rng
     crossovers = {
         CrossoverOp.K_POINT: lambda k: KPoint(
-            team_factory,
             event_factory,
             event_properties,
             rng,
             k=k,
         ),
         CrossoverOp.SCATTERED: lambda: Scattered(
-            team_factory,
             event_factory,
             event_properties,
             rng,
         ),
         CrossoverOp.UNIFORM: lambda: Uniform(
-            team_factory,
             event_factory,
             event_properties,
             rng,
         ),
         CrossoverOp.ROUND_TYPE_CROSSOVER: lambda: RoundTypeCrossover(
-            team_factory,
             event_factory,
             event_properties,
             rng,
         ),
         CrossoverOp.TIMESLOT_CROSSOVER: lambda: TimeSlotCrossover(
-            team_factory,
             event_factory,
             event_properties,
             rng,
         ),
         CrossoverOp.LOCATION_CROSSOVER: lambda: LocationCrossover(
-            team_factory,
             event_factory,
             event_properties,
             rng,
@@ -93,7 +85,6 @@ def build_crossovers(
 class Crossover(ABC):
     """Abstract base class for crossover operators in the FLL Scheduler GA."""
 
-    team_factory: TeamFactory
     event_factory: EventFactory
     event_properties: EventProperties
     rng: np.random.Generator
@@ -132,39 +123,41 @@ class Crossover(ABC):
         p2_genes: Iterator[int],
     ) -> Schedule:
         """Create a child schedule from two parents."""
-        c = Schedule(teams=self.team_factory.teams, origin=f"(C | {self!s})")
-        self.assign_from_p1(c, p1, p1_genes)
-        self.assign_from_p2(c, p2, p2_genes)
-        return c
+        child = Schedule(origin=f"(C | {self!s})")
+        self.assign_from_p1(child, p1, p1_genes)
+        self.assign_from_p2(child, p2, p2_genes)
+        return child
 
-    def assign_from_p1(self, c: Schedule, p: Schedule, p1_genes: Iterator[int]) -> None:
+    def assign_from_p1(self, child: Schedule, p1: Schedule, p1_genes: Iterator[int]) -> None:
         """Assign genes."""
         p1_events: Iterator[Event] = self.events[p1_genes]
         for e1 in p1_events:
-            if (t1 := p[e1.idx]) == -1:
+            if (t1 := p1[e1.idx]) == -1:
                 continue
 
             if (e2 := e1.paired) is None:
-                c.assign(t1, e1.idx)
-            elif (t2 := p[e2.idx]) != -1:
-                c.assign(t1, e1.idx)
-                c.assign(t2, e2.idx)
+                child.assign(t1, e1.idx)
+            elif (t2 := p1[e2.idx]) != -1:
+                child.assign(t1, e1.idx)
+                child.assign(t2, e2.idx)
 
-    def assign_from_p2(self, c: Schedule, p: Schedule, p2_genes: Iterator[int]) -> None:
+    def assign_from_p2(self, child: Schedule, p2: Schedule, p2_genes: Iterator[int]) -> None:
         """Assign genes."""
         p2_events: Iterator[Event] = self.events[p2_genes]
         for e1 in p2_events:
-            if (t1 := p[e1.idx]) == -1:
+            if (t1 := p2[e1.idx]) == -1:
                 continue
 
-            if not c.needs_round(t1, e1.roundtype_idx) or c.conflicts(t1, e1.idx):
+            if not child.needs_round(t1, e1.roundtype_idx) or child.conflicts(t1, e1.idx):
                 continue
 
             if (e2 := e1.paired) is None:
-                c.assign(t1, e1.idx)
-            elif (t2 := p[e2.idx]) != -1 and c.needs_round(t2, e2.roundtype_idx) and not c.conflicts(t2, e2.idx):
-                c.assign(t1, e1.idx)
-                c.assign(t2, e2.idx)
+                child.assign(t1, e1.idx)
+            elif (
+                (t2 := p2[e2.idx]) != -1 and child.needs_round(t2, e2.roundtype_idx) and not child.conflicts(t2, e2.idx)
+            ):
+                child.assign(t1, e1.idx)
+                child.assign(t2, e2.idx)
 
 
 @dataclass(slots=True)
