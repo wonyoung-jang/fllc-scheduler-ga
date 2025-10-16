@@ -90,16 +90,12 @@ class Crossover(ABC):
     rng: np.random.Generator
 
     events: list[Event] = None
-    events_mapping: dict[int, Event] = None
-    events_idx: list[Event] = None
     n_evts: int = None
     indices: np.ndarray = None
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the crossover operator."""
-        self.events = np.asarray(self.event_factory.build_singles_or_side1())
-        self.events_mapping = self.event_factory.as_mapping()
-        self.events_idx = np.asarray([e.idx for e in self.events])
+        self.events = self.event_factory.build_singles_or_side1()
         self.n_evts = len(self.events)
         self.indices = np.arange(self.n_evts)
 
@@ -130,8 +126,8 @@ class Crossover(ABC):
 
     def assign_from_p1(self, child: Schedule, p1: Schedule, p1_genes: Iterator[int]) -> None:
         """Assign genes."""
-        p1_events: Iterator[Event] = self.events[p1_genes]
-        for e1 in p1_events:
+        for i in p1_genes:
+            e1 = self.events[i]
             if (t1 := p1[e1.idx]) == -1:
                 continue
 
@@ -143,8 +139,8 @@ class Crossover(ABC):
 
     def assign_from_p2(self, child: Schedule, p2: Schedule, p2_genes: Iterator[int]) -> None:
         """Assign genes."""
-        p2_events: Iterator[Event] = self.events[p2_genes]
-        for e1 in p2_events:
+        for i in p2_genes:
+            e1 = self.events[i]
             if (t1 := p2[e1.idx]) == -1:
                 continue
 

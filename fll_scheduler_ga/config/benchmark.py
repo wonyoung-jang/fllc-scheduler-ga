@@ -22,9 +22,9 @@ import numpy as np
 from .constants import EPSILON, FITNESS_PENALTY
 
 if TYPE_CHECKING:
-    from ..data_model.config import TournamentConfig
     from ..data_model.event import EventFactory
     from ..data_model.time import TimeSlot
+    from ..data_model.tournament_config import TournamentConfig
 
 logger = getLogger(__name__)
 

@@ -12,7 +12,6 @@ class Location:
     """Data model for a location in the FLL Scheduler GA."""
 
     idx: int
-
     locationtype: str
     name: int
     side: int

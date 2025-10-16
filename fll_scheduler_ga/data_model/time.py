@@ -14,10 +14,10 @@ class TimeSlot:
     """Data model for a time slot in the FLL Scheduler GA."""
 
     idx: int
-
     start: datetime
     stop: datetime
 
+    # Class variables
     time_fmt: ClassVar[str]
 
     def __post_init__(self) -> None:

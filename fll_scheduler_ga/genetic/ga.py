@@ -20,8 +20,8 @@ if TYPE_CHECKING:
 
     from ..config.ga_context import GaContext
     from ..config.ga_parameters import GaParameters
-    from ..data_model.config import TournamentConfig
     from ..data_model.schedule import Schedule
+    from ..data_model.tournament_config import TournamentConfig
     from ..io.observers import GaObserver
     from ..operators.crossover import Crossover
     from ..operators.mutation import Mutation

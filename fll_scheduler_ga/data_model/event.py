@@ -13,9 +13,10 @@ import numpy as np
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from .config import Round, TournamentConfig
     from .location import Location
     from .time import TimeSlot
+    from .tournament_config import TournamentConfig
+    from .tournament_round import TournamentRound
 
 logger = getLogger(__name__)
 
@@ -163,7 +164,7 @@ class EventFactory:
             ]
         return self._list_singles_or_side1
 
-    def create_events(self, r: Round, event_idx_iter: Iterator[int]) -> Iterator[Event]:
+    def create_events(self, r: TournamentRound, event_idx_iter: Iterator[int]) -> Iterator[Event]:
         """Generate all possible Events for a given Round configuration.
 
         Args:

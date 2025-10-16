@@ -10,9 +10,9 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import numpy as np
 
-    from ..data_model.config import TournamentConfig
     from ..data_model.event import Event, EventFactory, EventProperties
     from ..data_model.schedule import Schedule
+    from ..data_model.tournament_config import TournamentConfig
 
 logger = getLogger(__name__)
 

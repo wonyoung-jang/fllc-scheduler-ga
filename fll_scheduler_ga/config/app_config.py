@@ -13,10 +13,11 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from ..data_model.config import Round, TournamentConfig
 from ..data_model.location import Location
 from ..data_model.schedule import Schedule
 from ..data_model.time import TimeSlot
+from ..data_model.tournament_config import TournamentConfig
+from ..data_model.tournament_round import TournamentRound
 from .constants import OPERATOR_CONFIG_OPTIONS, RANDOM_SEED_RANGE
 from .ga_operators_config import OperatorConfig
 from .ga_parameters import GaParameters
@@ -168,7 +169,7 @@ class AppConfigParser(ConfigParser):
 
     def parse_rounds_config(
         self, num_teams: int, time_fmt: str, locations: set[Location]
-    ) -> tuple[list[Round], dict[str, int], dict[str, int], dict[str, int]]:
+    ) -> tuple[list[TournamentRound], dict[str, int], dict[str, int], dict[str, int]]:
         """Parse and return a list of Round objects from the configuration.
 
         Args:
@@ -183,7 +184,7 @@ class AppConfigParser(ConfigParser):
             dict[str, int]: A mapping of round types to their teams per round.
 
         """
-        rounds: list[Round] = []
+        rounds: list[TournamentRound] = []
         roundreqs: dict[str, int] = {}
         timeslot_idx_iter = itertools.count()
 
@@ -226,7 +227,7 @@ class AppConfigParser(ConfigParser):
             roundreqs[roundtype] = rounds_per_team
 
             rounds.append(
-                Round(
+                TournamentRound(
                     roundtype=roundtype,
                     roundtype_idx=rti,
                     rounds_per_team=rounds_per_team,

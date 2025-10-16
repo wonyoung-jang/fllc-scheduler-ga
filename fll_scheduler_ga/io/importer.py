@@ -4,26 +4,23 @@
 from __future__ import annotations
 
 import csv
-import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from logging import getLogger
 from typing import TYPE_CHECKING, TextIO
 
-from ..config.constants import ASCII_OFFSET
+from ..config.constants import ASCII_OFFSET, RE_HHMM, TIME_HEADER
 from ..data_model.schedule import Schedule
 from ..data_model.time import TimeSlot
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from ..data_model.config import Round, TournamentConfig
     from ..data_model.event import Event, EventFactory
+    from ..data_model.tournament_config import TournamentConfig
+    from ..data_model.tournament_round import TournamentRound
 
 logger = getLogger(__name__)
-
-_TIME_HEADER = "Time"
-_RE_HHMM = re.compile(r"\d{2}:\d{2}")
 
 
 @dataclass(slots=True)
@@ -34,7 +31,7 @@ class CsvImporter:
     config: TournamentConfig
     event_factory: EventFactory
     schedule: Schedule = field(init=False, repr=False)
-    _round_configs: dict[str, Round] = field(init=False, repr=False)
+    _round_configs: dict[str, TournamentRound] = field(init=False, repr=False)
     _rtl_map: dict[tuple[str, TimeSlot, str], Event] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -107,11 +104,11 @@ class CsvImporter:
             if not current_round_type:
                 continue
 
-            if first_cell == _TIME_HEADER:
+            if first_cell == TIME_HEADER:
                 header_locations = [h.strip() for h in row[1:]]
                 continue
 
-            if header_locations and _RE_HHMM.match(first_cell):
+            if header_locations and RE_HHMM.match(first_cell):
                 self.parse_csv_data_row(
                     row,
                     current_round_type,
@@ -142,7 +139,7 @@ class CsvImporter:
         """
         time_fmt = self.config.time_fmt
         time_str = row[0]
-        rc: Round = self._round_configs[curr_rt]
+        rc: TournamentRound = self._round_configs[curr_rt]
         if not rc.times:
             start = datetime.strptime(time_str, time_fmt).replace(tzinfo=UTC)
             stop = start + rc.duration_minutes

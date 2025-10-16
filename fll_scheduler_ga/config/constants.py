@@ -9,6 +9,10 @@ FITNESS_PENALTY = 0.5
 RANDOM_SEED_RANGE = (1, 2**32 - 1)
 EPSILON = 1e-12
 
+# For Importer
+TIME_HEADER = "Time"
+RE_HHMM = r"\d{2}:\d{2}"
+
 
 class SelectionOp(StrEnum):
     """Enum for selection operator keys."""
@@ -47,7 +51,6 @@ class FitnessObjective(StrEnum):
     BREAK_TIME = "BreakTime"
     LOCATION_CONSISTENCY = "LocationConsistency"
     OPPONENT_VARIETY = "OpponentVariety"
-    # CONFLICTS = "Conflicts"
 
 
 OPERATOR_CONFIG_OPTIONS = {
