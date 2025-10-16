@@ -5,18 +5,15 @@ from __future__ import annotations
 import logging
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
 import numpy as np
 
-from .event import Event
-
-if TYPE_CHECKING:
-    from .config import RoundType
+from .event import Event, EventProperties
 
 type Population = list[Schedule]
 type Individual = dict[Event, int]
-type Match = tuple[Event, Event, int, int]
+type Match = tuple[int, int, int, int]
 
 logger = logging.getLogger(__name__)
 
@@ -38,9 +35,12 @@ class Schedule:
     _hash: int = None
 
     team_events: dict[int, set[int]] = None
-    team_rounds: dict[int, dict[RoundType, int]] = None
+    team_rounds: np.ndarray = None
 
-    team_roundreqs: ClassVar[dict[int, dict[RoundType, int]]]
+    # Class variables
+    event_map: ClassVar[dict[int, Event]]
+    event_properties: ClassVar[EventProperties]
+    team_roundreqs_array: ClassVar[np.ndarray]
     team_identities: ClassVar[dict[int, int | str]]
     total_num_events: ClassVar[int]
     conflict_matrix: ClassVar[np.ndarray]
@@ -54,31 +54,29 @@ class Schedule:
             self.team_events = defaultdict(set)
 
         if self.team_rounds is None:
-            self.team_rounds = {team: Schedule.team_roundreqs.copy() for team in self.teams}
+            self.team_rounds = Schedule.team_roundreqs_array.copy()
 
     def __len__(self) -> int:
         """Return the number of scheduled events."""
-        return self.schedule.size - np.count_nonzero(self.schedule == -1)
+        return np.count_nonzero(self.schedule >= 0)
 
-    def __getitem__(self, event: Event) -> int | None:
+    def __getitem__(self, event: int) -> int | None:
         """Get the team assigned to a specific event."""
-        if (team_id := self.schedule[event.idx]) == -1:
-            return None
-        return self.teams[team_id]
+        return self.schedule[event]
 
-    def __setitem__(self, event: Event, team: int) -> None:
+    def __setitem__(self, event: int, team: int) -> None:
         """Assign a team to a specific event."""
-        self.schedule[event.idx] = team
+        self.schedule[event] = team
         self._hash = None
 
-    def __delitem__(self, event: Event) -> None:
+    def __delitem__(self, event: int) -> None:
         """Remove a specific event from the schedule."""
-        self.schedule[event.idx] = -1
+        self.schedule[event] = -1
         self._hash = None
 
-    def __contains__(self, event: Event) -> bool:
+    def __contains__(self, event: int) -> bool:
         """Check if a specific event is scheduled."""
-        return self.schedule[event.idx] != -1
+        return self.schedule[event] != -1
 
     def __eq__(self, other: object) -> bool:
         """Two Schedules are equal if they assign the same teams to the same events."""
@@ -89,6 +87,13 @@ class Schedule:
     def __hash__(self) -> int:
         """Hash is based on the frozenset of (event_id, team_id) pairs."""
         if self._hash is None:
+            # s = self.schedule
+            # team_events = defaultdict(set)
+            # for event_id, team_id in enumerate(s):
+            #     if team_id >= 0:
+            #         team_events[team_id].add(event_id)
+
+            # self._hash = hash(frozenset(frozenset(events) for events in team_events.values()))
             self._hash = hash(frozenset(frozenset(events) for events in self.team_events.values()))
         return self._hash
 
@@ -103,51 +108,63 @@ class Schedule:
         cls.total_num_events = total
 
     @classmethod
-    def set_team_roundreqs(cls, roundreqs: dict[int, dict[str, int]]) -> None:
+    def set_team_roundreqs(cls, roundreqarray: np.ndarray) -> None:
         """Set the team round requirements for the schedule."""
-        cls.team_roundreqs = roundreqs
+        cls.team_roundreqs_array = roundreqarray
 
     @classmethod
     def set_conflict_matrix(cls, matrix: np.ndarray) -> None:
         """Set the conflict matrix for the schedule."""
         cls.conflict_matrix = matrix
 
-    def swap_assignment(self, team: int, old_event: Event, new_event: Event) -> None:
+    @classmethod
+    def set_event_map(cls, events: dict[int, Event]) -> None:
+        """Set the event map for the schedule."""
+        cls.event_map = events
+
+    @classmethod
+    def set_event_properties(cls, properties: np.ndarray) -> None:
+        """Set the event properties for the schedule."""
+        cls.event_properties = properties
+
+    def swap_assignment(self, team: int, old_event: int, new_event: int) -> None:
         """Switch an event for a team in the schedule."""
         self.unassign(team, old_event)
         self.assign(team, new_event)
 
-    def assign(self, team: int, event: Event) -> None:
+    def assign(self, team: int, event: int) -> None:
         """Add an event to a team's scheduled events."""
-        ei = event.idx
-        self.team_events[team].add(ei)
-        self.team_rounds[team][event.roundtype] -= 1
-        self.schedule[ei] = team
-        self._hash = None
+        roundtype = Schedule.event_properties.roundtype[event]
+        self.team_events[team].add(event)
+        self.team_rounds[team, roundtype] -= 1
+        self[event] = team
 
-    def unassign(self, team: int, event: Event) -> None:
+    def unassign(self, team: int, event: int) -> None:
         """Remove an event from a team's scheduled events."""
-        ei = event.idx
-        self.team_events[team].remove(ei)
-        self.team_rounds[team][event.roundtype] += 1
-        self.schedule[ei] = -1
-        self._hash = None
+        roundtype = Schedule.event_properties.roundtype[event]
+        self.team_events[team].remove(event)
+        self.team_rounds[team, roundtype] += 1
+        del self[event]
 
-    def team_rounds_needed(self, team: int) -> bool:
-        """Check if any rounds still needed for the team."""
-        return sum(self.team_rounds[team].values()) > 0
-
-    def needs_round(self, team: int, roundtype: RoundType) -> bool:
+    def needs_round(self, team: int, roundtype: int) -> bool:
         """Check if a team still needs to participate in a given round type."""
-        return self.team_rounds[team][roundtype] > 0
+        return self.team_rounds[team, roundtype] > 0
 
-    def conflicts(self, team: int, new_event: Event, *, ignore: Event = None) -> bool:
+    def all_rounds_needed(self, roundtype: int) -> np.ndarray:
+        """Return all teams that still need roundtype."""
+        return np.where(self.team_rounds[:, roundtype] > 0)[0]
+
+    def any_rounds_needed(self) -> bool:
+        """Check if any team still needs rounds."""
+        return np.any(self.team_rounds.sum(axis=1) > 0)
+
+    def conflicts(self, team: int, new_event: int, *, ignore: int | None = None) -> bool:
         """Check if adding a new event would cause a time conflict.
 
         Args:
             team (int): The team to check for conflicts.
-            new_event (Event): The new event to check for conflicts.
-            ignore (Event): An event to ignore when checking for conflicts.
+            new_event (int): The new event to check for conflicts.
+            ignore (int): An event to ignore when checking for conflicts.
 
         Returns:
             bool: True if there is a conflict, False otherwise.
@@ -156,16 +173,26 @@ class Schedule:
         team_events = self.team_events[team]
         events_to_check = team_events
 
-        if ignore and ignore.idx in team_events:
-            events_to_check = team_events - {ignore.idx}
+        if ignore is not None and ignore in team_events:
+            events_to_check = events_to_check - {ignore}
 
-        conflict_found = new_event.idx in events_to_check
-
-        if conflict_found:
+        if new_event in events_to_check:
             return True
 
-        new_conflicts = new_event.conflicts
-        return bool(not conflict_found and new_conflicts and not events_to_check.isdisjoint(new_conflicts))
+        new_conflicts = Schedule.event_map[new_event].conflicts
+        if not new_conflicts:
+            return False
+
+        return not events_to_check.isdisjoint(new_conflicts)
+        # team_event_indices = np.nonzero(self.schedule == team)[0]
+
+        # if ignore is not None:
+        #     team_event_indices = team_event_indices[team_event_indices != ignore]
+
+        # if team_event_indices.size == 0:
+        #     return False
+
+        # return np.any(Schedule.conflict_matrix[new_event, team_event_indices])
 
     def clone(self) -> Schedule:
         """Create a deep copy of the schedule."""
@@ -180,25 +207,16 @@ class Schedule:
             clones=self.clones + 1,
             _hash=self._hash,
             team_events={k: v.copy() for k, v in self.team_events.items()},
-            team_rounds={k: v.copy() for k, v in self.team_rounds.items()},
+            team_rounds=self.team_rounds.copy(),
         )
 
     def scheduled_events(self) -> np.ndarray:
         """Return the indices of scheduled events."""
-        return np.where(self.schedule >= 0)[0]
+        return np.nonzero(self.schedule >= 0)[0]
 
     def unscheduled_events(self) -> np.ndarray:
         """Return the indices of unscheduled events."""
-        return np.where(self.schedule == -1)[0]
-
-    def destroy_event(self, event1: Event) -> None:
-        """Destroy an event, whether single or match."""
-        if event2 := event1.paired:
-            if (team1 := self[event1]) and (team2 := self[event2]):
-                self.unassign(team1, event1)
-                self.unassign(team2, event2)
-        elif team := self[event1]:
-            self.unassign(team, event1)
+        return np.nonzero(self.schedule == -1)[0]
 
     def normalized_teams(self) -> dict[int, int]:
         """Normalize the schedule by reassigning team identities."""

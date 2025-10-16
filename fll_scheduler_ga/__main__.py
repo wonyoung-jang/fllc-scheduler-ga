@@ -6,14 +6,14 @@ from logging import getLogger
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import fll_scheduler_ga.config.cli as ga_cli
+import fll_scheduler_ga.io.export as ga_export
 from fll_scheduler_ga.config.app_config import AppConfig
-from fll_scheduler_ga.config.cli import init_logging, init_parser
-from fll_scheduler_ga.io.export import generate_summary
+from fll_scheduler_ga.config.ga_context import GaContext
+from fll_scheduler_ga.genetic.ga import GA
 
 if TYPE_CHECKING:
     from argparse import Namespace
-
-    from fll_scheduler_ga.genetic.ga import GA
 
 
 logger = getLogger(__name__)
@@ -22,11 +22,11 @@ logger = getLogger(__name__)
 def setup_environment() -> tuple[Namespace, GA]:
     """Set up the environment for the application."""
     try:
-        args = init_parser()
-        init_logging(args)
-        app_config = AppConfig.create_app_config(args, Path(args.config_file))
-        ga_context = app_config.create_ga_context(args)
-        ga = ga_context.create_ga_instance(args)
+        args = ga_cli.init_parser()
+        ga_cli.init_logging(args)
+        app_config = AppConfig.build(args, Path(args.config_file))
+        ga_context = GaContext.build(args, app_config)
+        ga = GA.build(args, ga_context)
     except (FileNotFoundError, KeyError):
         logger.exception("Error loading configuration")
     else:
@@ -49,7 +49,7 @@ def main() -> None:
     except Exception:
         logger.exception("An unhandled error occurred during the GA run. Saving state before exiting.")
     finally:
-        generate_summary(args, ga)
+        ga_export.generate_summary(args, ga)
 
     logger.debug("FLLC Scheduler finished")
 

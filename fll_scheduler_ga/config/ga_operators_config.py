@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from logging import getLogger
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ..config.constants import CrossoverOp, MutationOp
@@ -35,3 +35,8 @@ class OperatorConfig:
             f"\n\t  crossover_ks:\n\t\t{crossover_ks_str}"
             f"\n\t  mutation_types:\n\t\t{mutations_str}"
         )
+
+    @classmethod
+    def build(cls, params: dict[str, Any]) -> OperatorConfig:
+        """Build an OperatorConfig from a dictionary of parameters."""
+        return cls(**params)

@@ -27,13 +27,14 @@ class Island:
     """Genetic algorithm island for the FLL Scheduler GA."""
 
     identity: int
-    rng: np.random.Generator
-    builder: ScheduleBuilder
     context: GaContext
-    ga_params: GaParameters
     offspring_ratio: Counter
     crossover_ratio: dict[str, Counter]
     mutation_ratio: dict[str, Counter]
+
+    rng: np.random.Generator = None
+    builder: ScheduleBuilder = None
+    ga_params: GaParameters = None
 
     selected: list[Schedule] = field(default_factory=list, repr=False)
 
@@ -43,9 +44,13 @@ class Island:
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
-        self.fitness_history = np.zeros(
-            (self.ga_params.generations, len(self.context.evaluator.objectives)), dtype=float
-        )
+        self.rng = self.context.app_config.rng
+        self.builder = self.context.builder
+        self.ga_params = self.context.app_config.ga_params
+        n_gen = self.ga_params.generations
+        n_obj = len(self.context.evaluator.objectives)
+        self.fitness_history = np.zeros((n_gen, n_obj), dtype=float)
+        self.curr_schedule_fitnesses = np.zeros((0, n_obj), dtype=float)
 
     def __len__(self) -> int:
         """Return the number of individuals in the island's population."""
@@ -80,10 +85,6 @@ class Island:
         self.mutate_schedule(schedule)
         return self.add_to_population(schedule, recurse=True)
 
-    def build_schedule(self) -> Schedule:
-        """Build a new offspring schedule."""
-        return self.builder.build()
-
     def build_n_schedules(self, needed: int) -> None:
         """Build a number of schedules."""
         if needed <= 0:
@@ -91,7 +92,7 @@ class Island:
 
         created = 0
         while created < needed:
-            s = self.build_schedule()
+            s = self.builder.build()
             if self.context.repairer.repair(s):
                 self.add_to_population(s)
                 created += 1
@@ -173,7 +174,7 @@ class Island:
 
     def evaluate_pop(self) -> tuple[np.ndarray[float], np.ndarray[np.ndarray[float]]]:
         """Evaluate the entire population."""
-        pop_array = np.asarray([s.schedule for s in self.selected])
+        pop_array = np.array([s.schedule for s in self.selected], dtype=int)
         return self.context.evaluator.evaluate_population(pop_array, self.context)
 
     def give_migrants(self) -> Iterator[Schedule]:

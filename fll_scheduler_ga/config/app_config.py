@@ -14,20 +14,10 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from ..data_model.config import Round, RoundType, TournamentConfig
-from ..data_model.event import EventFactory
 from ..data_model.location import Location
 from ..data_model.schedule import Schedule
-from ..data_model.team import TeamFactory
 from ..data_model.time import TimeSlot
-from ..genetic.fitness import FitnessEvaluator, HardConstraintChecker
-from ..operators.crossover import build_crossovers
-from ..operators.mutation import build_mutations
-from ..operators.nsga3 import NSGA3
-from ..operators.repairer import Repairer
-from ..operators.selection import RandomSelect
-from .benchmark import FitnessBenchmark
-from .constants import RANDOM_SEED_RANGE, CrossoverOp, MutationOp
-from .ga_context import GaContext
+from .constants import OPERATOR_CONFIG_OPTIONS, RANDOM_SEED_RANGE
 from .ga_operators_config import OperatorConfig
 from .ga_parameters import GaParameters
 
@@ -48,55 +38,22 @@ class AppConfig:
     rng: np.random.Generator
 
     @classmethod
-    def create_app_config(cls, args: Namespace, path: Path | None = None) -> AppConfig:
+    def build(cls, args: Namespace, path: Path | None = None) -> AppConfig:
         """Create and return the application configuration."""
         if path is None:
             path = Path(args.config_file).resolve()
 
-        parser = AppConfigParser.get_config_parser(args, path)
+        parser = AppConfigParser.build(args, path)
+
+        tournament_params = parser.load_tournament_config()
+        operators_params = parser.load_operator_config()
+        ga_params = parser.load_ga_parameters()
 
         return cls(
-            tournament=parser.load_tournament_config(),
-            operators=parser.load_operator_config(),
-            ga_params=parser.load_ga_parameters(),
+            tournament=TournamentConfig.build(tournament_params),
+            operators=OperatorConfig.build(operators_params),
+            ga_params=GaParameters.build(ga_params),
             rng=parser.load_rng(),
-        )
-
-    def create_ga_context(self, args: Namespace) -> GaContext:
-        """Create and return a GaContext with the provided configuration."""
-        rng = self.rng
-        tconfig = self.tournament
-        event_factory = EventFactory(tconfig)
-        team_factory = TeamFactory(np.arange(tconfig.num_teams, dtype=int))
-        Schedule.set_conflict_matrix(event_factory.build_conflict_matrix())
-
-        repairer = Repairer(rng, tconfig, event_factory)
-        benchmark = FitnessBenchmark(tconfig, event_factory, flush=args.flush_benchmarks)
-        evaluator = FitnessEvaluator(tconfig, benchmark)
-        checker = HardConstraintChecker(tconfig)
-
-        num_objectives = len(evaluator.objectives)
-        params = self.ga_params
-        nsga3 = NSGA3(
-            rng=rng,
-            n_objectives=num_objectives,
-            n_total_pop=params.population_size,  # * params.num_islands,
-        )
-        selection = RandomSelect(rng)
-        crossovers = tuple(build_crossovers(self, team_factory, event_factory))
-        mutations = tuple(build_mutations(self, event_factory))
-
-        return GaContext(
-            app_config=self,
-            event_factory=event_factory,
-            team_factory=team_factory,
-            repairer=repairer,
-            evaluator=evaluator,
-            checker=checker,
-            nsga3=nsga3,
-            selection=selection,
-            crossovers=crossovers,
-            mutations=mutations,
         )
 
 
@@ -112,7 +69,7 @@ class AppConfigParser(ConfigParser):
         super(AppConfigParser, self).__init__(**self.kwargs)
 
     @classmethod
-    def get_config_parser(cls, args: Namespace, path: Path) -> AppConfigParser:
+    def build(cls, args: Namespace, path: Path) -> AppConfigParser:
         """Get a ConfigParser instance for the given config file path."""
         if not Path(path).exists():
             msg = f"Configuration file does not exist at: {path}"
@@ -126,38 +83,44 @@ class AppConfigParser(ConfigParser):
         logger.debug("Configuration file loaded from %s", path)
         return parser
 
-    def load_tournament_config(self) -> TournamentConfig:
+    def load_tournament_config(self) -> dict[str, Any]:
         """Load and return the tournament configuration from the provided ConfigParser."""
         num_teams, team_ids = self.parse_teams_config()
-        Schedule.set_team_identities(team_ids)
 
         time_fmt = self.parse_time_config()
         TimeSlot.set_time_format(time_fmt)
 
         locations = self.parse_location_config()
         rounds, roundreqs, round_to_int, round_to_tpr = self.parse_rounds_config(num_teams, time_fmt, locations)
+        round_idx_to_tpr = {r.roundtype_idx: r.teams_per_round for r in rounds}
 
         total_slots_possible = sum(len(r.timeslots) * len(r.locations) for r in rounds)
         total_slots_required = sum(num_teams * r.rounds_per_team for r in rounds)
         unique_opponents_possible = 1 <= max(r.rounds_per_team for r in rounds) <= num_teams - 1
+
+        roundreqs_array_flat = np.array([roundreqs[r.roundtype] for r in rounds], dtype=int)
+        roundreqs_array = np.tile(roundreqs_array_flat, (num_teams, 1))
+
+        Schedule.set_team_identities(team_ids)
         Schedule.set_total_num_events(total_slots_possible)
-        Schedule.set_team_roundreqs(roundreqs)
+        Schedule.set_team_roundreqs(roundreqs_array)
 
         weights = self.parse_fitness_config()
 
-        return TournamentConfig(
-            num_teams=num_teams,
-            time_fmt=time_fmt,
-            rounds=rounds,
-            round_requirements=roundreqs,
-            round_to_int=round_to_int,
-            round_to_tpr=round_to_tpr,
-            total_slots_possible=total_slots_possible,
-            total_slots_required=total_slots_required,
-            unique_opponents_possible=unique_opponents_possible,
-            weights=weights,
-            locations=locations,
-        )
+        return {
+            "num_teams": num_teams,
+            "time_fmt": time_fmt,
+            "rounds": rounds,
+            "round_requirements": roundreqs,
+            "round_to_int": round_to_int,
+            "round_to_tpr": round_to_tpr,
+            "round_idx_to_tpr": round_idx_to_tpr,
+            "total_slots_possible": total_slots_possible,
+            "total_slots_required": total_slots_required,
+            "unique_opponents_possible": unique_opponents_possible,
+            "weights": weights,
+            "locations": locations,
+        }
 
     def _get_section(self, section: str) -> SectionProxy:
         """Get a section from the config as a dictionary."""
@@ -177,20 +140,20 @@ class AppConfigParser(ConfigParser):
         """Parse and return a list of team IDs from the configuration."""
         sec = self._get_section("teams")
         num_teams = sec.getint("num_teams", fallback=0)
-        idents_raw = sec.get("identities", fallback="").strip()
-        idents = [i.strip() for i in idents_raw.split(",") if i.strip()] if idents_raw else []
+        identities_raw = sec.get("identities", fallback="").strip()
+        identities = [i.strip() for i in identities_raw.split(",") if i.strip()] if identities_raw else []
 
-        if num_teams and not idents:
-            idents = [str(i) for i in range(1, num_teams + 1)]
+        if num_teams and not identities:
+            identities = [str(i) for i in range(1, num_teams + 1)]
 
-        if not num_teams and idents:
-            num_teams = len(idents)
+        if not num_teams and identities:
+            num_teams = len(identities)
 
-        if num_teams != len(idents):
-            msg = f"Number of teams ({num_teams}) does not match number of identities ({len(idents)})."
+        if num_teams != len(identities):
+            msg = f"Number of teams ({num_teams}) does not match number of identities ({len(identities)})."
             raise ValueError(msg)
 
-        team_ids = {i: (int(tid) if tid.isdigit() else tid) for i, tid in enumerate(idents, start=1)}
+        team_ids = {i: (int(tid) if tid.isdigit() else tid) for i, tid in enumerate(identities, start=1)}
         return num_teams, team_ids
 
     def parse_time_config(self) -> str:
@@ -224,7 +187,7 @@ class AppConfigParser(ConfigParser):
         roundreqs: dict[RoundType, int] = {}
         timeslot_idx_iter = itertools.count()
 
-        for sec in self._iter_sections_prefix("round"):
+        for rti, sec in enumerate(self._iter_sections_prefix("round")):
             self.validate_round_section(sec)
             roundtype = sec.get("round_type")
             rounds_per_team = sec.getint("rounds_per_team")
@@ -265,6 +228,7 @@ class AppConfigParser(ConfigParser):
             rounds.append(
                 Round(
                     roundtype=roundtype,
+                    roundtype_idx=rti,
                     rounds_per_team=rounds_per_team,
                     teams_per_round=teams_per_round,
                     times=times,
@@ -395,13 +359,13 @@ class AppConfigParser(ConfigParser):
         sec = self._get_section("fitness")
         self.validate_fitness_section(sec)
         weights = (
-            max(0, sec.getfloat("weight_mean", fallback=3)),
+            max(0, sec.getfloat("weight_mean", fallback=1)),
             max(0, sec.getfloat("weight_variation", fallback=1)),
             max(0, sec.getfloat("weight_range", fallback=1)),
         )
         total = sum(weights)
-        if total == 0 or len(set(weights)) == 1:
-            logger.warning("All fitness weights are zero or identical. Using equal weights.")
+        if total == 0:
+            logger.warning("All fitness weights are zero. Using equal weights.")
             return (1 / 3, 1 / 3, 1 / 3)
         return tuple(w / total for w in weights)
 
@@ -417,33 +381,27 @@ class AppConfigParser(ConfigParser):
                 msg = f"No '{option}' option found in section '{section.name}'."
                 raise KeyError(msg)
 
-    def load_operator_config(self) -> OperatorConfig:
+    def load_operator_config(self) -> dict[str, Any]:
         """Parse and return the operator configuration from the provided ConfigParser."""
-        options = {
-            ("crossover", "crossover_types", "", ""): (c.value for c in CrossoverOp),
-            ("crossover", "crossover_ks", "", "int"): (1, 2, 4, 8),
-            ("mutation", "mutation_types", "", ""): (m.value for m in MutationOp),
-        }
         params = {}
-        for (section, opt, fallback, dtype), default in options.items():
+        for (section, opt, fallback, dtype), default in OPERATOR_CONFIG_OPTIONS.items():
             sec = f"genetic.operator.{section}"
             if self.has_option(sec, opt):
-                params[opt] = tuple(self.parse_operator(sec, opt, fallback, dtype))
+                params[opt] = self.parse_operator(sec, opt, fallback, dtype)
             else:
-                params[opt] = tuple(default)
+                params[opt] = default
                 logger.warning("%s not found in config. Using defaults: %s", opt, default)
+        return params
 
-        return OperatorConfig(**params)
-
-    def parse_operator(self, section: str, option: str, fallback: str, dtype: str = "") -> Iterator[str]:
+    def parse_operator(self, section: str, option: str, fallback: str, dtype: str = "") -> tuple[str]:
         """Parse a list of operator types from the configuration."""
         raw = self.get(section, option, fallback=fallback)
         items = (i.strip() for i in raw.split(",") if i.strip())
         if dtype == "int":
-            yield from (int(i) for i in items)
-        yield from items
+            return tuple(int(i) for i in items)
+        return tuple(items)
 
-    def load_ga_parameters(self) -> GaParameters:
+    def load_ga_parameters(self) -> dict[str, Any]:
         """Build a GaParameters, overriding defaults with any provided CLI args."""
         sec = self._get_section("genetic")
         params = {
@@ -456,19 +414,18 @@ class AppConfigParser(ConfigParser):
             "migration_interval": sec.getint("migration_interval"),
             "migration_size": sec.getint("migration_size"),
         }
-
         for k in params:
             if v := getattr(self.args, k, None):
                 params[k] = v
-
-        return GaParameters(**params)
+        return params
 
     def load_rng(self) -> np.random.Generator:
         """Set up the random number generator."""
         sec = self._get_section("genetic")
         seed_val = ""
-        if self.args.rng_seed is not None:
-            seed_val = self.args.rng_seed
+        rng_seed = getattr(self.args, "rng_seed", None)
+        if rng_seed is not None:
+            seed_val = rng_seed
         elif sec.get("seed"):
             seed_val = sec["seed"].strip()
         else:

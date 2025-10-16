@@ -11,8 +11,8 @@ from ..data_model.schedule import Schedule
 if TYPE_CHECKING:
     import numpy as np
 
-    from ..data_model.config import RoundType, TournamentConfig
-    from ..data_model.event import Event, EventFactory
+    from ..data_model.config import TournamentConfig
+    from ..data_model.event import EventFactory, EventProperties
     from ..data_model.team import TeamFactory
 
 logger = getLogger(__name__)
@@ -24,13 +24,14 @@ class ScheduleBuilder:
 
     team_factory: TeamFactory
     event_factory: EventFactory
+    event_properties: EventProperties
     config: TournamentConfig
     rng: np.random.Generator
-    roundtype_events: dict[RoundType, list[Event]] = None
+    roundtype_events: dict[int, list[int]] = None
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the random number generator."""
-        self.roundtype_events = self.event_factory.as_roundtypes()
+        self.roundtype_events = self.event_factory.as_roundtype_indices()
 
     def build(self) -> Schedule:
         """Construct and return the final schedule."""
@@ -42,29 +43,34 @@ class ScheduleBuilder:
             teams=self.team_factory.teams,
             origin="Builder",
         )
-        teams = self.rng.permutation(schedule.teams)
-
         for rt, evts in events.items():
-            if self.config.round_to_tpr[rt] == 1:
-                self.build_singles(schedule, rt, evts, teams)
-            elif self.config.round_to_tpr[rt] == 2:
-                self.build_matches(schedule, rt, evts, teams)
+            if self.config.round_idx_to_tpr[rt] == 1:
+                self.build_singles(schedule, evts, rt)
+            elif self.config.round_idx_to_tpr[rt] == 2:
+                self.build_matches(schedule, evts, rt)
         return schedule
 
-    def build_singles(self, schedule: Schedule, rt: RoundType, events: list[Event], teams: list[int]) -> None:
+    def build_singles(self, schedule: Schedule, events: list[int], roundtype: int) -> None:
         """Book all judging events for a specific round type."""
         for event in events:
-            available = (t for t in teams if schedule.needs_round(t, rt) and not schedule.conflicts(t, event))
+            needs_rounds = schedule.all_rounds_needed(roundtype)
+            self.rng.shuffle(needs_rounds)
+            available = (t for t in needs_rounds if not schedule.conflicts(t, event))
             team = next(available, None)
             if team:
                 schedule.assign(team, event)
 
-    def build_matches(self, schedule: Schedule, rt: RoundType, events: list[Event], teams: list[int]) -> None:
+    def build_matches(self, schedule: Schedule, events: list[int], roundtype: int) -> None:
         """Book all events for a specific round type."""
-        for side1, side2 in ((e, e.paired) for e in events if e.location.side == 1):
-            available = (t for t in teams if schedule.needs_round(t, rt) and not schedule.conflicts(t, side1))
-            team1 = next(available, None)
-            team2 = next(available, None)
-            if team1 and team2:
-                schedule.assign(team1, side1)
-                schedule.assign(team2, side2)
+        for e1 in events:
+            e2 = self.event_properties.paired_idx[e1]
+            if e2 == -1 or self.event_properties.loc_side[e1] != 1:
+                continue
+            needs_rounds = schedule.all_rounds_needed(roundtype)
+            self.rng.shuffle(needs_rounds)
+            available = (t for t in needs_rounds if not schedule.conflicts(t, e1) and not schedule.conflicts(t, e2))
+            t1 = next(available, None)
+            t2 = next(available, None)
+            if t1 and t2:
+                schedule.assign(t1, e1)
+                schedule.assign(t2, e2)

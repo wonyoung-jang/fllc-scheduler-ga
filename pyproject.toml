@@ -6,20 +6,24 @@ readme = "README.md"
 authors = [
     { name = "Wonyoung Jang", email = "contact@wonyoungjang.org" }
 ]
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 dependencies = [
-    "matplotlib>=3.10.3",
-    "numpy>=2.3.1",
-    "pandas>=2.3.0",
-    "tqdm>=4.67.1",
+    "matplotlib>=3.10.7",
+    "numpy>=2.3.3",
+    "pandas>=2.3",
+    "tqdm>=4.67",
 ]
 
 [project.scripts]
 fll-scheduler-ga = "fll_scheduler_ga.__main__:main"
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["uv_build>=0.9.1,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "fll_scheduler_ga"
+module-root = ""
 
 [tool.ruff]
 line-length = 120

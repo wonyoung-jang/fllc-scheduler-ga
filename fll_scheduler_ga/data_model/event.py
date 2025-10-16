@@ -21,12 +21,72 @@ logger = getLogger(__name__)
 
 
 @dataclass(slots=True)
+class EventProperties:
+    """Holds properties of an event for fast access during evaluation."""
+
+    all_props: np.ndarray
+    roundtype: np.ndarray
+    timeslot_idx: np.ndarray
+    start: np.ndarray
+    stop: np.ndarray
+    loc_idx: np.ndarray
+    loc_name: np.ndarray
+    loc_side: np.ndarray
+    teams_per_round: np.ndarray
+    paired_idx: np.ndarray
+
+    @classmethod
+    def build(cls, num_events: int, event_map: dict[int, Event]) -> EventProperties:
+        """Build EventProperties from an event mapping."""
+        event_prop_dtype = np.dtype(
+            [
+                ("roundtype", int),
+                ("timeslot_idx", int),
+                ("start", int),
+                ("stop", int),
+                ("loc_idx", int),
+                ("loc_name", int),
+                ("loc_side", int),
+                ("teams_per_round", int),
+                ("paired_idx", int),
+            ]
+        )
+        event_properties = np.zeros(num_events, dtype=event_prop_dtype)
+        for i in range(num_events):
+            e = event_map[i]
+            event_properties[i]["roundtype"] = e.roundtype_idx
+            event_properties[i]["timeslot_idx"] = e.timeslot.idx
+            event_properties[i]["start"] = int(e.timeslot.start.timestamp())
+            event_properties[i]["stop"] = int(e.timeslot.stop.timestamp())
+            event_properties[i]["loc_idx"] = e.location.idx
+            event_properties[i]["loc_name"] = e.location.name
+            event_properties[i]["loc_side"] = e.location.side
+            event_properties[i]["teams_per_round"] = e.location.teams_per_round
+            event_properties[i]["paired_idx"] = e.paired.idx if e.paired else -1
+
+        logger.debug("Event properties array: %s", event_properties)
+        return cls(
+            all_props=event_properties,
+            roundtype=event_properties["roundtype"],
+            timeslot_idx=event_properties["timeslot_idx"],
+            start=event_properties["start"],
+            stop=event_properties["stop"],
+            loc_idx=event_properties["loc_idx"],
+            loc_name=event_properties["loc_name"],
+            loc_side=event_properties["loc_side"],
+            teams_per_round=event_properties["teams_per_round"],
+            paired_idx=event_properties["paired_idx"],
+        )
+
+
+@dataclass(slots=True)
 class Event:
     """Data model for an event in a schedule."""
 
     idx: int
 
     roundtype: RoundType
+    roundtype_idx: int
     timeslot: TimeSlot
     location: Location
     paired: Event | None = field(default=None, repr=False, compare=False)
@@ -52,10 +112,12 @@ class EventFactory:
 
     config: TournamentConfig
     _list: list[Event] = field(default_factory=list, repr=False)
+    _list_indices: np.ndarray = None
     _list_singles_or_side1: list[Event] = None
     _conflict_matrix: np.ndarray = None
     _cached_mapping: dict[int, Event] = None
     _cached_roundtypes: dict[RoundType, list[Event]] = None
+    _cached_roundtype_indices: dict[int, list[int]] = None
     _cached_timeslots_list: dict[tuple[RoundType, TimeSlot], list[Event]] = None
     _cached_locations: dict[tuple[RoundType, Location], list[Event]] = None
     _cached_matches: dict[RoundType, list[tuple[Event, ...]]] = None
@@ -63,6 +125,7 @@ class EventFactory:
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
         self.build()
+        self.build_indices()
         self.build_singles_or_side1()
         self.build_conflicts()
         self.build_conflict_matrix()
@@ -86,6 +149,12 @@ class EventFactory:
             self._list.extend(e for r in rounds_sorted_by_start for e in self.create_events(r, event_idx_iter))
         return self._list
 
+    def build_indices(self) -> np.ndarray:
+        """Create and return a list of all event indices."""
+        if not self._list_indices:
+            self._list_indices = np.array([e.idx for e in self.build()], dtype=int)
+        return self._list_indices
+
     def build_singles_or_side1(self) -> list[Event]:
         """Create and return all single-team Events or side 1 of paired Events."""
         if not self._list_singles_or_side1:
@@ -108,14 +177,14 @@ class EventFactory:
         for ts in r.timeslots:
             if r.teams_per_round == 1:
                 for loc in r.locations:
-                    event = Event(next(event_idx_iter), r.roundtype, ts, loc)
+                    event = Event(next(event_idx_iter), r.roundtype, r.roundtype_idx, ts, loc)
                     yield event
             elif r.teams_per_round == 2:
                 for loc in r.locations:
                     if loc.side == 1:
-                        event1 = Event(next(event_idx_iter), r.roundtype, ts, loc)
+                        event1 = Event(next(event_idx_iter), r.roundtype, r.roundtype_idx, ts, loc)
                     elif loc.side == 2:
-                        event2 = Event(next(event_idx_iter), r.roundtype, ts, loc)
+                        event2 = Event(next(event_idx_iter), r.roundtype, r.roundtype_idx, ts, loc)
                         event1.pair(event2)
                         yield from (event1, event2)
 
@@ -156,6 +225,14 @@ class EventFactory:
             for e in self.build():
                 self._cached_roundtypes[e.roundtype].append(e)
         return self._cached_roundtypes
+
+    def as_roundtype_indices(self) -> dict[int, list[int]]:
+        """Get a mapping of RoundTypes to their Event indices."""
+        if self._cached_roundtype_indices is None:
+            self._cached_roundtype_indices = defaultdict(list)
+            for e in self.build():
+                self._cached_roundtype_indices[e.roundtype_idx].append(e.idx)
+        return self._cached_roundtype_indices
 
     def as_timeslots(self) -> dict[tuple[RoundType, TimeSlot], list[Event]]:
         """Get a mapping of TimeSlots to their Events."""

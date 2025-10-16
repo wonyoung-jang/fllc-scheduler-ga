@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from ..config.app_config import AppConfig
-    from ..data_model.event import Event, EventFactory
+    from ..data_model.event import Event, EventFactory, EventProperties
     from ..data_model.team import TeamFactory
 
 logger = getLogger(__name__)
@@ -26,16 +26,48 @@ def build_crossovers(
     app_config: AppConfig,
     team_factory: TeamFactory,
     event_factory: EventFactory,
+    event_properties: EventProperties,
 ) -> Iterator[Crossover]:
     """Build and return a tuple of crossover operators based on the configuration."""
     rng = app_config.rng
     crossovers = {
-        CrossoverOp.K_POINT: lambda k: KPoint(team_factory, event_factory, rng, k=k),
-        CrossoverOp.SCATTERED: lambda: Scattered(team_factory, event_factory, rng),
-        CrossoverOp.UNIFORM: lambda: Uniform(team_factory, event_factory, rng),
-        CrossoverOp.ROUND_TYPE_CROSSOVER: lambda: RoundTypeCrossover(team_factory, event_factory, rng),
-        CrossoverOp.TIMESLOT_CROSSOVER: lambda: TimeSlotCrossover(team_factory, event_factory, rng),
-        CrossoverOp.LOCATION_CROSSOVER: lambda: LocationCrossover(team_factory, event_factory, rng),
+        CrossoverOp.K_POINT: lambda k: KPoint(
+            team_factory,
+            event_factory,
+            event_properties,
+            rng,
+            k=k,
+        ),
+        CrossoverOp.SCATTERED: lambda: Scattered(
+            team_factory,
+            event_factory,
+            event_properties,
+            rng,
+        ),
+        CrossoverOp.UNIFORM: lambda: Uniform(
+            team_factory,
+            event_factory,
+            event_properties,
+            rng,
+        ),
+        CrossoverOp.ROUND_TYPE_CROSSOVER: lambda: RoundTypeCrossover(
+            team_factory,
+            event_factory,
+            event_properties,
+            rng,
+        ),
+        CrossoverOp.TIMESLOT_CROSSOVER: lambda: TimeSlotCrossover(
+            team_factory,
+            event_factory,
+            event_properties,
+            rng,
+        ),
+        CrossoverOp.LOCATION_CROSSOVER: lambda: LocationCrossover(
+            team_factory,
+            event_factory,
+            event_properties,
+            rng,
+        ),
     }
 
     if not (crossover_types := app_config.operators.crossover_types):
@@ -63,15 +95,20 @@ class Crossover(ABC):
 
     team_factory: TeamFactory
     event_factory: EventFactory
+    event_properties: EventProperties
     rng: np.random.Generator
 
     events: list[Event] = None
+    events_mapping: dict[int, Event] = None
+    events_idx: list[Event] = None
     n_evts: int = None
     indices: np.ndarray = None
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the crossover operator."""
         self.events = np.asarray(self.event_factory.build_singles_or_side1())
+        self.events_mapping = self.event_factory.as_mapping()
+        self.events_idx = np.asarray([e.idx for e in self.events])
         self.n_evts = len(self.events)
         self.indices = np.arange(self.n_evts)
 
@@ -102,35 +139,32 @@ class Crossover(ABC):
 
     def assign_from_p1(self, c: Schedule, p: Schedule, p1_genes: Iterator[int]) -> None:
         """Assign genes."""
-        for i in p1_genes:
-            e1 = self.events[i]
-            if (t1 := p[e1]) is None:
+        p1_events: Iterator[Event] = self.events[p1_genes]
+        for e1 in p1_events:
+            if (t1 := p[e1.idx]) == -1:
                 continue
 
             if (e2 := e1.paired) is None:
-                c.assign(t1, e1)
-            elif (t2 := p[e2]) is not None:
-                c.assign(t1, e1)
-                c.assign(t2, e2)
+                c.assign(t1, e1.idx)
+            elif (t2 := p[e2.idx]) != -1:
+                c.assign(t1, e1.idx)
+                c.assign(t2, e2.idx)
 
     def assign_from_p2(self, c: Schedule, p: Schedule, p2_genes: Iterator[int]) -> None:
         """Assign genes."""
-        for i in p2_genes:
-            e1 = self.events[i]
-            if (t1 := p[e1]) is None:
+        p2_events: Iterator[Event] = self.events[p2_genes]
+        for e1 in p2_events:
+            if (t1 := p[e1.idx]) == -1:
                 continue
 
-            t1_needs_round = c.team_rounds[t1][e1.roundtype] > 0
-            if not t1_needs_round or c.conflicts(t1, e1):
+            if not c.needs_round(t1, e1.roundtype_idx) or c.conflicts(t1, e1.idx):
                 continue
 
             if (e2 := e1.paired) is None:
-                c.assign(t1, e1)
-            elif (t2 := p[e2]) is not None:
-                t2_needs_round = c.team_rounds[t2][e2.roundtype] > 0
-                if t2_needs_round and not c.conflicts(t2, e2):
-                    c.assign(t1, e1)
-                    c.assign(t2, e2)
+                c.assign(t1, e1.idx)
+            elif (t2 := p[e2.idx]) != -1 and c.needs_round(t2, e2.roundtype_idx) and not c.conflicts(t2, e2.idx):
+                c.assign(t1, e1.idx)
+                c.assign(t2, e2.idx)
 
 
 @dataclass(slots=True)
@@ -221,7 +255,6 @@ class StructureCrossover(EventCrossover):
     """
 
     array: np.ndarray = None
-    mid: int = None
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
@@ -235,8 +268,9 @@ class StructureCrossover(EventCrossover):
     def get_genes(self) -> Iterator[Iterator[int]]:
         """Get the genes for Structure-based crossover."""
         self.rng.shuffle(self.indices)
-        p1_indices = self.array[self.indices[: self.mid]]
-        p2_indices = self.array[self.indices[self.mid :]]
+        p1, p2 = np.array_split(self.indices, 2)
+        p1_indices = self.array[p1]
+        p2_indices = self.array[p2]
         return p1_indices[p1_indices >= 0], p2_indices[p2_indices >= 0]
 
 
@@ -259,8 +293,7 @@ class RoundTypeCrossover(StructureCrossover):
             evts = eventmap[rt]
             self.array[j, : len(evts)] = evts
 
-        self.indices = np.array(range(len(roundtypes)))
-        self.mid = len(self.indices) // 2
+        self.indices = np.arange(len(roundtypes))
 
 
 @dataclass(slots=True)
@@ -282,8 +315,7 @@ class TimeSlotCrossover(StructureCrossover):
             evts = eventmap[ts_id]
             self.array[j, : len(evts)] = evts
 
-        self.indices = np.array(range(len(timeslot_ids)))
-        self.mid = len(self.indices) // 2
+        self.indices = np.arange(len(timeslot_ids))
 
 
 @dataclass(slots=True)
@@ -305,5 +337,4 @@ class LocationCrossover(StructureCrossover):
             evts = eventmap[loc_id]
             self.array[j, : len(evts)] = evts
 
-        self.indices = np.array(range(len(location_ids)))
-        self.mid = len(self.indices) // 2
+        self.indices = np.arange(len(location_ids))

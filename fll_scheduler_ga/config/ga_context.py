@@ -12,21 +12,25 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..genetic.ga import GA
+from ..data_model.event import EventFactory, EventProperties
+from ..data_model.schedule import Schedule
+from ..data_model.team import TeamFactory
+from ..genetic.builder import ScheduleBuilder
+from ..genetic.fitness import FitnessEvaluator, HardConstraintChecker
 from ..io.export import generate_summary_report
 from ..io.importer import CsvImporter
-from ..io.observers import LoggingObserver, TqdmObserver
+from ..operators.crossover import build_crossovers
+from ..operators.mutation import build_mutations
+from ..operators.nsga3 import NSGA3
+from ..operators.repairer import Repairer
+from ..operators.selection import RandomSelect
+from .benchmark import FitnessBenchmark
 
 if TYPE_CHECKING:
     from argparse import Namespace
 
-    from ..data_model.event import EventFactory
-    from ..data_model.team import TeamFactory
-    from ..genetic.fitness import FitnessEvaluator, HardConstraintChecker
     from ..operators.crossover import Crossover
     from ..operators.mutation import Mutation
-    from ..operators.nsga3 import NSGA3
-    from ..operators.repairer import Repairer
     from ..operators.selection import Selection
     from .app_config import AppConfig
 
@@ -39,61 +43,77 @@ class GaContext:
 
     app_config: AppConfig
     event_factory: EventFactory
+    event_properties: EventProperties
     team_factory: TeamFactory
     evaluator: FitnessEvaluator
     checker: HardConstraintChecker
+    builder: ScheduleBuilder
     repairer: Repairer
     nsga3: NSGA3
     selection: Selection
     crossovers: tuple[Crossover, ...]
     mutations: tuple[Mutation, ...]
-    event_properties: np.ndarray = None
-    max_events_per_team: int = 0
+    max_events_per_team: int
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the GA context."""
-        self.max_events_per_team = sum(r.rounds_per_team for r in self.app_config.tournament.rounds)
-        self.event_properties = self.build_event_properties()
         self.run_preflight_checks()
 
-    def build_event_properties(self) -> np.ndarray:
-        """Build a numpy array of event properties for fast access during evaluation."""
-        num_events = self.app_config.tournament.total_slots_possible
-        event_map = self.event_factory.as_mapping()
-        round_to_int = self.app_config.tournament.round_to_int
-
-        # Shape: (num_events, num_properties)
-        event_prop_dtype = np.dtype(
-            [
-                ("start", int),
-                ("stop", int),
-                ("loc_idx", int),
-                ("loc_side", int),
-                ("roundtype", int),
-                ("paired_idx", int),
-            ]
+    @classmethod
+    def build(cls, args: Namespace, app_config: AppConfig) -> GaContext:
+        """Build and return a GA context."""
+        rng = app_config.rng
+        tournament_config = app_config.tournament
+        event_factory = EventFactory(tournament_config)
+        event_properties = EventProperties.build(
+            num_events=tournament_config.total_slots_possible,
+            event_map=event_factory.as_mapping(),
         )
-        event_properties = np.zeros(num_events, dtype=event_prop_dtype)
-        for i in range(num_events):
-            event = event_map[i]
-            event_properties[i]["start"] = int(event.timeslot.start.timestamp())
-            event_properties[i]["stop"] = int(event.timeslot.stop.timestamp())
-            event_properties[i]["loc_idx"] = event.location.idx
-            event_properties[i]["loc_side"] = event.location.side
-            event_properties[i]["roundtype"] = round_to_int[event.roundtype]
-            event_properties[i]["paired_idx"] = event.paired.idx if event.paired else -1
-        logger.debug("Event properties array: %s", event_properties)
-        return event_properties
+        team_factory = TeamFactory(np.arange(tournament_config.num_teams, dtype=int))
 
-    def create_ga_instance(self, args: Namespace) -> GA:
-        """Create and return a GA instance with the provided configuration."""
-        self.handle_seed_file(args)
-        return GA(
-            context=self,
-            rng=self.app_config.rng,
-            observers=(TqdmObserver(), LoggingObserver()),
-            seed_file=Path(args.seed_file) if args.seed_file else None,
-            save_front_only=args.front_only,
+        Schedule.set_conflict_matrix(event_factory.build_conflict_matrix())
+        Schedule.set_event_properties(event_properties)
+        Schedule.set_event_map(event_factory.as_mapping())
+
+        repairer = Repairer(rng, tournament_config, event_factory, event_properties)
+        benchmark = FitnessBenchmark(tournament_config, event_factory, flush=args.flush_benchmarks)
+        evaluator = FitnessEvaluator(tournament_config, benchmark)
+        checker = HardConstraintChecker(tournament_config)
+
+        num_objectives = len(evaluator.objectives)
+        params = app_config.ga_params
+        nsga3 = NSGA3(
+            rng=rng,
+            n_objectives=num_objectives,
+            n_total_pop=params.population_size,  # * params.num_islands,
+        )
+        selection = RandomSelect(rng)
+        crossovers = tuple(build_crossovers(app_config, team_factory, event_factory, event_properties))
+        mutations = tuple(build_mutations(app_config, event_factory))
+        max_events_per_team = sum(r.rounds_per_team for r in tournament_config.rounds)
+
+        builder = ScheduleBuilder(
+            team_factory=team_factory,
+            event_factory=event_factory,
+            event_properties=event_properties,
+            config=tournament_config,
+            rng=rng,
+        )
+
+        return cls(
+            app_config=app_config,
+            event_factory=event_factory,
+            event_properties=event_properties,
+            team_factory=team_factory,
+            builder=builder,
+            repairer=repairer,
+            evaluator=evaluator,
+            checker=checker,
+            nsga3=nsga3,
+            selection=selection,
+            crossovers=crossovers,
+            mutations=mutations,
+            max_events_per_team=max_events_per_team,
         )
 
     def handle_seed_file(self, args: Namespace) -> None:

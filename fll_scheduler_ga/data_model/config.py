@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from logging import getLogger
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from datetime import datetime, timedelta
@@ -22,6 +22,7 @@ class Round:
     """Representation of a round in the FLL tournament."""
 
     roundtype: RoundType
+    roundtype_idx: int
     rounds_per_team: int
     teams_per_round: int
     times: list[datetime]
@@ -43,6 +44,7 @@ class Round:
         return (
             f"\n\tRound:"
             f"\n\t  roundtype        : {self.roundtype}"
+            f"\n\t  roundtype_idx    : {self.roundtype_idx}"
             f"\n\t  teams_per_round  : {self.teams_per_round}"
             f"\n\t  rounds_per_team  : {self.rounds_per_team}"
             f"\n\t  times            : {self.times}"
@@ -67,6 +69,7 @@ class TournamentConfig:
     round_requirements: dict[RoundType, int]
     round_to_int: dict[RoundType, int]
     round_to_tpr: dict[RoundType, int]
+    round_idx_to_tpr: dict[int, int]
     total_slots_possible: int
     total_slots_required: int
     unique_opponents_possible: bool
@@ -90,9 +93,15 @@ class TournamentConfig:
             f"\n\t  round_requirements        : {round_reqs_str}"
             f"\n\t  round_to_int              : {self.round_to_int}"
             f"\n\t  round_to_tpr              : {self.round_to_tpr}"
+            f"\n\t  round_idx_to_tpr          : {self.round_idx_to_tpr}"
             f"\n\t  total_slots_possible      : {self.total_slots_possible}"
             f"\n\t  total_slots_required      : {self.total_slots_required}"
             f"\n\t  unique_opponents_possible : {self.unique_opponents_possible}"
             f"\n\t  weights                   : {self.weights}"
             f"\n\t  locations                 : {[str(loc) for loc in self.locations]}"
         )
+
+    @classmethod
+    def build(cls, params: dict[str, Any]) -> TournamentConfig:
+        """Build a TournamentConfig from a dictionary of parameters."""
+        return cls(**params)

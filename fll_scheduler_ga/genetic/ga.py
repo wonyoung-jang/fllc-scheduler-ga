@@ -3,19 +3,20 @@
 from __future__ import annotations
 
 import pickle
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from logging import getLogger
+from pathlib import Path
 from time import time
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from .builder import ScheduleBuilder
+from ..io.observers import LoggingObserver, TqdmObserver
 from .island import Island
 
 if TYPE_CHECKING:
-    from pathlib import Path
+    from argparse import Namespace
 
     from ..config.ga_context import GaContext
     from ..config.ga_parameters import GaParameters
@@ -63,29 +64,31 @@ class GA:
             (self.ga_params.generations, len(self.context.evaluator.objectives)), dtype=float
         )
 
-        builder = ScheduleBuilder(
-            team_factory=self.context.team_factory,
-            event_factory=self.context.event_factory,
-            config=self.context.app_config.tournament,
-            rng=self.context.app_config.rng,
-        )
-
         trackers = ("success", "total")
         self._crossover_ratio = {tr: Counter({str(c): 0 for c in self.context.crossovers}) for tr in trackers}
         self._mutation_ratio = {tr: Counter({str(m): 0 for m in self.context.mutations}) for tr in trackers}
 
         self.islands.extend(
             Island(
-                i,
-                self.context.app_config.rng,
-                builder,
-                self.context,
-                self.ga_params.clone(),
-                self._offspring_ratio.copy(),
-                self._crossover_ratio.copy(),
-                self._mutation_ratio.copy(),
+                identity=i,
+                context=self.context,
+                offspring_ratio=self._offspring_ratio.copy(),
+                crossover_ratio=self._crossover_ratio.copy(),
+                mutation_ratio=self._mutation_ratio.copy(),
             )
             for i in range(self.ga_params.num_islands)
+        )
+
+    @classmethod
+    def build(cls, args: Namespace, context: GaContext) -> GA:
+        """Build and return a GA instance with the provided configuration."""
+        context.handle_seed_file(args)
+        return cls(
+            context=context,
+            rng=context.app_config.rng,
+            observers=(TqdmObserver(), LoggingObserver()),
+            seed_file=Path(args.seed_file) if args.seed_file else None,
+            save_front_only=args.front_only,
         )
 
     def __len__(self) -> int:
@@ -267,10 +270,14 @@ class GA:
         """Count unique event lists."""
         unique_genes = Counter()
         for schedule in self.total_population:
-            for events in schedule.team_events.values():
+            s = schedule.schedule
+            team_events = defaultdict(set)
+            for event_id, team_id in enumerate(s):
+                if team_id >= 0:
+                    team_events[team_id].add(event_id)
+
+            for events in team_events.values():
                 unique_genes[tuple(sorted(events))] += 1
-            # for team in schedule.teams:
-            #     unique_genes[tuple(sorted(team.events))] += 1
         for gene, count in unique_genes.most_common(n=10):
             logger.debug("Event: %s, Count: %d", gene, count)
 

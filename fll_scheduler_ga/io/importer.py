@@ -45,7 +45,10 @@ class CsvImporter:
         self._validate_inputs()
         self._initialize_caches()
         team_factory = TeamFactory(np.arange(self.config.num_teams))
-        self.schedule = Schedule(teams=team_factory.teams, origin="CSV Importer")
+        self.schedule = Schedule(
+            teams=team_factory.teams,
+            origin="CSV Importer",
+        )
         self.import_schedule()
 
         if not self.schedule:
@@ -123,7 +126,7 @@ class CsvImporter:
                     created_events,
                 )
 
-        if any(self.schedule.team_rounds_needed(t) for t in self.schedule.teams):
+        if self.schedule.any_rounds_needed():
             logger.warning("Schedule: %s", self.schedule)
             logger.warning("Some teams are missing required rounds defined in your config.")
 
@@ -190,4 +193,4 @@ class CsvImporter:
                 continue
 
             if event:
-                self.schedule.assign(team, event)
+                self.schedule.assign(team, event.idx)

@@ -124,7 +124,7 @@ class SwapMutation(Mutation):
 
     same_timeslot: bool = False
     same_location: bool = False
-    swap_candidates: list[tuple[Event, ...]] = None
+    swap_candidates: list[tuple[tuple[int, ...], ...]] = None
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
@@ -145,15 +145,15 @@ class SwapMutation(Mutation):
         msg = "get_swap_candidates method must be implemented by subclasses."
         raise NotImplementedError(msg)
 
-    def init_swap_candidates(self) -> list[tuple[Event, ...]]:
+    def init_swap_candidates(self) -> list[tuple[tuple[int, ...], ...]]:
         """Precompute any necessary data before mutation."""
         swap_candidates = []
         for match_list in self.event_factory.as_matches().values():
             for match1, match2 in itertools.combinations(match_list, 2):
-                e1, _ = match1
-                e2, _ = match2
-                is_same_timeslot = e1.timeslot.idx == e2.timeslot.idx
-                is_same_location = e1.location.idx == e2.location.idx
+                e1a, e1b = match1
+                e2a, e2b = match2
+                is_same_timeslot = e1a.timeslot.idx == e2a.timeslot.idx
+                is_same_location = e1a.location.idx == e2a.location.idx
 
                 if not (self.same_timeslot and self.same_location) and not self._validate_swap(
                     is_same_timeslot=is_same_timeslot,
@@ -163,7 +163,9 @@ class SwapMutation(Mutation):
                 ):
                     continue
 
-                swap_candidates.append((match1, match2))
+                match1_idx = (e1a.idx, e1b.idx)
+                match2_idx = (e2a.idx, e2b.idx)
+                swap_candidates.append((match1_idx, match2_idx))
         logger.debug("Initialized %d swap candidates", len(swap_candidates))
         return swap_candidates
 
@@ -208,15 +210,16 @@ class SwapTeamMutation(SwapMutation):
         schedule.swap_assignment(t2a, e2a, e1a)
         return True
 
-    def get_swap_candidates(self, schedule: Schedule) -> tuple[Match | None, ...]:
+    def get_swap_candidates(self, schedule: Schedule) -> tuple[Match | None]:
         """Get two matches to swap in the schedule schedule."""
         for idx in self.rng.permutation(len(self.swap_candidates)):
+            idx: int
             match1_data, match2_data = self.swap_candidates[idx]
             e1a, e1b = match1_data
             e2a, e2b = match2_data
             t1a, t1b = schedule[e1a], schedule[e1b]
             t2a, t2b = schedule[e2a], schedule[e2b]
-            if None in (t1a, t1b, t2a, t2b):
+            if -1 in (t1a, t1b, t2a, t2b):
                 continue
 
             match_team_ids = {t1a, t1b, t2a, t2b}
@@ -255,8 +258,8 @@ class SwapMatchMutation(SwapMutation):
 
         e1a, e1b, t1a, t1b = match1_data
         e2a, e2b, t2a, t2b = match2_data
-        none_in_m1 = None in (t1a, t1b)
-        none_in_m2 = None in (t2a, t2b)
+        none_in_m1 = -1 in (t1a, t1b)
+        none_in_m2 = -1 in (t2a, t2b)
 
         if not none_in_m1:
             schedule.swap_assignment(t1a, e1a, e2a)
@@ -274,21 +277,22 @@ class SwapMatchMutation(SwapMutation):
 
         return True
 
-    def get_swap_candidates(self, schedule: Schedule) -> tuple[Match | None, ...]:
+    def get_swap_candidates(self, schedule: Schedule) -> tuple[Match | None]:
         """Get two matches to swap in the schedule schedule."""
         for idx in self.rng.permutation(len(self.swap_candidates)):
+            idx: int
             match1_data, match2_data = self.swap_candidates[idx]
             e1a, e1b = match1_data
             e2a, e2b = match2_data
 
             t1a, t1b = schedule[e1a], schedule[e1b]
-            if None not in (t1a, t1b) and (
+            if -1 not in (t1a, t1b) and (
                 schedule.conflicts(t1a, e2a, ignore=e1a) or schedule.conflicts(t1b, e2b, ignore=e1b)
             ):
                 continue
 
             t2a, t2b = schedule[e2a], schedule[e2b]
-            if None not in (t2a, t2b) and (
+            if -1 not in (t2a, t2b) and (
                 schedule.conflicts(t2a, e1a, ignore=e2a) or schedule.conflicts(t2b, e1b, ignore=e2b)
             ):
                 continue
@@ -312,18 +316,20 @@ class SwapTableSideMutation(SwapMutation):
         match_data = self.get_swap_candidates(schedule)
         if match_data is None:
             return False
+
         e1a, e1b, t1a, t1b = match_data
         schedule.swap_assignment(t1a, e1a, e1b)
         schedule.swap_assignment(t1b, e1b, e1a)
         return True
 
-    def get_swap_candidates(self, schedule: Schedule) -> Match | None:
+    def get_swap_candidates(self, schedule: Schedule) -> tuple[int, ...] | None:
         """Get two matches to swap in the schedule schedule."""
         for idx in self.rng.permutation(len(self.swap_candidates)):
+            idx: int
             match_data, _ = self.swap_candidates[idx]
             e1, e2 = match_data
             t1, t2 = schedule[e1], schedule[e2]
-            if None not in (t1, t2):
+            if -1 not in (t1, t2):
                 return e1, e2, t1, t2
         return None
 
@@ -349,46 +355,46 @@ class TimeSlotSequenceMutation(Mutation):
         msg = "Subclasses must implement this method."
         raise NotImplementedError(msg)
 
-    def get_candidates(self) -> list[Event]:
+    def get_candidates(self) -> tuple[list[tuple[int, ...]], int]:
         """Get a list of candidate events for mutation within a specific timeslot."""
-        idx = self.rng.integers(0, len(self.timeslot_keys))
+        idx = self.rng.choice(len(self.timeslot_keys))
         key = self.timeslot_keys[idx]
         candidates = self.timeslot_event_map[key]
         candidates = [e for e in candidates if e.location.side == 1 or e.paired is None]
-        return sorted(candidates, key=lambda e: e.location.idx)
+        candidates.sort(key=lambda e: e.location.idx)
+        tpr = candidates[0].location.teams_per_round if candidates else 1
+        return [(e.idx, e.paired.idx if e.paired is not None else -1) for e in candidates], tpr
 
     def mutate(self, schedule: Schedule) -> bool:
         """Find a suitable timeslot and round type, then permute assignments."""
-        candidates = self.get_candidates()
-        tpr = candidates[0].location.teams_per_round
+        candidates, tpr = self.get_candidates()
         if tpr == 1:
             return self.mutate_singles(schedule, candidates)
         if tpr == 2:
             return self.mutate_matches(schedule, candidates)
         return False
 
-    def mutate_singles(self, schedule: Schedule, candidates: list[Event]) -> bool:
+    def mutate_singles(self, schedule: Schedule, candidates: list[tuple[int, ...]]) -> bool:
         """Permute team assignments for single-team events."""
-        old_ids = [schedule[e] for e in candidates]
+        old_ids = [schedule[e] for e, _ in candidates]
         new_ids = self.permute(old_ids)
-        for event, old_team, new_team in zip(candidates, old_ids, new_ids, strict=True):
+        for (event, _), old_team, new_team in zip(candidates, old_ids, new_ids, strict=True):
             if old_team == new_team:
                 continue
 
-            if old_team:
+            if old_team != -1:
                 schedule.unassign(old_team, event)
 
-            if new_team:
+            if new_team != -1:
                 schedule.assign(new_team, event)
 
         return True
 
-    def mutate_matches(self, schedule: Schedule, candidates: list[Event]) -> bool:
+    def mutate_matches(self, schedule: Schedule, candidates: list[tuple[int, ...]]) -> bool:
         """Permute team assignments for match-based events."""
-        matches: list[tuple[Event, ...]] = []
-        old_ids: list[tuple[int | None, ...]] = []
-        for e1 in candidates:
-            e2 = e1.paired
+        matches: list[tuple[int, ...]] = []
+        old_ids: list[tuple[int, ...]] = []
+        for e1, e2 in candidates:
             t1, t2 = schedule[e1], schedule[e2]
             matches.append((e1, e2))
             old_ids.append((t1, t2))
@@ -398,12 +404,12 @@ class TimeSlotSequenceMutation(Mutation):
             if old_id_pair == new_id_pair:
                 continue
 
-            if None not in old_id_pair:
+            if -1 not in old_id_pair:
                 old_t1, old_t2 = old_id_pair
                 schedule.unassign(old_t1, e1)
                 schedule.unassign(old_t2, e2)
 
-            if None not in new_id_pair:
+            if -1 not in new_id_pair:
                 new_t1, new_t2 = new_id_pair
                 schedule.assign(new_t1, e1)
                 schedule.assign(new_t2, e2)
@@ -419,16 +425,12 @@ class InversionMutation(TimeSlotSequenceMutation):
         """Return string representation."""
         return MutationOp.INVERSION
 
-    def permute(
-        self, items: list[int | None | tuple[int | None, ...]]
-    ) -> Iterator[int | None | tuple[int | None, ...]]:
+    def permute(self, items: list[int | tuple[int, ...]]) -> Iterator[int | tuple[int, ...]]:
         """Invert a random sub-sequence of the items."""
         if len(items) <= 1:
             return iter(items)
-
         if isinstance(items[0], tuple):
             return reversed([tuple(reversed(pair)) for pair in items])
-
         return reversed(items[:])
 
 
@@ -440,14 +442,10 @@ class ScrambleMutation(TimeSlotSequenceMutation):
         """Return string representation."""
         return MutationOp.SCRAMBLE
 
-    def permute(
-        self, items: list[int | None | tuple[int | None, ...]]
-    ) -> Iterator[int | None | tuple[int | None, ...]]:
+    def permute(self, items: list[int | tuple[int, ...]]) -> Iterator[int | tuple[int, ...]]:
         """Scramble a random sub-sequence of the items."""
         if len(items) <= 1:
             return iter(items)
-
         if isinstance(items[0], tuple):
             return (tuple(self.rng.permutation(pair)) for pair in items)
-
         return (_ for _ in self.rng.permutation(items))

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from csv import writer
 from dataclasses import dataclass
 from logging import getLogger
@@ -156,7 +157,13 @@ def generate_team_schedules(schedule: Schedule, path: Path, ga: GA) -> None:
 
             rows.append(headers)
 
-            for team_id, events in sorted(schedule.team_events.items()):
+            s = schedule.schedule
+            team_events = defaultdict(set)
+            for event_id, team_id in enumerate(s):
+                if team_id >= 0:
+                    team_events[team_id].add(event_id)
+
+            for team_id, events in sorted(team_events.items()):
                 row = [team_id + 1]
                 for event_id in sorted(events):
                     event = event_map.get(event_id)

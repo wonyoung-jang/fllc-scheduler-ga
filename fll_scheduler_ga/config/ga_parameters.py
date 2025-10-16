@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from logging import getLogger
+from typing import Any
 
 logger = getLogger(__name__)
 
@@ -39,6 +40,11 @@ class GaParameters:
             f"\n\t  migration_interval : {self.migration_interval}"
             f"\n\t  migration_size     : {self.migration_size}"
         )
+
+    @classmethod
+    def build(cls, params: dict[str, Any]) -> GaParameters:
+        """Build GaParameters from a dictionary of parameters."""
+        return cls(**params)
 
     def _validate(self) -> None:
         """Validate the parameters."""
@@ -77,16 +83,3 @@ class GaParameters:
         if self.num_islands > 1 and self.migration_size >= self.population_size:
             self.migration_size = max(1, self.population_size // 5)
             logger.warning("Migration size is >= population size, defaulting to max(1, 20%%): %i", self.migration_size)
-
-    def clone(self) -> GaParameters:
-        """Create a copy of the parameters."""
-        return GaParameters(
-            population_size=self.population_size,
-            generations=self.generations,
-            offspring_size=self.offspring_size,
-            crossover_chance=self.crossover_chance,
-            mutation_chance=self.mutation_chance,
-            num_islands=self.num_islands,
-            migration_interval=self.migration_interval,
-            migration_size=self.migration_size,
-        )
