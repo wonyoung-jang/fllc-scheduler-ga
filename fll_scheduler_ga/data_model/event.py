@@ -28,10 +28,12 @@ class EventProperties:
     all_props: np.ndarray
     roundtype: np.ndarray
     roundtype_idx: np.ndarray
+    timeslot: np.ndarray
     timeslot_idx: np.ndarray
     start: np.ndarray
     stop: np.ndarray
     loc_str: np.ndarray
+    loc_type: np.ndarray
     loc_idx: np.ndarray
     loc_name: np.ndarray
     loc_side: np.ndarray
@@ -43,12 +45,14 @@ class EventProperties:
         """Build EventProperties from an event mapping."""
         event_prop_dtype = np.dtype(
             [
-                ("roundtype", str),
+                ("roundtype", "U50"),
                 ("roundtype_idx", int),
+                ("timeslot", object),
                 ("timeslot_idx", int),
                 ("start", int),
                 ("stop", int),
-                ("loc_str", str),
+                ("loc_str", "U50"),
+                ("loc_type", "U50"),
                 ("loc_idx", int),
                 ("loc_name", int),
                 ("loc_side", int),
@@ -61,10 +65,12 @@ class EventProperties:
             e = event_map[i]
             event_properties[i]["roundtype"] = e.roundtype
             event_properties[i]["roundtype_idx"] = e.roundtype_idx
+            event_properties[i]["timeslot"] = e.timeslot
             event_properties[i]["timeslot_idx"] = e.timeslot.idx
             event_properties[i]["start"] = int(e.timeslot.start.timestamp())
             event_properties[i]["stop"] = int(e.timeslot.stop.timestamp())
             event_properties[i]["loc_str"] = str(e.location)
+            event_properties[i]["loc_type"] = e.location.locationtype
             event_properties[i]["loc_idx"] = e.location.idx
             event_properties[i]["loc_name"] = e.location.name
             event_properties[i]["loc_side"] = e.location.side
@@ -76,10 +82,12 @@ class EventProperties:
             all_props=event_properties,
             roundtype=event_properties["roundtype"],
             roundtype_idx=event_properties["roundtype_idx"],
+            timeslot=event_properties["timeslot"],
             timeslot_idx=event_properties["timeslot_idx"],
             start=event_properties["start"],
             stop=event_properties["stop"],
             loc_str=event_properties["loc_str"],
+            loc_type=event_properties["loc_type"],
             loc_idx=event_properties["loc_idx"],
             loc_name=event_properties["loc_name"],
             loc_side=event_properties["loc_side"],
@@ -162,7 +170,7 @@ class EventFactory:
 
     def build_indices(self) -> np.ndarray:
         """Create and return a list of all event indices."""
-        if not self._list_indices:
+        if self._list_indices is None:
             self._list_indices = np.array([e.idx for e in self.build()], dtype=int)
         return self._list_indices
 

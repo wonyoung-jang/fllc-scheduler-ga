@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import itertools
 import pickle
 from collections import defaultdict
 from dataclasses import dataclass
@@ -127,9 +126,9 @@ class GaContext:
             return
 
         schedule_csv_path = Path(args.import_file).resolve()
-        csv_import = CsvImporter(schedule_csv_path, config, self.event_factory)
+        csv_import = CsvImporter(schedule_csv_path, config, self.event_factory, self.event_properties)
         csv_schedule = csv_import.schedule
-        pop = np.asarray([csv_schedule.schedule])
+        pop = np.array([csv_schedule.schedule], dtype=int)
 
         if fits := self.evaluator.evaluate_population(pop):
             sched_fits, team_fits = fits
@@ -213,21 +212,21 @@ class GaContext:
 
     def check_location_time_overlaps(self) -> None:
         """Check if different round types are scheduled in the same locations at the same time."""
-        c = self.app_config.tournament
-        ef = self.event_factory
+        _ep = self.event_properties
         booked_slots = defaultdict(list)
-        event_idx_iter = itertools.count()
-        for r in c.rounds:
-            for e in ef.create_events(r, event_idx_iter):
-                loc_key = (type(e.location), e.location)
-                for existing_ts, existing_rt in booked_slots.get(loc_key, []):
-                    if e.timeslot.overlaps(existing_ts):
-                        msg = (
-                            f"Configuration conflict: TournamentRound '{r.roundtype}' and '{existing_rt}' "
-                            f"are scheduled in the same location ({loc_key[0].__name__} {loc_key[1]}) "
-                            f"at overlapping times ({e.timeslot} and "
-                            f"{existing_ts})."
-                        )
-                        raise ValueError(msg)
-                booked_slots[loc_key].append((e.timeslot, r.roundtype))
+        for e in self.event_factory.build_indices():
+            loc_str = _ep.loc_str[e]
+            loc_idx = _ep.loc_idx[e]
+            timeslot = _ep.timeslot[e]
+            roundtype = _ep.roundtype[e]
+            for existing_ts, existing_rt in booked_slots.get(loc_idx, []):
+                if timeslot.overlaps(existing_ts):
+                    msg = (
+                        f"Configuration conflict: TournamentRound '{roundtype}' and '{existing_rt}' "
+                        f"are scheduled in the same location ({loc_str} {loc_idx}) "
+                        f"at overlapping times ({timeslot} and "
+                        f"{existing_ts})."
+                    )
+                    raise ValueError(msg)
+            booked_slots[loc_idx].append((timeslot, roundtype))
         logger.debug("Check passed: No location/time overlaps found.")

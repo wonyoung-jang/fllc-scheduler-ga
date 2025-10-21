@@ -98,6 +98,7 @@ class AppConfigParser(ConfigParser):
         if not locations:
             msg = "No locations defined in the configuration file."
             raise ValueError(msg)
+        logger.debug("Parsed %s locations from configuration.", locations)
 
         rounds = list(self.parse_rounds_config(num_teams, time_fmt, locations))
         if not rounds:
@@ -299,7 +300,7 @@ class AppConfigParser(ConfigParser):
         location_idx_iter = itertools.count()
         for sec in self._iter_sections_prefix("location"):
             self.validate_location_section(sec)
-            name = sec.get("name")
+            locationtype = sec.get("name")
             sides = sec.getint("sides")
             teams_per_round = sides
             count = sec.getint("count")
@@ -308,7 +309,7 @@ class AppConfigParser(ConfigParser):
                     side = -1 if sides == 1 else j
                     yield Location(
                         idx=next(location_idx_iter),
-                        locationtype=name,
+                        locationtype=locationtype,
                         name=identifier,
                         side=side,
                         teams_per_round=teams_per_round,

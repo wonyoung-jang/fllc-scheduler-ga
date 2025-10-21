@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from enum import StrEnum
 
 ASCII_OFFSET = 64
@@ -11,7 +12,7 @@ EPSILON = 1e-12
 
 # For Importer
 TIME_HEADER = "Time"
-RE_HHMM = r"\d{2}:\d{2}"
+RE_HHMM = re.compile(r"\d{2}:\d{2}")
 
 
 class SelectionOp(StrEnum):
