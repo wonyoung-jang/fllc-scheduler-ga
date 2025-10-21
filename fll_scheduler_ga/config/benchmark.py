@@ -131,12 +131,14 @@ class FitnessBenchmark:
         max_matches_possible = 0
         max_matches_required = 0
         non_matches_required = 0
+        round_idx_to_rt = {v: k for k, v in self.config.round_to_int.items()}
         for rt, el in self.event_factory.as_roundtypes().items():
-            if self.config.round_to_tpr[rt] == 2:
+            rti_to_rt = round_idx_to_rt[rt]
+            if self.config.round_idx_to_tpr[rt] == 2:
                 max_matches_possible += len(el)
-                max_matches_required += self.config.round_requirements[rt]
-            elif self.config.round_to_tpr[rt] == 1:
-                non_matches_required += self.config.round_requirements[rt]
+                max_matches_required += self.config.round_requirements[rti_to_rt]
+            elif self.config.round_idx_to_tpr[rt] == 1:
+                non_matches_required += self.config.round_requirements[rti_to_rt]
 
         cache_scorer = dict.fromkeys(range(max_matches_required + non_matches_required + 1), 0.0)
         for i in range(1, max_matches_required + 1):

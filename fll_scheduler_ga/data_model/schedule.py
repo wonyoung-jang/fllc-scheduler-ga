@@ -182,19 +182,7 @@ class Schedule:
             return True
 
         new_conflicts = Schedule.event_map[new_event].conflicts
-        if not new_conflicts:
-            return False
-
         return not events_to_check.isdisjoint(new_conflicts)
-        # team_event_indices = np.nonzero(self.schedule == team)[0]
-
-        # if ignore is not None:
-        #     team_event_indices = team_event_indices[team_event_indices != ignore]
-
-        # if team_event_indices.size == 0:
-        #     return False
-
-        # return np.any(Schedule.conflict_matrix[new_event, team_event_indices])
 
     def clone(self) -> Schedule:
         """Create a deep copy of the schedule."""

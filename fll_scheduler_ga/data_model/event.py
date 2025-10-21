@@ -32,6 +32,7 @@ class EventProperties:
     timeslot_idx: np.ndarray
     start: np.ndarray
     stop: np.ndarray
+    location: np.ndarray
     loc_str: np.ndarray
     loc_type: np.ndarray
     loc_idx: np.ndarray
@@ -51,6 +52,7 @@ class EventProperties:
                 ("timeslot_idx", int),
                 ("start", int),
                 ("stop", int),
+                ("location", object),
                 ("loc_str", "U50"),
                 ("loc_type", "U50"),
                 ("loc_idx", int),
@@ -69,6 +71,7 @@ class EventProperties:
             event_properties[i]["timeslot_idx"] = e.timeslot.idx
             event_properties[i]["start"] = int(e.timeslot.start.timestamp())
             event_properties[i]["stop"] = int(e.timeslot.stop.timestamp())
+            event_properties[i]["location"] = e.location
             event_properties[i]["loc_str"] = str(e.location)
             event_properties[i]["loc_type"] = e.location.locationtype
             event_properties[i]["loc_idx"] = e.location.idx
@@ -86,6 +89,7 @@ class EventProperties:
             timeslot_idx=event_properties["timeslot_idx"],
             start=event_properties["start"],
             stop=event_properties["stop"],
+            location=event_properties["location"],
             loc_str=event_properties["loc_str"],
             loc_type=event_properties["loc_type"],
             loc_idx=event_properties["loc_idx"],
@@ -134,8 +138,7 @@ class EventFactory:
     _list_singles_or_side1_indices: list[int] = None
     _conflict_matrix: np.ndarray = None
     _cached_mapping: dict[int, Event] = None
-    _cached_roundtypes: dict[str, list[Event]] = None
-    _cached_roundtype_indices: dict[int, list[int]] = None
+    _cached_roundtypes: dict[int, list[int]] = None
     _cached_timeslots: dict[tuple[int, int], list[int]] = None
     _cached_locations: dict[tuple[str, Location], list[Event]] = None
     _cached_matches: dict[int, list[tuple[int, int]]] = None
@@ -150,15 +153,12 @@ class EventFactory:
         self.build_conflict_matrix()
         self.as_mapping()
         self.as_timeslots()
-        self.as_locations()
         self.as_matches()
         self.as_roundtypes()
 
         for rt, events in self._cached_roundtypes.items():
             round_events_str = f"{rt} TournamentRound has {len(events)} events."
             logger.debug("%s", round_events_str)
-            for e in events:
-                logger.debug("  %s | Conflicts with: %s", e, e.conflicts)
 
     def build(self) -> list[Event]:
         """Create and return all Events for the tournament."""
@@ -266,21 +266,13 @@ class EventFactory:
             self._cached_mapping = {e.idx: e for e in self.build()}
         return self._cached_mapping
 
-    def as_roundtypes(self) -> dict[str, list[Event]]:
-        """Get a mapping of RoundTypes to their Events."""
+    def as_roundtypes(self) -> dict[int, list[int]]:
+        """Get a mapping of RoundTypes to their Event indices."""
         if self._cached_roundtypes is None:
             self._cached_roundtypes = defaultdict(list)
             for e in self.build():
-                self._cached_roundtypes[e.roundtype].append(e)
+                self._cached_roundtypes[e.roundtype_idx].append(e.idx)
         return self._cached_roundtypes
-
-    def as_roundtype_indices(self) -> dict[int, list[int]]:
-        """Get a mapping of RoundTypes to their Event indices."""
-        if self._cached_roundtype_indices is None:
-            self._cached_roundtype_indices = defaultdict(list)
-            for e in self.build():
-                self._cached_roundtype_indices[e.roundtype_idx].append(e.idx)
-        return self._cached_roundtype_indices
 
     def as_timeslots(self) -> dict[tuple[int, int], list[int]]:
         """Get a mapping of TimeSlots to their Events."""
@@ -289,15 +281,6 @@ class EventFactory:
             for e in self.build():
                 self._cached_timeslots[(e.roundtype_idx, e.timeslot_idx)].append(e.idx)
         return self._cached_timeslots
-
-    def as_locations(self) -> dict[tuple[str, Location], list[Event]]:
-        """Get a mapping of RoundTypes to their Locations."""
-        if self._cached_locations is None:
-            self._cached_locations = defaultdict(list)
-            for e in self.build():
-                if not e.paired or (e.paired and e.location.side == 1):
-                    self._cached_locations[(e.roundtype, e.location)].append(e)
-        return self._cached_locations
 
     def as_matches(self) -> dict[int, list[tuple[int, int]]]:
         """Get a mapping of RoundTypes to their matched Event indices."""

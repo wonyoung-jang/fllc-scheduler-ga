@@ -18,7 +18,6 @@ if TYPE_CHECKING:
     from argparse import Namespace
     from collections.abc import Iterator
 
-    from ..data_model.event import Event
     from ..data_model.schedule import Schedule
     from ..genetic.ga import GA
 
@@ -145,9 +144,7 @@ def generate_team_schedules(schedule: Schedule, path: Path, ga: GA) -> None:
     """Generate a CSV file with team schedules, sorted by team IDs."""
     try:
         with path.open("w", newline="", encoding="utf-8") as f:
-            event_factory = ga.context.event_factory
             config = ga.context.app_config.tournament
-            event_map = event_factory.as_mapping()
             rows = []
             headers = ["Team"]
 
@@ -170,12 +167,12 @@ def generate_team_schedules(schedule: Schedule, path: Path, ga: GA) -> None:
                 if team_id >= 0:
                     team_events[team_id].add(event_id)
 
+            ep = ga.context.event_properties
             for team_id, events in sorted(team_events.items()):
                 row = [team_id + 1]
                 for event_id in sorted(events):
-                    event = event_map.get(event_id)
-                    row.append(str(event.timeslot))
-                    row.append(str(event.location))
+                    row.append(str(ep.timeslot[event_id]))
+                    row.append(str(ep.location[event_id]))
                 rows.append(row)
 
             writer(f).writerows(rows)
@@ -213,7 +210,7 @@ def generate_pareto_summary(pop: list[Schedule], path: Path) -> None:
 class CsvExporter(Exporter):
     """Exporter for schedules in CSV format."""
 
-    def render_grid(self, schedule_by_type: dict[str, dict[Event, int]]) -> Iterator[list[str]]:
+    def render_grid(self, schedule_by_type: dict[str, dict[int, int]]) -> Iterator[list[str]]:
         """Write a single schedule grid to a CSV writer."""
         for title, schedule in schedule_by_type.items():
             yield [title]
@@ -231,7 +228,7 @@ class CsvExporter(Exporter):
                 yield r
             yield []
 
-    def write_to_file(self, schedule_by_type: dict[str, dict[Event, int]], filename: Path) -> None:
+    def write_to_file(self, schedule_by_type: dict[str, dict[int, int]], filename: Path) -> None:
         """Write the schedule to a file."""
         with filename.open("w", newline="", encoding="utf-8") as csvfile:
             writer(csvfile).writerows(self.render_grid(schedule_by_type))
@@ -241,7 +238,7 @@ class CsvExporter(Exporter):
 class HtmlExporter(Exporter):
     """Exporter for schedules in HTML format."""
 
-    def render_grid(self, schedule_by_type: dict[str, dict[Event, int]]) -> Iterator[str]:
+    def render_grid(self, schedule_by_type: dict[str, dict[int, int]]) -> Iterator[str]:
         """Render a single schedule grid as an HTML table."""
         yield """
             <!DOCTYPE html>
@@ -304,7 +301,7 @@ class HtmlExporter(Exporter):
                 yield "</tr>"
             yield "</tbody></table>"
 
-    def write_to_file(self, schedule_by_type: dict[str, dict[Event, int]], filename: Path) -> None:
+    def write_to_file(self, schedule_by_type: dict[str, dict[int, int]], filename: Path) -> None:
         """Write the schedule to a file."""
         with filename.open("w", encoding="utf-8") as f:
             f.write("".join(self.render_grid(schedule_by_type)))

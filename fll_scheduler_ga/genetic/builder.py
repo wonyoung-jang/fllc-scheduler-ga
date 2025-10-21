@@ -29,7 +29,7 @@ class ScheduleBuilder:
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the random number generator."""
-        self.roundtype_events = self.event_factory.as_roundtype_indices()
+        self.roundtype_events = self.event_factory.as_roundtypes()
 
     def __call__(self) -> Schedule:
         """Build and return a valid schedule."""
