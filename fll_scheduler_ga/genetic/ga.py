@@ -60,8 +60,10 @@ class GA:
         if self.ga_params.num_islands > 1 and self.ga_params.migration_size > 0:
             self.migrate_generations[:: self.ga_params.migration_interval] = 1
 
-        self.fitness_history = np.zeros(
-            (self.ga_params.generations, len(self.context.evaluator.objectives)), dtype=float
+        self.fitness_history = np.full(
+            (self.ga_params.generations, len(self.context.evaluator.objectives)),
+            fill_value=-1,
+            dtype=float,
         )
 
         trackers = ("success", "total")

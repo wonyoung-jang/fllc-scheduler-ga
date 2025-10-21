@@ -53,6 +53,7 @@ class Plot:
 
         """
         history = self.ga.fitness_history
+        history = history[history[:, 0] >= 0]  # Filter out generations (if program terminated early)
         if not history.any():
             logger.error("Cannot plot fitness. No generation history was recorded.")
             return
