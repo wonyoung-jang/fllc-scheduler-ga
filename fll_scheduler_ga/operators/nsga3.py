@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from itertools import combinations
 from logging import getLogger
 from math import comb
@@ -21,8 +21,9 @@ class NSGA3:
     rng: np.random.Generator
     n_objectives: int
     n_total_pop: int
-    ref_points: np.ndarray = field(default=None, repr=False)
-    norm_sq: np.ndarray = field(default=None, repr=False)
+
+    ref_points: np.ndarray = None
+    norm_sq: np.ndarray = None
 
     def __post_init__(self) -> None:
         """Post-initialization to generate reference points."""

@@ -11,7 +11,7 @@ from shutil import rmtree
 from typing import TYPE_CHECKING
 
 from ..config.constants import FitnessObjective
-from .base_exporter import GridBasedExporter
+from .base_exporter import Exporter
 from .plot import Plot
 
 if TYPE_CHECKING:
@@ -55,8 +55,9 @@ def export_all_schedules(schedules: list[Schedule], subdirs: dict[str, Path], ga
     """Export all schedules to the different formats."""
     time_fmt = ga.context.app_config.tournament.time_fmt
     event_factory = ga.context.event_factory
-    csv_exporter = CsvExporter(time_fmt, event_factory)
-    html_exporter = HtmlExporter(time_fmt, event_factory)
+    event_properties = ga.context.event_properties
+    csv_exporter = CsvExporter(time_fmt, event_factory, event_properties)
+    html_exporter = HtmlExporter(time_fmt, event_factory, event_properties)
 
     for i, sched in enumerate(schedules, start=1):
         name = f"front_{sched.rank}_schedule_{i}"
@@ -70,7 +71,13 @@ def export_all_schedules(schedules: list[Schedule], subdirs: dict[str, Path], ga
 def generate_plots(ga: GA, output_dir: Path, args: Namespace) -> None:
     """Generate plots for the GA results."""
     if not args.no_plotting and ga.total_population:
-        Plot(ga, output_dir, args.cmap_name).plot()
+        Plot(
+            ga=ga,
+            save_dir=output_dir,
+            cmap_name=args.cmap_name,
+            objectives=list(FitnessObjective),
+            ref_points=ga.context.nsga3.ref_points,
+        ).plot()
 
 
 def generate_summary_report(schedule: Schedule, path: Path) -> None:
@@ -203,7 +210,7 @@ def generate_pareto_summary(pop: list[Schedule], path: Path) -> None:
 
 
 @dataclass(slots=True)
-class CsvExporter(GridBasedExporter):
+class CsvExporter(Exporter):
     """Exporter for schedules in CSV format."""
 
     def render_grid(self, schedule_by_type: dict[str, dict[Event, int]]) -> Iterator[list[str]]:
@@ -213,16 +220,14 @@ class CsvExporter(GridBasedExporter):
             if not schedule:
                 yield ["No events scheduled for this round type.", []]
                 continue
+
             timeslots, locations, grid_lookup = self._build_grid_data(schedule)
             yield ["Time"] + [str(loc) for loc in locations]
             for ts in timeslots:
                 r = [ts.start.strftime(self.time_fmt)]
                 for loc in locations:
                     team = grid_lookup.get((ts, loc))
-                    if isinstance(team, int):
-                        r.append(str(team))
-                    else:
-                        r.append("")
+                    r.append(team)
                 yield r
             yield []
 
@@ -233,7 +238,7 @@ class CsvExporter(GridBasedExporter):
 
 
 @dataclass(slots=True)
-class HtmlExporter(GridBasedExporter):
+class HtmlExporter(Exporter):
     """Exporter for schedules in HTML format."""
 
     def render_grid(self, schedule_by_type: dict[str, dict[Event, int]]) -> Iterator[str]:
@@ -295,10 +300,7 @@ class HtmlExporter(GridBasedExporter):
                 yield f"<tr><td>{ts.start.strftime(self.time_fmt)}</td>"
                 for loc in locations:
                     team = grid_lookup.get((ts, loc))
-                    if isinstance(team, int):
-                        yield f"<td>{team}</td>"
-                    else:
-                        yield "<td></td>"
+                    yield f"<td>{team}</td>"
                 yield "</tr>"
             yield "</tbody></table>"
 

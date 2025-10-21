@@ -84,14 +84,14 @@ class Schedule:
     def __hash__(self) -> int:
         """Hash is based on the frozenset of (event_id, team_id) pairs."""
         if self._hash is None:
-            # s = self.schedule
-            # team_events = defaultdict(set)
-            # for event_id, team_id in enumerate(s):
-            #     if team_id >= 0:
-            #         team_events[team_id].add(event_id)
+            s = self.schedule
+            team_events = defaultdict(set)
+            for event_id, team_id in enumerate(s):
+                if team_id >= 0:
+                    team_events[team_id].add(event_id)
 
-            # self._hash = hash(frozenset(frozenset(events) for events in team_events.values()))
-            self._hash = hash(frozenset(frozenset(events) for events in self.team_events.values()))
+            self._hash = hash(frozenset(sorted(frozenset(sorted(events)) for events in team_events.values())))
+            # self._hash = hash(frozenset(frozenset(events) for events in self.team_events.values()))
         return self._hash
 
     @classmethod
@@ -136,14 +136,14 @@ class Schedule:
 
     def assign(self, team: int, event: int) -> None:
         """Add an event to a team's scheduled events."""
-        roundtype = Schedule.event_properties.roundtype[event]
+        roundtype = Schedule.event_properties.roundtype_idx[event]
         self.team_events[team].add(event)
         self.team_rounds[team, roundtype] -= 1
         self[event] = team
 
     def unassign(self, team: int, event: int) -> None:
         """Remove an event from a team's scheduled events."""
-        roundtype = Schedule.event_properties.roundtype[event]
+        roundtype = Schedule.event_properties.roundtype_idx[event]
         self.team_events[team].remove(event)
         self.team_rounds[team, roundtype] += 1
         del self[event]
@@ -219,7 +219,7 @@ class Schedule:
         """Return the indices of unscheduled events."""
         return np.nonzero(self.schedule == -1)[0]
 
-    def normalized_teams(self) -> dict[int, int]:
+    def normalized_teams(self) -> dict[int, int | str]:
         """Normalize the schedule by reassigning team identities."""
         normalized_teams = {}
         count = 1

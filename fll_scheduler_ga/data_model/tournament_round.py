@@ -35,10 +35,10 @@ class TournamentRound:
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the round configuration."""
-        logger.debug("Round configuration loaded: %s", self)
+        logger.debug("TournamentRound configuration loaded: %s", self)
 
     def __str__(self) -> str:
-        """Represent the Round."""
+        """Represent the TournamentRound."""
         return (
             f"\n\tRound:"
             f"\n\t  roundtype        : {self.roundtype}"

@@ -49,12 +49,13 @@ class AppConfig:
         tournament_params = parser.load_tournament_config()
         operators_params = parser.load_operator_config()
         ga_params = parser.load_ga_parameters()
+        rng = parser.load_rng()
 
         return cls(
-            tournament=TournamentConfig.build(tournament_params),
-            operators=OperatorConfig.build(operators_params),
-            ga_params=GaParameters.build(ga_params),
-            rng=parser.load_rng(),
+            tournament=TournamentConfig(**tournament_params),
+            operators=OperatorConfig(**operators_params),
+            ga_params=GaParameters(**ga_params),
+            rng=rng,
         )
 
 
@@ -86,13 +87,27 @@ class AppConfigParser(ConfigParser):
 
     def load_tournament_config(self) -> dict[str, Any]:
         """Load and return the tournament configuration from the provided ConfigParser."""
-        num_teams, team_ids = self.parse_teams_config()
+        identities = self.parse_teams_config()
+        num_teams = len(identities)
+        team_ids = dict(enumerate(identities, start=1))
 
         time_fmt = self.parse_time_config()
         TimeSlot.set_time_format(time_fmt)
 
-        locations = self.parse_location_config()
-        rounds, roundreqs, round_to_int, round_to_tpr = self.parse_rounds_config(num_teams, time_fmt, locations)
+        locations = list(self.parse_location_config())
+        if not locations:
+            msg = "No locations defined in the configuration file."
+            raise ValueError(msg)
+
+        rounds = list(self.parse_rounds_config(num_teams, time_fmt, locations))
+        if not rounds:
+            msg = "No rounds defined in the configuration file."
+            raise ValueError(msg)
+
+        rounds.sort(key=lambda r: (r.start_time))
+        roundreqs = {r.roundtype: r.rounds_per_team for r in rounds}
+        round_to_int = {r.roundtype: i for i, r in enumerate(rounds)}
+        round_to_tpr = {r.roundtype: r.teams_per_round for r in rounds}
         round_idx_to_tpr = {r.roundtype_idx: r.teams_per_round for r in rounds}
 
         total_slots_possible = sum(len(r.timeslots) * len(r.locations) for r in rounds)
@@ -137,7 +152,7 @@ class AppConfigParser(ConfigParser):
     def _parse_time(self, raw: str, fmt: str) -> datetime:
         return datetime.strptime(raw.strip(), fmt).replace(tzinfo=UTC)
 
-    def parse_teams_config(self) -> tuple[int, dict[int, int | str]]:
+    def parse_teams_config(self) -> list[int | str]:
         """Parse and return a list of team IDs from the configuration."""
         sec = self._get_section("teams")
         num_teams = sec.getint("num_teams", fallback=0)
@@ -154,40 +169,39 @@ class AppConfigParser(ConfigParser):
             msg = f"Number of teams ({num_teams}) does not match number of identities ({len(identities)})."
             raise ValueError(msg)
 
-        team_ids = {i: (int(tid) if tid.isdigit() else tid) for i, tid in enumerate(identities, start=1)}
-        return num_teams, team_ids
+        return identities
 
     def parse_time_config(self) -> str:
         """Parse and return the time format configuration."""
         sec = self._get_section("time")
         fmt_val = sec.getint("format", fallback=None)
-        fmt_map = {12: "%I:%M %p", 24: "%H:%M"}
+        fmt_map = {
+            12: "%I:%M %p",
+            24: "%H:%M",
+        }
         if fmt_val not in fmt_map:
             msg = "Invalid time format. Must be 12 or 24."
             raise ValueError(msg)
         return fmt_map[fmt_val]
 
     def parse_rounds_config(
-        self, num_teams: int, time_fmt: str, locations: set[Location]
-    ) -> tuple[list[TournamentRound], dict[str, int], dict[str, int], dict[str, int]]:
-        """Parse and return a list of Round objects from the configuration.
+        self,
+        num_teams: int,
+        time_fmt: str,
+        locations: set[Location],
+    ) -> Iterator[TournamentRound]:
+        """Parse and return a list of TournamentRound objects from the configuration.
 
         Args:
             num_teams (int): The total number of teams in the tournament.
             time_fmt (str): The time format string.
             locations (set[Location]): A set of Location objects.
 
-        Returns:
-            list[Round]: A list of Round objects parsed from the configuration.
-            dict[str, int]: A dictionary mapping round types to the number of rounds per team.
-            dict[str, int]: A mapping of round types to their index in the rounds list.
-            dict[str, int]: A mapping of round types to their teams per round.
+        Yields:
+            TournamentRound: TournamentRound objects parsed from the configuration.
 
         """
-        rounds: list[TournamentRound] = []
-        roundreqs: dict[str, int] = {}
         timeslot_idx_iter = itertools.count()
-
         for rti, sec in enumerate(self._iter_sections_prefix("round")):
             self.validate_round_section(sec)
             roundtype = sec.get("round_type")
@@ -224,34 +238,21 @@ class AppConfigParser(ConfigParser):
             start_time = self.init_start_time(times, timeslots)
             stop_time = self.init_stop_time(times, timeslots, duration_minutes)
 
-            roundreqs[roundtype] = rounds_per_team
-
-            rounds.append(
-                TournamentRound(
-                    roundtype=roundtype,
-                    roundtype_idx=rti,
-                    rounds_per_team=rounds_per_team,
-                    teams_per_round=teams_per_round,
-                    times=times,
-                    start_time=start_time,
-                    stop_time=stop_time,
-                    duration_minutes=duration_minutes,
-                    num_teams=num_teams,
-                    location=location,
-                    locations=locations_in_sec,
-                    num_timeslots=num_timeslots,
-                    timeslots=timeslots,
-                )
+            yield TournamentRound(
+                roundtype=roundtype,
+                roundtype_idx=rti,
+                rounds_per_team=rounds_per_team,
+                teams_per_round=teams_per_round,
+                times=times,
+                start_time=start_time,
+                stop_time=stop_time,
+                duration_minutes=duration_minutes,
+                num_teams=num_teams,
+                location=location,
+                locations=locations_in_sec,
+                num_timeslots=num_timeslots,
+                timeslots=timeslots,
             )
-
-        if not rounds:
-            msg = "No rounds defined in the configuration file."
-            raise ValueError(msg)
-
-        rounds.sort(key=lambda r: (r.start_time))
-        round_to_int = {r.roundtype: i for i, r in enumerate(rounds)}
-        round_to_tpr = {r.roundtype: r.teams_per_round for r in rounds}
-        return rounds, roundreqs, round_to_int, round_to_tpr
 
     def calc_num_timeslots(
         self, times: list[datetime], locations: list[Location], num_teams: int, rounds_per_team: int
@@ -293,37 +294,25 @@ class AppConfigParser(ConfigParser):
             return times[-1] + duration
         return timeslots[-1].stop
 
-    def parse_location_config(self) -> list[Location]:
+    def parse_location_config(self) -> Iterator[Location]:
         """Parse and return a list of Location objects from the configuration."""
-        locations: list[Location] = []
         location_idx_iter = itertools.count()
-
         for sec in self._iter_sections_prefix("location"):
             self.validate_location_section(sec)
             name = sec.get("name")
-
             sides = sec.getint("sides")
             teams_per_round = sides
-
             count = sec.getint("count")
-
             for identifier in range(1, count + 1):
                 for j in range(1, sides + 1):
                     side = -1 if sides == 1 else j
-                    locations.append(
-                        Location(
-                            idx=next(location_idx_iter),
-                            locationtype=name,
-                            name=identifier,
-                            side=side,
-                            teams_per_round=teams_per_round,
-                        )
+                    yield Location(
+                        idx=next(location_idx_iter),
+                        locationtype=name,
+                        name=identifier,
+                        side=side,
+                        teams_per_round=teams_per_round,
                     )
-
-        locations.sort(key=lambda loc: (loc.locationtype, loc.name, loc.side))
-        locations_log_str = "\n".join(repr(loc) for loc in locations)
-        logger.debug("Loaded locations:\n%s", locations_log_str)
-        return locations
 
     def validate_location_section(self, section: SectionProxy) -> None:
         """Validate location sections in config file."""

@@ -85,12 +85,12 @@ class GaContext:
         nsga3 = NSGA3(
             rng=rng,
             n_objectives=num_objectives,
-            n_total_pop=params.population_size,  # * params.num_islands,
+            n_total_pop=params.population_size * params.num_islands,
         )
         selection = RandomSelect(rng)
-        crossovers = tuple(build_crossovers(app_config, event_factory, event_properties))
-        mutations = tuple(build_mutations(app_config, event_factory))
-
+        operators = app_config.operators
+        crossovers = tuple(build_crossovers(rng, operators, event_factory, event_properties))
+        mutations = tuple(build_mutations(rng, operators, event_factory, event_properties))
         builder = ScheduleBuilder(
             event_factory=event_factory,
             event_properties=event_properties,
@@ -202,13 +202,13 @@ class GaContext:
             available = r.num_timeslots * (len(r.locations) // r.teams_per_round)
             if required > available:
                 msg = (
-                    f"Capacity impossible for Round '{rt}':\n"
+                    f"Capacity impossible for TournamentRound '{rt}':\n"
                     f"  - Required team-events: {required}\n"
                     f"  - Total available team-event slots: {available}\n"
                     f"  - Suggestion: Increase duration, locations, or start/end times for this round."
                 )
                 raise ValueError(msg)
-            logger.debug("Check passed: Capacity sufficient for Round '%s' - %d/%d.", rt, required, available)
+            logger.debug("Check passed: Capacity sufficient for TournamentRound '%s' - %d/%d.", rt, required, available)
         logger.debug("Check passed: Overall capacity is sufficient.")
 
     def check_location_time_overlaps(self) -> None:
@@ -223,7 +223,7 @@ class GaContext:
                 for existing_ts, existing_rt in booked_slots.get(loc_key, []):
                     if e.timeslot.overlaps(existing_ts):
                         msg = (
-                            f"Configuration conflict: Round '{r.roundtype}' and '{existing_rt}' "
+                            f"Configuration conflict: TournamentRound '{r.roundtype}' and '{existing_rt}' "
                             f"are scheduled in the same location ({loc_key[0].__name__} {loc_key[1]}) "
                             f"at overlapping times ({e.timeslot} and "
                             f"{existing_ts})."

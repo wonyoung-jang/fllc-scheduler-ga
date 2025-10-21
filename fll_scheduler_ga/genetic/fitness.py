@@ -28,6 +28,10 @@ class HardConstraintChecker:
 
     config: TournamentConfig
 
+    def __call__(self, schedule: Schedule) -> bool:
+        """Check the hard constraints of a schedule."""
+        return self.check(schedule)
+
     def check(self, schedule: Schedule) -> bool:
         """Check the hard constraints of a schedule."""
         if not schedule:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from logging import getLogger
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .location import Location
@@ -54,8 +54,3 @@ class TournamentConfig:
             f"\n\t  weights                   : {self.weights}"
             f"\n\t  locations                 : {[str(loc) for loc in self.locations]}"
         )
-
-    @classmethod
-    def build(cls, params: dict[str, Any]) -> TournamentConfig:
-        """Build a TournamentConfig from a dictionary of parameters."""
-        return cls(**params)

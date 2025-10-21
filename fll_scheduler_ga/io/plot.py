@@ -12,12 +12,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from ..config.constants import FitnessObjective
-
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
     from matplotlib.figure import Figure
 
+    from ..config.constants import FitnessObjective
     from ..genetic.ga import GA
 
 
@@ -34,14 +33,8 @@ class Plot:
     ga: GA
     save_dir: str | Path | None
     cmap_name: str
-
-    objectives: list[FitnessObjective] = None
-    ref_points: np.ndarray = None
-
-    def __post_init__(self) -> None:
-        """Post initializtion for Plot class."""
-        self.objectives = list(FitnessObjective)
-        self.ref_points = self.ga.context.nsga3.ref_points
+    objectives: list[FitnessObjective]
+    ref_points: np.ndarray
 
     def plot(self) -> None:
         """Create all plots."""

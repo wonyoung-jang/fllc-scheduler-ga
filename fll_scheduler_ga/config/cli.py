@@ -14,9 +14,11 @@ def init_parser() -> Namespace:
         Namespace(): Configured argument parser.
 
     """
-    _default_values = {
+    default_vals = {
         "cmap_name": "viridis",
         "config_file": "fll_scheduler_ga/config.ini",
+        "flush_benchmarks": False,
+        "flush": False,
         "front_only": True,
         "log_file": "fll_scheduler_ga.log",
         "loglevel_console": "INFO",
@@ -40,7 +42,7 @@ def init_parser() -> Namespace:
     general_group.add_argument(
         "--config_file",
         type=str,
-        default=_default_values["config_file"],
+        default=default_vals["config_file"],
         help="Path to config .ini file.",
     )
     general_group.add_argument(
@@ -52,7 +54,7 @@ def init_parser() -> Namespace:
     general_group.add_argument(
         "--flush_benchmarks",
         action="store_true",
-        default=False,
+        default=default_vals["flush_benchmarks"],
         help="Flush fitness benchmarks at beginning of run (for testing and development use).",
     )
 
@@ -61,19 +63,19 @@ def init_parser() -> Namespace:
     output_group.add_argument(
         "--output_dir",
         type=str,
-        default=_default_values["output_dir"],
+        default=default_vals["output_dir"],
         help="Directory to save output files.",
     )
     output_group.add_argument(
         "--no_plotting",
         action="store_true",
-        default=_default_values["no_plotting"],
+        default=default_vals["no_plotting"],
         help="Disable plotting of results.",
     )
     output_group.add_argument(
         "--cmap_name",
         type=str,
-        default=_default_values["cmap_name"],
+        default=default_vals["cmap_name"],
         help="Name of the colormap to use for plotting.",
     )
 
@@ -82,21 +84,21 @@ def init_parser() -> Namespace:
     log_group.add_argument(
         "--log_file",
         type=str,
-        default=_default_values["log_file"],
+        default=default_vals["log_file"],
         help="Path to the log file.",
     )
     log_group.add_argument(
         "--loglevel_file",
         type=str,
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        default=_default_values["loglevel_file"],
+        default=default_vals["loglevel_file"],
         help="Logging level for the file output.",
     )
     log_group.add_argument(
         "--loglevel_console",
         type=str,
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        default=_default_values["loglevel_console"],
+        default=default_vals["loglevel_console"],
         help="Logging level for the console output.",
     )
 
@@ -133,18 +135,19 @@ def init_parser() -> Namespace:
     seed_group.add_argument(
         "--seed_file",
         type=str,
-        default=_default_values["seed_file"],
+        default=default_vals["seed_file"],
         help="Path to the seed file for the genetic algorithm.",
     )
     seed_group.add_argument(
         "--flush",
         action="store_true",
+        default=default_vals["flush"],
         help="Flush the cached population to the seed file at the end of the run.",
     )
     seed_group.add_argument(
         "--front_only",
         action="store_true",
-        default=_default_values["front_only"],
+        default=default_vals["front_only"],
         help="Whether to save only the pareto front to the seed file. (default: True)",
     )
 

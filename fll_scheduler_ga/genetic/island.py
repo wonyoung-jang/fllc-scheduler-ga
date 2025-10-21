@@ -92,20 +92,26 @@ class Island:
 
         created = 0
         while created < needed:
-            s = self.builder.build()
-            if self.context.repairer.repair(s):
+            s = self.builder()
+            if self.context.repairer(s):
                 self.add_to_population(s)
                 created += 1
 
     def initialize(self) -> None:
         """Initialize the population for each island."""
         needed = self.ga_params.population_size - len(self)
+        if needed == 0:
+            return
         logger.debug("Island %d: Initializing population with %d individuals", self.identity, needed)
         self.build_n_schedules(needed)
 
     def handle_underpopulation(self) -> None:
         """Handle underpopulation by creating new individuals."""
-        self.build_n_schedules(self.ga_params.population_size - len(self))
+        needed = self.ga_params.population_size - len(self)
+        if needed == 0:
+            return
+        logger.debug("Island %d: Handling underpopulation with %d individuals", self.identity, needed)
+        self.build_n_schedules(needed)
 
     def mutate_schedule(self, schedule: Schedule, *, m_roll: bool = True) -> bool:
         """Mutate a child schedule."""
@@ -133,9 +139,9 @@ class Island:
         c_str = str(c)
         for child in c.cross(parents):
             self.crossover_ratio["total"][c_str] += 1
-            if self.context.checker.check(child):
+            if self.context.checker(child) and child not in self.selected:
                 self.crossover_ratio["success"][c_str] += 1
-            if self.context.repairer.repair(child):
+            if self.context.repairer(child):
                 yield child
 
     def evolve(self) -> None:

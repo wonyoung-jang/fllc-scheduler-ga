@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from logging import getLogger
-from typing import Any
 
 logger = getLogger(__name__)
 
@@ -40,11 +39,6 @@ class GaParameters:
             f"\n\t  migration_interval : {self.migration_interval}"
             f"\n\t  migration_size     : {self.migration_size}"
         )
-
-    @classmethod
-    def build(cls, params: dict[str, Any]) -> GaParameters:
-        """Build GaParameters from a dictionary of parameters."""
-        return cls(**params)
 
     def _validate(self) -> None:
         """Validate the parameters."""

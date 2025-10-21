@@ -15,36 +15,42 @@ if TYPE_CHECKING:
 
     import numpy as np
 
-    from ..config.app_config import AppConfig
-    from ..data_model.event import Event, EventFactory
+    from ..config.ga_operators_config import OperatorConfig
+    from ..data_model.event import EventFactory, EventProperties
     from ..data_model.schedule import Schedule
-    from ..data_model.time import TimeSlot
 
 type Match = tuple[int, int, int, int]
 
 logger = getLogger(__name__)
 
 
-def build_mutations(app_config: AppConfig, event_factory: EventFactory) -> Iterator[Mutation]:
+def build_mutations(
+    rng: np.random.Generator,
+    operators: OperatorConfig,
+    event_factory: EventFactory,
+    event_properties: EventProperties,
+) -> Iterator[Mutation]:
     """Build and return a tuple of mutation operators based on the configuration."""
-    rng = app_config.rng
     mutations = {
         # SwapMatchMutation variants
         MutationOp.SWAP_MATCH_CROSS_TIME_LOCATION: lambda: SwapMatchMutation(
             rng=rng,
             event_factory=event_factory,
+            event_properties=event_properties,
             same_timeslot=False,
             same_location=False,
         ),
         MutationOp.SWAP_MATCH_SAME_LOCATION: lambda: SwapMatchMutation(
             rng=rng,
             event_factory=event_factory,
+            event_properties=event_properties,
             same_timeslot=False,
             same_location=True,
         ),
         MutationOp.SWAP_MATCH_SAME_TIME: lambda: SwapMatchMutation(
             rng=rng,
             event_factory=event_factory,
+            event_properties=event_properties,
             same_timeslot=True,
             same_location=False,
         ),
@@ -52,18 +58,21 @@ def build_mutations(app_config: AppConfig, event_factory: EventFactory) -> Itera
         MutationOp.SWAP_TEAM_CROSS_TIME_LOCATION: lambda: SwapTeamMutation(
             rng=rng,
             event_factory=event_factory,
+            event_properties=event_properties,
             same_timeslot=False,
             same_location=False,
         ),
         MutationOp.SWAP_TEAM_SAME_LOCATION: lambda: SwapTeamMutation(
             rng=rng,
             event_factory=event_factory,
+            event_properties=event_properties,
             same_timeslot=False,
             same_location=True,
         ),
         MutationOp.SWAP_TEAM_SAME_TIME: lambda: SwapTeamMutation(
             rng=rng,
             event_factory=event_factory,
+            event_properties=event_properties,
             same_timeslot=True,
             same_location=False,
         ),
@@ -71,6 +80,7 @@ def build_mutations(app_config: AppConfig, event_factory: EventFactory) -> Itera
         MutationOp.SWAP_TABLE_SIDE: lambda: SwapTableSideMutation(
             rng=rng,
             event_factory=event_factory,
+            event_properties=event_properties,
             same_timeslot=True,
             same_location=True,
         ),
@@ -78,14 +88,16 @@ def build_mutations(app_config: AppConfig, event_factory: EventFactory) -> Itera
         MutationOp.INVERSION: lambda: InversionMutation(
             rng=rng,
             event_factory=event_factory,
+            event_properties=event_properties,
         ),
         MutationOp.SCRAMBLE: lambda: ScrambleMutation(
             rng=rng,
             event_factory=event_factory,
+            event_properties=event_properties,
         ),
     }
 
-    if not (mutation_types := app_config.operators.mutation_types):
+    if not (mutation_types := operators.mutation_types):
         logger.warning("No mutation types enabled in the configuration. Mutation will not occur.")
         return
 
@@ -103,6 +115,7 @@ class Mutation(ABC):
 
     rng: np.random.Generator
     event_factory: EventFactory
+    event_properties: EventProperties
 
     @abstractmethod
     def mutate(self, schedule: Schedule) -> bool:
@@ -148,13 +161,17 @@ class SwapMutation(Mutation):
 
     def init_swap_candidates(self) -> list[tuple[tuple[int, ...], ...]]:
         """Precompute any necessary data before mutation."""
+        _ts_idx = self.event_properties.timeslot_idx
+        _loc_idx = self.event_properties.loc_idx
+        _as_matches = self.event_factory.as_matches()
+
         swap_candidates = []
-        for match_list in self.event_factory.as_matches().values():
+        for match_list in _as_matches.values():
             for match1, match2 in itertools.combinations(match_list, 2):
                 e1a, e1b = match1
                 e2a, e2b = match2
-                is_same_timeslot = e1a.timeslot.idx == e2a.timeslot.idx
-                is_same_location = e1a.location.idx == e2a.location.idx
+                is_same_timeslot = _ts_idx[e1a] == _ts_idx[e2a]
+                is_same_location = _loc_idx[e1a] == _loc_idx[e2a]
 
                 if not (self.same_timeslot and self.same_location) and not self._validate_swap(
                     is_same_timeslot=is_same_timeslot,
@@ -164,8 +181,8 @@ class SwapMutation(Mutation):
                 ):
                     continue
 
-                match1_idx = (e1a.idx, e1b.idx)
-                match2_idx = (e2a.idx, e2b.idx)
+                match1_idx = (e1a, e1b)
+                match2_idx = (e2a, e2b)
                 swap_candidates.append((match1_idx, match2_idx))
         logger.debug("Initialized %d swap candidates", len(swap_candidates))
         return swap_candidates
@@ -339,16 +356,14 @@ class SwapTableSideMutation(SwapMutation):
 class TimeSlotSequenceMutation(Mutation):
     """Abstract base class for mutations that permute assignments within a single timeslot."""
 
-    event_factory: EventFactory
-    event_map: dict[int, Event] = None
-    timeslot_event_map: dict[tuple[str, TimeSlot], list[Event]] = None
-    timeslot_keys: list[tuple[str, TimeSlot]] = None
+    timeslot_candidates: dict[tuple[int, int], list[tuple[int, ...]]] = None
+    timeslot_keys: list[tuple[int, int]] = None
+    key_to_tpr: dict[tuple[int, int], int] = None
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
-        self.timeslot_event_map = self.event_factory.as_timeslots()
-        self.timeslot_keys = list(self.timeslot_event_map.keys())
-        self.event_map = self.event_factory.as_mapping()
+        self.timeslot_candidates, self.key_to_tpr = self.init_candidates()
+        self.timeslot_keys = list(self.timeslot_candidates.keys())
 
     @abstractmethod
     def permute(self, items: list) -> list:
@@ -356,15 +371,30 @@ class TimeSlotSequenceMutation(Mutation):
         msg = "Subclasses must implement this method."
         raise NotImplementedError(msg)
 
+    def init_candidates(
+        self,
+    ) -> tuple[dict[tuple[int, int], list[tuple[int, ...]]], dict[tuple[int, int], int]]:
+        """Precompute candidate events for each timeslot."""
+        _loc_side = self.event_properties.loc_side
+        _paired_idx = self.event_properties.paired_idx
+        _teams_per_round = self.event_properties.teams_per_round
+
+        timeslot_data = {}
+        keys_to_tpr = {}
+        timeslot_event_map = self.event_factory.as_timeslots()
+        for key, events in timeslot_event_map.items():
+            candidates = [e for e in events if _loc_side[e] == 1 or _paired_idx[e] == -1]
+            timeslot_data[key] = [(e, _paired_idx[e]) for e in candidates]
+            keys_to_tpr[key] = _teams_per_round[events[0]]
+        return timeslot_data, keys_to_tpr
+
     def get_candidates(self) -> tuple[list[tuple[int, ...]], int]:
         """Get a list of candidate events for mutation within a specific timeslot."""
         idx = self.rng.choice(len(self.timeslot_keys))
         key = self.timeslot_keys[idx]
-        candidates = self.timeslot_event_map[key]
-        candidates = [e for e in candidates if e.location.side == 1 or e.paired is None]
-        candidates.sort(key=lambda e: e.location.idx)
-        tpr = candidates[0].location.teams_per_round if candidates else 1
-        return [(e.idx, e.paired.idx if e.paired is not None else -1) for e in candidates], tpr
+        candidates = self.timeslot_candidates[key]
+        tpr = self.key_to_tpr[key]
+        return candidates, tpr
 
     def mutate(self, schedule: Schedule) -> bool:
         """Find a suitable timeslot and round type, then permute assignments."""

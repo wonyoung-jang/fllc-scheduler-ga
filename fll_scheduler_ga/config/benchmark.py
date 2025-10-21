@@ -8,11 +8,11 @@ schedules a team could receive, independent of other teams.
 
 from __future__ import annotations
 
+import itertools
 import pickle
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from hashlib import sha256
-from itertools import combinations, product
 from logging import getLogger
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -172,10 +172,8 @@ class FitnessBenchmark:
         """Run the time slot fitness benchmarking."""
         logger.info("Running break time consistency benchmarks...")
         logger.debug("Finding timeslots per round type:")
-        indexed_ts = [ts for r in self.config.rounds for ts in r.timeslots]
         timeslots_by_round = defaultdict(list)
-        rounds_sorted_by_start = sorted(self.config.rounds, key=lambda x: x.start_time)
-        for r in rounds_sorted_by_start:
+        for r in self.config.rounds:
             rt = r.roundtype
             timeslots_by_round[rt] = sorted(ts.idx for ts in r.timeslots)
             logger.debug("  %s: %d unique timeslots", f"{rt:<10}", len(timeslots_by_round[rt]))
@@ -186,20 +184,21 @@ class FitnessBenchmark:
         round_slot_combos = {}
         for rt, num_needed in self.config.round_requirements.items():
             available_slots = timeslots_by_round.get(rt, [])
-            round_slot_combos[rt] = list(combinations(available_slots, num_needed))
+            round_slot_combos[rt] = list(itertools.combinations(available_slots, num_needed))
             logger.debug("  %s: %d round combinations", f"{rt:<10}", len(round_slot_combos[rt]))
             logger.debug("    %s", ", ".join(str(combo) for combo in round_slot_combos[rt]))
 
         # Filter, score, and store valid schedules
         logger.debug("Generating and filtering all possible team schedules")
+        indexed_ts = [ts for r in self.config.rounds for ts in r.timeslots]
         valid_scored_schedules = []
         total_generated = 0
         self.timeslots = {}
-        for schedule_tuple in product(*round_slot_combos.values()):  # Cartesian product
+        for schedule_tuple in itertools.product(*round_slot_combos.values()):  # Cartesian product
             total_generated += 1
             curr_indices = [idx for combo in schedule_tuple for idx in combo]
-
-            curr_timeslots = sorted((indexed_ts[idx] for idx in curr_indices), key=lambda ts: ts.start)
+            curr_indices = np.array(curr_indices, dtype=int)
+            curr_timeslots = [indexed_ts[idx] for idx in curr_indices]
             if self._has_overlaps(curr_timeslots):
                 continue
 
@@ -221,6 +220,7 @@ class FitnessBenchmark:
         self.best_timeslot_score = valid_scored_schedules[0][0]
         if self.best_timeslot_score == 0:
             self.best_timeslot_score = 1  # Avoid division by zero
+        logger.debug("Best timeslot score: %f", self.best_timeslot_score)
 
         for i, (score, indices) in enumerate(valid_scored_schedules):
             valid_scored_schedules[i][0] = score / self.best_timeslot_score
@@ -267,10 +267,7 @@ class FitnessBenchmark:
             return 0.0
 
         std_devs = np.std(breaks, axis=0)
-
         coeffs_of_variation = std_devs / (mean_b + EPSILON)
         ratio = 1 / (1 + coeffs_of_variation)
-
         b_penalty = self.penalty ** np.count_nonzero(breaks == 0)
-
         return ratio * b_penalty
