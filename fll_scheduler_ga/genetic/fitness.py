@@ -55,8 +55,8 @@ class FitnessEvaluator:
 
     max_int: ClassVar[int] = np.iinfo(np.int64).max
     min_int: ClassVar[int] = -1
-    n_teams: ClassVar[int] = None
-    n_objs: ClassVar[int] = None
+    n_teams: ClassVar[int] = -1
+    n_objs: ClassVar[int] = -1
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the configuration."""

@@ -15,7 +15,7 @@ from ..data_model.event import EventFactory, EventProperties
 from ..data_model.schedule import Schedule
 from ..genetic.builder import ScheduleBuilder
 from ..genetic.fitness import FitnessEvaluator, HardConstraintChecker
-from ..io.export import generate_summary_report
+from ..io.export import ScheduleSummaryGenerator
 from ..io.importer import CsvImporter
 from ..operators.crossover import build_crossovers
 from ..operators.mutation import build_mutations
@@ -139,10 +139,8 @@ class GaContext:
             parent_dir = schedule_csv_path.parent
             parent_dir.mkdir(parents=True, exist_ok=True)
             report_path = parent_dir / "report.txt"
-            generate_summary_report(
-                csv_import.schedule,
-                report_path,
-            )
+            summary_gen = ScheduleSummaryGenerator()
+            summary_gen.generate(csv_import.schedule, report_path)
 
         if not args.add_import_to_population:
             logger.debug("Not adding imported schedule to population.")

@@ -49,7 +49,17 @@ def main() -> None:
     except Exception:
         logger.exception("An unhandled error occurred during the GA run. Saving state before exiting.")
     finally:
-        ga_export.generate_summary(args, ga)
+        output_dir = getattr(args, "output_dir", "output")
+        front_only = getattr(args, "front_only", False)
+        cmap_name = getattr(args, "cmap_name", "viridis")
+        no_plotting = getattr(args, "no_plotting", False)
+        ga_export.generate_summary(
+            ga=ga,
+            output_dir=output_dir,
+            cmap_name=cmap_name,
+            front_only=front_only,
+            no_plotting=no_plotting,
+        )
 
     logger.debug("FLLC Scheduler finished")
 

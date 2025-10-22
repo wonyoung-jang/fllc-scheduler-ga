@@ -80,7 +80,8 @@ class EventProperties:
             event_properties[i]["teams_per_round"] = e.location.teams_per_round
             event_properties[i]["paired_idx"] = e.paired.idx if e.paired else -1
 
-        logger.debug("Event properties array: %s", event_properties)
+        event_prop_labels = ", ".join(event_properties.dtype.names)
+        logger.debug("\nEvent properties array:\n%s\n%s", event_prop_labels, event_properties)
         return cls(
             all_props=event_properties,
             roundtype=event_properties["roundtype"],

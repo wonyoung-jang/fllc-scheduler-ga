@@ -132,10 +132,7 @@ class Repairer:
         _rt_idx = self.event_properties.roundtype_idx
 
         events_by_rt_tpr: dict[tuple[str, int], list[int]] = defaultdict(list)
-        for e, t in enumerate(schedule.schedule):
-            if t != -1:
-                continue
-
+        for e in schedule.unscheduled_events():
             paired_e = _paired_idx[e]
             if (paired_e != -1 and _loc_side[e] == 1) or paired_e == -1:
                 rt = _rt_idx[e]
