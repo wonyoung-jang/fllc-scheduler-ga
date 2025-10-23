@@ -6,17 +6,17 @@ import pickle
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from logging import getLogger
-from pathlib import Path
 from time import time
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from ..config.constants import FRONT_ONLY, SEED_FILE
 from ..io.observers import LoggingObserver, TqdmObserver
 from .island import Island
 
 if TYPE_CHECKING:
-    from argparse import Namespace
+    from pathlib import Path
 
     from ..config.ga_context import GaContext
     from ..config.schemas import GaParameters, TournamentConfig
@@ -35,7 +35,7 @@ class GA:
     context: GaContext
     rng: np.random.Generator
     observers: tuple[GaObserver]
-    seed_file: Path | None
+    seed_file: Path
     save_front_only: bool
 
     curr_gen: int = 0
@@ -81,15 +81,15 @@ class GA:
         )
 
     @classmethod
-    def build(cls, args: Namespace, context: GaContext) -> GA:
+    def build(cls, context: GaContext) -> GA:
         """Build and return a GA instance with the provided configuration."""
-        context.handle_seed_file(args)
+        context.handle_seed_file()
         return cls(
             context=context,
             rng=context.app_config.rng,
             observers=(TqdmObserver(), LoggingObserver()),
-            seed_file=Path(args.seed_file) if args.seed_file else None,
-            save_front_only=args.front_only,
+            seed_file=SEED_FILE,
+            save_front_only=FRONT_ONLY,
         )
 
     def __len__(self) -> int:

@@ -42,7 +42,7 @@ class FitnessBenchmark:
     timeslots: dict[frozenset[int], float] = field(default_factory=dict, init=False, repr=False)
     locations: np.ndarray = None
     opponents: np.ndarray = None
-    flush: bool = False
+    flush_benchmarks: bool = False
     best_timeslot_score: float = None
 
     def __post_init__(self) -> None:
@@ -55,7 +55,7 @@ class FitnessBenchmark:
         """Load benchmarks from cache or run calculations if cache is invalid/missing."""
         config_hash = self._get_config_hash()
         cache_file = self.cache_dir / f"benchmark_cache_{config_hash}.pkl"
-        if not self.flush:
+        if not self.flush_benchmarks:
             try:
                 if cache_file.exists():
                     logger.debug("Loading fitness benchmarks from cache: %s", cache_file)

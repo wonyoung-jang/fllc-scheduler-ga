@@ -4,15 +4,34 @@ from __future__ import annotations
 
 import re
 from enum import StrEnum
+from pathlib import Path
 
 ASCII_OFFSET = 64
 FITNESS_PENALTY = 0.5
 RANDOM_SEED_RANGE = (1, 2**32 - 1)
 EPSILON = 1e-12
 
+LOG_FILE = Path("fll_scheduler_ga.log")
+LOG_LEVEL_CONSOLE = "INFO"
+LOG_LEVEL_FILE = "DEBUG"
+
+CONFIG_FILE = Path("fll_scheduler_ga/config.ini")
+SEED_FILE = Path("fllc_genetic.pkl")
+OUTPUT_DIR = Path("fllc_schedule_outputs")
+
+CMAP_NAME = "viridis"
+NO_PLOTTING = False
+
+FLUSH = False
+FLUSH_BENCHMARKS = False
+
+FRONT_ONLY = True
+
 # For Importer
 TIME_HEADER = "Time"
 RE_HHMM = re.compile(r"\d{2}:\d{2}")
+IMPORT_FILE = ""
+IMPORT_ADD_TO_POP = True
 
 
 class SelectionOp(StrEnum):

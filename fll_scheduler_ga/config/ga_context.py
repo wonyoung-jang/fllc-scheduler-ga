@@ -23,10 +23,9 @@ from ..operators.nsga3 import NSGA3
 from ..operators.repairer import Repairer
 from ..operators.selection import RandomSelect
 from .benchmark import FitnessBenchmark
+from .constants import FLUSH, FLUSH_BENCHMARKS, IMPORT_ADD_TO_POP, IMPORT_FILE, SEED_FILE
 
 if TYPE_CHECKING:
-    from argparse import Namespace
-
     from ..operators.crossover import Crossover
     from ..operators.mutation import Mutation
     from ..operators.selection import Selection
@@ -57,7 +56,7 @@ class GaContext:
         self.run_preflight_checks()
 
     @classmethod
-    def build(cls, args: Namespace, app_config: AppConfig) -> GaContext:
+    def build(cls, app_config: AppConfig) -> GaContext:
         """Build and return a GA context."""
         rng = app_config.rng
         tournament_config = app_config.tournament
@@ -84,7 +83,7 @@ class GaContext:
             tournament_config,
             event_factory,
             event_properties,
-            flush=args.flush_benchmarks,
+            flush_benchmarks=FLUSH_BENCHMARKS,
         )
         evaluator = FitnessEvaluator(
             tournament_config,
@@ -136,20 +135,20 @@ class GaContext:
             max_events_per_team=max_events_per_team,
         )
 
-    def handle_seed_file(self, args: Namespace) -> None:
+    def handle_seed_file(self) -> None:
         """Handle the seed file for the genetic algorithm."""
         config = self.app_config.tournament
-        path = Path(args.seed_file).resolve()
+        path = SEED_FILE.resolve()
 
-        if args.flush and path.exists():
+        if FLUSH and path.exists():
             path.unlink(missing_ok=True)
         path.touch(exist_ok=True)
 
-        if not args.import_file:
+        if not IMPORT_FILE:
             logger.debug("No import file specified, skipping import step.")
             return
 
-        schedule_csv_path = Path(args.import_file).resolve()
+        schedule_csv_path = Path(IMPORT_FILE).resolve()
         csv_import = CsvImporter(schedule_csv_path, config, self.event_factory, self.event_properties)
         csv_schedule = csv_import.schedule
         pop = np.array([csv_schedule.schedule], dtype=int)
@@ -166,7 +165,7 @@ class GaContext:
             summary_gen = ScheduleSummaryGenerator()
             summary_gen.generate(csv_import.schedule, report_path)
 
-        if not args.add_import_to_population:
+        if not IMPORT_ADD_TO_POP:
             logger.debug("Not adding imported schedule to population.")
             return
 

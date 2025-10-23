@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import itertools
 from configparser import ConfigParser, SectionProxy
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from logging import getLogger
 from math import ceil
@@ -16,11 +16,10 @@ import numpy as np
 from ..data_model.location import Location
 from ..data_model.schedule import Schedule
 from ..data_model.time import TimeSlot
-from .constants import OPERATOR_CONFIG_OPTIONS, RANDOM_SEED_RANGE
+from .constants import CONFIG_FILE, OPERATOR_CONFIG_OPTIONS, RANDOM_SEED_RANGE
 from .schemas import GaParameters, OperatorConfig, TournamentConfig, TournamentRound
 
 if TYPE_CHECKING:
-    from argparse import Namespace
     from collections.abc import Iterator
 
 logger = getLogger(__name__)
@@ -36,26 +35,23 @@ class AppConfig:
     rng: np.random.Generator
 
     @classmethod
-    def build(cls, args: Namespace, path: Path | None = None) -> AppConfig:
+    def build(cls, path: Path | None = None) -> AppConfig:
         """Create and return the application configuration."""
         if path is None:
-            path = Path(args.config_file).resolve()
+            path = CONFIG_FILE.resolve()
 
-        parser = AppConfigParser.build(args, path)
+        parser = AppConfigParser.build(path)
 
-        tournament_params = parser.load_tournament_config()
-        operators_params = parser.load_operator_config()
-        ga_params = parser.load_ga_parameters()
-        rng = parser.load_rng()
-
-        tournament_config = TournamentConfig(**tournament_params)
+        tournament_config = TournamentConfig(**parser.load_tournament_config())
         logger.debug("Initialized tournament configuration: %s", tournament_config)
 
-        operator_config = OperatorConfig(**operators_params)
+        operator_config = OperatorConfig(**parser.load_operator_config())
         logger.debug("Initialized operator configuration: %s", operator_config)
 
-        ga_parameters = GaParameters(**ga_params)
+        ga_parameters = GaParameters(**parser.load_ga_parameters())
         logger.debug("Initialized genetic algorithm parameters: %s", ga_parameters)
+
+        rng = parser.load_rng()
 
         return cls(
             tournament=tournament_config,
@@ -69,15 +65,14 @@ class AppConfig:
 class AppConfigParser(ConfigParser):
     """Parser for the application configuration."""
 
-    args: Namespace
-    kwargs: dict[str, Any] = field(default_factory=dict)
+    kwargs: dict[str, Any]
 
     def __post_init__(self) -> None:
         """Post-initialization processing."""
         super(AppConfigParser, self).__init__(**self.kwargs)
 
     @classmethod
-    def build(cls, args: Namespace, path: Path) -> AppConfigParser:
+    def build(cls, path: Path) -> AppConfigParser:
         """Get a ConfigParser instance for the given config file path."""
         if not Path(path).exists():
             msg = f"Configuration file does not exist at: {path}"
@@ -86,7 +81,7 @@ class AppConfigParser(ConfigParser):
         config_parser_options = {
             "inline_comment_prefixes": ("#", ";"),
         }
-        parser = cls(args, config_parser_options)
+        parser = cls(config_parser_options)
         parser.read(path)
         logger.debug("Configuration file loaded from %s", path)
         return parser
@@ -188,12 +183,7 @@ class AppConfigParser(ConfigParser):
             raise ValueError(msg)
         return fmt_map[fmt_val]
 
-    def parse_rounds_config(
-        self,
-        num_teams: int,
-        time_fmt: str,
-        locations: set[Location],
-    ) -> Iterator[TournamentRound]:
+    def parse_rounds_config(self, num_teams: int, time_fmt: str, locations: set[Location]) -> Iterator[TournamentRound]:
         """Parse and return a list of TournamentRound objects from the configuration.
 
         Args:
@@ -403,7 +393,7 @@ class AppConfigParser(ConfigParser):
     def load_ga_parameters(self) -> dict[str, Any]:
         """Build a GaParameters, overriding defaults with any provided CLI args."""
         sec = self._get_section("genetic")
-        params = {
+        return {
             "population_size": sec.getint("population_size"),
             "generations": sec.getint("generations"),
             "offspring_size": sec.getint("offspring_size"),
@@ -413,27 +403,18 @@ class AppConfigParser(ConfigParser):
             "migration_interval": sec.getint("migration_interval"),
             "migration_size": sec.getint("migration_size"),
         }
-        for k in params:
-            if v := getattr(self.args, k, None):
-                params[k] = v
-        return params
 
     def load_rng(self) -> np.random.Generator:
         """Set up the random number generator."""
         sec = self._get_section("genetic")
-        seed_val = ""
-        rng_seed = getattr(self.args, "rng_seed", None)
-        if rng_seed is not None:
-            seed_val = rng_seed
-        elif sec.get("seed"):
-            seed_val = sec["seed"].strip()
-        else:
-            seed_val = np.random.default_rng().integers(*RANDOM_SEED_RANGE)
+        seed_val = (
+            sec["rng_seed"].strip() if sec.get("rng_seed") else np.random.default_rng().integers(*RANDOM_SEED_RANGE)
+        )
 
         try:
-            seed = int(seed_val)
+            rng_seed = int(seed_val)
         except (TypeError, ValueError):
-            seed = abs(hash(seed_val)) % (RANDOM_SEED_RANGE[1] + 1)
+            rng_seed = abs(hash(seed_val)) % (RANDOM_SEED_RANGE[1] + 1)
 
-        logger.debug("Using RNG seed: %d", seed)
-        return np.random.default_rng(seed)
+        logger.debug("Using RNG seed: %d", rng_seed)
+        return np.random.default_rng(rng_seed)

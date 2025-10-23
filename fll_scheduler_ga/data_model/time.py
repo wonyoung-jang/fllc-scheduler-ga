@@ -17,7 +17,6 @@ class TimeSlot:
     start: datetime
     stop: datetime
 
-    # Class variables
     time_fmt: ClassVar[str]
 
     def __post_init__(self) -> None:

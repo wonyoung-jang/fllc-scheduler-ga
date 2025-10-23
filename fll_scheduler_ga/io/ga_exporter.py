@@ -7,7 +7,6 @@ import shutil
 from collections import defaultdict
 from dataclasses import dataclass
 from logging import getLogger
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..config.constants import FitnessObjective
@@ -15,6 +14,8 @@ from .plot import Plot
 from .schedule_exporter import CsvScheduleExporter, HtmlScheduleExporter
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from ..data_model.event import EventProperties
     from ..data_model.schedule import Schedule
     from ..genetic.ga import GA
@@ -22,9 +23,8 @@ if TYPE_CHECKING:
 logger = getLogger(__name__)
 
 
-def generate_summary(ga: GA, output_dir: str, cmap_name: str, *, front_only: bool, no_plotting: bool) -> None:
+def generate_summary(ga: GA, output_dir: Path, cmap_name: str, *, front_only: bool, no_plotting: bool) -> None:
     """Run the fll-scheduler-ga application and generate summary reports."""
-    output_dir = Path(output_dir)
     subdirs = OutputDirManager(output_dir).subdirs
     total_pop = ga.total_population
     if not no_plotting and total_pop:
