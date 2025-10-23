@@ -51,7 +51,9 @@ class FitnessEvaluator:
     benchmark: FitnessBenchmark
     event_properties: EventProperties
     max_events_per_team: int
+
     objectives: list[FitnessObjective] = None
+    penalty: float = FITNESS_PENALTY
 
     max_int: ClassVar[int] = np.iinfo(np.int64).max
     min_int: ClassVar[int] = -1
@@ -144,27 +146,30 @@ class FitnessEvaluator:
         # Valid consecutive events must have valid start and stop times
         valid_consecutive = (start_next < FitnessEvaluator.max_int) & (stop_curr < FitnessEvaluator.max_int)
         breaks_seconds = start_next - stop_curr
-        breaks_minutes = breaks_seconds / 60.0
+        breaks_minutes = breaks_seconds / 60
         breaks_minutes[~valid_consecutive] = np.nan
         # Identify overlaps
         overlap_mask = np.any(breaks_minutes < 0, axis=2)
 
         mean_break = np.nanmean(breaks_minutes, axis=2)
-        mean_break = np.nan_to_num(mean_break, nan=0.0)
+        mean_break = np.nan_to_num(mean_break, nan=EPSILON)
+        mean_zero_mask = mean_break == 0
 
         std_dev = np.nanstd(breaks_minutes, axis=2)
-        std_dev = np.nan_to_num(std_dev, nan=0.0)
+        std_dev = np.nan_to_num(std_dev, nan=EPSILON)
 
-        coefficient = std_dev / (mean_break + EPSILON)
-        ratio = 1.0 / (1.0 + coefficient)
+        coeff = std_dev / mean_break
+        ratio = 1 / (1 + coeff)
 
         zeros = np.sum(breaks_minutes == 0, axis=2)
-        zeros_penalty = FITNESS_PENALTY**zeros
+        zeros_penalty = self.penalty**zeros
 
         final_scores = ratio * zeros_penalty
-        final_scores[overlap_mask] = -1.0
-        final_scores /= self.benchmark.best_timeslot_score
-        return final_scores
+
+        final_scores[mean_zero_mask] = 0
+        final_scores[overlap_mask] = 0
+
+        return final_scores / (self.benchmark.best_timeslot_score or 1.0)
 
     def score_loc_consistency(self, loc_ids: np.ndarray) -> np.ndarray:
         """Vectorized location consistency scoring."""

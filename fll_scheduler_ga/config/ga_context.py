@@ -15,7 +15,7 @@ from ..data_model.event import EventFactory, EventProperties
 from ..data_model.schedule import Schedule
 from ..genetic.builder import ScheduleBuilder
 from ..genetic.fitness import FitnessEvaluator, HardConstraintChecker
-from ..io.export import ScheduleSummaryGenerator
+from ..io.ga_exporter import ScheduleSummaryGenerator
 from ..io.importer import CsvImporter
 from ..operators.crossover import build_crossovers
 from ..operators.mutation import build_mutations
@@ -74,9 +74,24 @@ class GaContext:
 
         max_events_per_team = sum(r.rounds_per_team for r in tournament_config.rounds)
 
-        repairer = Repairer(rng, tournament_config, event_factory, event_properties)
-        benchmark = FitnessBenchmark(tournament_config, event_factory, flush=args.flush_benchmarks)
-        evaluator = FitnessEvaluator(tournament_config, benchmark, event_properties, max_events_per_team)
+        repairer = Repairer(
+            rng,
+            tournament_config,
+            event_factory,
+            event_properties,
+        )
+        benchmark = FitnessBenchmark(
+            tournament_config,
+            event_factory,
+            event_properties,
+            flush=args.flush_benchmarks,
+        )
+        evaluator = FitnessEvaluator(
+            tournament_config,
+            benchmark,
+            event_properties,
+            max_events_per_team,
+        )
         checker = HardConstraintChecker(tournament_config)
 
         num_objectives = len(evaluator.objectives)
@@ -96,6 +111,15 @@ class GaContext:
             config=tournament_config,
             rng=rng,
         )
+
+        # builder_naive = ScheduleBuilderNaive(
+        #     event_factory=event_factory,
+        #     event_properties=event_properties,
+        #     config=tournament_config,
+        #     rng=rng,
+        # )
+        # naive_schedule = builder_naive.build()
+        # repairer.repair(naive_schedule)
 
         return cls(
             app_config=app_config,
@@ -185,10 +209,10 @@ class GaContext:
         """Check that round definitions are valid."""
         c = self.app_config.tournament
         defined_round_types = {r.roundtype for r in c.rounds}
-        if diff := defined_round_types.difference(set(c.round_requirements)):
+        if diff := defined_round_types.difference(set(c.roundreqs)):
             msg = f"Defined round types {diff} are not required."
             raise ValueError(msg)
-        logger.debug("Check passed: All required round types (%s) are defined.", c.round_requirements.keys())
+        logger.debug("Check passed: All required round types (%s) are defined.", c.roundreqs.keys())
 
     def check_total_capacity(self) -> None:
         """Check for total available vs. required event slots."""

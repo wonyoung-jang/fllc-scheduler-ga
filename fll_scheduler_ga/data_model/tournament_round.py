@@ -27,8 +27,7 @@ class TournamentRound:
     start_time: datetime
     stop_time: datetime
     duration_minutes: timedelta
-    num_teams: int
-    location: str
+    location_type: str
     locations: list[Location]
     num_timeslots: int
     timeslots: list[TimeSlot]
@@ -45,13 +44,12 @@ class TournamentRound:
             f"\n\t  roundtype_idx    : {self.roundtype_idx}"
             f"\n\t  teams_per_round  : {self.teams_per_round}"
             f"\n\t  rounds_per_team  : {self.rounds_per_team}"
-            f"\n\t  times            : {self.times}"
+            f"\n\t  times            : {[str(time) for time in self.times]}"
             f"\n\t  start_time       : {self.start_time}"
             f"\n\t  stop_time        : {self.stop_time}"
             f"\n\t  duration_minutes : {self.duration_minutes}"
-            f"\n\t  num_teams        : {self.num_teams}"
-            f"\n\t  location         : {self.location}"
-            f"\n\t  locations        : {[str(loc) for loc in self.locations]}"
+            f"\n\t  location         : {self.location_type}"
+            f"\n\t  locations        : {[str(location) for location in self.locations]}"
             f"\n\t  num_timeslots    : {self.num_timeslots}"
-            f"\n\t  timeslots        : {[str(ts) for ts in self.timeslots]}"
+            f"\n\t  timeslots        : {[str(timeslot) for timeslot in self.timeslots]}"
         )

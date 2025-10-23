@@ -8,11 +8,11 @@ schedules a team could receive, independent of other teams.
 
 from __future__ import annotations
 
+import hashlib
 import itertools
 import pickle
-from collections import Counter, defaultdict
+from collections import Counter
 from dataclasses import dataclass, field
-from hashlib import sha256
 from logging import getLogger
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -22,7 +22,7 @@ import numpy as np
 from .constants import EPSILON, FITNESS_PENALTY
 
 if TYPE_CHECKING:
-    from ..data_model.event import EventFactory
+    from ..data_model.event import EventFactory, EventProperties
     from ..data_model.time import TimeSlot
     from ..data_model.tournament_config import TournamentConfig
 
@@ -35,6 +35,8 @@ class FitnessBenchmark:
 
     config: TournamentConfig
     event_factory: EventFactory
+    event_properties: EventProperties
+
     penalty: float = FITNESS_PENALTY
     cache_dir: Path = None
     timeslots: dict[frozenset[int], float] = field(default_factory=dict, init=False, repr=False)
@@ -104,24 +106,41 @@ class FitnessBenchmark:
         round_tuples = tuple(
             (
                 r.roundtype,
+                r.roundtype_idx,
                 r.rounds_per_team,
                 r.teams_per_round,
                 frozenset(r.times),
                 r.start_time,
                 r.stop_time,
                 r.duration_minutes,
-                r.location,
-                len(r.locations),
+                r.location_type,
+                frozenset(r.locations),
+                r.num_timeslots,
+                frozenset(r.timeslots),
             )
-            for r in sorted(self.config.rounds, key=lambda x: x.start_time)
+            for r in self.config.rounds
         )
 
         # Canonical representation of requirements
-        req_tuple = tuple(sorted(self.config.round_requirements.items()))
+        req_tuple = tuple(
+            sorted(self.config.roundreqs.items()),
+        )
 
         # Include the penalty in the hash
-        config_representation = (round_tuples, req_tuple, self.penalty, self.config.num_teams)
-        return int(sha256(str(config_representation).encode()).hexdigest(), 16)
+        config_representation = (
+            round_tuples,
+            req_tuple,
+            self.penalty,
+            self.config.num_teams,
+        )
+
+        # Using hashlib over built-in hash for stability
+        return int(
+            hashlib.sha256(
+                str(config_representation).encode(),
+            ).hexdigest(),
+            16,
+        )
 
     def _run_location_and_opponent_benchmarks(self) -> None:
         """Run the location consistency and opponent variety fitness benchmarking."""
@@ -131,19 +150,22 @@ class FitnessBenchmark:
         max_matches_possible = 0
         max_matches_required = 0
         non_matches_required = 0
-        round_idx_to_rt = {v: k for k, v in self.config.round_to_int.items()}
-        for rt, el in self.event_factory.as_roundtypes().items():
+        round_idx_to_rt = {v: k for k, v in self.config.round_str_to_idx.items()}
+        for rt, events in self.event_factory.as_roundtypes().items():
             rti_to_rt = round_idx_to_rt[rt]
-            if self.config.round_idx_to_tpr[rt] == 2:
-                max_matches_possible += len(el)
-                max_matches_required += self.config.round_requirements[rti_to_rt]
-            elif self.config.round_idx_to_tpr[rt] == 1:
-                non_matches_required += self.config.round_requirements[rti_to_rt]
+            roundreq = self.config.roundreqs[rti_to_rt]
+            round_to_tpr = self.config.round_idx_to_tpr[rt]
+            if round_to_tpr == 2:
+                max_matches_possible += len(events)
+                max_matches_required += roundreq
+            elif round_to_tpr == 1:
+                non_matches_required += roundreq
 
-        cache_scorer = dict.fromkeys(range(max_matches_required + non_matches_required + 1), 0.0)
-        for i in range(1, max_matches_required + 1):
-            ratio = i / max_matches_possible
-            cache_scorer[i] = 1 / (1 + ratio)
+        num_matches_considered = max_matches_required + non_matches_required + 1
+        cache_scorer = dict.fromkeys(range(num_matches_considered), 0.0)
+        for n_rounds in range(1, max_matches_required + 1):
+            ratio = n_rounds / max_matches_possible
+            cache_scorer[n_rounds] = 1 / (1 + ratio)
 
         if non_matches_required > 0:
             cache_scorer[max_matches_required + non_matches_required] = 0
@@ -151,20 +173,23 @@ class FitnessBenchmark:
         maximum_score = cache_scorer[1]
         minimum_score = cache_scorer[max_matches_required]
         diff = maximum_score - minimum_score
+        if diff <= 0:
+            diff = EPSILON
 
-        self.locations = np.zeros(max_matches_required + non_matches_required + 1)
-        self.opponents = np.zeros(max_matches_required + non_matches_required + 1)
-        for num_loc, raw_score in cache_scorer.items():
-            if raw_score == 0:
-                continue
-            self.locations[num_loc] = abs((raw_score - minimum_score) / diff) if diff else 1
-            self.opponents[num_loc] = abs((raw_score - maximum_score) / diff) if diff else 1
+        raw_scores = list(cache_scorer.values())
+        logger.debug("Raw location/opponent scores: %s", raw_scores)
+        locations = [abs((s - minimum_score) / diff) if s != 0 else 0 for s in raw_scores]
+        opponents = [abs((s - maximum_score) / diff) if s != 0 else 0 for s in raw_scores]
+        self.locations = np.array(locations, dtype=float)
+        self.opponents = np.array(opponents, dtype=float)
 
+        logger.debug("Location consistency scores:")
         for k, v in enumerate(self.locations):
-            logger.debug("Location consistency score for %d location(s): %.6f", k, v)
+            logger.debug("  %d location(s): %.6f", k, v)
 
+        logger.debug("Opponent variety scores:")
         for k, v in enumerate(self.opponents):
-            logger.debug("Opponent variety score for %d opponent(s): %.6f", k, v)
+            logger.debug("  %d opponent(s): %.6f", k, v)
 
         if not self.locations.any() or not self.opponents.any():
             logger.warning("No valid schedules could be generated.")
@@ -174,17 +199,17 @@ class FitnessBenchmark:
         """Run the time slot fitness benchmarking."""
         logger.info("Running break time consistency benchmarks...")
         logger.debug("Finding timeslots per round type:")
-        timeslots_by_round = defaultdict(list)
-        for r in self.config.rounds:
-            rt = r.roundtype
-            timeslots_by_round[rt] = sorted(ts.idx for ts in r.timeslots)
-            logger.debug("  %s: %d unique timeslots", f"{rt:<10}", len(timeslots_by_round[rt]))
-            logger.debug("    %s", ", ".join(str(ts) for ts in timeslots_by_round[rt]))
+        timeslots_by_round = {r.roundtype: [ts.idx for ts in r.timeslots] for r in self.config.rounds}
+        for rt, timeslot_idx in timeslots_by_round.items():
+            roundtype = f"{rt:<10}"
+            n_timeslots = len(timeslot_idx)
+            ts_idx_to_str = ", ".join(str(ts) for ts in timeslot_idx)
+            logger.debug("  %s: %d unique timeslots\n    %s", roundtype, n_timeslots, ts_idx_to_str)
 
         # Generate intra-round combinations
         logger.debug("Generating all possible schedules per round type:")
         round_slot_combos = {}
-        for rt, num_needed in self.config.round_requirements.items():
+        for rt, num_needed in self.config.roundreqs.items():
             available_slots = timeslots_by_round.get(rt, [])
             round_slot_combos[rt] = list(itertools.combinations(available_slots, num_needed))
             logger.debug("  %s: %d round combinations", f"{rt:<10}", len(round_slot_combos[rt]))
@@ -192,15 +217,15 @@ class FitnessBenchmark:
 
         # Filter, score, and store valid schedules
         logger.debug("Generating and filtering all possible team schedules")
-        indexed_ts = [ts for r in self.config.rounds for ts in r.timeslots]
+        timeslot_objs = np.array([ts for r in self.config.rounds for ts in r.timeslots], dtype=object)
         valid_scored_schedules = []
-        total_generated = 0
+        total_combinations = 0
         self.timeslots = {}
         for schedule_tuple in itertools.product(*round_slot_combos.values()):  # Cartesian product
-            total_generated += 1
-            curr_indices = [idx for combo in schedule_tuple for idx in combo]
+            total_combinations += 1
+            curr_indices = list(itertools.chain.from_iterable(schedule_tuple))
             curr_indices = np.array(curr_indices, dtype=int)
-            curr_timeslots = [indexed_ts[idx] for idx in curr_indices]
+            curr_timeslots = timeslot_objs[curr_indices]
             if self._has_overlaps(curr_timeslots):
                 continue
 
@@ -208,7 +233,7 @@ class FitnessBenchmark:
             valid_scored_schedules.append([score, curr_indices])
             self.timeslots[frozenset(curr_indices)] = score
 
-        logger.debug("  Total potential: %d", total_generated)
+        logger.debug("  Total combinations: %d", total_combinations)
         logger.debug("  Valid (non-overlapping): %d", len(self.timeslots))
 
         if not self.timeslots:
@@ -254,22 +279,28 @@ class FitnessBenchmark:
         if len(timeslots) < 2:
             return 1.0  # Perfect score if only one event or no events
 
-        starts = np.array([ts.start.timestamp() for ts in timeslots])
-        stops = np.array([ts.stop.timestamp() for ts in timeslots])
+        starts = np.array([int(ts.start.timestamp()) for ts in timeslots], dtype=int)
+        stops = np.array([int(ts.stop.timestamp()) for ts in timeslots], dtype=int)
 
-        breaks = (starts[1:] - stops[:-1]) / 60.0
-        if np.any(breaks < 0):
-            return 0.0
+        order = np.argsort(starts)
+        starts_sorted = np.take_along_axis(starts, order, axis=0)
+        stops_sorted = np.take_along_axis(stops, order, axis=0)
 
-        if breaks.size == 0:
-            return 1.0
+        breaks_seconds = starts_sorted[1:] - stops_sorted[:-1]
+        breaks_minutes = breaks_seconds / 60
+        if np.any(breaks_minutes < 0):
+            return 0
 
-        mean_b = np.mean(breaks, axis=0)
-        if mean_b == 0:
-            return 0.0
+        mean_break = np.mean(breaks_minutes, axis=0)
+        if mean_break == 0:
+            return 0
 
-        std_devs = np.std(breaks, axis=0)
-        coeffs_of_variation = std_devs / (mean_b + EPSILON)
-        ratio = 1 / (1 + coeffs_of_variation)
-        b_penalty = self.penalty ** np.count_nonzero(breaks == 0)
-        return ratio * b_penalty
+        std_dev = np.std(breaks_minutes, axis=0)
+
+        coeff = std_dev / mean_break
+        ratio = 1 / (1 + coeff)
+
+        zeros = np.sum(breaks_minutes == 0)
+        zeros_penalty = self.penalty**zeros
+
+        return ratio * zeros_penalty

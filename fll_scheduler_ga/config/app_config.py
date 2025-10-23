@@ -107,8 +107,7 @@ class AppConfigParser(ConfigParser):
 
         rounds.sort(key=lambda r: (r.start_time))
         roundreqs = {r.roundtype: r.rounds_per_team for r in rounds}
-        round_to_int = {r.roundtype: i for i, r in enumerate(rounds)}
-        round_to_tpr = {r.roundtype: r.teams_per_round for r in rounds}
+        round_str_to_idx = {r.roundtype: r.roundtype_idx for r in rounds}
         round_idx_to_tpr = {r.roundtype_idx: r.teams_per_round for r in rounds}
 
         total_slots_possible = sum(len(r.timeslots) * len(r.locations) for r in rounds)
@@ -128,15 +127,13 @@ class AppConfigParser(ConfigParser):
             "num_teams": num_teams,
             "time_fmt": time_fmt,
             "rounds": rounds,
-            "round_requirements": roundreqs,
-            "round_to_int": round_to_int,
-            "round_to_tpr": round_to_tpr,
+            "roundreqs": roundreqs,
+            "round_str_to_idx": round_str_to_idx,
             "round_idx_to_tpr": round_idx_to_tpr,
             "total_slots_possible": total_slots_possible,
             "total_slots_required": total_slots_required,
             "unique_opponents_possible": unique_opponents_possible,
             "weights": weights,
-            "locations": locations,
         }
 
     def _get_section(self, section: str) -> SectionProxy:
@@ -220,14 +217,14 @@ class AppConfigParser(ConfigParser):
                 times = [self._parse_time(t, time_fmt) for t in times.split(",")]
                 start_time = times[0]
 
-            location = sec.get("location")
+            location_type = sec.get("location")
             locations_in_sec = sorted(
-                (loc for loc in locations if loc.locationtype == location),
+                (loc for loc in locations if loc.locationtype == location_type),
                 key=lambda loc: (loc.locationtype, loc.name, loc.side),
             )
 
             num_timeslots = self.calc_num_timeslots(times, locations_in_sec, num_teams, rounds_per_team)
-            timeslots = []
+            timeslots: list[TimeSlot] = []
             for start, stop in self.init_timeslots(times, duration_minutes, num_timeslots, start_time):
                 timeslots.append(
                     TimeSlot(
@@ -236,24 +233,28 @@ class AppConfigParser(ConfigParser):
                         stop=stop,
                     )
                 )
+
             start_time = self.init_start_time(times, timeslots)
             stop_time = self.init_stop_time(times, timeslots, duration_minutes)
+            if not times:
+                for ts in timeslots:
+                    times.append(ts.start)
 
-            yield TournamentRound(
-                roundtype=roundtype,
-                roundtype_idx=rti,
-                rounds_per_team=rounds_per_team,
-                teams_per_round=teams_per_round,
-                times=times,
-                start_time=start_time,
-                stop_time=stop_time,
-                duration_minutes=duration_minutes,
-                num_teams=num_teams,
-                location=location,
-                locations=locations_in_sec,
-                num_timeslots=num_timeslots,
-                timeslots=timeslots,
-            )
+            tournament_round_params = {
+                "roundtype": roundtype,
+                "roundtype_idx": rti,
+                "rounds_per_team": rounds_per_team,
+                "teams_per_round": teams_per_round,
+                "times": times,
+                "start_time": start_time,
+                "stop_time": stop_time,
+                "duration_minutes": duration_minutes,
+                "location_type": location_type,
+                "locations": locations_in_sec,
+                "num_timeslots": num_timeslots,
+                "timeslots": timeslots,
+            }
+            yield TournamentRound(**tournament_round_params)
 
     def calc_num_timeslots(
         self, times: list[datetime], locations: list[Location], num_teams: int, rounds_per_team: int

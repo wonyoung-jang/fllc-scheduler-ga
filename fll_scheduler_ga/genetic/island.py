@@ -92,7 +92,7 @@ class Island:
 
         created = 0
         while created < needed:
-            s = self.builder()
+            s = self.builder.build()
             if self.context.repairer(s):
                 self.add_to_population(s)
                 created += 1

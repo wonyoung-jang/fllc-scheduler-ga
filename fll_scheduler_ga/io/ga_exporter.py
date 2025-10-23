@@ -11,8 +11,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..config.constants import FitnessObjective
-from .base_exporter import CsvScheduleExporter, HtmlScheduleExporter
 from .plot import Plot
+from .schedule_exporter import CsvScheduleExporter, HtmlScheduleExporter
 
 if TYPE_CHECKING:
     from ..data_model.event import EventProperties

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import fll_scheduler_ga.config.cli as ga_cli
-import fll_scheduler_ga.io.export as ga_export
+import fll_scheduler_ga.io.ga_exporter as ga_export
 from fll_scheduler_ga.config.app_config import AppConfig
 from fll_scheduler_ga.config.ga_context import GaContext
 from fll_scheduler_ga.genetic.ga import GA
