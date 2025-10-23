@@ -16,11 +16,8 @@ import numpy as np
 from ..data_model.location import Location
 from ..data_model.schedule import Schedule
 from ..data_model.time import TimeSlot
-from ..data_model.tournament_config import TournamentConfig
-from ..data_model.tournament_round import TournamentRound
 from .constants import OPERATOR_CONFIG_OPTIONS, RANDOM_SEED_RANGE
-from .ga_operators_config import OperatorConfig
-from .ga_parameters import GaParameters
+from .schemas import GaParameters, OperatorConfig, TournamentConfig, TournamentRound
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -51,10 +48,19 @@ class AppConfig:
         ga_params = parser.load_ga_parameters()
         rng = parser.load_rng()
 
+        tournament_config = TournamentConfig(**tournament_params)
+        logger.debug("Initialized tournament configuration: %s", tournament_config)
+
+        operator_config = OperatorConfig(**operators_params)
+        logger.debug("Initialized operator configuration: %s", operator_config)
+
+        ga_parameters = GaParameters(**ga_params)
+        logger.debug("Initialized genetic algorithm parameters: %s", ga_parameters)
+
         return cls(
-            tournament=TournamentConfig(**tournament_params),
-            operators=OperatorConfig(**operators_params),
-            ga_params=GaParameters(**ga_params),
+            tournament=tournament_config,
+            operators=operator_config,
+            ga_params=ga_parameters,
             rng=rng,
         )
 
@@ -92,7 +98,7 @@ class AppConfigParser(ConfigParser):
         team_ids = dict(enumerate(identities, start=1))
 
         time_fmt = self.parse_time_config()
-        TimeSlot.set_time_format(time_fmt)
+        TimeSlot.time_fmt = time_fmt
 
         locations = list(self.parse_location_config())
         if not locations:
@@ -237,8 +243,7 @@ class AppConfigParser(ConfigParser):
             start_time = self.init_start_time(times, timeslots)
             stop_time = self.init_stop_time(times, timeslots, duration_minutes)
             if not times:
-                for ts in timeslots:
-                    times.append(ts.start)
+                times = [ts.start for ts in timeslots]
 
             tournament_round_params = {
                 "roundtype": roundtype,
@@ -254,7 +259,9 @@ class AppConfigParser(ConfigParser):
                 "num_timeslots": num_timeslots,
                 "timeslots": timeslots,
             }
-            yield TournamentRound(**tournament_round_params)
+            tournament_round = TournamentRound(**tournament_round_params)
+            logger.debug("Parsed tournament round: %s", tournament_round)
+            yield tournament_round
 
     def calc_num_timeslots(
         self, times: list[datetime], locations: list[Location], num_teams: int, rounds_per_team: int
@@ -346,7 +353,7 @@ class AppConfigParser(ConfigParser):
             msg = f"Either 'start_time' or 'times' must be specified in section '{section.name}'."
             raise KeyError(msg)
 
-    def parse_fitness_config(self) -> tuple[float, float]:
+    def parse_fitness_config(self) -> tuple[float, ...]:
         """Parse and return fitness-related configuration values."""
         sec = self._get_section("fitness")
         self.validate_fitness_section(sec)

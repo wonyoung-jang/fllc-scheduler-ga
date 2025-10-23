@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from ..config.ga_context import GaContext
-    from ..config.ga_parameters import GaParameters
+    from ..config.schemas import GaParameters
     from ..data_model.schedule import Schedule
     from ..operators.crossover import Crossover
     from ..operators.mutation import Mutation

@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
     import numpy as np
 
-    from ..config.ga_operators_config import OperatorConfig
+    from ..config.schemas import OperatorConfig
     from ..data_model.event import EventFactory, EventProperties
     from ..data_model.schedule import Schedule
 

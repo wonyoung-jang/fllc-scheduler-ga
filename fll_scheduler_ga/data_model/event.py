@@ -13,10 +13,9 @@ import numpy as np
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
+    from ..config.schemas import TournamentConfig, TournamentRound
     from .location import Location
     from .time import TimeSlot
-    from .tournament_config import TournamentConfig
-    from .tournament_round import TournamentRound
 
 logger = getLogger(__name__)
 

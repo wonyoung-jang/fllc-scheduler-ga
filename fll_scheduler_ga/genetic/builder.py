@@ -11,8 +11,8 @@ import numpy as np
 from ..data_model.schedule import Schedule
 
 if TYPE_CHECKING:
+    from ..config.schemas import TournamentConfig
     from ..data_model.event import EventFactory, EventProperties
-    from ..data_model.tournament_config import TournamentConfig
 
 logger = getLogger(__name__)
 

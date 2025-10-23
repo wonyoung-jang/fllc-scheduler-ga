@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from ..config.constants import ASCII_OFFSET
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True)
 class Location:
     """Data model for a location in the FLL Scheduler GA."""
 

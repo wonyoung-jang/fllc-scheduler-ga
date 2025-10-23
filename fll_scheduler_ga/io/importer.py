@@ -16,9 +16,8 @@ from ..data_model.time import TimeSlot
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from ..config.schemas import TournamentConfig, TournamentRound
     from ..data_model.event import EventFactory, EventProperties
-    from ..data_model.tournament_config import TournamentConfig
-    from ..data_model.tournament_round import TournamentRound
 
 logger = getLogger(__name__)
 
@@ -151,7 +150,7 @@ class CsvImporter:
             start_index = rc.times.index(start)
             stop = rc.times[start_index + 1] if start_index + 1 < len(rc.times) else start + rc.duration_minutes
 
-        TimeSlot.set_time_format(time_fmt)
+        TimeSlot.time_fmt = time_fmt
         timeslot_t = (start, stop)
 
         for i, team_id_str in enumerate(row[1:]):
