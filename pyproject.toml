@@ -9,7 +9,6 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.120.0",
-    "jupyter>=1.1.1",
     "matplotlib>=3.10.7",
     "numpy>=2.3.3",
     "pandas>=2.3",
@@ -89,8 +88,15 @@ line-ending = "auto"
 docstring-code-format = false
 docstring-code-line-length = "dynamic"
 
+[tool.vulture]
+paths = ["./fll_scheduler_ga", "whitelist.py"]
+ignore_decorators = ["@app.*"]
+min_confidence = 60
+verbose = false
+
 [dependency-groups]
 dev = [
+    "pyinstaller>=6.16.0",
     "pytest>=8.4.1",
     "snakeviz>=2.2.2",
     "vulture>=2.14",
