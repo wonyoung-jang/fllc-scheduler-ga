@@ -36,10 +36,6 @@ class Repairer:
             2: self.repair_matches,
         }
 
-    def __call__(self, schedule: Schedule) -> bool:
-        """Repair missing assignments in the schedule."""
-        return self.repair(schedule)
-
     def repair(self, schedule: Schedule) -> bool:
         """Repair missing assignments in the schedule.
 

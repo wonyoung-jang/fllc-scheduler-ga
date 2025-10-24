@@ -85,41 +85,6 @@ class Schedule:
             self._hash = id(self)
         return self._hash
 
-    @classmethod
-    def set_teams_list(cls, teams: np.ndarray) -> None:
-        """Set the teams list for the schedule."""
-        cls.teams = teams
-
-    @classmethod
-    def set_team_identities(cls, identities: dict[int, int | str]) -> None:
-        """Set the team identities for the schedule."""
-        cls.team_identities = identities
-
-    @classmethod
-    def set_total_num_events(cls, total: int) -> None:
-        """Set the total number of events for the schedule."""
-        cls.total_num_events = total
-
-    @classmethod
-    def set_team_roundreqs(cls, roundreqarray: np.ndarray) -> None:
-        """Set the team round requirements for the schedule."""
-        cls.team_roundreqs_array = roundreqarray
-
-    @classmethod
-    def set_conflict_matrix(cls, matrix: np.ndarray) -> None:
-        """Set the conflict matrix for the schedule."""
-        cls.conflict_matrix = matrix
-
-    @classmethod
-    def set_event_map(cls, events: dict[int, Event]) -> None:
-        """Set the event map for the schedule."""
-        cls.event_map = events
-
-    @classmethod
-    def set_event_properties(cls, properties: np.ndarray) -> None:
-        """Set the event properties for the schedule."""
-        cls.event_properties = properties
-
     def swap_assignment(self, team: int, old_event: int, new_event: int) -> None:
         """Switch an event for a team in the schedule."""
         self.unassign(team, old_event)

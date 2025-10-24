@@ -3,7 +3,7 @@
 import logging
 from datetime import datetime, timedelta
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..data_model.location import Location
 from ..data_model.time import TimeSlot
@@ -12,8 +12,90 @@ from .constants import CrossoverOp, MutationOp
 logger = logging.getLogger(__name__)
 
 
-class GaParameters(BaseModel):
-    """Genetic Algorithm parameters with validation."""
+class ArgumentModel(BaseModel):
+    """Configuration for command-line arguments and runtime flags."""
+
+    flush_benchmarks: bool
+    output_dir: str
+    no_plotting: bool
+    cmap_name: str
+    log_file: str
+    loglevel_file: str
+    loglevel_console: str
+    seed_file: str
+    flush: bool
+    front_only: bool
+    import_file: str
+    add_import_to_population: bool
+    rng_seed: int | str | None
+
+
+class TeamsModel(BaseModel):
+    """Configuration for teams."""
+
+    num_teams: int | None
+    identities: list[int | str]
+
+
+class FitnessModel(BaseModel):
+    """Configuration for fitness weights."""
+
+    weight_mean: float = 1.0
+    weight_variation: float = 1.0
+    weight_range: float = 1.0
+
+
+class TimeModel(BaseModel):
+    """Configuration for time format."""
+
+    format: int
+
+    @field_validator("format")
+    @classmethod
+    def check_format(cls, v: int) -> int:
+        """Validate that the time format is either 12 or 24."""
+        if v not in (12, 24):
+            msg = "Invalid time format. Must be 12 or 24."
+            raise ValueError(msg)
+        return v
+
+
+class LocationModel(BaseModel):
+    """Input model for a location type."""
+
+    name: str
+    count: int
+    sides: int
+
+
+class RoundModel(BaseModel):
+    """Input model for a tournament round."""
+
+    round_type: str
+    rounds_per_team: int
+    teams_per_round: int
+    start_time: str
+    duration_minutes: int
+    location: str
+    times: list[str]
+    stop_time: str | None
+
+
+class CrossoverModel(BaseModel):
+    """Configuration for crossover operators."""
+
+    crossover_types: list[CrossoverOp | str] = Field(default_factory=list)
+    crossover_ks: list[int] = Field(default_factory=list)
+
+
+class MutationModel(BaseModel):
+    """Configuration for mutation operators."""
+
+    mutation_types: list[MutationOp | str] = Field(default_factory=list)
+
+
+class GaParametersModel(BaseModel):
+    """Genetic Algorithm parameters."""
 
     population_size: int = Field(128, gt=1)
     generations: int = Field(256, gt=0)
@@ -23,6 +105,45 @@ class GaParameters(BaseModel):
     num_islands: int = Field(1, ge=1)
     migration_interval: int = Field(0, ge=0)
     migration_size: int = Field(0, ge=0)
+
+
+class OperatorModel(BaseModel):
+    """Container for operator configurations."""
+
+    crossover: CrossoverModel
+    mutation: MutationModel
+
+
+class GeneticModel(BaseModel):
+    """Configuration for the genetic algorithm."""
+
+    parameters: GaParametersModel
+    operator: OperatorModel
+
+
+class AppConfigModel(BaseModel):
+    """Root model for the entire application configuration from JSON."""
+
+    arguments: ArgumentModel
+    teams: TeamsModel
+    fitness: FitnessModel
+    time: TimeModel
+    locations: list[LocationModel]
+    rounds: list[RoundModel]
+    genetic: GeneticModel
+
+
+class GaParameters(BaseModel):
+    """Genetic Algorithm parameters with validation."""
+
+    population_size: int
+    generations: int
+    offspring_size: int
+    crossover_chance: float
+    mutation_chance: float
+    num_islands: int
+    migration_interval: int
+    migration_size: int
 
     def __str__(self) -> str:
         """Representation of GA parameters."""
@@ -42,15 +163,14 @@ class GaParameters(BaseModel):
 class OperatorConfig(BaseModel):
     """Configuration for genetic algorithm operators."""
 
-    crossover_types: tuple[CrossoverOp | str, ...]
-    crossover_ks: tuple[int, ...]
-    mutation_types: tuple[MutationOp | str, ...]
+    crossover: CrossoverModel
+    mutation: MutationModel
 
     def __str__(self) -> str:
         """Represent the OperatorConfig."""
-        crossovers_str = f"{'\n\t\t'.join(str(c) for c in self.crossover_types)}"
-        crossover_ks_str = f"{'\n\t\t'.join(str(k) for k in self.crossover_ks)}"
-        mutations_str = f"{'\n\t\t'.join(str(m) for m in self.mutation_types)}"
+        crossovers_str = f"{'\n\t\t'.join(str(c) for c in self.crossover.crossover_types)}"
+        crossover_ks_str = f"{'\n\t\t'.join(str(k) for k in self.crossover.crossover_ks)}"
+        mutations_str = f"{'\n\t\t'.join(str(m) for m in self.mutation.mutation_types)}"
         return (
             f"\n\tOperatorConfig:"
             f"\n\t  crossover_types:\n\t\t{crossovers_str}"
@@ -74,6 +194,10 @@ class TournamentRound(BaseModel):
     locations: list[Location]
     num_timeslots: int
     timeslots: list[TimeSlot]
+    slots_total: int
+    slots_required: int
+
+    model_config: ConfigDict = ConfigDict(arbitrary_types_allowed=True)
 
     def __str__(self) -> str:
         """Represent the TournamentRound."""
@@ -91,6 +215,8 @@ class TournamentRound(BaseModel):
             f"\n\t  locations        : {[str(location) for location in self.locations]}"
             f"\n\t  num_timeslots    : {self.num_timeslots}"
             f"\n\t  timeslots        : {[str(timeslot) for timeslot in self.timeslots]}"
+            f"\n\t  slots_total      : {self.slots_total}"
+            f"\n\t  slots_required   : {self.slots_required}"
         )
 
 
@@ -107,6 +233,8 @@ class TournamentConfig(BaseModel):
     total_slots_required: int
     unique_opponents_possible: bool
     weights: tuple[float, ...]
+
+    model_config: ConfigDict = ConfigDict(arbitrary_types_allowed=True)
 
     def __str__(self) -> str:
         """Represent the TournamentConfig."""

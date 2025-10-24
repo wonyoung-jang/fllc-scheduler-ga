@@ -93,7 +93,7 @@ class Island:
         created = 0
         while created < needed:
             s = self.builder.build()
-            if self.context.repairer(s):
+            if self.context.repairer.repair(s):
                 self.add_to_population(s)
                 created += 1
 
@@ -141,7 +141,7 @@ class Island:
             self.crossover_ratio["total"][c_str] += 1
             if self.context.checker(child) and child not in self.selected:
                 self.crossover_ratio["success"][c_str] += 1
-            if self.context.repairer(child):
+            if self.context.repairer.repair(child):
                 yield child
 
     def evolve(self) -> None:

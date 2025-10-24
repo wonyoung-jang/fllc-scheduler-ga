@@ -63,7 +63,7 @@ def build_crossovers(
         ),
     }
 
-    if not (crossover_types := operators.crossover_types):
+    if not (crossover_types := operators.crossover.crossover_types):
         logger.warning("No crossover types enabled in the configuration. Crossover will not occur.")
         return
 
@@ -72,7 +72,7 @@ def build_crossovers(
             msg = f"Unknown crossover type in config: {crossover_name}"
             raise ValueError(msg)
         elif crossover_name == CrossoverOp.K_POINT:
-            if crossover_ks := operators.crossover_ks:
+            if crossover_ks := operators.crossover.crossover_ks:
                 for k in crossover_ks:
                     if k <= 0:
                         msg = f"Invalid crossover k value: {k}. Must be greater than 0."

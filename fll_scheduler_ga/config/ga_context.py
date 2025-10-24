@@ -23,7 +23,6 @@ from ..operators.nsga3 import NSGA3
 from ..operators.repairer import Repairer
 from ..operators.selection import RandomSelect
 from .benchmark import FitnessBenchmark
-from .constants import FLUSH, FLUSH_BENCHMARKS, IMPORT_ADD_TO_POP, IMPORT_FILE, SEED_FILE
 
 if TYPE_CHECKING:
     from ..operators.crossover import Crossover
@@ -66,10 +65,10 @@ class GaContext:
             event_map=event_factory.as_mapping(),
         )
 
-        Schedule.set_teams_list(np.arange(tournament_config.num_teams, dtype=int))
-        Schedule.set_conflict_matrix(event_factory.build_conflict_matrix())
-        Schedule.set_event_properties(event_properties)
-        Schedule.set_event_map(event_factory.as_mapping())
+        Schedule.teams = np.arange(tournament_config.num_teams, dtype=int)
+        Schedule.conflict_matrix = event_factory.build_conflict_matrix()
+        Schedule.event_properties = event_properties
+        Schedule.event_map = event_factory.as_mapping()
 
         max_events_per_team = sum(r.rounds_per_team for r in tournament_config.rounds)
 
@@ -83,7 +82,7 @@ class GaContext:
             tournament_config,
             event_factory,
             event_properties,
-            flush_benchmarks=FLUSH_BENCHMARKS,
+            flush_benchmarks=app_config.arguments.flush_benchmarks,
         )
         evaluator = FitnessEvaluator(
             tournament_config,
@@ -93,17 +92,33 @@ class GaContext:
         )
         checker = HardConstraintChecker(tournament_config)
 
-        num_objectives = len(evaluator.objectives)
-        params = app_config.ga_params
+        ga_params = app_config.ga_params
+        n_total_pop = ga_params.population_size * ga_params.num_islands
+        n_objectives = len(evaluator.objectives)
         nsga3 = NSGA3(
             rng=rng,
-            n_objectives=num_objectives,
-            n_total_pop=params.population_size * params.num_islands,
+            n_objectives=n_objectives,
+            n_total_pop=n_total_pop,
         )
+
         selection = RandomSelect(rng)
         operators = app_config.operators
-        crossovers = tuple(build_crossovers(rng, operators, event_factory, event_properties))
-        mutations = tuple(build_mutations(rng, operators, event_factory, event_properties))
+        crossovers = tuple(
+            build_crossovers(
+                rng,
+                operators,
+                event_factory,
+                event_properties,
+            )
+        )
+        mutations = tuple(
+            build_mutations(
+                rng,
+                operators,
+                event_factory,
+                event_properties,
+            )
+        )
         builder = ScheduleBuilder(
             event_factory=event_factory,
             event_properties=event_properties,
@@ -137,35 +152,35 @@ class GaContext:
 
     def handle_seed_file(self) -> None:
         """Handle the seed file for the genetic algorithm."""
+        args = self.app_config.arguments
         config = self.app_config.tournament
-        path = SEED_FILE.resolve()
+        path = Path(args.seed_file).resolve()
 
-        if FLUSH and path.exists():
+        if args.flush and path.exists():
             path.unlink(missing_ok=True)
         path.touch(exist_ok=True)
 
-        if not IMPORT_FILE:
+        if not args.import_file:
             logger.debug("No import file specified, skipping import step.")
             return
 
-        schedule_csv_path = Path(IMPORT_FILE).resolve()
-        csv_import = CsvImporter(schedule_csv_path, config, self.event_factory, self.event_properties)
-        csv_schedule = csv_import.schedule
-        pop = np.array([csv_schedule.schedule], dtype=int)
+        import_path = Path(args.import_file).resolve()
+        csv_importer = CsvImporter(import_path, config, self.event_factory, self.event_properties)
+        imported_schedule_csv = csv_importer.schedule
+
+        pop = np.array([imported_schedule_csv.schedule], dtype=int)
 
         if fits := self.evaluator.evaluate_population(pop):
             sched_fits, team_fits = fits
-            csv_schedule.fitness = sched_fits[0]
-            csv_schedule.team_fitnesses = team_fits[0]
-            csv_import.schedule.fitness = csv_schedule.fitness
-            csv_import.schedule.team_fitnesses = csv_schedule.team_fitnesses
-            parent_dir = schedule_csv_path.parent
+            imported_schedule_csv.fitness = sched_fits[0]
+            imported_schedule_csv.team_fitnesses = team_fits[0]
+            parent_dir = import_path.parent
             parent_dir.mkdir(parents=True, exist_ok=True)
             report_path = parent_dir / "report.txt"
             summary_gen = ScheduleSummaryGenerator()
-            summary_gen.generate(csv_import.schedule, report_path)
+            summary_gen.generate(imported_schedule_csv, report_path)
 
-        if not IMPORT_ADD_TO_POP:
+        if not args.add_import_to_population:
             logger.debug("Not adding imported schedule to population.")
             return
 
@@ -179,8 +194,8 @@ class GaContext:
         except EOFError:
             logger.debug("Pickle file is empty")
 
-        if csv_import.schedule not in population:
-            population.append(csv_import.schedule)
+        if imported_schedule_csv not in population:
+            population.append(imported_schedule_csv)
 
         try:
             with path.open("wb") as f:
@@ -233,13 +248,13 @@ class GaContext:
 
     def check_location_time_overlaps(self) -> None:
         """Check if different round types are scheduled in the same locations at the same time."""
-        _ep = self.event_properties
+        ep = self.event_properties
         booked_slots = defaultdict(list)
         for e in self.event_factory.build_indices():
-            loc_str = _ep.loc_str[e]
-            loc_idx = _ep.loc_idx[e]
-            timeslot = _ep.timeslot[e]
-            roundtype = _ep.roundtype[e]
+            loc_str = ep.loc_str[e]
+            loc_idx = ep.loc_idx[e]
+            timeslot = ep.timeslot[e]
+            roundtype = ep.roundtype[e]
             for existing_ts, existing_rt in booked_slots.get(loc_idx, []):
                 if timeslot.overlaps(existing_ts):
                     msg = (

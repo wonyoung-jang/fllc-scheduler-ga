@@ -3,24 +3,36 @@
 from __future__ import annotations
 
 import itertools
-from configparser import ConfigParser, SectionProxy
+import json
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from logging import getLogger
 from math import ceil
-from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from ..data_model.location import Location
 from ..data_model.schedule import Schedule
 from ..data_model.time import TimeSlot
-from .constants import CONFIG_FILE, OPERATOR_CONFIG_OPTIONS, RANDOM_SEED_RANGE
-from .schemas import GaParameters, OperatorConfig, TournamentConfig, TournamentRound
+from .constants import CONFIG_FILE, RANDOM_SEED_RANGE
+from .schemas import (
+    AppConfigModel,
+    ArgumentModel,
+    FitnessModel,
+    GaParameters,
+    LocationModel,
+    OperatorConfig,
+    RoundModel,
+    TeamsModel,
+    TimeModel,
+    TournamentConfig,
+    TournamentRound,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+    from pathlib import Path
 
 logger = getLogger(__name__)
 
@@ -29,6 +41,7 @@ logger = getLogger(__name__)
 class AppConfig:
     """Configuration for the FLL Scheduler GA application."""
 
+    arguments: ArgumentModel
     tournament: TournamentConfig
     operators: OperatorConfig
     ga_params: GaParameters
@@ -40,69 +53,52 @@ class AppConfig:
         if path is None:
             path = CONFIG_FILE.resolve()
 
-        parser = AppConfigParser.build(path)
+        if not path.exists():
+            msg = f"Configuration file does not exist at: {path}"
+            raise FileNotFoundError(msg)
 
-        tournament_config = TournamentConfig(**parser.load_tournament_config())
+        with path.open(encoding="utf-8") as jf:
+            config_data = json.load(jf)
+
+        config_model = AppConfigModel.model_validate(config_data)
+        return cls.build_from_model(config_model)
+
+    @classmethod
+    def build_from_model(cls, config_model: AppConfigModel) -> AppConfig:
+        """Create and return the application configuration from a Pydantic model."""
+        tournament_config = cls.load_tournament_config(config_model)
+        operator_config = cls.load_operator_config(config_model)
+        ga_parameters = cls.load_ga_parameters(config_model)
+        rng = cls.load_rng(config_model)
+
         logger.debug("Initialized tournament configuration: %s", tournament_config)
-
-        operator_config = OperatorConfig(**parser.load_operator_config())
         logger.debug("Initialized operator configuration: %s", operator_config)
-
-        ga_parameters = GaParameters(**parser.load_ga_parameters())
         logger.debug("Initialized genetic algorithm parameters: %s", ga_parameters)
-
-        rng = parser.load_rng()
+        logger.debug("Initialized random number generator: %s.", rng.bit_generator.state["state"])
 
         return cls(
+            arguments=config_model.arguments,
             tournament=tournament_config,
             operators=operator_config,
             ga_params=ga_parameters,
             rng=rng,
         )
 
-
-@dataclass(slots=True)
-class AppConfigParser(ConfigParser):
-    """Parser for the application configuration."""
-
-    kwargs: dict[str, Any]
-
-    def __post_init__(self) -> None:
-        """Post-initialization processing."""
-        super(AppConfigParser, self).__init__(**self.kwargs)
-
     @classmethod
-    def build(cls, path: Path) -> AppConfigParser:
-        """Get a ConfigParser instance for the given config file path."""
-        if not Path(path).exists():
-            msg = f"Configuration file does not exist at: {path}"
-            raise FileNotFoundError(msg)
-
-        config_parser_options = {
-            "inline_comment_prefixes": ("#", ";"),
-        }
-        parser = cls(config_parser_options)
-        parser.read(path)
-        logger.debug("Configuration file loaded from %s", path)
-        return parser
-
-    def load_tournament_config(self) -> dict[str, Any]:
-        """Load and return the tournament configuration from the provided ConfigParser."""
-        identities = self.parse_teams_config()
+    def load_tournament_config(cls, model: AppConfigModel) -> TournamentConfig:
+        """Load and return the tournament configuration from the validated model."""
+        identities = cls.parse_teams_config(model.teams)
         num_teams = len(identities)
         team_ids = dict(enumerate(identities, start=1))
 
-        time_fmt = self.parse_time_config()
+        time_fmt = cls.parse_time_config(model.time)
         TimeSlot.time_fmt = time_fmt
 
-        locations = list(self.parse_location_config())
-        if not locations:
+        if not (locations := cls.parse_location_config(model.locations)):
             msg = "No locations defined in the configuration file."
             raise ValueError(msg)
-        logger.debug("Parsed %s locations from configuration.", locations)
 
-        rounds = list(self.parse_rounds_config(num_teams, time_fmt, locations))
-        if not rounds:
+        if not (rounds := cls.parse_rounds_config(model.rounds, num_teams, time_fmt, locations)):
             msg = "No rounds defined in the configuration file."
             raise ValueError(msg)
 
@@ -111,55 +107,43 @@ class AppConfigParser(ConfigParser):
         round_str_to_idx = {r.roundtype: r.roundtype_idx for r in rounds}
         round_idx_to_tpr = {r.roundtype_idx: r.teams_per_round for r in rounds}
 
-        total_slots_possible = sum(len(r.timeslots) * len(r.locations) for r in rounds)
-        total_slots_required = sum(num_teams * r.rounds_per_team for r in rounds)
+        total_slots_possible = sum(r.slots_total for r in rounds)
+        total_slots_required = sum(r.slots_required for r in rounds)
         unique_opponents_possible = 1 <= max(r.rounds_per_team for r in rounds) <= num_teams - 1
 
-        roundreqs_array_flat = np.array([roundreqs[r.roundtype] for r in rounds], dtype=int)
-        roundreqs_array = np.tile(roundreqs_array_flat, (num_teams, 1))
+        roundreqs_array = np.tile(list(roundreqs.values()), (num_teams, 1))
 
-        Schedule.set_team_identities(team_ids)
-        Schedule.set_total_num_events(total_slots_possible)
-        Schedule.set_team_roundreqs(roundreqs_array)
+        Schedule.team_identities = team_ids
+        Schedule.total_num_events = total_slots_possible
+        Schedule.team_roundreqs_array = roundreqs_array
 
-        weights = self.parse_fitness_config()
+        weights = cls.parse_fitness_config(model.fitness)
 
-        return {
-            "num_teams": num_teams,
-            "time_fmt": time_fmt,
-            "rounds": rounds,
-            "roundreqs": roundreqs,
-            "round_str_to_idx": round_str_to_idx,
-            "round_idx_to_tpr": round_idx_to_tpr,
-            "total_slots_possible": total_slots_possible,
-            "total_slots_required": total_slots_required,
-            "unique_opponents_possible": unique_opponents_possible,
-            "weights": weights,
-        }
+        return TournamentConfig(
+            num_teams=num_teams,
+            time_fmt=time_fmt,
+            rounds=rounds,
+            roundreqs=roundreqs,
+            round_str_to_idx=round_str_to_idx,
+            round_idx_to_tpr=round_idx_to_tpr,
+            total_slots_possible=total_slots_possible,
+            total_slots_required=total_slots_required,
+            unique_opponents_possible=unique_opponents_possible,
+            weights=weights,
+        )
 
-    def _get_section(self, section: str) -> SectionProxy:
-        """Get a section from the config as a dictionary."""
-        if not self.has_section(section):
-            msg = f"No '{section}' section found in the configuration file."
-            raise KeyError(msg)
-        return self[section]
-
-    def _iter_sections_prefix(self, prefix: str) -> Iterator[SectionProxy]:
-        """Iterate over sections with a specific prefix."""
-        yield from (self._get_section(s) for s in self.sections() if s.startswith(prefix))
-
-    def _parse_time(self, raw: str, fmt: str) -> datetime:
+    @classmethod
+    def _parse_time(cls, raw: str, fmt: str) -> datetime:
         return datetime.strptime(raw.strip(), fmt).replace(tzinfo=UTC)
 
-    def parse_teams_config(self) -> list[int | str]:
+    @classmethod
+    def parse_teams_config(cls, t_model: TeamsModel) -> list[int | str]:
         """Parse and return a list of team IDs from the configuration."""
-        sec = self._get_section("teams")
-        num_teams = sec.getint("num_teams", fallback=0)
-        identities_raw = sec.get("identities", fallback="").strip()
-        identities = [i.strip() for i in identities_raw.split(",") if i.strip()] if identities_raw else []
+        num_teams = t_model.num_teams or 0
+        identities = t_model.identities or []
 
         if num_teams and not identities:
-            identities = [str(i) for i in range(1, num_teams + 1)]
+            return [str(i) for i in range(1, num_teams + 1)]
 
         if not num_teams and identities:
             num_teams = len(identities)
@@ -170,187 +154,129 @@ class AppConfigParser(ConfigParser):
 
         return identities
 
-    def parse_time_config(self) -> str:
+    @classmethod
+    def parse_time_config(cls, time_cfg: TimeModel) -> str:
         """Parse and return the time format configuration."""
-        sec = self._get_section("time")
-        fmt_val = sec.getint("format", fallback=None)
-        fmt_map = {
-            12: "%I:%M %p",
-            24: "%H:%M",
-        }
-        if fmt_val not in fmt_map:
-            msg = "Invalid time format. Must be 12 or 24."
-            raise ValueError(msg)
-        return fmt_map[fmt_val]
+        fmt_map = {12: "%I:%M %p", 24: "%H:%M"}
+        return fmt_map[time_cfg.format]
 
-    def parse_rounds_config(self, num_teams: int, time_fmt: str, locations: set[Location]) -> Iterator[TournamentRound]:
-        """Parse and return a list of TournamentRound objects from the configuration.
-
-        Args:
-            num_teams (int): The total number of teams in the tournament.
-            time_fmt (str): The time format string.
-            locations (set[Location]): A set of Location objects.
-
-        Yields:
-            TournamentRound: TournamentRound objects parsed from the configuration.
-
-        """
+    @classmethod
+    def parse_rounds_config(
+        cls,
+        round_models: list[RoundModel],
+        num_teams: int,
+        time_fmt: str,
+        locations: list[Location],
+    ) -> list[TournamentRound]:
+        """Parse and return a list of TournamentRound objects from the configuration."""
+        tournament_rounds = []
         timeslot_idx_iter = itertools.count()
-        for rti, sec in enumerate(self._iter_sections_prefix("round")):
-            self.validate_round_section(sec)
-            roundtype = sec.get("round_type")
-            rounds_per_team = sec.getint("rounds_per_team")
-            teams_per_round = sec.getint("teams_per_round")
-            duration_minutes = timedelta(minutes=sec.getint("duration_minutes"))
+        for rti, sec in enumerate(round_models):
+            duration_minutes = timedelta(minutes=sec.duration_minutes)
+            start_time_dt = cls._parse_time(sec.start_time, time_fmt)
+            times_dt = [cls._parse_time(t, time_fmt) for t in sec.times] if sec.times else []
 
-            if start_time := sec.get("start_time"):
-                start_time = self._parse_time(start_time, time_fmt)
+            locations_in_sec = [loc for loc in locations if loc.locationtype == sec.location]
+            locations_in_sec.sort(key=lambda loc: loc.idx)
 
-            if stop_time := sec.get("stop_time"):
-                stop_time = self._parse_time(stop_time, time_fmt)
-
-            if times := sec.get("times", fallback=[]):
-                times = [self._parse_time(t, time_fmt) for t in times.split(",")]
-                start_time = times[0]
-
-            location_type = sec.get("location")
-            locations_in_sec = sorted(
-                (loc for loc in locations if loc.locationtype == location_type),
-                key=lambda loc: (loc.locationtype, loc.name, loc.side),
-            )
-
-            num_timeslots = self.calc_num_timeslots(times, locations_in_sec, num_teams, rounds_per_team)
+            num_timeslots = cls.calc_num_timeslots(times_dt, locations_in_sec, num_teams, sec.rounds_per_team)
             timeslots: list[TimeSlot] = []
-            for start, stop in self.init_timeslots(times, duration_minutes, num_timeslots, start_time):
-                timeslots.append(
-                    TimeSlot(
-                        idx=next(timeslot_idx_iter),
-                        start=start,
-                        stop=stop,
-                    )
-                )
+            for start, stop in cls.init_timeslots(times_dt, duration_minutes, num_timeslots, start_time_dt):
+                timeslots.append(TimeSlot(idx=next(timeslot_idx_iter), start=start, stop=stop))
 
-            start_time = self.init_start_time(times, timeslots)
-            stop_time = self.init_stop_time(times, timeslots, duration_minutes)
-            if not times:
-                times = [ts.start for ts in timeslots]
+            final_start_time = cls.init_start_time(times_dt, timeslots)
+            final_stop_time = cls.init_stop_time(times_dt, timeslots, duration_minutes)
+            if not times_dt:
+                times_dt = [ts.start for ts in timeslots]
 
-            tournament_round_params = {
-                "roundtype": roundtype,
-                "roundtype_idx": rti,
-                "rounds_per_team": rounds_per_team,
-                "teams_per_round": teams_per_round,
-                "times": times,
-                "start_time": start_time,
-                "stop_time": stop_time,
-                "duration_minutes": duration_minutes,
-                "location_type": location_type,
-                "locations": locations_in_sec,
-                "num_timeslots": num_timeslots,
-                "timeslots": timeslots,
-            }
-            tournament_round = TournamentRound(**tournament_round_params)
+            slots_total = len(timeslots) * len(locations_in_sec)
+            slots_required = num_teams * sec.rounds_per_team
+
+            tournament_round = TournamentRound(
+                roundtype=sec.round_type,
+                roundtype_idx=rti,
+                rounds_per_team=sec.rounds_per_team,
+                teams_per_round=sec.teams_per_round,
+                times=times_dt,
+                start_time=final_start_time,
+                stop_time=final_stop_time,
+                duration_minutes=duration_minutes,
+                location_type=sec.location,
+                locations=locations_in_sec,
+                num_timeslots=num_timeslots,
+                timeslots=timeslots,
+                slots_total=slots_total,
+                slots_required=slots_required,
+            )
             logger.debug("Parsed tournament round: %s", tournament_round)
-            yield tournament_round
+            tournament_rounds.append(tournament_round)
+        return tournament_rounds
 
+    @classmethod
     def calc_num_timeslots(
-        self, times: list[datetime], locations: list[Location], num_teams: int, rounds_per_team: int
+        cls, times: list[datetime], locations: list[Location], num_teams: int, rounds_per_team: int
     ) -> int:
         """Calculate the number of timeslots needed for a round."""
         if times:
-            num_timeslots = len(times)
-        elif not locations:
-            num_timeslots = 0
-        else:
-            num_timeslots = ceil((num_teams * rounds_per_team) / len(locations))
-        return num_timeslots
+            return len(times)
+        if not locations:
+            return 0
+        return ceil((num_teams * rounds_per_team) / len(locations))
 
+    @classmethod
     def init_timeslots(
-        self, times: list[datetime], dur: timedelta, numslots: int, start: datetime
+        cls, times: list[datetime], dur: timedelta, numslots: int, start: datetime
     ) -> Iterator[tuple[datetime, datetime]]:
         """Initialize the timeslots for the round."""
-        start = times[0] if times else start
+        current_start = times[0] if times else start
         for i in range(1, numslots + 1):
             if not times:
-                stop = start + dur
+                stop = current_start + dur
             elif i < len(times):
                 stop = times[i]
-            elif i == len(times):
-                stop += dur
+            else:  # Last slot in a list of times needs a duration
+                stop = current_start + dur
 
-            yield (start, stop)
-            start = stop
+            yield (current_start, stop)
+            current_start = stop
 
-    def init_start_time(self, times: list[datetime], timeslots: list[TimeSlot]) -> datetime:
+    @classmethod
+    def init_start_time(cls, times: list[datetime], timeslots: list[TimeSlot]) -> datetime:
         """Initialize the start time if not provided."""
-        if times:
-            return times[0]
-        return timeslots[0].start
+        return times[0] if times else timeslots[0].start
 
-    def init_stop_time(self, times: list[datetime], timeslots: list[TimeSlot], duration: timedelta) -> datetime:
+    @classmethod
+    def init_stop_time(cls, times: list[datetime], timeslots: list[TimeSlot], duration: timedelta) -> datetime:
         """Initialize the stop time if not provided."""
-        if times:
-            return times[-1] + duration
-        return timeslots[-1].stop
+        return (times[-1] + duration) if times else timeslots[-1].stop
 
-    def parse_location_config(self) -> Iterator[Location]:
+    @classmethod
+    def parse_location_config(cls, location_models: list[LocationModel]) -> list[Location]:
         """Parse and return a list of Location objects from the configuration."""
+        locations = []
         location_idx_iter = itertools.count()
-        for sec in self._iter_sections_prefix("location"):
-            self.validate_location_section(sec)
-            locationtype = sec.get("name")
-            sides = sec.getint("sides")
-            teams_per_round = sides
-            count = sec.getint("count")
-            for identifier in range(1, count + 1):
-                for j in range(1, sides + 1):
-                    side = -1 if sides == 1 else j
-                    yield Location(
-                        idx=next(location_idx_iter),
-                        locationtype=locationtype,
-                        name=identifier,
-                        side=side,
-                        teams_per_round=teams_per_round,
+        for sec in location_models:
+            for identifier in range(1, sec.count + 1):
+                for j in range(1, sec.sides + 1):
+                    side = -1 if sec.sides == 1 else j
+                    locations.append(
+                        Location(
+                            idx=next(location_idx_iter),
+                            locationtype=sec.name,
+                            name=identifier,
+                            side=side,
+                            teams_per_round=sec.sides,
+                        )
                     )
+        return locations
 
-    def validate_location_section(self, section: SectionProxy) -> None:
-        """Validate location sections in config file."""
-        required = (
-            "name",
-            "sides",
-            "count",
-        )
-        for option in required:
-            if not section.get(option):
-                msg = f"No '{option}' option found in section '{section.name}'."
-                raise KeyError(msg)
-
-    def validate_round_section(self, section: SectionProxy) -> None:
-        """Validate round sections in config file."""
-        required = (
-            "round_type",
-            "rounds_per_team",
-            "teams_per_round",
-            "duration_minutes",
-            "location",
-        )
-        for option in required:
-            if not section.get(option):
-                msg = f"No '{option}' option found in section '{section.name}'."
-                raise KeyError(msg)
-
-        if not section.get("start_time") and not section.get("times"):
-            msg = f"Either 'start_time' or 'times' must be specified in section '{section.name}'."
-            raise KeyError(msg)
-
-    def parse_fitness_config(self) -> tuple[float, ...]:
+    @classmethod
+    def parse_fitness_config(cls, fitness_model: FitnessModel) -> tuple[float, ...]:
         """Parse and return fitness-related configuration values."""
-        sec = self._get_section("fitness")
-        self.validate_fitness_section(sec)
         weights = (
-            max(0, sec.getfloat("weight_mean", fallback=1)),
-            max(0, sec.getfloat("weight_variation", fallback=1)),
-            max(0, sec.getfloat("weight_range", fallback=1)),
+            max(0, fitness_model.weight_mean),
+            max(0, fitness_model.weight_variation),
+            max(0, fitness_model.weight_range),
         )
         total = sum(weights)
         if total == 0:
@@ -358,63 +284,41 @@ class AppConfigParser(ConfigParser):
             return (1 / 3, 1 / 3, 1 / 3)
         return tuple(w / total for w in weights)
 
-    def validate_fitness_section(self, section: SectionProxy) -> None:
-        """Validate fitness sections in config file."""
-        required = (
-            "weight_mean",
-            "weight_variation",
-            "weight_range",
+    @classmethod
+    def load_operator_config(cls, model: AppConfigModel) -> OperatorConfig:
+        """Parse and return the operator configuration from the validated model."""
+        op_model = model.genetic.operator
+        return OperatorConfig(
+            crossover=op_model.crossover,
+            mutation=op_model.mutation,
         )
-        for option in required:
-            if not section.get(option):
-                msg = f"No '{option}' option found in section '{section.name}'."
-                raise KeyError(msg)
 
-    def load_operator_config(self) -> dict[str, Any]:
-        """Parse and return the operator configuration from the provided ConfigParser."""
-        params = {}
-        for (section, opt, fallback, dtype), default in OPERATOR_CONFIG_OPTIONS.items():
-            sec = f"genetic.operator.{section}"
-            if self.has_option(sec, opt):
-                params[opt] = self.parse_operator(sec, opt, fallback, dtype)
-            else:
-                params[opt] = default
-                logger.warning("%s not found in config. Using defaults: %s", opt, default)
-        return params
+    @classmethod
+    def load_ga_parameters(cls, model: AppConfigModel) -> GaParameters:
+        """Build a GaParameters from the validated model."""
+        pa_model = model.genetic.parameters
+        return GaParameters(
+            population_size=pa_model.population_size,
+            generations=pa_model.generations,
+            offspring_size=pa_model.offspring_size,
+            crossover_chance=pa_model.crossover_chance,
+            mutation_chance=pa_model.mutation_chance,
+            num_islands=pa_model.num_islands,
+            migration_interval=pa_model.migration_interval,
+            migration_size=pa_model.migration_size,
+        )
 
-    def parse_operator(self, section: str, option: str, fallback: str, dtype: str = "") -> tuple[str]:
-        """Parse a list of operator types from the configuration."""
-        raw = self.get(section, option, fallback=fallback)
-        items = (i.strip() for i in raw.split(",") if i.strip())
-        if dtype == "int":
-            return tuple(int(i) for i in items)
-        return tuple(items)
-
-    def load_ga_parameters(self) -> dict[str, Any]:
-        """Build a GaParameters, overriding defaults with any provided CLI args."""
-        sec = self._get_section("genetic")
-        return {
-            "population_size": sec.getint("population_size"),
-            "generations": sec.getint("generations"),
-            "offspring_size": sec.getint("offspring_size"),
-            "crossover_chance": sec.getfloat("crossover_chance"),
-            "mutation_chance": sec.getfloat("mutation_chance"),
-            "num_islands": sec.getint("num_islands"),
-            "migration_interval": sec.getint("migration_interval"),
-            "migration_size": sec.getint("migration_size"),
-        }
-
-    def load_rng(self) -> np.random.Generator:
+    @classmethod
+    def load_rng(cls, model: AppConfigModel) -> np.random.Generator:
         """Set up the random number generator."""
-        sec = self._get_section("genetic")
         seed_val = (
-            sec["rng_seed"].strip() if sec.get("rng_seed") else np.random.default_rng().integers(*RANDOM_SEED_RANGE)
+            model.arguments.rng_seed
+            if model.arguments.rng_seed is not None
+            else np.random.default_rng().integers(*RANDOM_SEED_RANGE)
         )
-
         try:
             rng_seed = int(seed_val)
         except (TypeError, ValueError):
             rng_seed = abs(hash(seed_val)) % (RANDOM_SEED_RANGE[1] + 1)
 
-        logger.debug("Using RNG seed: %d", rng_seed)
         return np.random.default_rng(rng_seed)

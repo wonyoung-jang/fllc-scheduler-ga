@@ -97,7 +97,7 @@ def build_mutations(
         ),
     }
 
-    if not (mutation_types := operators.mutation_types):
+    if not (mutation_types := operators.mutation.mutation_types):
         logger.warning("No mutation types enabled in the configuration. Mutation will not occur.")
         return
 

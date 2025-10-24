@@ -6,18 +6,16 @@ import pickle
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from logging import getLogger
+from pathlib import Path
 from time import time
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from ..config.constants import FRONT_ONLY, SEED_FILE
 from ..io.observers import LoggingObserver, TqdmObserver
 from .island import Island
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from ..config.ga_context import GaContext
     from ..config.schemas import GaParameters, TournamentConfig
     from ..data_model.schedule import Schedule
@@ -88,8 +86,8 @@ class GA:
             context=context,
             rng=context.app_config.rng,
             observers=(TqdmObserver(), LoggingObserver()),
-            seed_file=SEED_FILE,
-            save_front_only=FRONT_ONLY,
+            seed_file=Path(context.app_config.arguments.seed_file),
+            save_front_only=context.app_config.arguments.front_only,
         )
 
     def __len__(self) -> int:
