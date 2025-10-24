@@ -11,15 +11,14 @@ FITNESS_PENALTY = 0.5
 RANDOM_SEED_RANGE = (1, 2**32 - 1)
 EPSILON = 1e-12
 
-LOG_FILE = Path("fll_scheduler_ga.log")
-LOG_LEVEL_CONSOLE = "INFO"
-LOG_LEVEL_FILE = "DEBUG"
-
 CONFIG_FILE = Path("fll_scheduler_ga/config.json")
 
 # For Importer
 TIME_HEADER = "Time"
 RE_HHMM = re.compile(r"\d{2}:\d{2}")
+
+# For API
+API_OUTPUT_DIR = Path("fllc_api_outputs")
 
 
 class SelectionOp(StrEnum):

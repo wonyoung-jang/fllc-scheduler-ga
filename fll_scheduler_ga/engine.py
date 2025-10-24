@@ -17,6 +17,31 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def init_logging(app_config: AppConfig) -> None:
+    """Initialize logging for the application."""
+    args = app_config.arguments
+    file = logging.FileHandler(
+        filename=Path(args.log_file),
+        mode="w",
+        encoding="utf-8",
+        delay=True,
+    )
+    file.setLevel(args.loglevel_file)
+    file.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s[%(module)s] %(message)s"))
+
+    console = logging.StreamHandler()
+    console.setLevel(args.loglevel_console)
+    console.setFormatter(logging.Formatter("%(levelname)s[%(module)s] %(message)s"))
+
+    root = logging.getLogger()
+    root.setLevel(logging.DEBUG)
+    root.addHandler(file)
+    root.addHandler(console)
+
+    root.debug("Start: Tournament Scheduler.")
+    app_config.log_creation_info()
+
+
 def run_ga_instance(app_config: AppConfig) -> None:
     """Initialize and run a complete GA instance from an AppConfig object.
 

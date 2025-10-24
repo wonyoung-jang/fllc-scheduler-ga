@@ -70,12 +70,6 @@ class AppConfig:
         operator_config = cls.load_operator_config(config_model)
         ga_parameters = cls.load_ga_parameters(config_model)
         rng = cls.load_rng(config_model)
-
-        logger.debug("Initialized tournament configuration: %s", tournament_config)
-        logger.debug("Initialized operator configuration: %s", operator_config)
-        logger.debug("Initialized genetic algorithm parameters: %s", ga_parameters)
-        logger.debug("Initialized random number generator: %s.", rng.bit_generator.state["state"])
-
         return cls(
             arguments=config_model.arguments,
             tournament=tournament_config,
@@ -208,7 +202,6 @@ class AppConfig:
                 slots_total=slots_total,
                 slots_required=slots_required,
             )
-            logger.debug("Parsed tournament round: %s", tournament_round)
             tournament_rounds.append(tournament_round)
         return tournament_rounds
 
@@ -280,7 +273,6 @@ class AppConfig:
         )
         total = sum(weights)
         if total == 0:
-            logger.warning("All fitness weights are zero. Using equal weights.")
             return (1 / 3, 1 / 3, 1 / 3)
         return tuple(w / total for w in weights)
 
@@ -322,3 +314,16 @@ class AppConfig:
             rng_seed = abs(hash(seed_val)) % (RANDOM_SEED_RANGE[1] + 1)
 
         return np.random.default_rng(rng_seed)
+
+    def log_creation_info(self) -> None:
+        """Log information about the application configuration creation."""
+        logger.debug("AppConfig created successfully.")
+        logger.debug("Initialized argument configuration: %s", self.arguments)
+        for r in self.tournament.rounds:
+            logger.debug("Initialized tournament round: %s", r)
+        if sum(self.tournament.weights) == 0:
+            logger.debug("All fitness weights are zero; using equal weights.")
+        logger.debug("Initialized tournament configuration: %s", self.tournament)
+        logger.debug("Initialized operator configuration: %s", self.operators)
+        logger.debug("Initialized genetic algorithm parameters: %s", self.ga_params)
+        logger.debug("Initialized random number generator: %s.", self.rng.bit_generator.state["state"])

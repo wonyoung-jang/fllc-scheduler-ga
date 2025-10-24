@@ -3,7 +3,7 @@
 import logging
 from datetime import datetime, timedelta
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from ..data_model.location import Location
 from ..data_model.time import TimeSlot
@@ -168,14 +168,11 @@ class OperatorConfig(BaseModel):
 
     def __str__(self) -> str:
         """Represent the OperatorConfig."""
-        crossovers_str = f"{'\n\t\t'.join(str(c) for c in self.crossover.crossover_types)}"
-        crossover_ks_str = f"{'\n\t\t'.join(str(k) for k in self.crossover.crossover_ks)}"
-        mutations_str = f"{'\n\t\t'.join(str(m) for m in self.mutation.mutation_types)}"
         return (
             f"\n\tOperatorConfig:"
-            f"\n\t  crossover_types:\n\t\t{crossovers_str}"
-            f"\n\t  crossover_ks:\n\t\t{crossover_ks_str}"
-            f"\n\t  mutation_types:\n\t\t{mutations_str}"
+            f"\n\t  crossover_types:\n\t\t{'\n\t\t'.join(str(c) for c in self.crossover.crossover_types)}"
+            f"\n\t  crossover_ks:\n\t\t{'\n\t\t'.join(str(k) for k in self.crossover.crossover_ks)}"
+            f"\n\t  mutation_types:\n\t\t{'\n\t\t'.join(str(m) for m in self.mutation.mutation_types)}"
         )
 
 
@@ -196,8 +193,6 @@ class TournamentRound(BaseModel):
     timeslots: list[TimeSlot]
     slots_total: int
     slots_required: int
-
-    model_config: ConfigDict = ConfigDict(arbitrary_types_allowed=True)
 
     def __str__(self) -> str:
         """Represent the TournamentRound."""
@@ -233,8 +228,6 @@ class TournamentConfig(BaseModel):
     total_slots_required: int
     unique_opponents_possible: bool
     weights: tuple[float, ...]
-
-    model_config: ConfigDict = ConfigDict(arbitrary_types_allowed=True)
 
     def __str__(self) -> str:
         """Represent the TournamentConfig."""

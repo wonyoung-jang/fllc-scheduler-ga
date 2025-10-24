@@ -82,7 +82,14 @@ class Schedule:
     def __hash__(self) -> int:
         """Hash is based on the frozenset of (event_id, team_id) pairs."""
         if self._hash is None:
-            self._hash = id(self)
+            # self._hash = id(self)
+            # team_events = defaultdict(set)
+            # for event_id, team_id in enumerate(self.schedule):
+            #     if team_id >= 0:
+            #         team_events[team_id].add(event_id)
+
+            # self._hash = hash(frozenset(frozenset(events) for events in team_events.values()))
+            self._hash = hash(frozenset(frozenset(events) for events in self.team_events.values()))
         return self._hash
 
     def swap_assignment(self, team: int, old_event: int, new_event: int) -> None:
