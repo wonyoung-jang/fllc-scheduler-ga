@@ -19,12 +19,12 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from .constants import EPSILON, FITNESS_PENALTY
+from ..config.constants import EPSILON, FITNESS_PENALTY
 
 if TYPE_CHECKING:
+    from ..config.schemas import TournamentConfig
     from ..data_model.event import EventFactory, EventProperties
     from ..data_model.time import TimeSlot
-    from .schemas import TournamentConfig
 
 logger = getLogger(__name__)
 
@@ -124,25 +124,13 @@ class FitnessBenchmark:
         )
 
         # Canonical representation of requirements
-        req_tuple = tuple(
-            sorted(self.config.roundreqs.items()),
-        )
+        req_tuple = tuple(sorted(self.config.roundreqs.items()))
 
         # Include the penalty in the hash
-        config_representation = (
-            round_tuples,
-            req_tuple,
-            self.penalty,
-            self.config.num_teams,
-        )
+        config_representation = (round_tuples, req_tuple, self.penalty, self.config.num_teams)
 
         # Using hashlib over built-in hash for stability
-        return int(
-            hashlib.sha256(
-                str(config_representation).encode(),
-            ).hexdigest(),
-            16,
-        )
+        return int(hashlib.sha256(str(config_representation).encode()).hexdigest(), 16)
 
     def _run_location_and_opponent_benchmarks(self) -> None:
         """Run the location consistency and opponent variety fitness benchmarking."""
@@ -219,7 +207,7 @@ class FitnessBenchmark:
 
         # Filter, score, and store valid schedules
         logger.debug("Generating and filtering all possible team schedules")
-        timeslot_objs = np.array([ts for r in self.config.rounds for ts in r.timeslots], dtype=object)
+        timeslot_objs = np.array(self.config.all_timeslots, dtype=object)
         valid_scored_schedules = []
         total_combinations = 0
         self.timeslots = {}
