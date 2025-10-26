@@ -51,7 +51,7 @@ class ScheduleExporter(ABC):
 
             rt = self.event_properties.roundtype[event]
             grouped.setdefault(rt, {})
-            grouped[rt][event] = normalized_teams.get(team)
+            grouped[rt][event] = normalized_teams[team]
         return grouped
 
     def _build_grid_data(

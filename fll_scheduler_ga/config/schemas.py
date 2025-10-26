@@ -24,6 +24,7 @@ class GaParametersModel(BaseModel):
     num_islands: int = Field(1, ge=1)
     migration_interval: int = Field(0, ge=0)
     migration_size: int = Field(0, ge=0)
+    rng_seed: int | str | None
 
 
 class CrossoverModel(BaseModel):
@@ -53,16 +54,14 @@ class GeneticModel(BaseModel):
     operator: OperatorModel
 
 
-class ArgumentModel(BaseModel):
+class RuntimeModel(BaseModel):
     """Configuration for command-line arguments and runtime flags."""
 
-    flush_benchmarks: bool
-    output_dir: str
-    seed_file: str
-    flush: bool
-    import_file: str
     add_import_to_population: bool
-    rng_seed: int | str | None
+    flush: bool
+    flush_benchmarks: bool
+    import_file: str
+    seed_file: str
 
 
 class LoggingModel(BaseModel):
@@ -76,6 +75,7 @@ class LoggingModel(BaseModel):
 class ExportModel(BaseModel):
     """Configuration for export options."""
 
+    output_dir: str
     summary_reports: bool
     schedules_csv: bool
     schedules_html: bool
@@ -144,7 +144,7 @@ class AppConfigModel(BaseModel):
     """Root model for the entire application configuration from JSON."""
 
     genetic: GeneticModel
-    arguments: ArgumentModel
+    runtime: RuntimeModel
     exports: ExportModel
     logging: LoggingModel
     teams: TeamsModel

@@ -63,9 +63,8 @@ def run_ga_instance(app_config: AppConfig) -> None:
     except Exception:
         logger.exception("An unhandled error occurred during the GA run.")
     finally:
-        args = app_config.arguments
         exports = app_config.exports
-        output_dir = Path(args.output_dir)
+        output_dir = Path(exports.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
         ga_export.generate_summary(

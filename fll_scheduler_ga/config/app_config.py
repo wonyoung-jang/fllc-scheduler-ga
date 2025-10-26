@@ -18,7 +18,6 @@ from ..data_model.time import TimeSlot
 from .constants import CONFIG_FILE, RANDOM_SEED_RANGE
 from .schemas import (
     AppConfigModel,
-    ArgumentModel,
     ExportModel,
     FitnessModel,
     GaParameters,
@@ -26,6 +25,7 @@ from .schemas import (
     LoggingModel,
     OperatorConfig,
     RoundModel,
+    RuntimeModel,
     TeamsModel,
     TimeModel,
     TournamentConfig,
@@ -43,7 +43,7 @@ logger = getLogger(__name__)
 class AppConfig:
     """Configuration for the FLL Scheduler GA application."""
 
-    arguments: ArgumentModel
+    runtime: RuntimeModel
     exports: ExportModel
     logging: LoggingModel
     tournament: TournamentConfig
@@ -75,7 +75,7 @@ class AppConfig:
         ga_parameters = cls.load_ga_parameters(config_model)
         rng = cls.load_rng(config_model)
         return cls(
-            arguments=config_model.arguments,
+            runtime=config_model.runtime,
             exports=config_model.exports,
             logging=config_model.logging,
             tournament=tournament_config,
@@ -312,21 +312,21 @@ class AppConfig:
     def load_rng(cls, model: AppConfigModel) -> np.random.Generator:
         """Set up the random number generator."""
         seed_val = (
-            model.arguments.rng_seed
-            if model.arguments.rng_seed is not None
+            model.genetic.parameters.rng_seed
+            if model.genetic.parameters.rng_seed is not None
             else np.random.default_rng().integers(*RANDOM_SEED_RANGE)
         )
         try:
-            rng_seed = int(seed_val)
+            seed = int(seed_val)
         except (TypeError, ValueError):
-            rng_seed = abs(hash(seed_val)) % (RANDOM_SEED_RANGE[1] + 1)
+            seed = abs(hash(seed_val)) % (RANDOM_SEED_RANGE[1] + 1)
 
-        return np.random.default_rng(rng_seed)
+        return np.random.default_rng(seed)
 
     def log_creation_info(self) -> None:
         """Log information about the application configuration creation."""
         logger.debug("AppConfig created successfully.")
-        logger.debug("Initialized argument configuration: %s", self.arguments)
+        logger.debug("Initialized argument configuration: %s", self.runtime)
         for r in self.tournament.rounds:
             logger.debug("Initialized tournament round: %s", r)
         if sum(self.tournament.weights) == 0:

@@ -79,7 +79,7 @@ class GaContext:
             tournament_config,
             event_factory,
             event_properties,
-            flush_benchmarks=app_config.arguments.flush_benchmarks,
+            flush_benchmarks=app_config.runtime.flush_benchmarks,
         )
         evaluator = FitnessEvaluator(
             tournament_config,
@@ -147,7 +147,7 @@ class GaContext:
 
     def handle_seed_file(self) -> None:
         """Handle the seed file for the genetic algorithm."""
-        args = self.app_config.arguments
+        args = self.app_config.runtime
         config = self.app_config.tournament
         path = Path(args.seed_file).resolve()
 

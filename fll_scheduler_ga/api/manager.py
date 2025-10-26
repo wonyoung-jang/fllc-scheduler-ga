@@ -30,9 +30,9 @@ def _ga_process_wrapper(config_model: AppConfigModel) -> None:
     try:
         app_config = AppConfig.build_from_model(config_model)
         init_logging(app_config)
-        logger.info("Starting GA process for output: %s", app_config.arguments.output_dir)
+        logger.info("Starting GA process for output: %s", app_config.exports.output_dir)
         run_ga_instance(app_config)
-        logger.info("GA process finished for output: %s", app_config.arguments.output_dir)
+        logger.info("GA process finished for output: %s", app_config.exports.output_dir)
     except Exception:
         logger.exception("GA process failed unexpectedly.")
         raise

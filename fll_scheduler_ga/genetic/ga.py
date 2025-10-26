@@ -86,7 +86,7 @@ class GA:
             context=context,
             rng=context.app_config.rng,
             observers=(TqdmObserver(), LoggingObserver()),
-            seed_file=Path(context.app_config.arguments.seed_file),
+            seed_file=Path(context.app_config.runtime.seed_file),
             save_front_only=context.app_config.exports.front_only,
         )
 

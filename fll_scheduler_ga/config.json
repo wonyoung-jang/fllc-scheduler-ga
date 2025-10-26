@@ -2,13 +2,14 @@
   "genetic": {
     "parameters": {
       "population_size": 8,
-      "generations": 20000,
-      "offspring_size": 1,
+      "generations": 2000,
+      "offspring_size": 2,
       "crossover_chance": 0.7,
       "mutation_chance": 0.4,
       "num_islands": 8,
       "migration_interval": 20,
-      "migration_size": 1
+      "migration_size": 1,
+      "rng_seed": null
     },
     "operator": {
       "crossover": {
@@ -30,16 +31,15 @@
       }
     }
   },
-  "arguments": {
-    "flush_benchmarks": false,
-    "output_dir": "fllc_schedule_outputs",
-    "seed_file": "fll_scheduler_ga.pkl",
-    "flush": false,
-    "import_file": "",
+  "runtime": {
     "add_import_to_population": true,
-    "rng_seed": null
+    "flush": false,
+    "flush_benchmarks": false,
+    "import_file": "",
+    "seed_file": "fll_scheduler_ga.pkl"
   },
   "exports": {
+    "output_dir": "fllc_schedule_outputs",
     "summary_reports": true,
     "schedules_csv": true,
     "schedules_html": true,

@@ -82,13 +82,6 @@ class Schedule:
     def __hash__(self) -> int:
         """Hash is based on the frozenset of (event_id, team_id) pairs."""
         if self._hash is None:
-            # self._hash = id(self)
-            # team_events = defaultdict(set)
-            # for event_id, team_id in enumerate(self.schedule):
-            #     if team_id >= 0:
-            #         team_events[team_id].add(event_id)
-
-            # self._hash = hash(frozenset(frozenset(events) for events in team_events.values()))
             self._hash = hash(frozenset(frozenset(events) for events in self.team_events.values()))
         return self._hash
 
@@ -170,16 +163,17 @@ class Schedule:
         """Return the indices of unscheduled events."""
         return np.nonzero(self.schedule == -1)[0]
 
-    def normalized_teams(self) -> dict[int, int | str]:
+    def normalized_teams(self) -> np.ndarray:
         """Normalize the schedule by reassigning team identities."""
-        normalized_teams = {}
+        normalized = [None] * len(Schedule.teams)
         count = 1
         for team in self.schedule:
-            if team in normalized_teams:
+            if team in normalized:
                 continue
 
-            normalized_teams[team] = self.team_identities.get(count, count)
+            normalized[team] = self.team_identities.get(count, count)
             if count == len(self.teams):
                 break
+
             count += 1
-        return normalized_teams
+        return np.array(normalized)
