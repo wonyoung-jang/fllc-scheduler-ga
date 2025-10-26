@@ -19,9 +19,11 @@ from .constants import CONFIG_FILE, RANDOM_SEED_RANGE
 from .schemas import (
     AppConfigModel,
     ArgumentModel,
+    ExportModel,
     FitnessModel,
     GaParameters,
     LocationModel,
+    LoggingModel,
     OperatorConfig,
     RoundModel,
     TeamsModel,
@@ -42,6 +44,8 @@ class AppConfig:
     """Configuration for the FLL Scheduler GA application."""
 
     arguments: ArgumentModel
+    exports: ExportModel
+    logging: LoggingModel
     tournament: TournamentConfig
     operators: OperatorConfig
     ga_params: GaParameters
@@ -72,6 +76,8 @@ class AppConfig:
         rng = cls.load_rng(config_model)
         return cls(
             arguments=config_model.arguments,
+            exports=config_model.exports,
+            logging=config_model.logging,
             tournament=tournament_config,
             operators=operator_config,
             ga_params=ga_parameters,
@@ -113,6 +119,14 @@ class AppConfig:
 
         weights = cls.parse_fitness_config(model.fitness)
 
+        all_locations = itertools.chain.from_iterable(r.locations for r in rounds)
+        all_locations = sorted(all_locations, key=lambda loc: loc.idx)
+
+        all_timeslots = itertools.chain.from_iterable(r.timeslots for r in rounds)
+        all_timeslots = sorted(all_timeslots, key=lambda ts: ts.idx)
+
+        max_events_per_team = sum(r.rounds_per_team for r in rounds)
+
         return TournamentConfig(
             num_teams=num_teams,
             time_fmt=time_fmt,
@@ -124,6 +138,9 @@ class AppConfig:
             total_slots_required=total_slots_required,
             unique_opponents_possible=unique_opponents_possible,
             weights=weights,
+            all_locations=all_locations,
+            all_timeslots=all_timeslots,
+            max_events_per_team=max_events_per_team,
         )
 
     @classmethod
@@ -178,8 +195,8 @@ class AppConfig:
             for start, stop in cls.init_timeslots(times_dt, duration_minutes, num_timeslots, start_time_dt):
                 timeslots.append(TimeSlot(idx=next(timeslot_idx_iter), start=start, stop=stop))
 
-            final_start_time = cls.init_start_time(times_dt, timeslots)
-            final_stop_time = cls.init_stop_time(times_dt, timeslots, duration_minutes)
+            final_start_time = times_dt[0] if times_dt else timeslots[0].start
+            final_stop_time = (times_dt[-1] + duration_minutes) if times_dt else timeslots[-1].stop
             if not times_dt:
                 times_dt = [ts.start for ts in timeslots]
 
@@ -187,7 +204,7 @@ class AppConfig:
             slots_required = num_teams * sec.rounds_per_team
 
             tournament_round = TournamentRound(
-                roundtype=sec.round_type,
+                roundtype=sec.roundtype,
                 roundtype_idx=rti,
                 rounds_per_team=sec.rounds_per_team,
                 teams_per_round=sec.teams_per_round,
@@ -234,16 +251,6 @@ class AppConfig:
             current_start = stop
 
     @classmethod
-    def init_start_time(cls, times: list[datetime], timeslots: list[TimeSlot]) -> datetime:
-        """Initialize the start time if not provided."""
-        return times[0] if times else timeslots[0].start
-
-    @classmethod
-    def init_stop_time(cls, times: list[datetime], timeslots: list[TimeSlot], duration: timedelta) -> datetime:
-        """Initialize the stop time if not provided."""
-        return (times[-1] + duration) if times else timeslots[-1].stop
-
-    @classmethod
     def parse_location_config(cls, location_models: list[LocationModel]) -> list[Location]:
         """Parse and return a list of Location objects from the configuration."""
         locations = []
@@ -281,8 +288,9 @@ class AppConfig:
         """Parse and return the operator configuration from the validated model."""
         op_model = model.genetic.operator
         return OperatorConfig(
-            crossover=op_model.crossover,
-            mutation=op_model.mutation,
+            crossover_types=op_model.crossover.types,
+            crossover_ks=op_model.crossover.k_vals,
+            mutation_types=op_model.mutation.types,
         )
 
     @classmethod
@@ -296,8 +304,8 @@ class AppConfig:
             crossover_chance=pa_model.crossover_chance,
             mutation_chance=pa_model.mutation_chance,
             num_islands=pa_model.num_islands,
-            migration_interval=pa_model.migration_interval,
-            migration_size=pa_model.migration_size,
+            migrate_interval=pa_model.migration_interval,
+            migrate_size=pa_model.migration_size,
         )
 
     @classmethod

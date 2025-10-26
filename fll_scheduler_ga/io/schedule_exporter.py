@@ -176,7 +176,10 @@ class HtmlScheduleExporter(ScheduleExporter):
                 yield f"<tr><td>{ts.start.strftime(self.time_fmt)}</td>"
                 for loc in locations:
                     team = grid_lookup.get((ts, loc))
-                    yield f"<td>{team}</td>"
+                    if team is None:
+                        yield "<td></td>"
+                    else:
+                        yield f"<td>{team}</td>"
                 yield "</tr>"
             yield "</tbody></table>"
 

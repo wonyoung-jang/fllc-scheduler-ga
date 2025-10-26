@@ -16,12 +16,12 @@ from ..io.observers import LoggingObserver, TqdmObserver
 from .island import Island
 
 if TYPE_CHECKING:
-    from ..config.ga_context import GaContext
     from ..config.schemas import GaParameters, TournamentConfig
     from ..data_model.schedule import Schedule
     from ..io.observers import GaObserver
     from ..operators.crossover import Crossover
     from ..operators.mutation import Mutation
+    from .ga_context import GaContext
 
 logger = getLogger(__name__)
 
@@ -54,8 +54,8 @@ class GA:
         self.ga_params = self.context.app_config.ga_params
         self.generations_array = np.arange(1, self.ga_params.generations + 1)
         self.migrate_generations: np.ndarray = np.zeros(self.ga_params.generations + 1, dtype=int)
-        if self.ga_params.num_islands > 1 and self.ga_params.migration_size > 0:
-            self.migrate_generations[:: self.ga_params.migration_interval] = 1
+        if self.ga_params.num_islands > 1 and self.ga_params.migrate_size > 0:
+            self.migrate_generations[:: self.ga_params.migrate_interval] = 1
 
         self.fitness_history = np.full(
             (self.ga_params.generations, len(self.context.evaluator.objectives)),
@@ -87,7 +87,7 @@ class GA:
             rng=context.app_config.rng,
             observers=(TqdmObserver(), LoggingObserver()),
             seed_file=Path(context.app_config.arguments.seed_file),
-            save_front_only=context.app_config.arguments.front_only,
+            save_front_only=context.app_config.exports.front_only,
         )
 
     def __len__(self) -> int:

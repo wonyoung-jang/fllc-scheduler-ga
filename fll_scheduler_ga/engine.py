@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import fll_scheduler_ga.io.ga_exporter as ga_export
-from fll_scheduler_ga.config.ga_context import GaContext
 from fll_scheduler_ga.genetic.ga import GA
+from fll_scheduler_ga.genetic.ga_context import GaContext
 
 if TYPE_CHECKING:
     from .config.app_config import AppConfig
@@ -19,18 +19,18 @@ logger = logging.getLogger(__name__)
 
 def init_logging(app_config: AppConfig) -> None:
     """Initialize logging for the application."""
-    args = app_config.arguments
+    logging_model = app_config.logging
     file = logging.FileHandler(
-        filename=Path(args.log_file),
+        filename=Path(logging_model.log_file),
         mode="w",
         encoding="utf-8",
         delay=True,
     )
-    file.setLevel(args.loglevel_file)
+    file.setLevel(logging_model.loglevel_file)
     file.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s[%(module)s] %(message)s"))
 
     console = logging.StreamHandler()
-    console.setLevel(args.loglevel_console)
+    console.setLevel(logging_model.loglevel_console)
     console.setFormatter(logging.Formatter("%(levelname)s[%(module)s] %(message)s"))
 
     root = logging.getLogger()
@@ -64,14 +64,13 @@ def run_ga_instance(app_config: AppConfig) -> None:
         logger.exception("An unhandled error occurred during the GA run.")
     finally:
         args = app_config.arguments
+        exports = app_config.exports
         output_dir = Path(args.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
         ga_export.generate_summary(
             ga=ga,
             output_dir=output_dir,
-            cmap_name=args.cmap_name,
-            front_only=args.front_only,
-            no_plotting=args.no_plotting,
+            export_model=exports,
         )
     logger.debug("FLLC Scheduler run finished for output: %s", output_dir)

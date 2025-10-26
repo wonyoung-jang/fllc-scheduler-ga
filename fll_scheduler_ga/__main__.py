@@ -16,7 +16,6 @@ def main_cli() -> None:
     try:
         app_config = AppConfig.build(CONFIG_FILE)
         init_logging(app_config)
-
         run_ga_instance(app_config)
     except Exception:
         logger.exception("GA process failed unexpectedly.")

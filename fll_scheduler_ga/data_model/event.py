@@ -164,8 +164,7 @@ class EventFactory:
         """Create and return all Events for the tournament."""
         if not self._list:
             event_idx_iter = itertools.count()
-            rounds_sorted_by_start = sorted(self.config.rounds, key=lambda x: x.start_time)
-            self._list.extend(e for r in rounds_sorted_by_start for e in self.create_events(r, event_idx_iter))
+            self._list.extend(e for r in self.config.rounds for e in self.create_events(r, event_idx_iter))
         return self._list
 
     def build_indices(self) -> np.ndarray:

@@ -58,10 +58,3 @@ class FitnessObjective(StrEnum):
     BREAK_TIME = "BreakTime"
     LOCATION_CONSISTENCY = "LocationConsistency"
     OPPONENT_VARIETY = "OpponentVariety"
-
-
-OPERATOR_CONFIG_OPTIONS = {
-    ("crossover", "crossover_types", "", ""): tuple(c.value for c in CrossoverOp),
-    ("crossover", "crossover_ks", "", "int"): (1, 2, 4, 8),
-    ("mutation", "mutation_types", "", ""): tuple(m.value for m in MutationOp),
-}

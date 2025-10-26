@@ -15,21 +15,28 @@ from .manager import RunManager
 from .models import ResultsResponse, RunStatusEnum, ScheduleResponse, StatusResponse
 
 app = FastAPI(
-    title="FLL Scheduler GA API",
+    title="FLL Tournament Scheduler",
     description="An API to generate tournament schedules using a genetic algorithm.",
     version="1.0.0",
 )
 
-static_dir = Path(__file__).parent / "static"
-app.mount("/static", StaticFiles(directory=static_dir), name="static")
+STATIC_DIR = Path(__file__).parent / "static"
+app.mount(
+    path="/static",
+    app=StaticFiles(directory=STATIC_DIR),
+    name="static",
+)
 
-run_manager = RunManager(base_output_dir=API_OUTPUT_DIR)
+API_OUTPUT_DIR.mkdir(exist_ok=True)
+run_manager = RunManager(
+    base_output_dir=API_OUTPUT_DIR,
+)
 
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root() -> str:
     """Serve the main HTML user interface."""
-    index_path = static_dir / "index.html"
+    index_path = STATIC_DIR / "index.html"
     if not index_path.exists():
         raise HTTPException(status_code=500, detail="index.html not found")
     return index_path.read_text()
@@ -56,15 +63,26 @@ def get_run_status(run_id: str) -> StatusResponse:
     return StatusResponse(run_id=run_id, status=status)
 
 
+@app.get("/results")
+def get_all_results() -> dict[str, list[str]]:
+    """Get a list of all completed runs and their result files."""
+    results = {}
+    for run_id, run_info in run_manager.runs.items():
+        status = run_info["status"]
+        if status == RunStatusEnum.COMPLETED:
+            output_dir = run_info["output_dir"]
+            files = [str(p.relative_to(output_dir)) for p in output_dir.rglob("*") if p.is_file()]
+            results[run_id] = files
+    return results
+
+
 @app.get("/results/{run_id}", response_model=ResultsResponse)
 def get_run_results(run_id: str) -> ResultsResponse:
     """Get the list of result files for a completed run."""
     result_info = run_manager.get_results(run_id)
     status = result_info["status"]
-
     if status == RunStatusEnum.NOT_FOUND:
         raise HTTPException(status_code=404, detail="Run ID not found.")
-
     return ResultsResponse(run_id=run_id, status=status, files=result_info["files"])
 
 

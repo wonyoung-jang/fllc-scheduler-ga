@@ -12,12 +12,12 @@ if TYPE_CHECKING:
     from collections import Counter
     from collections.abc import Iterator
 
-    from ..config.ga_context import GaContext
     from ..config.schemas import GaParameters
     from ..data_model.schedule import Schedule
     from ..operators.crossover import Crossover
     from ..operators.mutation import Mutation
     from .builder import ScheduleBuilder
+    from .ga_context import GaContext
 
 logger = getLogger(__name__)
 
@@ -69,21 +69,14 @@ class Island:
         """Get the Pareto front for each island in the population."""
         return [s for s in self.selected if s.rank == 0]
 
-    def add_to_population(self, schedule: Schedule, *, recurse: bool = False) -> bool:
+    def add_to_population(self, schedule: Schedule) -> bool:
         """Add a schedule to a specific island's population if it's not a duplicate."""
-        if not recurse:
-            self.offspring_ratio["total"] += 1
-
+        self.offspring_ratio["total"] += 1
         if schedule not in self.selected:
             self.selected.append(schedule)
             self.offspring_ratio["success"] += 1
             return True
-
-        if not self.context.mutations:
-            return False
-
-        self.mutate_schedule(schedule)
-        return self.add_to_population(schedule, recurse=True)
+        return False
 
     def build_n_schedules(self, needed: int) -> None:
         """Build a number of schedules."""
@@ -93,8 +86,7 @@ class Island:
         created = 0
         while created < needed:
             s = self.builder.build()
-            if self.context.repairer.repair(s):
-                self.add_to_population(s)
+            if self.context.repairer.repair(s) and self.add_to_population(s):
                 created += 1
 
     def initialize(self) -> None:
@@ -139,7 +131,7 @@ class Island:
         c_str = str(c)
         for child in c.cross(parents):
             self.crossover_ratio["total"][c_str] += 1
-            if self.context.checker(child) and child not in self.selected:
+            if self.context.checker.check(child):
                 self.crossover_ratio["success"][c_str] += 1
             if self.context.repairer.repair(child):
                 yield child
@@ -149,17 +141,19 @@ class Island:
         if not (pop := self.selected):
             return
 
-        created = 0
-        while created < self.ga_params.offspring_size:
+        created_cycle = 0
+        while created_cycle < self.ga_params.offspring_size:
             parents_indices = self.context.selection.select(len(pop), k=2)
             parents = (pop[i] for i in parents_indices)
             c_roll = self.ga_params.crossover_chance > self.rng.random()
             for child in self.crossover_schedule(parents, c_roll=c_roll):
                 m_roll = self.ga_params.mutation_chance > self.rng.random()
                 self.mutate_schedule(child, m_roll=m_roll)
-                self.add_to_population(child)
-                created += 1
-                if created >= self.ga_params.offspring_size:
+                if self.context.checker.check(child):
+                    self.add_to_population(child)
+
+                created_cycle += 1
+                if created_cycle >= self.ga_params.offspring_size:
                     break
 
         if not self.selected:
@@ -185,7 +179,7 @@ class Island:
 
     def give_migrants(self) -> Iterator[Schedule]:
         """Randomly yield migrants from population."""
-        for _ in range(self.ga_params.migration_size):
+        for _ in range(self.ga_params.migrate_size):
             i = self.rng.integers(0, len(self.selected))
             yield self.selected.pop(i)
 

@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from logging import getLogger
 from typing import TYPE_CHECKING, Any
 
+from ..fitness.fitness import HardConstraintChecker
+
 if TYPE_CHECKING:
     import numpy as np
 
@@ -25,12 +27,12 @@ class Repairer:
     config: TournamentConfig
     event_factory: EventFactory
     event_properties: EventProperties
-    rt_teams_needed: dict[int, int] = field(init=False, repr=False)
+    checker: HardConstraintChecker = None
     repair_map: dict[int, Any] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
-        self.rt_teams_needed = {rc.roundtype_idx: rc.teams_per_round for rc in self.config.rounds}
+        self.checker = HardConstraintChecker(self.config)
         self.repair_map = {
             1: self.repair_singles,
             2: self.repair_matches,
@@ -55,9 +57,6 @@ class Repairer:
         events_by_rt_tpr: dict[tuple[str, int], list[int]],
     ) -> bool:
         """Recursively repair the schedule by attempting to assign events to teams."""
-        if len(schedule) == self.config.total_slots_required:
-            return True
-
         assign_map = self.repair_map
         for key, teams_for_rt in teams_by_rt_tpr.items():
             _, tpr = key
@@ -81,41 +80,41 @@ class Repairer:
             if teams_by_rt_tpr[key]:  # noqa: PLR1733
                 break
 
-        if len(schedule) != self.config.total_slots_required:
-            event_indices = schedule.scheduled_events()
-            event = self.rng.choice(event_indices)
-            e_rt_idx = self.event_properties.roundtype_idx[event]
+        if len(schedule) == self.config.total_slots_required:
+            return True
 
-            ek = (e_rt_idx, self.rt_teams_needed[e_rt_idx])
+        event_indices = schedule.scheduled_events()
+        event = self.rng.choice(event_indices)
+        e_rt_idx = self.event_properties.roundtype_idx[event]
 
-            e1, e2 = event, None
-            # if event.paired is not None:
-            event_paired = self.event_properties.paired_idx[event]
-            if event_paired != -1:
-                if self.event_properties.loc_side[event] == 1:
-                    e1, e2 = event, event_paired
-                elif self.event_properties.loc_side[event] == 2:
-                    e1, e2 = event_paired, event
+        ek = (e_rt_idx, self.config.round_idx_to_tpr[e_rt_idx])
 
-            events_by_rt_tpr[ek].append(e1)
+        e1, e2 = event, None
+        event_paired = self.event_properties.paired_idx[event]
+        if event_paired != -1:
+            if self.event_properties.loc_side[event] == 1:
+                e1, e2 = event, event_paired
+            elif self.event_properties.loc_side[event] == 2:
+                e1, e2 = event_paired, event
 
-            t1 = schedule[e1]
-            teams_by_rt_tpr[ek].append(t1)
-            schedule.unassign(t1, e1)
+        events_by_rt_tpr[ek].append(e1)
 
-            if e2 is not None:
-                t2 = schedule[e2]
-                teams_by_rt_tpr[ek].append(t2)
-                schedule.unassign(t2, e2)
+        t1 = schedule[e1]
+        teams_by_rt_tpr[ek].append(t1)
+        schedule.unassign(t1, e1)
 
-            return self.recursive_repair(schedule, teams_by_rt_tpr, events_by_rt_tpr)
-        return True
+        if e2 is not None:
+            t2 = schedule[e2]
+            teams_by_rt_tpr[ek].append(t2)
+            schedule.unassign(t2, e2)
+
+        return self.recursive_repair(schedule, teams_by_rt_tpr, events_by_rt_tpr)
 
     def get_rt_tpr_maps(
         self, schedule: Schedule
     ) -> tuple[dict[tuple[str, int], list[int]], dict[tuple[str, int], list[int]]]:
         """Get the round type to team/player maps for the current schedule."""
-        rt_tpr_config = self.rt_teams_needed
+        rt_tpr_config = self.config.round_idx_to_tpr
 
         teams_by_rt_tpr: dict[tuple[str, int], list[int]] = defaultdict(list)
         for t, roundreqs in enumerate(schedule.team_rounds):

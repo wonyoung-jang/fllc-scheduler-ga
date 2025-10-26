@@ -1,6 +1,7 @@
 """Pydantic models for application configuration."""
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from pydantic import BaseModel, Field, field_validator
@@ -12,22 +13,80 @@ from .constants import CrossoverOp, MutationOp
 logger = logging.getLogger(__name__)
 
 
+class GaParametersModel(BaseModel):
+    """Genetic Algorithm parameters."""
+
+    population_size: int = Field(128, gt=1)
+    generations: int = Field(256, gt=0)
+    offspring_size: int = Field(64, ge=0)
+    crossover_chance: float = Field(0.6, ge=0.0, le=1.0)
+    mutation_chance: float = Field(0.2, ge=0.0, le=1.0)
+    num_islands: int = Field(1, ge=1)
+    migration_interval: int = Field(0, ge=0)
+    migration_size: int = Field(0, ge=0)
+
+
+class CrossoverModel(BaseModel):
+    """Configuration for crossover operators."""
+
+    types: list[CrossoverOp | str] = Field(default_factory=list)
+    k_vals: list[int] = Field(default_factory=list)
+
+
+class MutationModel(BaseModel):
+    """Configuration for mutation operators."""
+
+    types: list[MutationOp | str] = Field(default_factory=list)
+
+
+class OperatorModel(BaseModel):
+    """Container for operator configurations."""
+
+    crossover: CrossoverModel
+    mutation: MutationModel
+
+
+class GeneticModel(BaseModel):
+    """Configuration for the genetic algorithm."""
+
+    parameters: GaParametersModel
+    operator: OperatorModel
+
+
 class ArgumentModel(BaseModel):
     """Configuration for command-line arguments and runtime flags."""
 
     flush_benchmarks: bool
     output_dir: str
-    no_plotting: bool
-    cmap_name: str
-    log_file: str
-    loglevel_file: str
-    loglevel_console: str
     seed_file: str
     flush: bool
-    front_only: bool
     import_file: str
     add_import_to_population: bool
     rng_seed: int | str | None
+
+
+class LoggingModel(BaseModel):
+    """Configuration for logging."""
+
+    log_file: str
+    loglevel_file: str
+    loglevel_console: str
+
+
+class ExportModel(BaseModel):
+    """Configuration for export options."""
+
+    summary_reports: bool
+    schedules_csv: bool
+    schedules_html: bool
+    schedules_team_csv: bool
+    pareto_summary: bool
+    plot_fitness: bool
+    plot_parallel: bool
+    plot_scatter: bool
+    front_only: bool
+    no_plotting: bool
+    cmap_name: str
 
 
 class TeamsModel(BaseModel):
@@ -71,70 +130,33 @@ class LocationModel(BaseModel):
 class RoundModel(BaseModel):
     """Input model for a tournament round."""
 
-    round_type: str
+    roundtype: str
+    location: str
     rounds_per_team: int
     teams_per_round: int
     start_time: str
-    duration_minutes: int
-    location: str
-    times: list[str]
     stop_time: str | None
-
-
-class CrossoverModel(BaseModel):
-    """Configuration for crossover operators."""
-
-    crossover_types: list[CrossoverOp | str] = Field(default_factory=list)
-    crossover_ks: list[int] = Field(default_factory=list)
-
-
-class MutationModel(BaseModel):
-    """Configuration for mutation operators."""
-
-    mutation_types: list[MutationOp | str] = Field(default_factory=list)
-
-
-class GaParametersModel(BaseModel):
-    """Genetic Algorithm parameters."""
-
-    population_size: int = Field(128, gt=1)
-    generations: int = Field(256, gt=0)
-    offspring_size: int = Field(64, ge=0)
-    crossover_chance: float = Field(0.6, ge=0.0, le=1.0)
-    mutation_chance: float = Field(0.2, ge=0.0, le=1.0)
-    num_islands: int = Field(1, ge=1)
-    migration_interval: int = Field(0, ge=0)
-    migration_size: int = Field(0, ge=0)
-
-
-class OperatorModel(BaseModel):
-    """Container for operator configurations."""
-
-    crossover: CrossoverModel
-    mutation: MutationModel
-
-
-class GeneticModel(BaseModel):
-    """Configuration for the genetic algorithm."""
-
-    parameters: GaParametersModel
-    operator: OperatorModel
+    times: list[str]
+    duration_minutes: int
 
 
 class AppConfigModel(BaseModel):
     """Root model for the entire application configuration from JSON."""
 
+    genetic: GeneticModel
     arguments: ArgumentModel
+    exports: ExportModel
+    logging: LoggingModel
     teams: TeamsModel
     fitness: FitnessModel
     time: TimeModel
     locations: list[LocationModel]
     rounds: list[RoundModel]
-    genetic: GeneticModel
 
 
-class GaParameters(BaseModel):
-    """Genetic Algorithm parameters with validation."""
+@dataclass(slots=True)
+class GaParameters:
+    """Genetic Algorithm parameters."""
 
     population_size: int
     generations: int
@@ -142,8 +164,8 @@ class GaParameters(BaseModel):
     crossover_chance: float
     mutation_chance: float
     num_islands: int
-    migration_interval: int
-    migration_size: int
+    migrate_interval: int
+    migrate_size: int
 
     def __str__(self) -> str:
         """Representation of GA parameters."""
@@ -155,28 +177,31 @@ class GaParameters(BaseModel):
             f"\n\t  crossover_chance   : {self.crossover_chance:.2f}"
             f"\n\t  mutation_chance    : {self.mutation_chance:.2f}"
             f"\n\t  num_islands        : {self.num_islands}"
-            f"\n\t  migration_interval : {self.migration_interval}"
-            f"\n\t  migration_size     : {self.migration_size}"
+            f"\n\t  migrate_interval   : {self.migrate_interval}"
+            f"\n\t  migrate_size       : {self.migrate_size}"
         )
 
 
-class OperatorConfig(BaseModel):
-    """Configuration for genetic algorithm operators."""
+@dataclass(slots=True)
+class OperatorConfig:
+    """Genetic Algorithm operators."""
 
-    crossover: CrossoverModel
-    mutation: MutationModel
+    crossover_types: list[CrossoverOp | str]
+    crossover_ks: list[int]
+    mutation_types: list[MutationOp | str]
 
     def __str__(self) -> str:
         """Represent the OperatorConfig."""
         return (
             f"\n\tOperatorConfig:"
-            f"\n\t  crossover_types:\n\t\t{'\n\t\t'.join(str(c) for c in self.crossover.crossover_types)}"
-            f"\n\t  crossover_ks:\n\t\t{'\n\t\t'.join(str(k) for k in self.crossover.crossover_ks)}"
-            f"\n\t  mutation_types:\n\t\t{'\n\t\t'.join(str(m) for m in self.mutation.mutation_types)}"
+            f"\n\t  crossover_types:\n\t\t{'\n\t\t'.join(str(c) for c in self.crossover_types)}"
+            f"\n\t  crossover_ks:\n\t\t{'\n\t\t'.join(str(k) for k in self.crossover_ks)}"
+            f"\n\t  mutation_types:\n\t\t{'\n\t\t'.join(str(m) for m in self.mutation_types)}"
         )
 
 
-class TournamentRound(BaseModel):
+@dataclass(slots=True)
+class TournamentRound:
     """Representation of a round in the FLL tournament."""
 
     roundtype: str
@@ -215,7 +240,8 @@ class TournamentRound(BaseModel):
         )
 
 
-class TournamentConfig(BaseModel):
+@dataclass(slots=True)
+class TournamentConfig:
     """Configuration for the tournament."""
 
     num_teams: int
@@ -228,6 +254,9 @@ class TournamentConfig(BaseModel):
     total_slots_required: int
     unique_opponents_possible: bool
     weights: tuple[float, ...]
+    all_locations: list[Location]
+    all_timeslots: list[TimeSlot]
+    max_events_per_team: int
 
     def __str__(self) -> str:
         """Represent the TournamentConfig."""
@@ -243,8 +272,7 @@ class TournamentConfig(BaseModel):
             f"\n    total_slots_required      : {self.total_slots_required}"
             f"\n    unique_opponents_possible : {self.unique_opponents_possible}"
             f"\n    weights                   : {self.weights}"
+            f"\n    all_locations             : {[str(loc) for loc in self.all_locations]}"
+            f"\n    all_timeslots             : {[str(ts) for ts in self.all_timeslots]}"
+            f"\n    max_events_per_team       : {self.max_events_per_team}"
         )
-
-
-TournamentRound.model_rebuild()
-TournamentConfig.model_rebuild()

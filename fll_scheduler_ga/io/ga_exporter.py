@@ -16,6 +16,7 @@ from .schedule_exporter import CsvScheduleExporter, HtmlScheduleExporter
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from ..config.schemas import ExportModel
     from ..data_model.event import EventProperties
     from ..data_model.schedule import Schedule
     from ..genetic.ga import GA
@@ -23,20 +24,24 @@ if TYPE_CHECKING:
 logger = getLogger(__name__)
 
 
-def generate_summary(ga: GA, output_dir: Path, cmap_name: str, *, front_only: bool, no_plotting: bool) -> None:
+def generate_summary(
+    ga: GA,
+    output_dir: Path,
+    export_model: ExportModel,
+) -> None:
     """Run the fll-scheduler-ga application and generate summary reports."""
     subdirs = OutputDirManager(output_dir).subdirs
     total_pop = ga.total_population
-    if not no_plotting and total_pop:
+    if not export_model.no_plotting and total_pop:
         Plot(
             ga=ga,
             save_dir=output_dir,
-            cmap_name=cmap_name,
+            cmap_name=export_model.cmap_name,
             objectives=list(FitnessObjective),
             ref_points=ga.context.nsga3.ref_points,
         ).plot()
 
-    schedules = ga.pareto_front() if front_only else total_pop
+    schedules = ga.pareto_front() if export_model.front_only else total_pop
     schedules.sort(key=lambda s: (s.rank, -sum(s.fitness)))
 
     time_fmt = ga.context.app_config.tournament.time_fmt
@@ -44,8 +49,9 @@ def generate_summary(ga: GA, output_dir: Path, cmap_name: str, *, front_only: bo
     export_manager = ExportManager(schedules, subdirs, time_fmt, event_properties, ga)
     export_manager.export_all()
 
-    pareto_summary_gen = ParetoSummaryGenerator()
-    pareto_summary_gen.generate(total_pop, output_dir / "pareto_summary.csv")
+    if export_model.pareto_summary:
+        pareto_summary_gen = ParetoSummaryGenerator()
+        pareto_summary_gen.generate(total_pop, output_dir / "pareto_summary.csv")
 
 
 @dataclass(slots=True)
@@ -124,6 +130,7 @@ class ScheduleSummaryGenerator:
                 slots = (s for s in schedule.__slots__ if not s.startswith(("_", "team", "schedule", "fitness")))
                 for slot in slots:
                     f.write(f"{slot}: {getattr(schedule, slot)}\n")
+                f.write(f"Length: {len(schedule)}\n")
 
                 f.write("\n")
                 f.write("Fitness:\n")

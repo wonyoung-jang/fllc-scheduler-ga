@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from multiprocessing import Process
 from typing import TYPE_CHECKING, Any
@@ -19,20 +20,16 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _ga_process_wrapper(config_model_dict: dict) -> None:
+def _ga_process_wrapper(config_model: AppConfigModel) -> None:
     """Target function to run the GA in a separate process.
 
     Args:
-        config_model_dict (dict): A dictionary representation of the AppConfigModel.
+        config_model (AppConfigModel): The AppConfigModel instance.
 
     """
     try:
-        from fll_scheduler_ga.config.schemas import AppConfigModel  # noqa: PLC0415
-
-        config_model = AppConfigModel.model_validate(config_model_dict)
         app_config = AppConfig.build_from_model(config_model)
         init_logging(app_config)
-
         logger.info("Starting GA process for output: %s", app_config.arguments.output_dir)
         run_ga_instance(app_config)
         logger.info("GA process finished for output: %s", app_config.arguments.output_dir)
@@ -41,14 +38,12 @@ def _ga_process_wrapper(config_model_dict: dict) -> None:
         raise
 
 
+@dataclass(slots=True)
 class RunManager:
     """Manages the lifecycle of multiple GA scheduling runs."""
 
-    def __init__(self, base_output_dir: Path) -> None:
-        """Initialize the RunManager."""
-        self.base_output_dir = base_output_dir
-        self.base_output_dir.mkdir(exist_ok=True)
-        self.runs: dict[str, dict[str, Any]] = {}
+    base_output_dir: Path
+    runs: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def start_run(self, config_model: AppConfigModel) -> str:
         """Start a new GA run in a background process."""
@@ -57,8 +52,7 @@ class RunManager:
         run_output_dir.mkdir()
 
         config_model.arguments.output_dir = str(run_output_dir)
-        config_dict = config_model.model_dump()
-        process = Process(target=_ga_process_wrapper, args=(config_dict,))
+        process = Process(target=_ga_process_wrapper, args=(config_model,))
         process.start()
 
         self.runs[run_id] = {

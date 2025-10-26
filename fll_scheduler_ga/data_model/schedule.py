@@ -121,7 +121,7 @@ class Schedule:
 
     def any_rounds_needed(self) -> bool:
         """Check if any team still needs rounds."""
-        return np.any(self.team_rounds.sum(axis=1) > 0)
+        return self.team_rounds.sum() > 0
 
     def conflicts(self, team: int, new_event: int, *, ignore: int | None = None) -> bool:
         """Check if adding a new event would cause a time conflict.
