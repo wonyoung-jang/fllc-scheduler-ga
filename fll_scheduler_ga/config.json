@@ -1,20 +1,20 @@
 {
   "genetic": {
     "parameters": {
+      "generations": 500,
       "population_size": 8,
-      "generations": 2000,
       "offspring_size": 2,
       "crossover_chance": 0.7,
       "mutation_chance": 0.4,
       "num_islands": 8,
-      "migration_interval": 20,
+      "migration_interval": 50,
       "migration_size": 1,
       "rng_seed": null
     },
     "operator": {
       "crossover": {
         "types": ["KPoint", "Scattered", "Uniform", "RoundTypeCrossover", "TimeSlotCrossover", "LocationCrossover"],
-        "k_vals": [1, 2, 3, 4, 8, 16]
+        "k_vals": [1, 2, 3]
       },
       "mutation": {
         "types": [
@@ -58,13 +58,13 @@
     "loglevel_console": "INFO"
   },
   "teams": {
-    "num_teams": 42,
+    "teams": 42,
     "identities": []
   },
   "fitness": {
     "weight_mean": 100,
     "weight_variation": 10,
-    "weight_range": 1
+    "weight_range": 0
   },
   "time": {
     "format": 24

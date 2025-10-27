@@ -20,6 +20,11 @@ RE_HHMM = re.compile(r"\d{2}:\d{2}")
 # For API
 API_OUTPUT_DIR = Path("fllc_api_outputs")
 
+TIME_FORMAT_MAP = {
+    12: "%I:%M %p",
+    24: "%H:%M",
+}
+
 
 class SelectionOp(StrEnum):
     """Enum for selection operator keys."""

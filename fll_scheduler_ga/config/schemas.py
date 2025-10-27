@@ -4,11 +4,12 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from pydantic import BaseModel, Field, field_validator
+import numpy as np
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from ..data_model.location import Location
 from ..data_model.time import TimeSlot
-from .constants import CrossoverOp, MutationOp
+from .constants import RANDOM_SEED_RANGE, CrossoverOp, MutationOp
 
 logger = logging.getLogger(__name__)
 
@@ -16,15 +17,64 @@ logger = logging.getLogger(__name__)
 class GaParametersModel(BaseModel):
     """Genetic Algorithm parameters."""
 
-    population_size: int = Field(128, gt=1)
-    generations: int = Field(256, gt=0)
-    offspring_size: int = Field(64, ge=0)
-    crossover_chance: float = Field(0.6, ge=0.0, le=1.0)
-    mutation_chance: float = Field(0.2, ge=0.0, le=1.0)
-    num_islands: int = Field(1, ge=1)
-    migration_interval: int = Field(0, ge=0)
-    migration_size: int = Field(0, ge=0)
+    generations: int
+    population_size: int
+    offspring_size: int
+    crossover_chance: float
+    mutation_chance: float
+    num_islands: int
+    migration_interval: int
+    migration_size: int
     rng_seed: int | str | None
+
+    @model_validator(mode="after")
+    def validate(self) -> "GaParametersModel":
+        """Validate that migration settings are only used with multiple islands."""
+        if self.generations < 1:
+            self.generations = 128
+            logger.warning("Generations must be at least 1, defaulting to %d.", self.generations)
+
+        if self.population_size < 2:
+            self.population_size = 2
+            logger.warning("Population size must be at least 2, defaulting to %d.", self.population_size)
+
+        if self.offspring_size < 1:
+            self.offspring_size = 1
+            logger.warning("Offspring size must be at least 1, defaulting to %d.", self.offspring_size)
+
+        if not (0.0 < self.crossover_chance <= 1.0):
+            self.crossover_chance = 0.7
+            logger.warning("Crossover chance must be between 0.0 and 1.0, defaulting to %f.", self.crossover_chance)
+
+        if not (0.0 <= self.mutation_chance <= 1.0):
+            self.mutation_chance = 0.4
+            logger.warning("Mutation chance must be between 0.0 and 1.0, defaulting to %f.", self.mutation_chance)
+
+        if self.num_islands < 1:
+            self.num_islands = 1
+            logger.warning("Number of islands must be at least 1, defaulting to %d.", self.num_islands)
+
+        if self.migration_interval < 1:
+            self.migration_interval = self.generations // 10 or 1
+            logger.warning("Migration interval must be at least 1, defaulting to %d.", self.migration_interval)
+
+        if self.migration_size < 0:
+            self.migration_size = 0
+            logger.warning("Migration size cannot be negative, defaulting to %d.", self.migration_size)
+
+        if self.num_islands > 1 and self.migration_size >= self.population_size:
+            self.migration_size = max(1, self.population_size // 5)
+            logger.warning("Migration size is >= population size, defaulting to max(1, 20%%): %i", self.migration_size)
+
+        if self.rng_seed is None:
+            sv = np.random.default_rng().integers(*RANDOM_SEED_RANGE)
+            if not isinstance(sv, int):
+                self.rng_seed = abs(hash(sv)) % (RANDOM_SEED_RANGE[1] + 1)
+            else:
+                self.rng_seed = sv
+            logger.info("RNG seed not set, defaulting to %s.", self.rng_seed)
+
+        return self
 
 
 class CrossoverModel(BaseModel):
@@ -92,16 +142,42 @@ class ExportModel(BaseModel):
 class TeamsModel(BaseModel):
     """Configuration for teams."""
 
-    num_teams: int | None
-    identities: list[int | str]
+    teams: list[int | str] | int
+
+    @model_validator(mode="after")
+    def validate(self) -> "TeamsModel":
+        """Validate that num_teams matches the length of identities if both are provided."""
+        if isinstance(self.teams, list):
+            self.teams = [str(t) for t in self.teams]
+        elif isinstance(self.teams, int):
+            self.teams = [str(i) for i in range(1, self.teams + 1)]
+        return self
 
 
 class FitnessModel(BaseModel):
     """Configuration for fitness weights."""
 
-    weight_mean: float = 1.0
-    weight_variation: float = 1.0
-    weight_range: float = 1.0
+    weight_mean: float
+    weight_variation: float
+    weight_range: float
+
+    @model_validator(mode="after")
+    def validate(self) -> "FitnessModel":
+        """Validate that fitness weights are non-negative."""
+        self.weight_mean = max(0.0, self.weight_mean)
+        self.weight_variation = max(0.0, self.weight_variation)
+        self.weight_range = max(0.0, self.weight_range)
+        weights = (
+            self.weight_mean,
+            self.weight_variation,
+            self.weight_range,
+        )
+        if all(w == 0.0 for w in weights):
+            self.weight_mean = 1.0
+            self.weight_variation = 1.0
+            self.weight_range = 1.0
+            logger.warning("All fitness weights were zero; defaulting all weights to 1.0.")
+        return self
 
 
 class TimeModel(BaseModel):
@@ -109,7 +185,7 @@ class TimeModel(BaseModel):
 
     format: int
 
-    @field_validator("format")
+    @field_validator("format", mode="after")
     @classmethod
     def check_format(cls, v: int) -> int:
         """Validate that the time format is either 12 or 24."""

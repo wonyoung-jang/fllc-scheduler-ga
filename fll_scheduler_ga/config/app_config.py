@@ -15,7 +15,7 @@ import numpy as np
 from ..data_model.location import Location
 from ..data_model.schedule import Schedule
 from ..data_model.time import TimeSlot
-from .constants import CONFIG_FILE, RANDOM_SEED_RANGE
+from .constants import CONFIG_FILE, TIME_FORMAT_MAP
 from .schemas import (
     AppConfigModel,
     ExportModel,
@@ -26,8 +26,6 @@ from .schemas import (
     OperatorConfig,
     RoundModel,
     RuntimeModel,
-    TeamsModel,
-    TimeModel,
     TournamentConfig,
     TournamentRound,
 )
@@ -87,31 +85,29 @@ class AppConfig:
     @classmethod
     def load_tournament_config(cls, model: AppConfigModel) -> TournamentConfig:
         """Load and return the tournament configuration from the validated model."""
-        identities = cls.parse_teams_config(model.teams)
-        num_teams = len(identities)
-        team_ids = dict(enumerate(identities, start=1))
+        teams = model.teams.teams
+        n_teams = len(teams)
+        team_ids = dict(enumerate(teams, start=1))
 
-        time_fmt = cls.parse_time_config(model.time)
+        time_fmt = TIME_FORMAT_MAP[model.time.format]
         TimeSlot.time_fmt = time_fmt
 
         if not (locations := cls.parse_location_config(model.locations)):
             msg = "No locations defined in the configuration file."
             raise ValueError(msg)
 
-        if not (rounds := cls.parse_rounds_config(model.rounds, num_teams, time_fmt, locations)):
+        if not (rounds := cls.parse_rounds_config(model.rounds, n_teams, time_fmt, locations)):
             msg = "No rounds defined in the configuration file."
             raise ValueError(msg)
 
         rounds.sort(key=lambda r: (r.start_time))
         roundreqs = {r.roundtype: r.rounds_per_team for r in rounds}
+        roundreqs_array = np.tile(list(roundreqs.values()), (n_teams, 1))
         round_str_to_idx = {r.roundtype: r.roundtype_idx for r in rounds}
         round_idx_to_tpr = {r.roundtype_idx: r.teams_per_round for r in rounds}
-
         total_slots_possible = sum(r.slots_total for r in rounds)
         total_slots_required = sum(r.slots_required for r in rounds)
-        unique_opponents_possible = 1 <= max(r.rounds_per_team for r in rounds) <= num_teams - 1
-
-        roundreqs_array = np.tile(list(roundreqs.values()), (num_teams, 1))
+        unique_opponents_possible = 1 <= max(r.rounds_per_team for r in rounds) <= n_teams - 1
 
         Schedule.team_identities = team_ids
         Schedule.total_num_events = total_slots_possible
@@ -128,7 +124,7 @@ class AppConfig:
         max_events_per_team = sum(r.rounds_per_team for r in rounds)
 
         return TournamentConfig(
-            num_teams=num_teams,
+            num_teams=n_teams,
             time_fmt=time_fmt,
             rounds=rounds,
             roundreqs=roundreqs,
@@ -146,30 +142,6 @@ class AppConfig:
     @classmethod
     def _parse_time(cls, raw: str, fmt: str) -> datetime:
         return datetime.strptime(raw.strip(), fmt).replace(tzinfo=UTC)
-
-    @classmethod
-    def parse_teams_config(cls, t_model: TeamsModel) -> list[int | str]:
-        """Parse and return a list of team IDs from the configuration."""
-        num_teams = t_model.num_teams or 0
-        identities = t_model.identities or []
-
-        if num_teams and not identities:
-            return [str(i) for i in range(1, num_teams + 1)]
-
-        if not num_teams and identities:
-            num_teams = len(identities)
-
-        if num_teams != len(identities):
-            msg = f"Number of teams ({num_teams}) does not match number of identities ({len(identities)})."
-            raise ValueError(msg)
-
-        return identities
-
-    @classmethod
-    def parse_time_config(cls, time_cfg: TimeModel) -> str:
-        """Parse and return the time format configuration."""
-        fmt_map = {12: "%I:%M %p", 24: "%H:%M"}
-        return fmt_map[time_cfg.format]
 
     @classmethod
     def parse_rounds_config(
@@ -193,7 +165,7 @@ class AppConfig:
             num_timeslots = cls.calc_num_timeslots(times_dt, locations_in_sec, num_teams, sec.rounds_per_team)
             timeslots: list[TimeSlot] = []
             for start, stop in cls.init_timeslots(times_dt, duration_minutes, num_timeslots, start_time_dt):
-                timeslots.append(TimeSlot(idx=next(timeslot_idx_iter), start=start, stop=stop))
+                timeslots.append(TimeSlot(next(timeslot_idx_iter), start, stop))
 
             final_start_time = times_dt[0] if times_dt else timeslots[0].start
             final_stop_time = (times_dt[-1] + duration_minutes) if times_dt else timeslots[-1].stop
@@ -274,14 +246,11 @@ class AppConfig:
     def parse_fitness_config(cls, fitness_model: FitnessModel) -> tuple[float, ...]:
         """Parse and return fitness-related configuration values."""
         weights = (
-            max(0, fitness_model.weight_mean),
-            max(0, fitness_model.weight_variation),
-            max(0, fitness_model.weight_range),
+            fitness_model.weight_mean,
+            fitness_model.weight_variation,
+            fitness_model.weight_range,
         )
-        total = sum(weights)
-        if total == 0:
-            return (1 / 3, 1 / 3, 1 / 3)
-        return tuple(w / total for w in weights)
+        return tuple(w / sum(weights) for w in weights)
 
     @classmethod
     def load_operator_config(cls, model: AppConfigModel) -> OperatorConfig:
@@ -311,17 +280,7 @@ class AppConfig:
     @classmethod
     def load_rng(cls, model: AppConfigModel) -> np.random.Generator:
         """Set up the random number generator."""
-        seed_val = (
-            model.genetic.parameters.rng_seed
-            if model.genetic.parameters.rng_seed is not None
-            else np.random.default_rng().integers(*RANDOM_SEED_RANGE)
-        )
-        try:
-            seed = int(seed_val)
-        except (TypeError, ValueError):
-            seed = abs(hash(seed_val)) % (RANDOM_SEED_RANGE[1] + 1)
-
-        return np.random.default_rng(seed)
+        return np.random.default_rng(model.genetic.parameters.rng_seed)
 
     def log_creation_info(self) -> None:
         """Log information about the application configuration creation."""
