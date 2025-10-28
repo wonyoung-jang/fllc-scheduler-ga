@@ -1,7 +1,6 @@
 """Pydantic models for application configuration."""
 
 import logging
-from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 import numpy as np
@@ -208,12 +207,25 @@ class RoundModel(BaseModel):
 
     roundtype: str
     location: str
-    rounds_per_team: int
-    teams_per_round: int
-    start_time: str
-    stop_time: str | None
-    times: list[str]
-    duration_minutes: int
+    rounds_per_team: int = Field(default=1, ge=1)
+    teams_per_round: int = Field(default=1, ge=1)
+    start_time: str = ""
+    stop_time: str = ""
+    times: list[str] = Field(default_factory=list)
+    duration_minutes: int = 0
+
+    @model_validator(mode="after")
+    def validate(self) -> "RoundModel":
+        """Validate that rounds_per_team and teams_per_round are positive."""
+        if not self.start_time and not self.times:
+            msg = f"Round '{self.roundtype}' must have either start_time or times defined."
+            raise ValueError(msg)
+
+        if self.stop_time and not self.start_time:
+            msg = f"Round '{self.roundtype}' has stop_time defined but no start_time."
+            raise ValueError(msg)
+
+        return self
 
 
 class AppConfigModel(BaseModel):
@@ -230,8 +242,7 @@ class AppConfigModel(BaseModel):
     rounds: list[RoundModel]
 
 
-@dataclass(slots=True)
-class GaParameters:
+class GaParameters(BaseModel):
     """Genetic Algorithm parameters."""
 
     population_size: int
@@ -258,8 +269,7 @@ class GaParameters:
         )
 
 
-@dataclass(slots=True)
-class OperatorConfig:
+class OperatorConfig(BaseModel):
     """Genetic Algorithm operators."""
 
     crossover_types: list[CrossoverOp | str]
@@ -276,8 +286,7 @@ class OperatorConfig:
         )
 
 
-@dataclass(slots=True)
-class TournamentRound:
+class TournamentRound(BaseModel):
     """Representation of a round in the FLL tournament."""
 
     roundtype: str
@@ -316,8 +325,7 @@ class TournamentRound:
         )
 
 
-@dataclass(slots=True)
-class TournamentConfig:
+class TournamentConfig(BaseModel):
     """Configuration for the tournament."""
 
     num_teams: int
@@ -352,3 +360,7 @@ class TournamentConfig:
             f"\n    all_timeslots             : {[str(ts) for ts in self.all_timeslots]}"
             f"\n    max_events_per_team       : {self.max_events_per_team}"
         )
+
+
+TournamentRound.model_rebuild()
+TournamentConfig.model_rebuild()

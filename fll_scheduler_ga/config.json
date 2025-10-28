@@ -88,17 +88,13 @@
       "rounds_per_team": 1,
       "teams_per_round": 1,
       "start_time": "08:00",
-      "stop_time": null,
-      "times": [],
-      "duration_minutes": 45
+      "stop_time": "12:30"
     },
     {
       "roundtype": "Practice",
       "location": "Table",
       "rounds_per_team": 2,
       "teams_per_round": 2,
-      "start_time": "09:00",
-      "stop_time": "12:00",
       "times": ["09:00", "09:15", "09:30", "09:45", "10:00", "10:15", "10:30", "10:45", "11:00", "11:15", "11:30", "11:45"],
       "duration_minutes": 15
     },
@@ -108,8 +104,6 @@
       "rounds_per_team": 3,
       "teams_per_round": 2,
       "start_time": "13:30",
-      "stop_time": null,
-      "times": [],
       "duration_minutes": 11
     }
   ]

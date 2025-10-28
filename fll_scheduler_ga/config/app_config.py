@@ -140,7 +140,9 @@ class AppConfig:
         )
 
     @classmethod
-    def _parse_time(cls, raw: str, fmt: str) -> datetime:
+    def _parse_time(cls, raw: str | None, fmt: str) -> datetime | None:
+        if not raw:
+            return None
         return datetime.strptime(raw.strip(), fmt).replace(tzinfo=UTC)
 
     @classmethod
@@ -154,39 +156,46 @@ class AppConfig:
         """Parse and return a list of TournamentRound objects from the configuration."""
         tournament_rounds = []
         timeslot_idx_iter = itertools.count()
-        for rti, sec in enumerate(round_models):
-            duration_minutes = timedelta(minutes=sec.duration_minutes)
-            start_time_dt = cls._parse_time(sec.start_time, time_fmt)
-            times_dt = [cls._parse_time(t, time_fmt) for t in sec.times] if sec.times else []
+        for roundtype_idx, rnd in enumerate(round_models):
+            start_dt = cls._parse_time(rnd.start_time, time_fmt)
+            stop_dt = cls._parse_time(rnd.stop_time, time_fmt)
+            times_dt = [cls._parse_time(t, time_fmt) for t in rnd.times] if rnd.times else []
 
-            locations_in_sec = [loc for loc in locations if loc.locationtype == sec.location]
+            locations_in_sec = [loc for loc in locations if loc.locationtype == rnd.location]
             locations_in_sec.sort(key=lambda loc: loc.idx)
 
-            num_timeslots = cls.calc_num_timeslots(times_dt, locations_in_sec, num_teams, sec.rounds_per_team)
-            timeslots: list[TimeSlot] = []
-            for start, stop in cls.init_timeslots(times_dt, duration_minutes, num_timeslots, start_time_dt):
-                timeslots.append(TimeSlot(next(timeslot_idx_iter), start, stop))
+            n_timeslots = cls.calc_num_timeslots(len(times_dt), len(locations_in_sec), num_teams, rnd.rounds_per_team)
+
+            dur = rnd.duration_minutes
+            dur_valid = cls.validate_duration(start_dt, stop_dt, times_dt, dur, n_timeslots)
+            dur_tdelta = timedelta(minutes=dur_valid)
+
+            timeslots = [
+                TimeSlot(next(timeslot_idx_iter), start, stop)
+                for start, stop in cls.init_timeslots(times_dt, dur_tdelta, n_timeslots, start_dt)
+            ]
 
             final_start_time = times_dt[0] if times_dt else timeslots[0].start
-            final_stop_time = (times_dt[-1] + duration_minutes) if times_dt else timeslots[-1].stop
+            final_stop_time = (times_dt[-1] + dur_tdelta) if times_dt else timeslots[-1].stop
+
             if not times_dt:
                 times_dt = [ts.start for ts in timeslots]
 
             slots_total = len(timeslots) * len(locations_in_sec)
-            slots_required = num_teams * sec.rounds_per_team
+            slots_required = num_teams * rnd.rounds_per_team
 
             tournament_round = TournamentRound(
-                roundtype=sec.roundtype,
-                roundtype_idx=rti,
-                rounds_per_team=sec.rounds_per_team,
-                teams_per_round=sec.teams_per_round,
+                roundtype=rnd.roundtype,
+                roundtype_idx=roundtype_idx,
+                rounds_per_team=rnd.rounds_per_team,
+                teams_per_round=rnd.teams_per_round,
                 times=times_dt,
                 start_time=final_start_time,
                 stop_time=final_stop_time,
-                duration_minutes=duration_minutes,
-                location_type=sec.location,
+                duration_minutes=dur_tdelta,
+                location_type=rnd.location,
                 locations=locations_in_sec,
-                num_timeslots=num_timeslots,
+                num_timeslots=n_timeslots,
                 timeslots=timeslots,
                 slots_total=slots_total,
                 slots_required=slots_required,
@@ -195,15 +204,42 @@ class AppConfig:
         return tournament_rounds
 
     @classmethod
-    def calc_num_timeslots(
-        cls, times: list[datetime], locations: list[Location], num_teams: int, rounds_per_team: int
-    ) -> int:
+    def validate_duration(
+        cls,
+        start_time_dt: datetime | None,
+        stop_time_dt: datetime | None,
+        times_dt: list[datetime],
+        dur: int,
+        n_timeslots: int,
+    ) -> int | None:
+        """Validate the times configuration for a round."""
+        # Valid conditions:
+        #   1. start_time + duration
+        #   2. times + duration
+        #   3. start_time + stop_time (need to calculate num_timeslots)
+        if (start_time_dt or times_dt) and dur:
+            return dur
+
+        if start_time_dt and stop_time_dt:
+            total_available = (stop_time_dt - start_time_dt).total_seconds()
+            minimum_duration = total_available // n_timeslots
+            return max(1, minimum_duration // 60)
+
+        return None
+
+    @classmethod
+    def calc_num_timeslots(cls, n_times: int, n_locs: int, n_teams: int, rounds_per_team: int) -> int:
         """Calculate the number of timeslots needed for a round."""
-        if times:
-            return len(times)
-        if not locations:
-            return 0
-        return ceil((num_teams * rounds_per_team) / len(locations))
+        if n_times:
+            num_timeslots = n_times
+        elif n_locs:
+            num_timeslots = ceil((n_teams * rounds_per_team) / n_locs)
+
+        if not n_times and not n_locs:
+            msg = "Cannot calculate number of timeslots without times or locations."
+            raise ValueError(msg)
+
+        return num_timeslots
 
     @classmethod
     def init_timeslots(
