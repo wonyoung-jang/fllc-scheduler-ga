@@ -27,59 +27,45 @@ def build_crossovers(
     operators: OperatorConfig,
     event_factory: EventFactory,
     event_properties: EventProperties,
-) -> Iterator[Crossover]:
+) -> tuple[Crossover, ...]:
     """Build and return a tuple of crossover operators based on the configuration."""
-    crossovers = {
-        CrossoverOp.K_POINT: lambda k: KPoint(
-            event_factory,
-            event_properties,
-            rng,
-            k=k,
-        ),
-        CrossoverOp.SCATTERED: lambda: Scattered(
-            event_factory,
-            event_properties,
-            rng,
-        ),
-        CrossoverOp.UNIFORM: lambda: Uniform(
-            event_factory,
-            event_properties,
-            rng,
-        ),
-        CrossoverOp.ROUND_TYPE_CROSSOVER: lambda: RoundTypeCrossover(
-            event_factory,
-            event_properties,
-            rng,
-        ),
-        CrossoverOp.TIMESLOT_CROSSOVER: lambda: TimeSlotCrossover(
-            event_factory,
-            event_properties,
-            rng,
-        ),
-        CrossoverOp.LOCATION_CROSSOVER: lambda: LocationCrossover(
-            event_factory,
-            event_properties,
-            rng,
-        ),
+    crossover_factory = {
+        CrossoverOp.K_POINT: lambda p, k: KPoint(**p, k=k),
+        CrossoverOp.SCATTERED: lambda p: Scattered(**p),
+        CrossoverOp.UNIFORM: lambda p: Uniform(**p),
+        CrossoverOp.ROUND_TYPE_CROSSOVER: lambda p: RoundTypeCrossover(**p),
+        CrossoverOp.TIMESLOT_CROSSOVER: lambda p: TimeSlotCrossover(**p),
+        CrossoverOp.LOCATION_CROSSOVER: lambda p: LocationCrossover(**p),
     }
 
-    if not (crossover_types := operators.crossover_types):
+    crossovers = []
+    params = {
+        "event_factory": event_factory,
+        "event_properties": event_properties,
+        "rng": rng,
+    }
+
+    if not (crossover_types := operators.crossover.types):
         logger.warning("No crossover types enabled in the configuration. Crossover will not occur.")
-        return
+        return crossovers
 
     for crossover_name in crossover_types:
-        if crossover_name not in crossovers:
+        if crossover_name not in crossover_factory:
             msg = f"Unknown crossover type in config: {crossover_name}"
             raise ValueError(msg)
-        elif crossover_name == CrossoverOp.K_POINT:
-            if crossover_ks := operators.crossover_ks:
+
+        if crossover_name == CrossoverOp.K_POINT:
+            if crossover_ks := operators.crossover.k_vals:
                 for k in crossover_ks:
                     if k <= 0:
                         msg = f"Invalid crossover k value: {k}. Must be greater than 0."
                         raise ValueError(msg)
-                    yield crossovers[crossover_name](k)
+
+                    crossovers.append(crossover_factory[crossover_name](params, k))
         else:
-            yield crossovers[crossover_name]()
+            crossovers.append(crossover_factory[crossover_name](params))
+
+    return tuple(crossovers)
 
 
 @dataclass(slots=True)

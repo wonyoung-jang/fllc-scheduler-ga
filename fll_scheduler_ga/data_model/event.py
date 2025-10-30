@@ -1,23 +1,19 @@
 """Event data model for FLL scheduling."""
 
-from __future__ import annotations
-
 import itertools
+import logging
 from collections import defaultdict
+from collections.abc import Iterator
 from dataclasses import dataclass, field
-from logging import getLogger
-from typing import TYPE_CHECKING
 
 import numpy as np
+from pydantic import BaseModel, Field
 
-if TYPE_CHECKING:
-    from collections.abc import Iterator
+from ..config.schemas import TournamentConfig, TournamentRound
+from .location import Location
+from .time import TimeSlot
 
-    from ..config.schemas import TournamentConfig, TournamentRound
-    from .location import Location
-    from .time import TimeSlot
-
-logger = getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -41,7 +37,7 @@ class EventProperties:
     paired_idx: np.ndarray
 
     @classmethod
-    def build(cls, num_events: int, event_map: dict[int, Event]) -> EventProperties:
+    def build(cls, num_events: int, event_map: dict[int, "Event"]) -> "EventProperties":
         """Build EventProperties from an event mapping."""
         event_prop_dtype = np.dtype(
             [
@@ -77,7 +73,7 @@ class EventProperties:
             event_properties[i]["loc_name"] = e.location.name
             event_properties[i]["loc_side"] = e.location.side
             event_properties[i]["teams_per_round"] = e.location.teams_per_round
-            event_properties[i]["paired_idx"] = e.paired.idx if e.paired else -1
+            event_properties[i]["paired_idx"] = e.paired
 
         event_prop_labels = ", ".join(event_properties.dtype.names)
         logger.debug("\nEvent properties array:\n%s\n%s", event_prop_labels, event_properties)
@@ -100,31 +96,27 @@ class EventProperties:
         )
 
 
-@dataclass(slots=True)
-class Event:
+class Event(BaseModel):
     """Data model for an event in a schedule."""
 
-    idx: int
-    roundtype: str
-    roundtype_idx: int
+    model_config = {"arbitrary_types_allowed": True}
+    idx: int = Field(ge=0)
+    roundtype: str = Field(min_length=1)
+    roundtype_idx: int = Field(ge=0)
     timeslot: TimeSlot
-    timeslot_idx: int
+    timeslot_idx: int = Field(ge=0)
     location: Location
-    paired: Event | None = field(default=None, repr=False, compare=False)
-    conflicts: list[int] = field(default_factory=list, repr=False)
-
-    def __hash__(self) -> int:
-        """Use the unique identity for hashing."""
-        return self.idx
+    paired: int = Field(default=-1, ge=-1)
+    conflicts: list[int] = Field(default_factory=list)
 
     def __str__(self) -> str:
         """Get string representation of Event."""
         return f"{self.idx}, {self.roundtype}, {self.location}, {self.timeslot}"
 
-    def pair(self, other: Event) -> None:
+    def pair(self, other: "Event") -> None:
         """Pair this event with another event."""
-        self.paired = other
-        other.paired = self
+        self.paired = other.idx
+        other.paired = self.idx
 
 
 @dataclass(slots=True)
@@ -177,16 +169,14 @@ class EventFactory:
         """Create and return all single-team Events or side 1 of paired Events."""
         if not self._list_singles_or_side1:
             self._list_singles_or_side1 = [
-                e for e in self.build() if e.paired is None or (e.paired and e.location.side == 1)
+                e for e in self.build() if e.paired == -1 or (e.paired != -1 and e.location.side == 1)
             ]
         return self._list_singles_or_side1
 
     def build_singles_or_side1_indices(self) -> list[int]:
         """Create and return all single-team Events or side 1 of paired Events."""
         if not self._list_singles_or_side1_indices:
-            self._list_singles_or_side1_indices = [
-                e.idx for e in self.build() if e.paired is None or (e.paired and e.location.side == 1)
-            ]
+            self._list_singles_or_side1_indices = [e.idx for e in self.build_singles_or_side1()]
         return self._list_singles_or_side1_indices
 
     def create_events(self, r: TournamentRound, event_idx_iter: Iterator[int]) -> Iterator[Event]:
@@ -204,33 +194,33 @@ class EventFactory:
             if r.teams_per_round == 1:
                 for loc in r.locations:
                     event = Event(
-                        next(event_idx_iter),
-                        r.roundtype,
-                        r.roundtype_idx,
-                        ts,
-                        ts.idx,
-                        loc,
+                        idx=next(event_idx_iter),
+                        roundtype=r.roundtype,
+                        roundtype_idx=r.roundtype_idx,
+                        timeslot=ts,
+                        timeslot_idx=ts.idx,
+                        location=loc,
                     )
                     yield event
             elif r.teams_per_round == 2:
                 for loc in r.locations:
                     if loc.side == 1:
                         event1 = Event(
-                            next(event_idx_iter),
-                            r.roundtype,
-                            r.roundtype_idx,
-                            ts,
-                            ts.idx,
-                            loc,
+                            idx=next(event_idx_iter),
+                            roundtype=r.roundtype,
+                            roundtype_idx=r.roundtype_idx,
+                            timeslot=ts,
+                            timeslot_idx=ts.idx,
+                            location=loc,
                         )
                     elif loc.side == 2:
                         event2 = Event(
-                            next(event_idx_iter),
-                            r.roundtype,
-                            r.roundtype_idx,
-                            ts,
-                            ts.idx,
-                            loc,
+                            idx=next(event_idx_iter),
+                            roundtype=r.roundtype,
+                            roundtype_idx=r.roundtype_idx,
+                            timeslot=ts,
+                            timeslot_idx=ts.idx,
+                            location=loc,
                         )
                         event1.pair(event2)
                         yield from (event1, event2)
@@ -286,7 +276,12 @@ class EventFactory:
         if self._cached_matches is None:
             self._cached_matches = defaultdict(list)
             for e in self.build_singles_or_side1():
-                if e.paired is None:
+                if e.paired == -1:
                     continue
-                self._cached_matches[e.roundtype_idx].append((e.idx, e.paired.idx))
+                self._cached_matches[e.roundtype_idx].append((e.idx, e.paired))
         return self._cached_matches
+
+
+TimeSlot.model_rebuild()
+Location.model_rebuild()
+Event.model_rebuild()

@@ -29,84 +29,71 @@ def build_mutations(
     operators: OperatorConfig,
     event_factory: EventFactory,
     event_properties: EventProperties,
-) -> Iterator[Mutation]:
+) -> tuple[Mutation, ...]:
     """Build and return a tuple of mutation operators based on the configuration."""
-    mutations = {
+    mutation_factory = {
         # SwapMatchMutation variants
-        MutationOp.SWAP_MATCH_CROSS_TIME_LOCATION: lambda: SwapMatchMutation(
-            rng=rng,
-            event_factory=event_factory,
-            event_properties=event_properties,
+        MutationOp.SWAP_MATCH_CROSS_TIME_LOCATION: lambda p: SwapMatchMutation(
+            **p,
             same_timeslot=False,
             same_location=False,
         ),
-        MutationOp.SWAP_MATCH_SAME_LOCATION: lambda: SwapMatchMutation(
-            rng=rng,
-            event_factory=event_factory,
-            event_properties=event_properties,
+        MutationOp.SWAP_MATCH_SAME_LOCATION: lambda p: SwapMatchMutation(
+            **p,
             same_timeslot=False,
             same_location=True,
         ),
-        MutationOp.SWAP_MATCH_SAME_TIME: lambda: SwapMatchMutation(
-            rng=rng,
-            event_factory=event_factory,
-            event_properties=event_properties,
+        MutationOp.SWAP_MATCH_SAME_TIME: lambda p: SwapMatchMutation(
+            **p,
             same_timeslot=True,
             same_location=False,
         ),
         # SwapTeamMutation variants
-        MutationOp.SWAP_TEAM_CROSS_TIME_LOCATION: lambda: SwapTeamMutation(
-            rng=rng,
-            event_factory=event_factory,
-            event_properties=event_properties,
+        MutationOp.SWAP_TEAM_CROSS_TIME_LOCATION: lambda p: SwapTeamMutation(
+            **p,
             same_timeslot=False,
             same_location=False,
         ),
-        MutationOp.SWAP_TEAM_SAME_LOCATION: lambda: SwapTeamMutation(
-            rng=rng,
-            event_factory=event_factory,
-            event_properties=event_properties,
+        MutationOp.SWAP_TEAM_SAME_LOCATION: lambda p: SwapTeamMutation(
+            **p,
             same_timeslot=False,
             same_location=True,
         ),
-        MutationOp.SWAP_TEAM_SAME_TIME: lambda: SwapTeamMutation(
-            rng=rng,
-            event_factory=event_factory,
-            event_properties=event_properties,
+        MutationOp.SWAP_TEAM_SAME_TIME: lambda p: SwapTeamMutation(
+            **p,
             same_timeslot=True,
             same_location=False,
         ),
         # SwapTableSideMutation variant
-        MutationOp.SWAP_TABLE_SIDE: lambda: SwapTableSideMutation(
-            rng=rng,
-            event_factory=event_factory,
-            event_properties=event_properties,
+        MutationOp.SWAP_TABLE_SIDE: lambda p: SwapTableSideMutation(
+            **p,
             same_timeslot=True,
             same_location=True,
         ),
         # TimeSlotSequenceMutation variants
-        MutationOp.INVERSION: lambda: InversionMutation(
-            rng=rng,
-            event_factory=event_factory,
-            event_properties=event_properties,
-        ),
-        MutationOp.SCRAMBLE: lambda: ScrambleMutation(
-            rng=rng,
-            event_factory=event_factory,
-            event_properties=event_properties,
-        ),
+        MutationOp.INVERSION: lambda p: InversionMutation(**p),
+        MutationOp.SCRAMBLE: lambda p: ScrambleMutation(**p),
     }
 
-    if not (mutation_types := operators.mutation_types):
+    mutations = []
+    params = {
+        "rng": rng,
+        "event_factory": event_factory,
+        "event_properties": event_properties,
+    }
+
+    if not (mutation_types := operators.mutation.types):
         logger.warning("No mutation types enabled in the configuration. Mutation will not occur.")
-        return
+        return mutations
 
     for mutation_name in mutation_types:
-        if mutation_name not in mutations:
+        if mutation_name not in mutation_factory:
             msg = f"Unknown mutation type in config: '{mutation_name}'"
             raise ValueError(msg)
-        else:
-            yield mutations[mutation_name]()
+
+        mutations.append(mutation_factory[mutation_name](params))
+
+    return tuple(mutations)
 
 
 @dataclass(slots=True)

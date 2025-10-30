@@ -85,38 +85,44 @@ class ScheduleBuilderNaive:
         """Post-initialization to set up the random number generator."""
         self.roundtype_events = self.event_factory.as_roundtypes()
 
-    def build(self) -> Schedule:
+    def build_naive(self) -> Schedule:
         """Construct and return the final schedule."""
         schedule = Schedule(origin="Naive Builder")
-        for _ in range(3):
-            for roundtype, evts in self.roundtype_events.items():
-                events = np.array(evts, dtype=int)
-                if self.config.round_idx_to_tpr[roundtype] == 1:
-                    self.build_singles(schedule, events, roundtype)
-                elif self.config.round_idx_to_tpr[roundtype] == 2:
-                    self.build_matches(schedule, events, roundtype)
+        for roundtype, evts in self.roundtype_events.items():
+            events = np.array(evts, dtype=int)
+            if self.config.round_idx_to_tpr[roundtype] == 1:
+                self.build_naive_singles(schedule, events, roundtype)
+            elif self.config.round_idx_to_tpr[roundtype] == 2:
+                self.build_naive_matches(schedule, events, roundtype)
         return schedule
 
-    def build_singles(self, schedule: Schedule, events: np.ndarray, roundtype: int) -> None:
+    def build_naive_singles(self, schedule: Schedule, events: np.ndarray, roundtype: int) -> None:
         """Book all judging events for a specific round type."""
         for event in events:
-            available = (t for t in schedule.all_rounds_needed(roundtype) if not schedule.conflicts(t, event))
-            team = next(available, -1)
+            available = [t for t in schedule.all_rounds_needed(roundtype) if not schedule.conflicts(t, event)]
+            if len(available) < 1:
+                continue
+            available.sort()
+            team = next(iter(available), -1)
             if team != -1:
                 schedule.assign(team, event)
 
-    def build_matches(self, schedule: Schedule, events: np.ndarray, roundtype: int) -> None:
+    def build_naive_matches(self, schedule: Schedule, events: np.ndarray, roundtype: int) -> None:
         """Book all events for a specific round type."""
         side1s = events[np.nonzero(self.event_properties.loc_side[events] == 1)[0]]
         side2s = self.event_properties.paired_idx[side1s]
         for side1, side2 in zip(side1s, side2s, strict=True):
-            available = (
+            available = [
                 t
                 for t in schedule.all_rounds_needed(roundtype)
                 if not schedule.conflicts(t, side1) and not schedule.conflicts(t, side2)
-            )
-            team1 = next(available, -1)
-            team2 = next(available, -1)
+            ]
+            if len(available) < 2:
+                continue
+            available.sort()
+            av_iter = iter(available)
+            team1 = next(av_iter, -1)
+            team2 = next(av_iter, -1)
             if team1 != -1 and team2 != -1:
                 schedule.assign(team1, side1)
                 schedule.assign(team2, side2)

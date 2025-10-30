@@ -51,10 +51,11 @@ class FitnessEvaluator:
     penalty: float = FITNESS_PENALTY
 
     max_events_per_team: int = 0
+
     max_int: ClassVar[int] = np.iinfo(np.int64).max
     min_int: ClassVar[int] = -1
-    n_teams: ClassVar[int] = -1
-    n_objs: ClassVar[int] = -1
+    n_teams: ClassVar[int]
+    n_objs: ClassVar[int]
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the configuration."""
@@ -172,7 +173,7 @@ class FitnessEvaluator:
         """Vectorized location consistency scoring."""
         loc_sorted = np.sort(loc_ids, axis=2)
 
-        valid_mask = loc_sorted[:, :, :-1] >= 0
+        valid_mask = loc_sorted[:, :, 1:] >= 0
         changes = np.diff(loc_sorted, axis=2) != 0
         meaningful_changes = np.sum(changes & valid_mask, axis=2)
 

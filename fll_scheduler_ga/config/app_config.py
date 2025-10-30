@@ -4,22 +4,21 @@ from __future__ import annotations
 
 import itertools
 import json
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from logging import getLogger
 from math import ceil
 from typing import TYPE_CHECKING
 
 import numpy as np
+from pydantic import BaseModel, ConfigDict
 
 from ..data_model.location import Location
 from ..data_model.schedule import Schedule
 from ..data_model.time import TimeSlot
-from .constants import CONFIG_FILE, TIME_FORMAT_MAP
+from .constants import CONFIG_FILE
 from .schemas import (
     AppConfigModel,
     ExportModel,
-    FitnessModel,
     GaParameters,
     LocationModel,
     LoggingModel,
@@ -37,10 +36,10 @@ if TYPE_CHECKING:
 logger = getLogger(__name__)
 
 
-@dataclass(slots=True)
-class AppConfig:
+class AppConfig(BaseModel):
     """Configuration for the FLL Scheduler GA application."""
 
+    model_config: ConfigDict = ConfigDict(arbitrary_types_allowed=True)
     runtime: RuntimeModel
     exports: ExportModel
     logging: LoggingModel
@@ -66,54 +65,48 @@ class AppConfig:
         return cls.build_from_model(config_model)
 
     @classmethod
-    def build_from_model(cls, config_model: AppConfigModel) -> AppConfig:
+    def build_from_model(cls, model: AppConfigModel) -> AppConfig:
         """Create and return the application configuration from a Pydantic model."""
-        tournament_config = cls.load_tournament_config(config_model)
-        operator_config = cls.load_operator_config(config_model)
-        ga_parameters = cls.load_ga_parameters(config_model)
-        rng = cls.load_rng(config_model)
+        tournament_config = cls.load_tournament_config(model)
         return cls(
-            runtime=config_model.runtime,
-            exports=config_model.exports,
-            logging=config_model.logging,
+            runtime=model.runtime,
+            exports=model.exports,
+            logging=model.logging,
             tournament=tournament_config,
-            operators=operator_config,
-            ga_params=ga_parameters,
-            rng=rng,
+            operators=model.genetic.operator,
+            ga_params=model.genetic.parameters,
+            rng=np.random.default_rng(model.genetic.parameters.rng_seed),
         )
 
     @classmethod
     def load_tournament_config(cls, model: AppConfigModel) -> TournamentConfig:
         """Load and return the tournament configuration from the validated model."""
-        teams = model.teams.teams
-        n_teams = len(teams)
-        team_ids = dict(enumerate(teams, start=1))
-
-        time_fmt = TIME_FORMAT_MAP[model.time.format]
+        teams = model.teams
+        time_fmt = model.time.time_fmt
         TimeSlot.time_fmt = time_fmt
 
         if not (locations := cls.parse_location_config(model.locations)):
             msg = "No locations defined in the configuration file."
             raise ValueError(msg)
 
-        if not (rounds := cls.parse_rounds_config(model.rounds, n_teams, time_fmt, locations)):
+        if not (rounds := cls.parse_rounds_config(model.rounds, len(teams), time_fmt, locations)):
             msg = "No rounds defined in the configuration file."
             raise ValueError(msg)
 
-        rounds.sort(key=lambda r: (r.start_time))
+        rounds.sort(key=lambda r: r.start_time)
         roundreqs = {r.roundtype: r.rounds_per_team for r in rounds}
-        roundreqs_array = np.tile(list(roundreqs.values()), (n_teams, 1))
+        roundreqs_array = np.tile(list(roundreqs.values()), (len(teams), 1))
         round_str_to_idx = {r.roundtype: r.roundtype_idx for r in rounds}
         round_idx_to_tpr = {r.roundtype_idx: r.teams_per_round for r in rounds}
         total_slots_possible = sum(r.slots_total for r in rounds)
         total_slots_required = sum(r.slots_required for r in rounds)
-        unique_opponents_possible = 1 <= max(r.rounds_per_team for r in rounds) <= n_teams - 1
+        unique_opponents_possible = 1 <= max(r.rounds_per_team for r in rounds) <= len(teams) - 1
 
-        Schedule.team_identities = team_ids
+        Schedule.team_identities = teams.get_team_ids()
         Schedule.total_num_events = total_slots_possible
         Schedule.team_roundreqs_array = roundreqs_array
 
-        weights = cls.parse_fitness_config(model.fitness)
+        weights = model.fitness.get_fitness_tuple()
 
         all_locations = itertools.chain.from_iterable(r.locations for r in rounds)
         all_locations = sorted(all_locations, key=lambda loc: loc.idx)
@@ -124,7 +117,7 @@ class AppConfig:
         max_events_per_team = sum(r.rounds_per_team for r in rounds)
 
         return TournamentConfig(
-            num_teams=n_teams,
+            num_teams=len(teams),
             time_fmt=time_fmt,
             rounds=rounds,
             roundreqs=roundreqs,
@@ -166,23 +159,25 @@ class AppConfig:
 
             n_timeslots = cls.calc_num_timeslots(len(times_dt), len(locations_in_sec), num_teams, rnd.rounds_per_team)
 
-            dur = rnd.duration_minutes
-            dur_valid = cls.validate_duration(start_dt, stop_dt, times_dt, dur, n_timeslots)
+            dur_raw = rnd.duration_minutes
+            dur_valid = cls.validate_duration(start_dt, stop_dt, times_dt, dur_raw, n_timeslots)
             dur_tdelta = timedelta(minutes=dur_valid)
 
             timeslots = [
-                TimeSlot(next(timeslot_idx_iter), start, stop)
+                TimeSlot(idx=next(timeslot_idx_iter), start=start, stop=stop)
                 for start, stop in cls.init_timeslots(times_dt, dur_tdelta, n_timeslots, start_dt)
             ]
 
-            final_start_time = times_dt[0] if times_dt else timeslots[0].start
-            final_stop_time = (times_dt[-1] + dur_tdelta) if times_dt else timeslots[-1].stop
+            final_start_time = timeslots[0].start
+            final_stop_time = timeslots[-1].stop
 
-            if not times_dt:
-                times_dt = [ts.start for ts in timeslots]
+            times_dt = times_dt if times_dt else [ts.start for ts in timeslots]
 
             slots_total = len(timeslots) * len(locations_in_sec)
             slots_required = num_teams * rnd.rounds_per_team
+            slots_empty = slots_total - slots_required
+
+            unfilled_allowed = slots_empty > 0
 
             tournament_round = TournamentRound(
                 roundtype=rnd.roundtype,
@@ -199,6 +194,8 @@ class AppConfig:
                 timeslots=timeslots,
                 slots_total=slots_total,
                 slots_required=slots_required,
+                slots_empty=slots_empty,
+                unfilled_allowed=unfilled_allowed,
             )
             tournament_rounds.append(tournament_round)
         return tournament_rounds
@@ -206,22 +203,24 @@ class AppConfig:
     @classmethod
     def validate_duration(
         cls,
-        start_time_dt: datetime | None,
-        stop_time_dt: datetime | None,
+        start_dt: datetime | None,
+        stop_dt: datetime | None,
         times_dt: list[datetime],
         dur: int,
         n_timeslots: int,
     ) -> int | None:
-        """Validate the times configuration for a round."""
-        # Valid conditions:
-        #   1. start_time + duration
-        #   2. times + duration
-        #   3. start_time + stop_time (need to calculate num_timeslots)
-        if (start_time_dt or times_dt) and dur:
+        """Validate the times configuration for a round.
+
+        Valid conditions:
+        1. start + duration
+        2. times + duration
+        3. start + stop (need to calculate num_timeslots)
+        """
+        if (start_dt or times_dt) and dur:
             return dur
 
-        if start_time_dt and stop_time_dt:
-            total_available = (stop_time_dt - start_time_dt).total_seconds()
+        if start_dt and stop_dt:
+            total_available = (stop_dt - start_dt).total_seconds()
             minimum_duration = total_available // n_timeslots
             return max(1, minimum_duration // 60)
 
@@ -230,93 +229,58 @@ class AppConfig:
     @classmethod
     def calc_num_timeslots(cls, n_times: int, n_locs: int, n_teams: int, rounds_per_team: int) -> int:
         """Calculate the number of timeslots needed for a round."""
+        if not n_times and not n_locs:
+            msg = "Cannot calculate number of timeslots without times or locations."
+            raise ValueError(msg)
+
         if n_times:
             num_timeslots = n_times
         elif n_locs:
             num_timeslots = ceil((n_teams * rounds_per_team) / n_locs)
 
-        if not n_times and not n_locs:
-            msg = "Cannot calculate number of timeslots without times or locations."
-            raise ValueError(msg)
-
         return num_timeslots
 
     @classmethod
     def init_timeslots(
-        cls, times: list[datetime], dur: timedelta, numslots: int, start: datetime
+        cls,
+        start_times: list[datetime],
+        dur_tdelta: timedelta,
+        n_timeslots: int,
+        start_dt: datetime,
     ) -> Iterator[tuple[datetime, datetime]]:
         """Initialize the timeslots for the round."""
-        current_start = times[0] if times else start
-        for i in range(1, numslots + 1):
-            if not times:
-                stop = current_start + dur
-            elif i < len(times):
-                stop = times[i]
-            else:  # Last slot in a list of times needs a duration
-                stop = current_start + dur
+        if start_times:
+            stop_times = start_times[1:]
+            stop_times.append(stop_times[-1] + dur_tdelta)
 
-            yield (current_start, stop)
-            current_start = stop
+        if start_times and stop_times:
+            time_pairs = zip(start_times, stop_times, strict=True)
+            yield from time_pairs
+            return
+
+        current = start_dt
+        for _ in range(n_timeslots):
+            stop = current + dur_tdelta
+            yield (current, stop)
+            current = stop
 
     @classmethod
     def parse_location_config(cls, location_models: list[LocationModel]) -> list[Location]:
         """Parse and return a list of Location objects from the configuration."""
         locations = []
         location_idx_iter = itertools.count()
-        for sec in location_models:
-            for identifier in range(1, sec.count + 1):
-                for j in range(1, sec.sides + 1):
-                    side = -1 if sec.sides == 1 else j
-                    locations.append(
-                        Location(
-                            idx=next(location_idx_iter),
-                            locationtype=sec.name,
-                            name=identifier,
-                            side=side,
-                            teams_per_round=sec.sides,
-                        )
+        for loctype in location_models:
+            for name in range(1, loctype.count + 1):
+                for side_iter in range(1, loctype.sides + 1):
+                    location = Location(
+                        idx=next(location_idx_iter),
+                        locationtype=loctype.name,
+                        name=name,
+                        side=-1 if loctype.sides == 1 else side_iter,
+                        teams_per_round=loctype.sides,
                     )
+                    locations.append(location)
         return locations
-
-    @classmethod
-    def parse_fitness_config(cls, fitness_model: FitnessModel) -> tuple[float, ...]:
-        """Parse and return fitness-related configuration values."""
-        weights = (
-            fitness_model.weight_mean,
-            fitness_model.weight_variation,
-            fitness_model.weight_range,
-        )
-        return tuple(w / sum(weights) for w in weights)
-
-    @classmethod
-    def load_operator_config(cls, model: AppConfigModel) -> OperatorConfig:
-        """Parse and return the operator configuration from the validated model."""
-        op_model = model.genetic.operator
-        return OperatorConfig(
-            crossover_types=op_model.crossover.types,
-            crossover_ks=op_model.crossover.k_vals,
-            mutation_types=op_model.mutation.types,
-        )
-
-    @classmethod
-    def load_ga_parameters(cls, model: AppConfigModel) -> GaParameters:
-        """Build a GaParameters from the validated model."""
-        pa_model = model.genetic.parameters
-        return GaParameters(
-            population_size=pa_model.population_size,
-            generations=pa_model.generations,
-            offspring_size=pa_model.offspring_size,
-            crossover_chance=pa_model.crossover_chance,
-            mutation_chance=pa_model.mutation_chance,
-            num_islands=pa_model.num_islands,
-            migrate_interval=pa_model.migration_interval,
-            migrate_size=pa_model.migration_size,
-        )
-
-    @classmethod
-    def load_rng(cls, model: AppConfigModel) -> np.random.Generator:
-        """Set up the random number generator."""
-        return np.random.default_rng(model.genetic.parameters.rng_seed)
 
     def log_creation_info(self) -> None:
         """Log information about the application configuration creation."""

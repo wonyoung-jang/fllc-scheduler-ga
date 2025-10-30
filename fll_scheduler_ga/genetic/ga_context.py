@@ -99,22 +99,9 @@ class GaContext:
 
         selection = RandomSelect(rng)
         operators = app_config.operators
-        crossovers = tuple(
-            build_crossovers(
-                rng,
-                operators,
-                event_factory,
-                event_properties,
-            )
-        )
-        mutations = tuple(
-            build_mutations(
-                rng,
-                operators,
-                event_factory,
-                event_properties,
-            )
-        )
+        crossovers = build_crossovers(rng, operators, event_factory, event_properties)
+        mutations = build_mutations(rng, operators, event_factory, event_properties)
+
         builder = ScheduleBuilder(
             event_factory=event_factory,
             event_properties=event_properties,
@@ -128,8 +115,10 @@ class GaContext:
         #     config=tournament_config,
         #     rng=rng,
         # )
-        # naive_schedule = builder_naive.build()
-        # repairer.repair(naive_schedule)
+        # naive_schedule = builder_naive.build_naive()
+        # logger.info(naive_schedule.schedule)
+        # logger.info(naive_schedule.team_rounds)
+        # logger.info("\n".join(f"{k}: {v}" for k, v in naive_schedule.team_events.items()))
 
         return cls(
             app_config=app_config,
@@ -207,39 +196,10 @@ class GaContext:
     def run_preflight_checks(self) -> None:
         """Run preflight checks on the tournament configuration."""
         try:
-            self.check_round_definitions()
-            self.check_total_capacity()
             self.check_location_time_overlaps()
         except ValueError:
             logger.exception("Preflight checks failed. Please review the configuration.")
         logger.debug("All preflight checks passed successfully.")
-
-    def check_round_definitions(self) -> None:
-        """Check that round definitions are valid."""
-        c = self.app_config.tournament
-        defined_round_types = {r.roundtype for r in c.rounds}
-        if diff := defined_round_types.difference(set(c.roundreqs)):
-            msg = f"Defined round types {diff} are not required."
-            raise ValueError(msg)
-        logger.debug("Check passed: All required round types (%s) are defined.", c.roundreqs.keys())
-
-    def check_total_capacity(self) -> None:
-        """Check for total available vs. required event slots."""
-        c = self.app_config.tournament
-        for r in c.rounds:
-            rt = r.roundtype
-            required = (c.num_teams * r.rounds_per_team) / r.teams_per_round
-            available = r.num_timeslots * (len(r.locations) // r.teams_per_round)
-            if required > available:
-                msg = (
-                    f"Capacity impossible for TournamentRound '{rt}':\n"
-                    f"  - Required team-events: {required}\n"
-                    f"  - Total available team-event slots: {available}\n"
-                    f"  - Suggestion: Increase duration, locations, or start/end times for this round."
-                )
-                raise ValueError(msg)
-            logger.debug("Check passed: Capacity sufficient for TournamentRound '%s' - %d/%d.", rt, required, available)
-        logger.debug("Check passed: Overall capacity is sufficient.")
 
     def check_location_time_overlaps(self) -> None:
         """Check if different round types are scheduled in the same locations at the same time."""

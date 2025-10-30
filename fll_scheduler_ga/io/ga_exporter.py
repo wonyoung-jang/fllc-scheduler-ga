@@ -115,61 +115,67 @@ class OutputDirManager:
 class ScheduleSummaryGenerator:
     """Exporter for generating summaries of schedules."""
 
+    def get_text_summary(self, schedule: Schedule) -> list[str]:
+        """Get a text summary of the schedule."""
+        txt_data = []
+        objectives = list(FitnessObjective)
+        len_objectives = [len(name) for name in objectives]
+        max_len_obj = max(len_objectives, default=0) + 1
+        txt_data.append(f"FLL Scheduler GA Summary Report (ID: {id(schedule)} | Hash: {hash(schedule)})\n")
+
+        txt_data.append("\n")
+        txt_data.append("Attributes:\n")
+        txt_data.append("--------------------\n")
+        txt_data.extend(f"{slot}: {getattr(schedule, slot)}\n" for slot in schedule.__slots__)
+        txt_data.append(f"Length: {len(schedule)}\n")
+
+        txt_data.append("\n")
+        txt_data.append("Fitness:\n")
+        txt_data.append("--------------------------\n")
+        for name, score in zip(objectives, schedule.fitness, strict=True):
+            txt_data.append(f"{name:<{max_len_obj}}: {score:.6f}\n")
+        txt_data.append(f"{'-' * (max_len_obj + 15)}\n")
+        txt_data.append(f"{'Total':<{max_len_obj}}: {sum(schedule.fitness):.6f}\n")
+        txt_data.append(f"{'Percentage':<{max_len_obj}}: {sum(schedule.fitness) / len(schedule.fitness):.2%}\n")
+
+        all_teams = schedule.teams
+        team_fits = schedule.team_fitnesses
+        total_fitnesses = team_fits.sum(axis=1)
+        max_team_f = max(total_fitnesses)
+        min_team_f = min(total_fitnesses)
+
+        txt_data.append("\n")
+        txt_data.append("Team fitnesses (sorted by total fitness descending):\n")
+        txt_data.append("----------------------------------------------------\n")
+        txt_data.append(f"Max     : {max_team_f:.6f}\n")
+        txt_data.append(f"Min     : {min_team_f:.6f}\n")
+        txt_data.append(f"Range   : {max_team_f - min_team_f:.6f}\n")
+        txt_data.append(f"Average : {sum(total_fitnesses) / len(total_fitnesses):.6f}\n")
+
+        txt_data.append("\n")
+        objectives_header = (f"{name:<{len_objectives[i] + 1}}" for i, name in enumerate(objectives))
+        objectives_header_str = "|".join(objectives_header)
+        header = f"{'Team':<5}|{objectives_header_str}|Sum\n"
+        txt_data.append(header)
+        txt_data.append("-" * len(header) + "\n")
+
+        normalized_teams = schedule.normalized_teams()
+        for t, fit in sorted(zip(all_teams, team_fits, strict=True), key=lambda x: -x[1].sum()):
+            fitness_row = (f"{score:<{len_objectives[i] + 1}.4f}" for i, score in enumerate(fit))
+            fitness_str = "|".join(fitness_row)
+            team_id = normalized_teams[t]
+            if team_id is None:
+                team_id = -1
+            txt_data.append(f"{team_id:<5}|{fitness_str}|{sum(fit):.4f}\n")
+
+        return txt_data
+
     def generate(self, schedule: Schedule, path: Path) -> None:
         """Generate a text summary report for a single schedule."""
+        txt_data = self.get_text_summary(schedule)
         try:
             with path.open("w", encoding="utf-8") as f:
-                objectives = list(FitnessObjective)
-                len_objectives = [len(name) for name in objectives]
-                max_len_obj = max(len_objectives, default=0) + 1
-                f.write(f"FLL Scheduler GA Summary Report (ID: {id(schedule)} | Hash: {hash(schedule)})\n")
-
-                f.write("\n")
-                f.write("Attributes:\n")
-                f.write("--------------------\n")
-                slots = (s for s in schedule.__slots__)
-                for slot in slots:
-                    f.write(f"{slot}: {getattr(schedule, slot)}\n")
-                f.write(f"Length: {len(schedule)}\n")
-
-                f.write("\n")
-                f.write("Fitness:\n")
-                f.write("--------------------------\n")
-                for name, score in zip(objectives, schedule.fitness, strict=True):
-                    f.write(f"{name:<{max_len_obj}}: {score:.6f}\n")
-                f.write(f"{'-' * (max_len_obj + 15)}\n")
-                f.write(f"{'Total':<{max_len_obj}}: {sum(schedule.fitness):.6f}\n")
-                f.write(f"{'Percentage':<{max_len_obj}}: {sum(schedule.fitness) / len(schedule.fitness):.2%}\n")
-
-                all_teams = schedule.teams
-                team_fits = schedule.team_fitnesses
-                total_fitnesses = team_fits.sum(axis=1)
-                max_team_f = max(total_fitnesses)
-                min_team_f = min(total_fitnesses)
-
-                f.write("\n")
-                f.write("Team fitnesses (sorted by total fitness descending):\n")
-                f.write("----------------------------------------------------\n")
-                f.write(f"Max     : {max_team_f:.6f}\n")
-                f.write(f"Min     : {min_team_f:.6f}\n")
-                f.write(f"Range   : {max_team_f - min_team_f:.6f}\n")
-                f.write(f"Average : {sum(total_fitnesses) / len(total_fitnesses):.6f}\n")
-
-                f.write("\n")
-                objectives_header = (f"{name:<{len_objectives[i] + 1}}" for i, name in enumerate(objectives))
-                objectives_header_str = "|".join(objectives_header)
-                header = f"{'Team':<5}|{objectives_header_str}|Sum\n"
-                f.write(header)
-                f.write("-" * len(header) + "\n")
-
-                normalized_teams = schedule.normalized_teams()
-                for t, fit in sorted(zip(all_teams, team_fits, strict=True), key=lambda x: -x[1].sum()):
-                    fitness_row = (f"{score:<{len_objectives[i] + 1}.4f}" for i, score in enumerate(fit))
-                    fitness_str = "|".join(fitness_row)
-                    team_id = normalized_teams[t]
-                    if team_id is None:
-                        team_id = -1
-                    f.write(f"{team_id:<5}|{fitness_str}|{sum(fit):.4f}\n")
+                f.writelines(txt_data)
         except OSError:
             logger.exception("Failed to write summary report to file %s", path)
 
@@ -180,40 +186,42 @@ class TeamScheduleGenerator:
 
     ga: GA
 
+    def get_team_schedule(self, schedule: Schedule) -> list[list[str]]:
+        """Get the schedule for each team."""
+        config = self.ga.context.app_config.tournament
+        rows: list[list[str]] = []
+        headers: list[str] = ["Team"]
+
+        for roundtype, rounds_per_team in config.roundreqs.items():
+            if rounds_per_team == 1:
+                headers.append(f"{roundtype.capitalize()}")
+                headers.append("")
+            else:
+                for i in range(1, rounds_per_team + 1):
+                    headers.append(f"{roundtype.capitalize()} {i}")
+                    headers.append("")
+
+        rows.append(headers)
+
+        team_events: dict[int, set[int]] = defaultdict(set)
+        for event_id, team_id in enumerate(schedule):
+            if team_id >= 0:
+                team_events[team_id].add(event_id)
+
+        ep = self.ga.context.event_properties
+        for team_id, events in sorted(team_events.items()):
+            r = [str(team_id + 1)]
+            for event_id in sorted(events):
+                r.append(str(ep.timeslot[event_id]))
+                r.append(str(ep.location[event_id]))
+            rows.append(r)
+        return rows
+
     def generate(self, schedule: Schedule, path: Path) -> None:
         """Generate a CSV file with team schedules, sorted by team IDs."""
         try:
             with path.open("w", newline="", encoding="utf-8") as f:
-                config = self.ga.context.app_config.tournament
-                rows: list[list[str]] = []
-                headers: list[str] = ["Team"]
-
-                for r in config.rounds:
-                    roundtype = r.roundtype.capitalize()
-                    rounds_per_team = r.rounds_per_team
-                    if rounds_per_team == 1:
-                        headers.append(f"{roundtype}")
-                        headers.append("")
-                    else:
-                        for i in range(1, rounds_per_team + 1):
-                            headers.append(f"{roundtype} {i}")
-                            headers.append("")
-
-                rows.append(headers)
-
-                team_events: dict[int, set[int]] = defaultdict(set)
-                for event_id, team_id in enumerate(schedule):
-                    if team_id >= 0:
-                        team_events[team_id].add(event_id)
-
-                ep = self.ga.context.event_properties
-                for team_id, events in sorted(team_events.items()):
-                    r = [str(team_id + 1)]
-                    for event_id in sorted(events):
-                        r.append(str(ep.timeslot[event_id]))
-                        r.append(str(ep.location[event_id]))
-                    rows.append(r)
-
+                rows = self.get_team_schedule(schedule)
                 csv.writer(f).writerows(rows)
         except OSError:
             logger.exception("Failed to write team schedules to file %s", path)
@@ -223,19 +231,28 @@ class TeamScheduleGenerator:
 class ParetoSummaryGenerator:
     """Exporter for generating Pareto front summaries."""
 
+    def get_pareto_summary(self, pop: list[Schedule]) -> list[list[str]]:
+        """Get a summary of the Pareto front."""
+        summary: list[list[str]] = []
+        header = ["Schedule", "ID", "Hash", "Rank"]
+        header.extend(name.value for name in FitnessObjective)
+        header.extend(["Sum", "Origin", "Mutations", "Clones"])
+        summary.append(header)
+
+        for i, s in enumerate(pop, start=1):
+            row = [str(i), str(id(s)), str(hash(s)), str(s.rank)]
+            row.extend(f"{score:.4f}" for score in s.fitness)
+            row.append(f"{s.fitness.sum():.4f}")
+            row.extend([s.origin, str(s.mutations), str(s.clones)])
+            summary.append(row)
+        return summary
+
     def generate(self, pop: list[Schedule], path: Path) -> None:
         """Generate a summary of the Pareto front."""
         try:
-            with path.open("w", encoding="utf-8") as f:
-                f.write("Schedule,ID,Hash,Rank,")
-                for name in FitnessObjective:
-                    f.write(f"{name.value},")
-                f.write("Sum,Origin,Mutations,Clones\n")
-
-                for i, s in enumerate(pop, start=1):
-                    f.write(f"{i},{id(s)},{hash(s)},{s.rank},")
-                    for score in s.fitness:
-                        f.write(f"{score:.4f},")
-                    f.write(f"{s.fitness.sum():.4f},{s.origin},{s.mutations},{s.clones}\n")
+            with path.open("w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                summary = self.get_pareto_summary(pop)
+                writer.writerows(summary)
         except OSError:
             logger.exception("Failed to write Pareto summary to file %s", path)

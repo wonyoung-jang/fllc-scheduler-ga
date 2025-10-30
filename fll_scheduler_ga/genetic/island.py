@@ -35,9 +35,7 @@ class Island:
     rng: np.random.Generator = None
     builder: ScheduleBuilder = None
     ga_params: GaParameters = None
-
     selected: list[Schedule] = field(default_factory=list, repr=False)
-
     curr_gen: int = 0
     fitness_history: np.ndarray = None
     curr_schedule_fitnesses: np.ndarray = None
@@ -62,8 +60,9 @@ class Island:
 
     def update_fitness_history(self) -> None:
         """Update the fitness history with the current generation's fitness."""
-        if self.curr_schedule_fitnesses is not None and self.curr_schedule_fitnesses.size > 0:
-            self.fitness_history[self.curr_gen] = self.curr_schedule_fitnesses.mean(axis=0)
+        curr_fits = self.curr_schedule_fitnesses
+        if curr_fits is not None and curr_fits.size > 0:
+            self.fitness_history[self.curr_gen] = curr_fits.mean(axis=0)
 
     def pareto_front(self) -> list[Schedule]:
         """Get the Pareto front for each island in the population."""
@@ -105,13 +104,9 @@ class Island:
         logger.debug("Island %d: Handling underpopulation with %d individuals", self.identity, needed)
         self.build_n_schedules(needed)
 
-    def mutate_schedule(self, schedule: Schedule, *, m_roll: bool = True) -> bool:
+    def mutate_schedule(self, schedule: Schedule) -> bool:
         """Mutate a child schedule."""
-        if not m_roll or not self.context.mutations:
-            return False
-
         m: Mutation = self.rng.choice(self.context.mutations)
-
         m_str = str(m)
         self.mutation_ratio["total"][m_str] += 1
         if m.mutate(schedule):
@@ -120,14 +115,9 @@ class Island:
             return True
         return False
 
-    def crossover_schedule(self, parents: Iterator[Schedule], *, c_roll: bool = True) -> Iterator[Schedule]:
+    def crossover_schedule(self, parents: Iterator[Schedule]) -> Iterator[Schedule]:
         """Perform crossover between two parent schedules."""
-        if not c_roll or not self.context.crossovers:
-            yield from (p.clone() for p in parents)
-            return
-
         c: Crossover = self.rng.choice(self.context.crossovers)
-
         c_str = str(c)
         for child in c.cross(parents):
             self.crossover_ratio["total"][c_str] += 1
@@ -146,9 +136,15 @@ class Island:
             parents_indices = self.context.selection.select(len(pop), k=2)
             parents = (pop[i] for i in parents_indices)
             c_roll = self.ga_params.crossover_chance > self.rng.random()
-            for child in self.crossover_schedule(parents, c_roll=c_roll):
+            if c_roll and self.context.crossovers:
+                offspring = self.crossover_schedule(parents)
+            else:
+                offspring = (p.clone() for p in parents)
+
+            for child in offspring:
                 m_roll = self.ga_params.mutation_chance > self.rng.random()
-                self.mutate_schedule(child, m_roll=m_roll)
+                if m_roll and self.context.mutations:
+                    self.mutate_schedule(child)
                 if self.context.checker.check(child):
                     self.add_to_population(child)
 
@@ -179,7 +175,7 @@ class Island:
 
     def give_migrants(self) -> Iterator[Schedule]:
         """Randomly yield migrants from population."""
-        for _ in range(self.ga_params.migrate_size):
+        for _ in range(self.ga_params.migration_size):
             i = self.rng.integers(0, len(self.selected))
             yield self.selected.pop(i)
 

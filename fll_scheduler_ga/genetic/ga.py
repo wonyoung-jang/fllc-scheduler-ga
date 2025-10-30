@@ -54,8 +54,8 @@ class GA:
         self.ga_params = self.context.app_config.ga_params
         self.generations_array = np.arange(1, self.ga_params.generations + 1)
         self.migrate_generations: np.ndarray = np.zeros(self.ga_params.generations + 1, dtype=int)
-        if self.ga_params.num_islands > 1 and self.ga_params.migrate_size > 0:
-            self.migrate_generations[:: self.ga_params.migrate_interval] = 1
+        if self.ga_params.num_islands > 1 and self.ga_params.migration_size > 0:
+            self.migrate_generations[:: self.ga_params.migration_interval] = 1
 
         self.fitness_history = np.full(
             (self.ga_params.generations, len(self.context.evaluator.objectives)),
@@ -305,19 +305,16 @@ class GA:
             logger.debug("Pickle file is empty")
 
         seed_config: TournamentConfig | None = seed_data.get("config")
-        if not seed_config:
+        if seed_config is None:
             logger.warning("Seed population is missing config. Using current...")
             return None
 
-        if (
-            self.context.app_config.tournament.num_teams != seed_config.num_teams
-            or self.context.app_config.tournament.rounds != seed_config.rounds
-        ):
+        if self.context.app_config.tournament != seed_config:
             logger.warning("Seed population does not match current config. Using current...")
             return None
 
         population = seed_data.get("population")
-        if not population:
+        if population is None:
             logger.warning("Seed population is missing. Using current...")
             return None
 

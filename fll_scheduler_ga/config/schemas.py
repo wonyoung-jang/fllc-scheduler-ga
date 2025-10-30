@@ -4,20 +4,20 @@ import logging
 from datetime import datetime, timedelta
 
 import numpy as np
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ..data_model.location import Location
 from ..data_model.time import TimeSlot
-from .constants import RANDOM_SEED_RANGE, CrossoverOp, MutationOp
+from .constants import RANDOM_SEED_RANGE, TIME_FORMAT_MAP, CrossoverOp, MutationOp
 
 logger = logging.getLogger(__name__)
 
 
-class GaParametersModel(BaseModel):
+class GaParameters(BaseModel):
     """Genetic Algorithm parameters."""
 
-    generations: int
     population_size: int
+    generations: int
     offspring_size: int
     crossover_chance: float
     mutation_chance: float
@@ -26,8 +26,23 @@ class GaParametersModel(BaseModel):
     migration_size: int
     rng_seed: int | str | None
 
+    def __str__(self) -> str:
+        """Representation of GA parameters."""
+        return (
+            f"\n\tGaParameters:"
+            f"\n\t  population_size    : {self.population_size}"
+            f"\n\t  generations        : {self.generations}"
+            f"\n\t  offspring_size     : {self.offspring_size}"
+            f"\n\t  crossover_chance   : {self.crossover_chance:.2f}"
+            f"\n\t  mutation_chance    : {self.mutation_chance:.2f}"
+            f"\n\t  num_islands        : {self.num_islands}"
+            f"\n\t  migrate_interval   : {self.migration_interval}"
+            f"\n\t  migrate_size       : {self.migration_size}"
+            f"\n\t  rng_seed           : {self.rng_seed}"
+        )
+
     @model_validator(mode="after")
-    def validate(self) -> "GaParametersModel":
+    def validate(self) -> "GaParameters":
         """Validate that migration settings are only used with multiple islands."""
         if self.generations < 1:
             self.generations = 128
@@ -89,18 +104,27 @@ class MutationModel(BaseModel):
     types: list[MutationOp | str] = Field(default_factory=list)
 
 
-class OperatorModel(BaseModel):
+class OperatorConfig(BaseModel):
     """Container for operator configurations."""
 
     crossover: CrossoverModel
     mutation: MutationModel
 
+    def __str__(self) -> str:
+        """Represent the OperatorConfig."""
+        return (
+            f"\n\tOperatorConfig:"
+            f"\n\t  crossover_types:\n\t\t{'\n\t\t'.join(str(c) for c in self.crossover.types)}"
+            f"\n\t  crossover_ks:\n\t\t{'\n\t\t'.join(str(k) for k in self.crossover.k_vals)}"
+            f"\n\t  mutation_types:\n\t\t{'\n\t\t'.join(str(m) for m in self.mutation.types)}"
+        )
+
 
 class GeneticModel(BaseModel):
     """Configuration for the genetic algorithm."""
 
-    parameters: GaParametersModel
-    operator: OperatorModel
+    parameters: GaParameters
+    operator: OperatorConfig
 
 
 class RuntimeModel(BaseModel):
@@ -143,6 +167,10 @@ class TeamsModel(BaseModel):
 
     teams: list[int | str] | int
 
+    def __len__(self) -> int:
+        """Return the number of teams."""
+        return len(self.teams)
+
     @model_validator(mode="after")
     def validate(self) -> "TeamsModel":
         """Validate that num_teams matches the length of identities if both are provided."""
@@ -151,6 +179,10 @@ class TeamsModel(BaseModel):
         elif isinstance(self.teams, int):
             self.teams = [str(i) for i in range(1, self.teams + 1)]
         return self
+
+    def get_team_ids(self) -> dict[int, str]:
+        """Return a mapping of team indices to team identities."""
+        return dict(enumerate(self.teams, start=1))
 
 
 class FitnessModel(BaseModel):
@@ -178,20 +210,32 @@ class FitnessModel(BaseModel):
             logger.warning("All fitness weights were zero; defaulting all weights to 1.0.")
         return self
 
+    def get_fitness_tuple(self) -> tuple[float, ...]:
+        """Return the fitness weights as a tuple."""
+        weights = (
+            self.weight_mean,
+            self.weight_variation,
+            self.weight_range,
+        )
+        sum_w = sum(weights)
+        return tuple(w / sum_w for w in weights)
+
 
 class TimeModel(BaseModel):
     """Configuration for time format."""
 
     format: int
+    time_fmt: str = ""
 
-    @field_validator("format", mode="after")
-    @classmethod
-    def check_format(cls, v: int) -> int:
-        """Validate that the time format is either 12 or 24."""
-        if v not in (12, 24):
+    @model_validator(mode="after")
+    def set_time_fmt(self) -> "TimeModel":
+        """Set the time_fmt field based on the format."""
+        if self.format not in TIME_FORMAT_MAP:
             msg = "Invalid time format. Must be 12 or 24."
             raise ValueError(msg)
-        return v
+
+        self.time_fmt = TIME_FORMAT_MAP[self.format]
+        return self
 
 
 class LocationModel(BaseModel):
@@ -242,53 +286,10 @@ class AppConfigModel(BaseModel):
     rounds: list[RoundModel]
 
 
-class GaParameters(BaseModel):
-    """Genetic Algorithm parameters."""
-
-    population_size: int
-    generations: int
-    offspring_size: int
-    crossover_chance: float
-    mutation_chance: float
-    num_islands: int
-    migrate_interval: int
-    migrate_size: int
-
-    def __str__(self) -> str:
-        """Representation of GA parameters."""
-        return (
-            f"\n\tGaParameters:"
-            f"\n\t  population_size    : {self.population_size}"
-            f"\n\t  generations        : {self.generations}"
-            f"\n\t  offspring_size     : {self.offspring_size}"
-            f"\n\t  crossover_chance   : {self.crossover_chance:.2f}"
-            f"\n\t  mutation_chance    : {self.mutation_chance:.2f}"
-            f"\n\t  num_islands        : {self.num_islands}"
-            f"\n\t  migrate_interval   : {self.migrate_interval}"
-            f"\n\t  migrate_size       : {self.migrate_size}"
-        )
-
-
-class OperatorConfig(BaseModel):
-    """Genetic Algorithm operators."""
-
-    crossover_types: list[CrossoverOp | str]
-    crossover_ks: list[int]
-    mutation_types: list[MutationOp | str]
-
-    def __str__(self) -> str:
-        """Represent the OperatorConfig."""
-        return (
-            f"\n\tOperatorConfig:"
-            f"\n\t  crossover_types:\n\t\t{'\n\t\t'.join(str(c) for c in self.crossover_types)}"
-            f"\n\t  crossover_ks:\n\t\t{'\n\t\t'.join(str(k) for k in self.crossover_ks)}"
-            f"\n\t  mutation_types:\n\t\t{'\n\t\t'.join(str(m) for m in self.mutation_types)}"
-        )
-
-
 class TournamentRound(BaseModel):
     """Representation of a round in the FLL tournament."""
 
+    model_config: ConfigDict = ConfigDict(arbitrary_types_allowed=True, frozen=True)
     roundtype: str
     roundtype_idx: int
     rounds_per_team: int
@@ -303,6 +304,8 @@ class TournamentRound(BaseModel):
     timeslots: list[TimeSlot]
     slots_total: int
     slots_required: int
+    slots_empty: int
+    unfilled_allowed: bool
 
     def __str__(self) -> str:
         """Represent the TournamentRound."""
@@ -322,12 +325,27 @@ class TournamentRound(BaseModel):
             f"\n\t  timeslots        : {[str(timeslot) for timeslot in self.timeslots]}"
             f"\n\t  slots_total      : {self.slots_total}"
             f"\n\t  slots_required   : {self.slots_required}"
+            f"\n\t  slots_empty      : {self.slots_empty}"
+            f"\n\t  unfilled_allowed : {self.unfilled_allowed}"
         )
+
+    @field_validator("slots_empty", mode="after")
+    @classmethod
+    def validate_slots_empty(cls, v: int) -> int:
+        """Validate that slots_empty is not negative."""
+        if v < 0:
+            msg = (
+                "Insufficient capacity for TournamentRound (required > available).\n"
+                "Suggestion: increase number of locations or timeslots."
+            )
+            raise ValueError(msg)
+        return v
 
 
 class TournamentConfig(BaseModel):
     """Configuration for the tournament."""
 
+    model_config: ConfigDict = ConfigDict(arbitrary_types_allowed=True, frozen=True)
     num_teams: int
     time_fmt: str
     rounds: list[TournamentRound]

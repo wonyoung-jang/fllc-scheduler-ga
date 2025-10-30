@@ -1,21 +1,19 @@
 """Location data model for FLL Scheduler GA."""
 
-from __future__ import annotations
-
-from dataclasses import dataclass
+from pydantic import BaseModel, Field
 
 from ..config.constants import ASCII_OFFSET
 
 
-@dataclass(slots=True, frozen=True)
-class Location:
+class Location(BaseModel):
     """Data model for a location in the FLL Scheduler GA."""
 
-    idx: int
-    locationtype: str
-    name: int
-    side: int
-    teams_per_round: int
+    model_config = {"frozen": True}
+    idx: int = Field(ge=0)
+    locationtype: str = Field(min_length=1)
+    name: int = Field(ge=0)
+    side: int = Field(ge=-1)
+    teams_per_round: int = Field(ge=1)
 
     def __str__(self) -> str:
         """Represent the Location as a string."""

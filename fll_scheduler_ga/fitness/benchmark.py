@@ -119,6 +119,8 @@ class FitnessBenchmark:
                 frozenset(r.timeslots),
                 r.slots_total,
                 r.slots_required,
+                r.slots_empty,
+                r.unfilled_allowed,
             )
             for r in self.config.rounds
         )
