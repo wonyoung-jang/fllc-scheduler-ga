@@ -1,0 +1,109 @@
+{
+  "genetic": {
+    "parameters": {
+      "generations": 5000,
+      "population_size": 32,
+      "offspring_size": 4,
+      "crossover_chance": 0.7,
+      "mutation_chance": 0.4,
+      "num_islands": 8,
+      "migration_interval": 100,
+      "migration_size": 3,
+      "rng_seed": null
+    },
+    "operator": {
+      "crossover": {
+        "types": ["KPoint", "Scattered", "Uniform", "RoundTypeCrossover", "TimeSlotCrossover", "LocationCrossover"],
+        "k_vals": [1, 2, 3]
+      },
+      "mutation": {
+        "types": [
+          "SwapMatch_CrossTimeLocation",
+          "SwapMatch_SameLocation",
+          "SwapMatch_SameTime",
+          "SwapTeam_CrossTimeLocation",
+          "SwapTeam_SameLocation",
+          "SwapTeam_SameTime",
+          "SwapTableSide",
+          "Inversion",
+          "Scramble"
+        ]
+      }
+    }
+  },
+  "runtime": {
+    "add_import_to_population": true,
+    "flush": false,
+    "flush_benchmarks": false,
+    "import_file": "",
+    "seed_file": "fll_scheduler_ga.pkl"
+  },
+  "exports": {
+    "output_dir": "fllc_schedule_outputs",
+    "summary_reports": true,
+    "schedules_csv": true,
+    "schedules_html": true,
+    "schedules_team_csv": true,
+    "pareto_summary": true,
+    "plot_fitness": true,
+    "plot_parallel": true,
+    "plot_scatter": true,
+    "front_only": true,
+    "no_plotting": false,
+    "cmap_name": "viridis"
+  },
+  "logging": {
+    "log_file": "fll_scheduler_ga.log",
+    "loglevel_file": "DEBUG",
+    "loglevel_console": "INFO"
+  },
+  "teams": {
+    "teams": 42
+  },
+  "fitness": {
+    "weight_mean": 3,
+    "weight_variation": 1,
+    "weight_range": 0
+  },
+  "time": {
+    "format": 24
+  },
+  "locations": [
+    {
+      "name": "Room",
+      "count": 7,
+      "sides": 1
+    },
+    {
+      "name": "Table",
+      "count": 4,
+      "sides": 2
+    }
+  ],
+  "rounds": [
+    {
+      "roundtype": "Judging",
+      "location": "Room",
+      "rounds_per_team": 1,
+      "teams_per_round": 1,
+      "start_time": "08:00",
+      "stop_time": "12:30"
+    },
+    {
+      "roundtype": "Practice",
+      "location": "Table",
+      "rounds_per_team": 2,
+      "teams_per_round": 2,
+      "times": ["09:00", "09:15", "09:30", "09:45", "10:00", "10:15", "10:30", "10:45", "11:00", "11:15", "11:30", "11:45"],
+      "duration_minutes": 15
+    },
+    {
+      "roundtype": "Table",
+      "location": "Table",
+      "rounds_per_team": 3,
+      "teams_per_round": 2,
+      "start_time": "13:30",
+      "duration_minutes": 11
+    }
+  ]
+}
