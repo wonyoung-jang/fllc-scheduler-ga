@@ -67,12 +67,11 @@ class AppConfig(BaseModel):
     @classmethod
     def build_from_model(cls, model: AppConfigModel) -> AppConfig:
         """Create and return the application configuration from a Pydantic model."""
-        tournament_config = cls.load_tournament_config(model)
         return cls(
             runtime=model.runtime,
             exports=model.exports,
             logging=model.logging,
-            tournament=tournament_config,
+            tournament=cls.load_tournament_config(model),
             operators=model.genetic.operator,
             ga_params=model.genetic.parameters,
             rng=np.random.default_rng(model.genetic.parameters.rng_seed),

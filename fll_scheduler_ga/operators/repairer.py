@@ -47,23 +47,20 @@ class Repairer:
         if len(schedule) == self.config.total_slots_required:
             return True
 
-        teams_by_rt_tpr, events_by_rt_tpr = self.get_rt_tpr_maps(schedule)
-        return self.recursive_repair(schedule, teams_by_rt_tpr, events_by_rt_tpr)
+        teams, events = self.get_rt_tpr_maps(schedule)
+        return self.recursive_repair(schedule, teams, events)
 
     def recursive_repair(
-        self,
-        schedule: Schedule,
-        teams_by_rt_tpr: dict[tuple[str, int], list[int]],
-        events_by_rt_tpr: dict[tuple[str, int], list[int]],
+        self, schedule: Schedule, teams: dict[tuple[int, int], list[int]], events: dict[tuple[int, int], list[int]]
     ) -> bool:
         """Recursively repair the schedule by attempting to assign events to teams."""
         assign_map = self.repair_map
-        for key, teams_for_rt in teams_by_rt_tpr.items():
+        for key, teams_for_rt in teams.items():
             _, tpr = key
             if len(set(teams_for_rt)) < tpr:
                 break  # Not enough unique teams to fill a match, recurse
 
-            if not (events_for_rt := events_by_rt_tpr.get(key)):
+            if not (events_for_rt := events.get(key)):
                 msg = f"No available events for round type {key[0]} with teams per round {tpr}"
                 raise ValueError(msg)
 
@@ -71,13 +68,13 @@ class Repairer:
                 msg = f"No assignment function for teams per round: {tpr}"
                 raise ValueError(msg)
 
-            teams_by_rt_tpr[key], events_by_rt_tpr[key] = assign_fn(
+            teams[key], events[key] = assign_fn(
                 teams=dict(enumerate(teams_for_rt)),
                 events=dict(enumerate(events_for_rt)),
                 schedule=schedule,
             )
 
-            if teams_by_rt_tpr[key]:  # noqa: PLR1733
+            if teams[key]:  # noqa: PLR1733
                 break
 
         if len(schedule) == self.config.total_slots_required:
@@ -97,45 +94,45 @@ class Repairer:
             elif self.event_properties.loc_side[event] == 2:
                 e1, e2 = event_paired, event
 
-        events_by_rt_tpr[ek].append(e1)
+        events[ek].append(e1)
 
         t1 = schedule[e1]
-        teams_by_rt_tpr[ek].append(t1)
+        teams[ek].append(t1)
         schedule.unassign(t1, e1)
 
         if e2 is not None:
             t2 = schedule[e2]
-            teams_by_rt_tpr[ek].append(t2)
+            teams[ek].append(t2)
             schedule.unassign(t2, e2)
 
-        return self.recursive_repair(schedule, teams_by_rt_tpr, events_by_rt_tpr)
+        return self.recursive_repair(schedule, teams, events)
 
     def get_rt_tpr_maps(
         self, schedule: Schedule
-    ) -> tuple[dict[tuple[str, int], list[int]], dict[tuple[str, int], list[int]]]:
+    ) -> tuple[dict[tuple[int, int], list[int]], dict[tuple[int, int], list[int]]]:
         """Get the round type to team/player maps for the current schedule."""
         rt_tpr_config = self.config.round_idx_to_tpr
 
-        teams_by_rt_tpr: dict[tuple[str, int], list[int]] = defaultdict(list)
+        teams: dict[tuple[int, int], list[int]] = defaultdict(list)
         for t, roundreqs in enumerate(schedule.team_rounds):
             for rt, n in enumerate(roundreqs):
                 k = (rt, rt_tpr_config[rt])
-                teams_by_rt_tpr[k].extend([t] * n)
+                teams[k].extend([t] * n)
 
         _paired_idx = self.event_properties.paired_idx
         _loc_side = self.event_properties.loc_side
         _rt_idx = self.event_properties.roundtype_idx
 
-        events_by_rt_tpr: dict[tuple[str, int], list[int]] = defaultdict(list)
+        events: dict[tuple[int, int], list[int]] = defaultdict(list)
         for e in schedule.unscheduled_events():
             paired_e = _paired_idx[e]
             if (paired_e != -1 and _loc_side[e] == 1) or paired_e == -1:
                 rt = _rt_idx[e]
                 k = (rt, rt_tpr_config[rt])
-                if k in teams_by_rt_tpr:
-                    events_by_rt_tpr[k].append(e)
+                if k in teams:
+                    events[k].append(e)
 
-        return teams_by_rt_tpr, events_by_rt_tpr
+        return teams, events
 
     def repair_singles(
         self, teams: dict[int, int], events: dict[int, int], schedule: Schedule
@@ -155,6 +152,7 @@ class Repairer:
             else:
                 teams[tkey] = t
                 break
+
         return list(teams.values()), list(events.values())
 
     def repair_matches(

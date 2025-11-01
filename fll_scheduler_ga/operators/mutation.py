@@ -31,6 +31,11 @@ def build_mutations(
     event_properties: EventProperties,
 ) -> tuple[Mutation, ...]:
     """Build and return a tuple of mutation operators based on the configuration."""
+    if not (mutation_types := operators.mutation.types):
+        logger.warning("No mutation types enabled in the configuration. Mutation will not occur.")
+        return ()
+
+    mutations = []
     mutation_factory = {
         # SwapMatchMutation variants
         MutationOp.SWAP_MATCH_CROSS_TIME_LOCATION: lambda p: SwapMatchMutation(
@@ -74,17 +79,11 @@ def build_mutations(
         MutationOp.INVERSION: lambda p: InversionMutation(**p),
         MutationOp.SCRAMBLE: lambda p: ScrambleMutation(**p),
     }
-
-    mutations = []
     params = {
         "rng": rng,
         "event_factory": event_factory,
         "event_properties": event_properties,
     }
-
-    if not (mutation_types := operators.mutation.types):
-        logger.warning("No mutation types enabled in the configuration. Mutation will not occur.")
-        return mutations
 
     for mutation_name in mutation_types:
         if mutation_name not in mutation_factory:

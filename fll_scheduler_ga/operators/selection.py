@@ -25,7 +25,7 @@ class Selection(ABC):
     rng: np.random.Generator
 
     @abstractmethod
-    def select(self, n: int, k: int = 2) -> np.ndarray:
+    def select(self, n: int, k: int) -> np.ndarray:
         """Select individuals from the population to form the next generation.
 
         Args:

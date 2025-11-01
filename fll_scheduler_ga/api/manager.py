@@ -51,7 +51,7 @@ class RunManager:
         run_output_dir = self.base_output_dir / run_id
         run_output_dir.mkdir()
 
-        config_model.arguments.output_dir = str(run_output_dir)
+        config_model.exports.output_dir = str(run_output_dir)
         process = Process(target=_ga_process_wrapper, args=(config_model,))
         process.start()
 

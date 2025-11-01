@@ -29,6 +29,11 @@ def build_crossovers(
     event_properties: EventProperties,
 ) -> tuple[Crossover, ...]:
     """Build and return a tuple of crossover operators based on the configuration."""
+    if not (crossover_types := operators.crossover.types):
+        logger.warning("No crossover types enabled in the configuration. Crossover will not occur.")
+        return []
+
+    crossovers = []
     crossover_factory = {
         CrossoverOp.K_POINT: lambda p, k: KPoint(**p, k=k),
         CrossoverOp.SCATTERED: lambda p: Scattered(**p),
@@ -37,17 +42,11 @@ def build_crossovers(
         CrossoverOp.TIMESLOT_CROSSOVER: lambda p: TimeSlotCrossover(**p),
         CrossoverOp.LOCATION_CROSSOVER: lambda p: LocationCrossover(**p),
     }
-
-    crossovers = []
     params = {
         "event_factory": event_factory,
         "event_properties": event_properties,
         "rng": rng,
     }
-
-    if not (crossover_types := operators.crossover.types):
-        logger.warning("No crossover types enabled in the configuration. Crossover will not occur.")
-        return crossovers
 
     for crossover_name in crossover_types:
         if crossover_name not in crossover_factory:

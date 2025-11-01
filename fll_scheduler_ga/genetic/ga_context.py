@@ -136,19 +136,19 @@ class GaContext:
 
     def handle_seed_file(self) -> None:
         """Handle the seed file for the genetic algorithm."""
-        args = self.app_config.runtime
+        runtime = self.app_config.runtime
         config = self.app_config.tournament
-        path = Path(args.seed_file).resolve()
+        path = Path(runtime.seed_file).resolve()
 
-        if args.flush and path.exists():
+        if runtime.flush and path.exists():
             path.unlink(missing_ok=True)
         path.touch(exist_ok=True)
 
-        if not args.import_file:
+        if not runtime.import_file:
             logger.debug("No import file specified, skipping import step.")
             return
 
-        import_path = Path(args.import_file).resolve()
+        import_path = Path(runtime.import_file).resolve()
         csv_importer = CsvImporter(import_path, config, self.event_factory, self.event_properties)
         imported_schedule_csv = csv_importer.schedule
 
@@ -164,7 +164,7 @@ class GaContext:
             summary_gen = ScheduleSummaryGenerator()
             summary_gen.generate(imported_schedule_csv, report_path)
 
-        if not args.add_import_to_population:
+        if not runtime.add_import_to_population:
             logger.debug("Not adding imported schedule to population.")
             return
 
