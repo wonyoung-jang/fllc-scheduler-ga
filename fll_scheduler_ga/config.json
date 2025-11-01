@@ -1,14 +1,14 @@
 {
   "genetic": {
     "parameters": {
-      "generations": 500,
-      "population_size": 8,
-      "offspring_size": 2,
+      "generations": 5000,
+      "population_size": 32,
+      "offspring_size": 4,
       "crossover_chance": 0.7,
       "mutation_chance": 0.4,
       "num_islands": 8,
-      "migration_interval": 50,
-      "migration_size": 1,
+      "migration_interval": 100,
+      "migration_size": 3,
       "rng_seed": null
     },
     "operator": {
@@ -35,7 +35,7 @@
     "add_import_to_population": true,
     "flush": false,
     "flush_benchmarks": false,
-    "import_file": "",
+    "import_file": "real_life_examples\\fllc_2022-2023\\schedule.csv",
     "seed_file": "fll_scheduler_ga.pkl"
   },
   "exports": {
@@ -58,8 +58,7 @@
     "loglevel_console": "INFO"
   },
   "teams": {
-    "teams": 42,
-    "identities": []
+    "teams": 42
   },
   "fitness": {
     "weight_mean": 100,

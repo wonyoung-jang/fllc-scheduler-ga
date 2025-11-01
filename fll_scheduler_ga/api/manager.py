@@ -70,13 +70,15 @@ class RunManager:
         if not run_info:
             return {"status": RunStatusEnum.NOT_FOUND}
 
-        if run_info["status"] == RunStatusEnum.RUNNING and not run_info["process"].is_alive():
-            if run_info["process"].exitcode == 0:
+        process: Process = run_info["process"]
+        if run_info["status"] == RunStatusEnum.RUNNING and not process.is_alive():
+            exitcode = process.exitcode
+            if exitcode == 0:
                 run_info["status"] = RunStatusEnum.COMPLETED
                 logger.info("Run %s completed successfully.", run_id)
             else:
                 run_info["status"] = RunStatusEnum.FAILED
-                logger.error("Run %s failed with exit code %d.", run_id, run_info["process"].exitcode)
+                logger.error("Run %s failed with exit code %d.", run_id, exitcode)
 
         return {"status": run_info["status"]}
 

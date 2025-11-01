@@ -46,10 +46,8 @@ class FitnessEvaluator:
     config: TournamentConfig
     benchmark: FitnessBenchmark
     event_properties: EventProperties
-
     objectives: list[FitnessObjective] = None
     penalty: float = FITNESS_PENALTY
-
     max_events_per_team: int = 0
 
     max_int: ClassVar[int] = np.iinfo(np.int64).max
@@ -58,6 +56,9 @@ class FitnessEvaluator:
     n_objs: ClassVar[int]
     match_roundtypes: ClassVar[np.ndarray]
     min_matches: ClassVar[int]
+    loc_weight_primary: ClassVar[float] = 0.9
+    loc_weight_bonus: ClassVar[float] = 0.1
+    loc_norm_max: ClassVar[float] = (1.0 * loc_weight_primary) + (0.5 * loc_weight_bonus)
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the configuration."""
@@ -65,10 +66,14 @@ class FitnessEvaluator:
         self.max_events_per_team = self.config.max_events_per_team
         FitnessEvaluator.n_teams = self.config.num_teams
         FitnessEvaluator.n_objs = len(self.objectives)
-        FitnessEvaluator.match_roundtypes = np.array(
-            [rt_idx for rt_idx, tpr in self.config.round_idx_to_tpr.items() if tpr == 2]
+        match_roundtypes = np.array([rt_idx for rt_idx, tpr in self.config.round_idx_to_tpr.items() if tpr == 2])
+        FitnessEvaluator.match_roundtypes = match_roundtypes
+        min_matches = (
+            min(r.rounds_per_team for r in self.config.rounds if r.teams_per_round == 2)
+            if len(match_roundtypes) > 0
+            else 0
         )
-        FitnessEvaluator.min_matches = min(r.rounds_per_team for r in self.config.rounds if r.teams_per_round == 2)
+        FitnessEvaluator.min_matches = min_matches
 
     def evaluate_population(self, pop_array: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Evaluate an entire population of schedules.
@@ -179,66 +184,74 @@ class FitnessEvaluator:
 
     def score_loc_consistency(self, loc_ids: np.ndarray, roundtype_ids: np.ndarray) -> np.ndarray:
         """Calculate location consistency score."""
-        n_pop, n_teams, n_rounds = loc_ids.shape
+        n_pop, n_teams, _ = loc_ids.shape
 
         # Create mask for valid locations in match roundtypes
         match_roundtypes = FitnessEvaluator.match_roundtypes
-        n_rt = match_roundtypes.size
-        if n_rt == 0:
+        n_match_rt = len(match_roundtypes)
+
+        if n_match_rt == 0:
             return np.ones((n_pop, n_teams), dtype=float)
+
         match_rt_mask = np.isin(roundtype_ids, match_roundtypes) & (loc_ids >= 0)
 
         # Total matches per team
         total_matches_per_team = match_rt_mask.sum(axis=2)
 
         # Get all unique locations per team
-        max_loc = loc_ids.max() + 1
-        loc_one_hot = np.full((n_pop, n_teams, n_rounds, max_loc), fill_value=False, dtype=bool)
+        max_loc_idx = loc_ids.max()
 
-        # Vectorized assignment using advanced indexing
-        pop_idx, team_idx, round_idx = np.where(match_rt_mask)
+        # 3D mask: (n_pop, n_teams, location_idx)
+        team_loc_mask = np.zeros((n_pop, n_teams, max_loc_idx + 1), dtype=bool)
+
+        # Get indices of all valid match events for vectorized assignment
+        pop_indices, team_indices, _ = np.where(match_rt_mask)
         loc_vals = loc_ids[match_rt_mask]
-        loc_one_hot[pop_idx, team_idx, round_idx, loc_vals] = True
 
-        # Union: any location used across all rounds
-        union_mask = loc_one_hot.any(axis=2)  # (n_pop, n_teams, max_loc)
-        total_unique_locs = union_mask.sum(axis=2)  # (n_pop, n_teams)
+        # True where team has that location
+        team_loc_mask[pop_indices, team_indices, loc_vals] = True
+
+        # The number of unique locations is the sum along the location axis
+        total_unique_locs = team_loc_mask.sum(axis=2)
 
         # Primary Score: fewer unique locations is better
         max_negative = total_matches_per_team - 1
         negative = total_unique_locs - 1
-        primary_scores = np.where(max_negative <= 0, 1.0, 1.0 - (negative / np.maximum(max_negative, 1)))
+        primary_scores = 1.0 - (negative / np.maximum(max_negative, 1))
+        primary_scores[max_negative <= 0] = 1.0  # If only one or zero matches, perfect score
 
         # Bonus Score: intersection across round types
-        # Create masks
-        # Expand roundtype_ids to match match_roundtypes for broadcasting
-        # (n_rt, n_pop, n_teams, n_rounds)
-        rt_comparison = roundtype_ids[None, :, :, :] == match_roundtypes[:, None, None, None]
-        rt_valid = rt_comparison & (loc_ids[None, :, :, :] >= 0)
+        # Create a (pop, team, rt, loc) mask
+        rt_map = {rt_val: i for i, rt_val in enumerate(match_roundtypes)}
+        rt_values = roundtype_ids[match_rt_mask]
+        mapped_rt_indices = np.array([rt_map[rt] for rt in rt_values])
 
-        # Get indices where each roundtype has valid locations
-        rt_idx_all, pop_idx_all, team_idx_all, round_idx_all = np.where(rt_valid)
-        loc_vals_all = np.broadcast_to(loc_ids[None, :, :, :], (n_rt, n_pop, n_teams, n_rounds))[rt_valid]
+        # A 4D mask for locations used per round type
+        rt_loc_mask = np.zeros((n_pop, n_teams, n_match_rt, max_loc_idx + 1), dtype=bool)
+        rt_loc_mask[pop_indices, team_indices, mapped_rt_indices, loc_vals] = True
 
-        # Create a 5D array: (n_roundtypes, n_pop, n_teams, n_rounds, max_loc), then assign
-        rt_masks_5d = np.zeros((n_rt, n_pop, n_teams, n_rounds, max_loc), dtype=bool)
-        rt_masks_5d[rt_idx_all, pop_idx_all, team_idx_all, round_idx_all, loc_vals_all] = True
+        # For each team, determine which roundtypes they actually participate in.
+        # Shape: (n_pop, n_teams, n_match_rts)
+        participated_in_rt = np.any(rt_loc_mask, axis=3)
+        condition = ~participated_in_rt[:, :, :, np.newaxis]
+        x = True
 
-        # Aggregate (n_rt, n_pop, n_teams, max_loc), take any across rounds
-        rt_loc_masks = rt_masks_5d.any(axis=3)
+        # Create eval mask where non-participated round types count as having all locations
+        eval_mask = np.where(condition, x, rt_loc_mask)
 
-        # Intersection: locations present in all round types
-        intersection_mask = rt_loc_masks.all(axis=0) if n_rt > 1 else rt_loc_masks[0]  # (n_pop, n_teams, max_loc)
-        overlap_count = intersection_mask.sum(axis=2)  # (n_pop, n_teams)
+        # np.all() along the round-type axis
+        intersection_mask = np.all(eval_mask, axis=2)  # Shape: (n_pop, n_teams, max_loc)
+        overlap_count = np.sum(intersection_mask, axis=2)
 
+        # Normalize the bonus score
         min_matches = FitnessEvaluator.min_matches
-        bonus_scores = np.where(min_matches > 0, overlap_count / min_matches, 1.0)
+        bonus_scores = overlap_count / min_matches if min_matches > 0 else np.ones((n_pop, n_teams), dtype=float)
 
         # Combine with weights
-        wp = 0.9
-        wb = 0.1
-        norm_max = (1.0 * wp) + (0.5 * wb)
-        return ((primary_scores * wp) + (bonus_scores * wb)) / norm_max
+        wp = FitnessEvaluator.loc_weight_primary
+        wb = FitnessEvaluator.loc_weight_bonus
+        normmax = FitnessEvaluator.loc_norm_max
+        return ((primary_scores * wp) + (bonus_scores * wb)) / normmax
 
     def score_opp_variety(self, paired_evt_ids: np.ndarray, pop_array: np.ndarray) -> np.ndarray:
         """Vectorized opponent variety scoring."""
