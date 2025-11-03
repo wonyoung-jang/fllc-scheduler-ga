@@ -87,7 +87,7 @@
       "rounds_per_team": 1,
       "teams_per_round": 1,
       "start_time": "08:00",
-      "stop_time": "12:30"
+      "duration_minutes": 45
     },
     {
       "roundtype": "Practice",

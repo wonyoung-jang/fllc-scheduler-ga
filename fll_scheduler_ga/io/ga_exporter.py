@@ -163,9 +163,8 @@ class ScheduleSummaryGenerator:
         for t, fit in sorted(zip(all_teams, team_fits, strict=True), key=lambda x: -x[1].sum()):
             fitness_row = (f"{score:<{len_objectives[i] + 1}.4f}" for i, score in enumerate(fit))
             fitness_str = "|".join(fitness_row)
-            team_id = normalized_teams[t]
-            if team_id is None:
-                team_id = -1
+            if (team_id := normalized_teams[t]) == -1:
+                continue
             txt_data.append(f"{team_id:<5}|{fitness_str}|{sum(fit):.4f}\n")
 
         return txt_data
