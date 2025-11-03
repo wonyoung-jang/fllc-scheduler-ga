@@ -35,7 +35,7 @@
     "add_import_to_population": true,
     "flush": false,
     "flush_benchmarks": false,
-    "import_file": "real_life_examples\\fllc_2022-2023\\schedule.csv",
+    "import_file": "",
     "seed_file": "fll_scheduler_ga.pkl"
   },
   "exports": {
@@ -58,11 +58,11 @@
     "loglevel_console": "INFO"
   },
   "teams": {
-    "teams": 42
+    "teams": 40
   },
   "fitness": {
-    "weight_mean": 100,
-    "weight_variation": 10,
+    "weight_mean": 3,
+    "weight_variation": 1,
     "weight_range": 0
   },
   "time": {
@@ -71,12 +71,12 @@
   "locations": [
     {
       "name": "Room",
-      "count": 7,
+      "count": 6,
       "sides": 1
     },
     {
       "name": "Table",
-      "count": 4,
+      "count": 3,
       "sides": 2
     }
   ],
@@ -94,7 +94,7 @@
       "location": "Table",
       "rounds_per_team": 2,
       "teams_per_round": 2,
-      "times": ["09:00", "09:15", "09:30", "09:45", "10:00", "10:15", "10:30", "10:45", "11:00", "11:15", "11:30", "11:45"],
+      "start_time": "09:00",
       "duration_minutes": 15
     },
     {

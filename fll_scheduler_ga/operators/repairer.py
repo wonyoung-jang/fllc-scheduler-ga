@@ -23,10 +23,10 @@ logger = getLogger(__name__)
 class Repairer:
     """Class to handle the repair of schedules with missing event assignments."""
 
-    rng: np.random.Generator
     config: TournamentConfig
     event_factory: EventFactory
     event_properties: EventProperties
+    rng: np.random.Generator
     checker: HardConstraintChecker = None
     repair_map: dict[int, Any] = field(init=False, repr=False)
 

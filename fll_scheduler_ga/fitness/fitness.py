@@ -44,8 +44,8 @@ class FitnessEvaluator:
     """Calculates the fitness of a schedule."""
 
     config: TournamentConfig
-    benchmark: FitnessBenchmark
     event_properties: EventProperties
+    benchmark: FitnessBenchmark
     objectives: list[FitnessObjective] = None
     penalty: float = FITNESS_PENALTY
     max_events_per_team: int = 0

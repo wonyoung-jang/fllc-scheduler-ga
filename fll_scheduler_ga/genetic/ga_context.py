@@ -26,6 +26,7 @@ from .builder import ScheduleBuilder
 
 if TYPE_CHECKING:
     from ..config.app_config import AppConfig
+    from ..data_model.time import TimeSlot
     from ..operators.crossover import Crossover
     from ..operators.mutation import Mutation
     from ..operators.selection import Selection
@@ -49,10 +50,6 @@ class GaContext:
     crossovers: tuple[Crossover, ...]
     mutations: tuple[Mutation, ...]
 
-    def __post_init__(self) -> None:
-        """Post-initialization to validate the GA context."""
-        self.run_preflight_checks()
-
     @classmethod
     def build(cls, app_config: AppConfig) -> GaContext:
         """Build and return a GA context."""
@@ -64,27 +61,33 @@ class GaContext:
             event_map=event_factory.as_mapping(),
         )
 
+        # Run pre-flight checks before fitness benchmarking
+        PreFlightChecker(
+            event_factory=event_factory,
+            event_properties=event_properties,
+        ).run_checks()
+
         Schedule.teams = np.arange(tournament_config.num_teams, dtype=int)
         Schedule.conflict_matrix = event_factory.build_conflict_matrix()
         Schedule.event_properties = event_properties
         Schedule.event_map = event_factory.as_mapping()
 
         repairer = Repairer(
-            rng,
-            tournament_config,
-            event_factory,
-            event_properties,
+            config=tournament_config,
+            event_factory=event_factory,
+            event_properties=event_properties,
+            rng=rng,
         )
         benchmark = FitnessBenchmark(
-            tournament_config,
-            event_factory,
-            event_properties,
+            config=tournament_config,
+            event_factory=event_factory,
+            event_properties=event_properties,
             flush_benchmarks=app_config.runtime.flush_benchmarks,
         )
         evaluator = FitnessEvaluator(
-            tournament_config,
-            benchmark,
-            event_properties,
+            config=tournament_config,
+            event_properties=event_properties,
+            benchmark=benchmark,
         )
         checker = HardConstraintChecker(tournament_config)
 
@@ -108,17 +111,6 @@ class GaContext:
             config=tournament_config,
             rng=rng,
         )
-
-        # builder_naive = ScheduleBuilderNaive(
-        #     event_factory=event_factory,
-        #     event_properties=event_properties,
-        #     config=tournament_config,
-        #     rng=rng,
-        # )
-        # naive_schedule = builder_naive.build_naive()
-        # logger.info(naive_schedule.schedule)
-        # logger.info(naive_schedule.team_rounds)
-        # logger.info("\n".join(f"{k}: {v}" for k, v in naive_schedule.team_events.items()))
 
         return cls(
             app_config=app_config,
@@ -193,8 +185,16 @@ class GaContext:
         except EOFError:
             logger.debug("Pickle file is empty")
 
-    def run_preflight_checks(self) -> None:
-        """Run preflight checks on the tournament configuration."""
+
+@dataclass(slots=True)
+class PreFlightChecker:
+    """Run pre-flight checks on the tournament configuration."""
+
+    event_properties: EventProperties
+    event_factory: EventFactory
+
+    def run_checks(self) -> None:
+        """Run all pre-flight checks."""
         try:
             self.check_location_time_overlaps()
         except ValueError:
@@ -204,20 +204,25 @@ class GaContext:
     def check_location_time_overlaps(self) -> None:
         """Check if different round types are scheduled in the same locations at the same time."""
         ep = self.event_properties
-        booked_slots = defaultdict(list)
+        location_strings = ep.loc_str
+        location_indices = ep.loc_idx
+        timeslots = ep.timeslot
+        roundtypes = ep.roundtype
+
+        booked_slots: dict[int, list[tuple[TimeSlot, str]]] = defaultdict(list)
         for e in self.event_factory.build_indices():
-            loc_str = ep.loc_str[e]
-            loc_idx = ep.loc_idx[e]
-            timeslot = ep.timeslot[e]
-            roundtype = ep.roundtype[e]
+            loc_str = location_strings[e]
+            loc_idx = location_indices[e]
+            ts = timeslots[e]
+            rt = roundtypes[e]
             for existing_ts, existing_rt in booked_slots.get(loc_idx, []):
-                if timeslot.overlaps(existing_ts):
+                if ts.overlaps(existing_ts):
                     msg = (
-                        f"Configuration conflict: TournamentRound '{roundtype}' and '{existing_rt}' "
+                        f"Configuration conflict: TournamentRound '{rt}' and '{existing_rt}' "
                         f"are scheduled in the same location ({loc_str} {loc_idx}) "
-                        f"at overlapping times ({timeslot} and "
+                        f"at overlapping times ({ts} and "
                         f"{existing_ts})."
                     )
                     raise ValueError(msg)
-            booked_slots[loc_idx].append((timeslot, roundtype))
+            booked_slots[loc_idx].append((ts, rt))
         logger.debug("Check passed: No location/time overlaps found.")
