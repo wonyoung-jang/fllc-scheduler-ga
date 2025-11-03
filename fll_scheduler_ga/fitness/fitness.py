@@ -55,6 +55,7 @@ class FitnessEvaluator:
     n_teams: ClassVar[int]
     n_objs: ClassVar[int]
     match_roundtypes: ClassVar[np.ndarray]
+    rt_array: ClassVar[np.ndarray]
     min_matches: ClassVar[int]
     loc_weight_primary: ClassVar[float] = 0.9
     loc_weight_bonus: ClassVar[float] = 0.1
@@ -74,6 +75,12 @@ class FitnessEvaluator:
             else 0
         )
         FitnessEvaluator.min_matches = min_matches
+
+        max_rt_idx = match_roundtypes.max() if match_roundtypes.size > 0 else -1
+        rt_array = np.full(max_rt_idx + 1, -1, dtype=int)
+        for i, rt in enumerate(match_roundtypes):
+            rt_array[rt] = i
+        FitnessEvaluator.rt_array = rt_array
 
     def evaluate_population(self, pop_array: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Evaluate an entire population of schedules.
@@ -222,9 +229,8 @@ class FitnessEvaluator:
 
         # Bonus Score: intersection across round types
         # Create a (pop, team, rt, loc) mask
-        rt_map = {rt_val: i for i, rt_val in enumerate(match_roundtypes)}
         rt_values = roundtype_ids[match_rt_mask]
-        mapped_rt_indices = np.array([rt_map[rt] for rt in rt_values])
+        mapped_rt_indices = FitnessEvaluator.rt_array[rt_values]
 
         # A 4D mask for locations used per round type
         rt_loc_mask = np.zeros((n_pop, n_teams, n_match_rt, max_loc_idx + 1), dtype=bool)
@@ -233,11 +239,9 @@ class FitnessEvaluator:
         # For each team, determine which roundtypes they actually participate in.
         # Shape: (n_pop, n_teams, n_match_rts)
         participated_in_rt = np.any(rt_loc_mask, axis=3)
-        condition = ~participated_in_rt[:, :, :, np.newaxis]
-        x = True
 
         # Create eval mask where non-participated round types count as having all locations
-        eval_mask = np.where(condition, x, rt_loc_mask)
+        eval_mask = np.where(~participated_in_rt[:, :, :, np.newaxis], True, rt_loc_mask)  # noqa: FBT003
 
         # np.all() along the round-type axis
         intersection_mask = np.all(eval_mask, axis=2)  # Shape: (n_pop, n_teams, max_loc)
@@ -248,28 +252,22 @@ class FitnessEvaluator:
         bonus_scores = overlap_count / min_matches if min_matches > 0 else np.ones((n_pop, n_teams), dtype=float)
 
         # Combine with weights
-        wp = FitnessEvaluator.loc_weight_primary
-        wb = FitnessEvaluator.loc_weight_bonus
-        normmax = FitnessEvaluator.loc_norm_max
-        return ((primary_scores * wp) + (bonus_scores * wb)) / normmax
+        return (
+            (primary_scores * FitnessEvaluator.loc_weight_primary) + (bonus_scores * FitnessEvaluator.loc_weight_bonus)
+        ) / FitnessEvaluator.loc_norm_max
 
     def score_opp_variety(self, paired_evt_ids: np.ndarray, pop_array: np.ndarray) -> np.ndarray:
         """Vectorized opponent variety scoring."""
         n_pop = pop_array.shape[0]
         valid_opp = paired_evt_ids >= 0
         lookup_opp_events = np.where(valid_opp, paired_evt_ids, 0)
-
         schedule_indices = np.arange(n_pop)[:, None, None]
+
         opponents = pop_array[schedule_indices, lookup_opp_events]
         opponents[~valid_opp] = FitnessEvaluator.max_int
-
-        opponents_sorted = np.sort(opponents, axis=2)
-
-        valid_mask = opponents_sorted[:, :, :-1] >= 0
-        changes = np.diff(opponents_sorted, axis=2) != 0
-        meaningful_changes = np.sum(changes & valid_mask, axis=2)
-
-        has_any = opponents_sorted[:, :, 0] >= 0
-        unique_counts = np.where(has_any, meaningful_changes, 0)
+        opponents.sort(axis=2)
+        valid_mask = opponents[:, :, :-1] >= 0
+        changes = np.diff(opponents, axis=2) != 0
+        unique_counts = np.sum(changes & valid_mask, axis=2)
 
         return self.benchmark.opponents[unique_counts]

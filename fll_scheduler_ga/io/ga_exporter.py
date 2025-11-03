@@ -117,47 +117,42 @@ class ScheduleSummaryGenerator:
 
     def get_text_summary(self, schedule: Schedule) -> list[str]:
         """Get a text summary of the schedule."""
-        txt_data = []
+        txt = []
         objectives = list(FitnessObjective)
         len_objectives = [len(name) for name in objectives]
         max_len_obj = max(len_objectives, default=0) + 1
-        txt_data.append(f"FLL Scheduler GA Summary Report (ID: {id(schedule)} | Hash: {hash(schedule)})\n")
+        txt.append(f"FLL Scheduler GA Summary Report (ID: {id(schedule)} | Hash: {hash(schedule)})\n")
 
-        txt_data.append("\n")
-        txt_data.append("Attributes:\n")
-        txt_data.append("--------------------\n")
-        txt_data.extend(f"{slot}: {getattr(schedule, slot)}\n" for slot in schedule.__slots__)
-        txt_data.append(f"Length: {len(schedule)}\n")
+        txt.append("\nAttributes:\n")
+        txt.append("--------------------\n")
+        txt.extend(f"{slot}: {getattr(schedule, slot)}\n" for slot in schedule.__slots__)
+        txt.append(f"Length: {len(schedule)}\n")
 
-        txt_data.append("\n")
-        txt_data.append("Fitness:\n")
-        txt_data.append("--------------------------\n")
+        txt.append("\nFitness:\n")
+        txt.append("--------------------------\n")
         for name, score in zip(objectives, schedule.fitness, strict=True):
-            txt_data.append(f"{name:<{max_len_obj}}: {score:.6f}\n")
-        txt_data.append(f"{'-' * (max_len_obj + 15)}\n")
-        txt_data.append(f"{'Total':<{max_len_obj}}: {sum(schedule.fitness):.6f}\n")
-        txt_data.append(f"{'Percentage':<{max_len_obj}}: {sum(schedule.fitness) / len(schedule.fitness):.2%}\n")
+            txt.append(f"{name:<{max_len_obj}}: {score:.6f}\n")
+        txt.append(f"{'-' * (max_len_obj + 15)}\n")
+        txt.append(f"{'Total':<{max_len_obj}}: {sum(schedule.fitness):.6f}\n")
+        txt.append(f"{'Percentage':<{max_len_obj}}: {sum(schedule.fitness) / len(schedule.fitness):.2%}\n")
 
         all_teams = schedule.teams
         team_fits = schedule.team_fitnesses
-        total_fitnesses = team_fits.sum(axis=1)
-        max_team_f = max(total_fitnesses)
-        min_team_f = min(total_fitnesses)
+        total_fits = team_fits.sum(axis=1)
+        max_team_f = total_fits.max()
+        min_team_f = total_fits.min()
 
-        txt_data.append("\n")
-        txt_data.append("Team fitnesses (sorted by total fitness descending):\n")
-        txt_data.append("----------------------------------------------------\n")
-        txt_data.append(f"Max     : {max_team_f:.6f}\n")
-        txt_data.append(f"Min     : {min_team_f:.6f}\n")
-        txt_data.append(f"Range   : {max_team_f - min_team_f:.6f}\n")
-        txt_data.append(f"Average : {sum(total_fitnesses) / len(total_fitnesses):.6f}\n")
+        txt.append("\nTeam fitnesses (sorted by total fitness descending):\n")
+        txt.append("----------------------------------------------------\n")
+        txt.append(f"Max     : {max_team_f:.6f}\n")
+        txt.append(f"Min     : {min_team_f:.6f}\n")
+        txt.append(f"Range   : {max_team_f - min_team_f:.6f}\n")
+        txt.append(f"Average : {sum(total_fits) / len(total_fits):.6f}\n")
 
-        txt_data.append("\n")
-        objectives_header = (f"{name:<{len_objectives[i] + 1}}" for i, name in enumerate(objectives))
-        objectives_header_str = "|".join(objectives_header)
-        header = f"{'Team':<5}|{objectives_header_str}|Sum\n"
-        txt_data.append(header)
-        txt_data.append("-" * len(header) + "\n")
+        objs_header = "|".join(f"{name:<{len_objectives[i] + 1}}" for i, name in enumerate(objectives))
+        header = f"\n{'Team':<5}|{objs_header}|Sum\n"
+        txt.append(header)
+        txt.append("-" * len(header) + "\n")
 
         normalized_teams = schedule.normalized_teams()
         for t, fit in sorted(zip(all_teams, team_fits, strict=True), key=lambda x: -x[1].sum()):
@@ -165,14 +160,14 @@ class ScheduleSummaryGenerator:
             fitness_str = "|".join(fitness_row)
             if (team_id := normalized_teams[t]) == -1:
                 continue
-            txt_data.append(f"{team_id:<5}|{fitness_str}|{sum(fit):.4f}\n")
+            txt.append(f"{team_id:<5}|{fitness_str}|{sum(fit):.4f}\n")
 
-        return txt_data
+        return txt
 
     def generate(self, schedule: Schedule, path: Path) -> None:
         """Generate a text summary report for a single schedule."""
-        txt_data = self.get_text_summary(schedule)
         try:
+            txt_data = self.get_text_summary(schedule)
             with path.open("w", encoding="utf-8") as f:
                 f.writelines(txt_data)
         except OSError:
@@ -193,12 +188,10 @@ class TeamScheduleGenerator:
 
         for roundtype, rounds_per_team in config.roundreqs.items():
             if rounds_per_team == 1:
-                headers.append(f"{roundtype.capitalize()}")
-                headers.append("")
+                headers.extend([f"{roundtype.capitalize()}", ""])
             else:
                 for i in range(1, rounds_per_team + 1):
-                    headers.append(f"{roundtype.capitalize()} {i}")
-                    headers.append("")
+                    headers.extend([f"{roundtype.capitalize()} {i}", ""])
 
         rows.append(headers)
 
