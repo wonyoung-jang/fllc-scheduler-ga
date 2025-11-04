@@ -168,6 +168,7 @@ class GA:
         for island in self.islands:
             island.handle_underpopulation()
             island.evolve()
+            island.select_next_generation()
             island.update_fitness_history()
             island.curr_gen += 1
 

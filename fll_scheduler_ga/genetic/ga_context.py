@@ -72,11 +72,13 @@ class GaContext:
         Schedule.event_properties = event_properties
         Schedule.event_map = event_factory.as_mapping()
 
+        checker = HardConstraintChecker(tournament_config)
         repairer = Repairer(
             config=tournament_config,
             event_factory=event_factory,
             event_properties=event_properties,
             rng=rng,
+            checker=checker,
         )
         benchmark = FitnessBenchmark(
             config=tournament_config,
@@ -89,15 +91,14 @@ class GaContext:
             event_properties=event_properties,
             benchmark=benchmark,
         )
-        checker = HardConstraintChecker(tournament_config)
 
         ga_params = app_config.ga_params
         n_total_pop = ga_params.population_size * ga_params.num_islands
         n_objectives = len(evaluator.objectives)
         nsga3 = NSGA3(
             rng=rng,
-            n_objectives=n_objectives,
-            n_total_pop=n_total_pop,
+            n_obj=n_objectives,
+            n_pop=n_total_pop,
         )
 
         selection = RandomSelect(rng)

@@ -41,7 +41,7 @@ class HardConstraintChecker:
 
 @dataclass(slots=True)
 class FitnessEvaluator:
-    """Calculates the fitness of a schedule."""
+    """Calculates the fitness of a population of schedules."""
 
     config: TournamentConfig
     event_properties: EventProperties
@@ -94,27 +94,33 @@ class FitnessEvaluator:
 
         """
         # Dims for reference
-        n_pop = pop_array.shape[0]
+        n_pop, _ = pop_array.shape
         # Preallocate arrays
         team_fitnesses = np.zeros((n_pop, FitnessEvaluator.n_teams, FitnessEvaluator.n_objs), dtype=float)
         # Get team-events mapping for the entire population
         valid_events, lookup_events = self.get_team_events(pop_array)
+
         # Slice event properties
         starts = self.event_properties.start[lookup_events]
-        stops = self.event_properties.stop[lookup_events]
-        loc_ids = self.event_properties.loc_idx[lookup_events]
-        paired_evt_ids = self.event_properties.paired_idx[lookup_events]
-        roundtype_ids = self.event_properties.roundtype_idx[lookup_events]
-        # Invalidate non-existent events
         starts[~valid_events] = FitnessEvaluator.max_int
+
+        stops = self.event_properties.stop[lookup_events]
         stops[~valid_events] = FitnessEvaluator.max_int
+
+        loc_ids = self.event_properties.loc_idx[lookup_events]
         loc_ids[~valid_events] = FitnessEvaluator.min_int
+
+        paired_evt_ids = self.event_properties.paired_idx[lookup_events]
         paired_evt_ids[~valid_events] = FitnessEvaluator.min_int
+
+        roundtype_ids = self.event_properties.roundtype_idx[lookup_events]
         roundtype_ids[~valid_events] = FitnessEvaluator.min_int
+
         # Calculate scores for each objective
-        team_fitnesses[:, :, 0] = self.score_break_time(starts, stops)
-        team_fitnesses[:, :, 1] = self.score_loc_consistency(loc_ids, roundtype_ids)
-        team_fitnesses[:, :, 2] = self.score_opp_variety(paired_evt_ids, pop_array)
+        team_fitnesses[..., 0] = self.score_break_time(starts, stops)
+        team_fitnesses[..., 1] = self.score_loc_consistency(loc_ids, roundtype_ids)
+        team_fitnesses[..., 2] = self.score_opp_variety(paired_evt_ids, pop_array)
+
         # Aggregate team scores into schedule scores
         mean_s = team_fitnesses.mean(axis=1)
         std_devs = team_fitnesses.std(axis=1)
@@ -159,8 +165,8 @@ class FitnessEvaluator:
         starts_sorted = np.take_along_axis(starts, order, axis=2)
         stops_sorted = np.take_along_axis(stops, order, axis=2)
         # Calculate breaks between consecutive events
-        start_next = starts_sorted[:, :, 1:]
-        stop_curr = stops_sorted[:, :, :-1]
+        start_next = starts_sorted[..., 1:]
+        stop_curr = stops_sorted[..., :-1]
         # Valid consecutive events must have valid start and stop times
         valid_consecutive = (start_next < FitnessEvaluator.max_int) & (stop_curr < FitnessEvaluator.max_int)
         breaks_seconds = start_next - stop_curr
@@ -241,7 +247,7 @@ class FitnessEvaluator:
         participated_in_rt = np.any(rt_loc_mask, axis=3)
 
         # Create eval mask where non-participated round types count as having all locations
-        eval_mask = np.where(~participated_in_rt[:, :, :, np.newaxis], True, rt_loc_mask)  # noqa: FBT003
+        eval_mask = np.where(~participated_in_rt[..., np.newaxis], True, rt_loc_mask)  # noqa: FBT003
 
         # np.all() along the round-type axis
         intersection_mask = np.all(eval_mask, axis=2)  # Shape: (n_pop, n_teams, max_loc)
@@ -266,7 +272,7 @@ class FitnessEvaluator:
         opponents = pop_array[schedule_indices, lookup_opp_events]
         opponents[~valid_opp] = FitnessEvaluator.max_int
         opponents.sort(axis=2)
-        valid_mask = opponents[:, :, :-1] >= 0
+        valid_mask = opponents[..., :-1] >= 0
         changes = np.diff(opponents, axis=2) != 0
         unique_counts = np.sum(changes & valid_mask, axis=2)
 

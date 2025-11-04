@@ -40,7 +40,6 @@ class FitnessBenchmark:
     penalty: float = FITNESS_PENALTY
     cache_dir: Path = None
     timeslots: dict[frozenset[int], float] = field(default_factory=dict, init=False, repr=False)
-    locations: np.ndarray = None
     opponents: np.ndarray = None
     flush_benchmarks: bool = False
     best_timeslot_score: float = None
@@ -66,7 +65,7 @@ class FitnessBenchmark:
                 cache_file.unlink(missing_ok=True)
 
         logger.info("No valid cache found. Calculating and caching new fitness benchmarks...")
-        self._run_location_and_opponent_benchmarks()
+        self._run_opponent_variety_benchmarks()
         self._run_timeslot_benchmarks()
         self._save_to_cache(cache_file)
 
@@ -76,7 +75,6 @@ class FitnessBenchmark:
             with path.open("rb") as f:
                 cached_data = pickle.load(f)
                 self.timeslots = cached_data["timeslots"]
-                self.locations = cached_data["locations"]
                 self.opponents = cached_data["opponents"]
                 self.best_timeslot_score = cached_data["best_timeslot_score"]
         except (OSError, pickle.UnpicklingError, EOFError):
@@ -86,7 +84,6 @@ class FitnessBenchmark:
         """Save benchmark data to a pickle file."""
         data_to_cache = {
             "timeslots": self.timeslots,
-            "locations": self.locations,
             "opponents": self.opponents,
             "best_timeslot_score": self.best_timeslot_score,
         }
@@ -134,9 +131,9 @@ class FitnessBenchmark:
         # Using hashlib over built-in hash for stability
         return int(hashlib.sha256(str(config_representation).encode()).hexdigest(), 16)
 
-    def _run_location_and_opponent_benchmarks(self) -> None:
-        """Run the location consistency and opponent variety fitness benchmarking."""
-        logger.info("Running location consistency and opponent variety benchmarks...")
+    def _run_opponent_variety_benchmarks(self) -> None:
+        """Run the opponent variety fitness benchmarking."""
+        logger.info("Running opponent variety benchmarks...")
         logger.debug("Finding events per round type:")
 
         max_matches_possible = 0
@@ -170,20 +167,14 @@ class FitnessBenchmark:
 
         raw_scores = list(cache_scorer.values())
         logger.debug("Raw location/opponent scores: %s", raw_scores)
-        locations = [abs((s - minimum_score) / diff) if s != 0 else 0 for s in raw_scores]
         opponents = [abs((s - maximum_score) / diff) if s != 0 else 0 for s in raw_scores]
-        self.locations = np.array(locations, dtype=float)
         self.opponents = np.array(opponents, dtype=float)
-
-        logger.debug("Location consistency scores:")
-        for k, v in enumerate(self.locations):
-            logger.debug("  %d location(s): %.6f", k, v)
 
         logger.debug("Opponent variety scores:")
         for k, v in enumerate(self.opponents):
             logger.debug("  %d opponent(s): %.6f", k, v)
 
-        if not self.locations.any() or not self.opponents.any():
+        if not self.opponents.any():
             logger.warning("No valid schedules could be generated.")
             return
 
@@ -209,15 +200,14 @@ class FitnessBenchmark:
 
         # Filter, score, and store valid schedules
         logger.debug("Generating and filtering all possible team schedules")
-        timeslot_objs = np.array(self.config.all_timeslots, dtype=object)
+        ts_ints = np.array(self.config.all_timeslots, dtype=object)
         valid_scored_schedules = []
         total_combinations = 0
-        self.timeslots = {}
+
         for schedule_tuple in itertools.product(*round_slot_combos.values()):  # Cartesian product
             total_combinations += 1
-            curr_indices = list(itertools.chain.from_iterable(schedule_tuple))
-            curr_indices = np.array(curr_indices, dtype=int)
-            curr_timeslots = timeslot_objs[curr_indices]
+            curr_indices = np.array(list(itertools.chain.from_iterable(schedule_tuple)), dtype=int)
+            curr_timeslots = ts_ints[curr_indices]
             if self._has_overlaps(curr_timeslots):
                 continue
 

@@ -19,23 +19,23 @@ class NSGA3:
     """Non-dominated Sorting Genetic Algorithm III (NSGA-III)."""
 
     rng: np.random.Generator
-    n_objectives: int
-    n_total_pop: int
+    n_obj: int
+    n_pop: int
 
-    ref_points: np.ndarray = None
+    ref_pts: np.ndarray = None
     norm_sq: np.ndarray = None
 
     def __post_init__(self) -> None:
         """Post-initialization to generate reference points."""
-        self.ref_points = self.init_ref_points()
-        ns = np.sum(self.ref_points**2, axis=1)
+        self.ref_pts = self.init_ref_points()
+        ns = np.sum(self.ref_pts**2, axis=1)
         self.norm_sq = np.where(ns == 0.0, EPSILON, ns)
 
     def init_ref_points(self) -> np.ndarray:
         """Generate a set of structured reference points."""
-        m = self.n_objectives
+        m = self.n_obj
         p = 1
-        while comb(m + p - 1, m - 1) < self.n_total_pop:
+        while comb(m + p - 1, m - 1) < self.n_pop:
             p += 1
 
         ref_pts = np.array([], dtype=float).reshape(0, m)
@@ -95,13 +95,13 @@ class NSGA3:
         # dom[i,j] = True if i dominates j (>= on all and > on at least one)
         dom = np.logical_and(all_ge, any_gt)
         # Number of individuals that dominate j = sum over i dom[i,j]
-        dom_count = np.sum(dom, axis=0)
+        dom_count = dom.sum(axis=0)
         # Adjacency lists: who each i dominates
         assigned = np.zeros(n_pop, dtype=bool)
         fronts: list[np.ndarray] = []
 
         # Initial front: those not dominated by anybody
-        current_front = np.where(dom_count == 0)[0]
+        current_front = np.nonzero(dom_count == 0)[0]
         assigned[current_front] = True
         fronts.append(current_front)
         n_ranked = current_front.size
@@ -109,11 +109,11 @@ class NSGA3:
         # Build subsequent fronts
         while n_ranked < n and current_front.size > 0:
             # Sum of domination relationships from current_front to each j
-            decrement = np.sum(dom[current_front, :], axis=0)
+            decrement = dom[current_front, :].sum(axis=0)
             dom_count = dom_count - decrement
 
             # Next front: those now not dominated by anybody
-            next_front = np.where((dom_count == 0) & (~assigned))[0]
+            next_front = np.nonzero((dom_count == 0) & (~assigned))[0]
             if next_front.size == 0:
                 break
 
@@ -147,12 +147,12 @@ class NSGA3:
 
             # Number of individuals to select from this niche
             n_select = n_remaining - n_selected
-            niche_indices = available_refs[np.where(ref_counts == min_count)[0]]
+            niche_indices = available_refs[np.nonzero(ref_counts == min_count)[0]]
             niche_indices = niche_indices[permutation(len(niche_indices))[:n_select]]
 
             for niche_idx in niche_indices:
                 # Indices of individuals in this niche still available
-                next_i = np.where((niche_refs == niche_idx) & mask)[0]
+                next_i = np.nonzero((niche_refs == niche_idx) & mask)[0]
                 shuffle(next_i)
                 index = next_i[np.argmin(niche_dists[next_i])] if counts[niche_idx] == 0 else next_i[0]
                 mask[index] = False
@@ -160,7 +160,7 @@ class NSGA3:
                 n_selected += 1
 
         # Return the masked indices
-        return np.where(~mask)[0]
+        return np.nonzero(~mask)[0]
 
     def norm_and_associate(self, fits: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Normalize objectives then associate individuals with nearest reference points."""
@@ -172,10 +172,10 @@ class NSGA3:
 
         norm = (ideal - fits) / span
 
-        coeffs = (norm @ self.ref_points.T) / self.norm_sq
+        coeffs = (norm @ self.ref_pts.T) / self.norm_sq
         coeffs = np.where(coeffs < 0.0, 0.0, coeffs)
 
-        proj = coeffs[:, :, None] * self.ref_points[None, :, :]
+        proj = coeffs[:, :, None] * self.ref_pts[None, :, :]
 
         residuals = norm[:, None, :] - proj
         dists: np.ndarray = np.linalg.norm(residuals, axis=2)
@@ -192,7 +192,7 @@ class NSGA3:
 
     def count(self, idx_to_count: np.ndarray) -> np.ndarray:
         """Count how many individuals are associated with each reference point."""
-        counts = np.zeros(len(self.ref_points), dtype=int)
+        counts = np.zeros(len(self.ref_pts), dtype=int)
         if idx_to_count.size > 0:
             indices, count = np.unique(idx_to_count, return_counts=True)
             counts[indices] = count

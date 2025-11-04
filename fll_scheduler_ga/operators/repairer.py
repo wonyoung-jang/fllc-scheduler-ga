@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from logging import getLogger
 from typing import TYPE_CHECKING, Any
-
-from ..fitness.fitness import HardConstraintChecker
 
 if TYPE_CHECKING:
     import numpy as np
@@ -15,6 +13,7 @@ if TYPE_CHECKING:
     from ..config.schemas import TournamentConfig
     from ..data_model.event import EventFactory, EventProperties
     from ..data_model.schedule import Schedule
+    from ..fitness.fitness import HardConstraintChecker
 
 logger = getLogger(__name__)
 
@@ -27,12 +26,11 @@ class Repairer:
     event_factory: EventFactory
     event_properties: EventProperties
     rng: np.random.Generator
-    checker: HardConstraintChecker = None
-    repair_map: dict[int, Any] = field(init=False, repr=False)
+    checker: HardConstraintChecker
+    repair_map: dict[int, Any] = None
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
-        self.checker = HardConstraintChecker(self.config)
         self.repair_map = {
             1: self.repair_singles,
             2: self.repair_matches,
@@ -48,64 +46,63 @@ class Repairer:
             return True
 
         teams, events = self.get_rt_tpr_maps(schedule)
-        return self.recursive_repair(schedule, teams, events)
+        return self.iterative_repair(schedule, teams, events)
 
-    def recursive_repair(
+    def iterative_repair(
         self, schedule: Schedule, teams: dict[tuple[int, int], list[int]], events: dict[tuple[int, int], list[int]]
     ) -> bool:
         """Recursively repair the schedule by attempting to assign events to teams."""
-        assign_map = self.repair_map
-        for key, teams_for_rt in teams.items():
-            _, tpr = key
-            if len(set(teams_for_rt)) < tpr:
-                break  # Not enough unique teams to fill a match, recurse
+        repair_map = self.repair_map
+        while len(schedule) < self.config.total_slots_required:
+            filled = True
+            for key, teams_for_rt in teams.items():
+                _, tpr = key
+                if len(set(teams_for_rt)) < tpr:
+                    continue  # Not enough unique teams to fill a match, skip
 
-            if not (events_for_rt := events.get(key)):
-                msg = f"No available events for round type {key[0]} with teams per round {tpr}"
-                raise ValueError(msg)
+                if not (events_for_rt := events.get(key)):
+                    msg = f"No available events for round type {key[0]} with teams per round {tpr}"
+                    raise ValueError(msg)
 
-            if not (assign_fn := assign_map.get(tpr)):
-                msg = f"No assignment function for teams per round: {tpr}"
-                raise ValueError(msg)
+                if not (repair_fn := repair_map.get(tpr)):
+                    msg = f"No assignment function for teams per round: {tpr}"
+                    raise ValueError(msg)
 
-            teams[key], events[key] = assign_fn(
-                teams=dict(enumerate(teams_for_rt)),
-                events=dict(enumerate(events_for_rt)),
-                schedule=schedule,
-            )
+                teams[key], events[key] = repair_fn(
+                    teams=dict(enumerate(teams_for_rt)),
+                    events=dict(enumerate(events_for_rt)),
+                    schedule=schedule,
+                )
 
-            if teams[key]:  # noqa: PLR1733
-                break
+                if teams[key]:  # noqa: PLR1733
+                    filled = False
+                    break
 
-        if len(schedule) == self.config.total_slots_required:
-            return True
+            if filled:
+                return True
 
-        event_indices = schedule.scheduled_events()
-        event = self.rng.choice(event_indices)
-        e_rt_idx = self.event_properties.roundtype_idx[event]
+            event_indices = schedule.scheduled_events()
+            event = self.rng.choice(event_indices)
+            e_rt_idx = self.event_properties.roundtype_idx[event]
+            ek = (e_rt_idx, self.config.round_idx_to_tpr[e_rt_idx])
+            e1, e2 = event, None
+            event_paired = self.event_properties.paired_idx[event]
+            if event_paired != -1:
+                if self.event_properties.loc_side[event] == 1:
+                    e1, e2 = event, event_paired
+                elif self.event_properties.loc_side[event] == 2:
+                    e1, e2 = event_paired, event
 
-        ek = (e_rt_idx, self.config.round_idx_to_tpr[e_rt_idx])
+            events[ek].append(e1)
+            t1 = schedule[e1]
+            teams[ek].append(t1)
+            schedule.unassign(t1, e1)
+            if e2 is not None:
+                t2 = schedule[e2]
+                teams[ek].append(t2)
+                schedule.unassign(t2, e2)
 
-        e1, e2 = event, None
-        event_paired = self.event_properties.paired_idx[event]
-        if event_paired != -1:
-            if self.event_properties.loc_side[event] == 1:
-                e1, e2 = event, event_paired
-            elif self.event_properties.loc_side[event] == 2:
-                e1, e2 = event_paired, event
-
-        events[ek].append(e1)
-
-        t1 = schedule[e1]
-        teams[ek].append(t1)
-        schedule.unassign(t1, e1)
-
-        if e2 is not None:
-            t2 = schedule[e2]
-            teams[ek].append(t2)
-            schedule.unassign(t2, e2)
-
-        return self.recursive_repair(schedule, teams, events)
+        return len(schedule) == self.config.total_slots_required
 
     def get_rt_tpr_maps(
         self, schedule: Schedule

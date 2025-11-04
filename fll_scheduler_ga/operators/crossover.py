@@ -240,7 +240,7 @@ class StructureCrossover(EventCrossover):
     def get_genes(self) -> tuple[np.ndarray, np.ndarray]:
         """Get the genes for Structure-based crossover."""
         self.rng.shuffle(self.events)
-        p1, p2 = np.array_split(self.events, 2)
+        p1, p2 = np.array_split(self.events, indices_or_sections=2, axis=0)
         p1_indices = self.array[p1]
         p2_indices = self.array[p2]
         return p1_indices[p1_indices >= 0], p2_indices[p2_indices >= 0]

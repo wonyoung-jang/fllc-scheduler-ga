@@ -139,11 +139,7 @@ class AppConfig(BaseModel):
 
     @classmethod
     def parse_rounds_config(
-        cls,
-        round_models: list[RoundModel],
-        num_teams: int,
-        time_fmt: str,
-        locations: list[Location],
+        cls, round_models: list[RoundModel], num_teams: int, time_fmt: str, locations: list[Location]
     ) -> list[TournamentRound]:
         """Parse and return a list of TournamentRound objects from the configuration."""
         tournament_rounds = []
@@ -201,12 +197,7 @@ class AppConfig(BaseModel):
 
     @classmethod
     def validate_duration(
-        cls,
-        start_dt: datetime | None,
-        stop_dt: datetime | None,
-        times_dt: list[datetime],
-        dur: int,
-        n_timeslots: int,
+        cls, start_dt: datetime | None, stop_dt: datetime | None, times_dt: list[datetime], dur: int, n_timeslots: int
     ) -> int | None:
         """Validate the times configuration for a round.
 
@@ -241,18 +232,12 @@ class AppConfig(BaseModel):
 
     @classmethod
     def init_timeslots(
-        cls,
-        start_times: list[datetime],
-        dur_tdelta: timedelta,
-        n_timeslots: int,
-        start_dt: datetime,
+        cls, start_times: list[datetime], dur_tdelta: timedelta, n_timeslots: int, start_dt: datetime
     ) -> Iterator[tuple[datetime, datetime]]:
         """Initialize the timeslots for the round."""
-        if start_times:
+        if start_times and start_dt:
             stop_times = start_times[1:]
             stop_times.append(stop_times[-1] + dur_tdelta)
-
-        if start_times and stop_times:
             time_pairs = zip(start_times, stop_times, strict=True)
             yield from time_pairs
             return

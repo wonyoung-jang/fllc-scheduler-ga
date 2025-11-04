@@ -153,25 +153,25 @@ class Island:
                     break
 
         if not self.selected:
-            return
-
-        n_pop = self.ga_params.population_size
-        schedule_fitnesses, _ = self.evaluate_pop()
-        pop_to_select: list[Schedule] = self.selected
-        fronts = self.context.nsga3.select(
-            fits=schedule_fitnesses,
-            n=n_pop,
-        )
-        self.curr_schedule_fitnesses = schedule_fitnesses
-        self.selected = []
-        for front in fronts:
-            for idx in front:
-                self.add_to_population(pop_to_select[idx])
+            msg = f"Island {self.identity}: No individuals in population after evolution."
+            raise RuntimeError(msg)
 
     def evaluate_pop(self) -> tuple[np.ndarray, np.ndarray]:
         """Evaluate the entire population."""
         pop_array = np.array([s.schedule for s in self.selected], dtype=int)
         return self.context.evaluator.evaluate_population(pop_array)
+
+    def select_next_generation(self) -> None:
+        """Select the next generation using NSGA-III principles."""
+        n_pop = self.ga_params.population_size
+        schedule_fits, _ = self.evaluate_pop()
+        fronts = self.context.nsga3.select(schedule_fits, n_pop)
+        idx_to_select = [i for f in fronts for i in f]
+        self.curr_schedule_fitnesses = schedule_fits[idx_to_select]
+        total_pop: list[Schedule] = self.selected[:]  # Copy current population
+        self.selected = []
+        for i in idx_to_select:
+            self.add_to_population(total_pop[i])
 
     def give_migrants(self) -> Iterator[Schedule]:
         """Randomly yield migrants from population."""

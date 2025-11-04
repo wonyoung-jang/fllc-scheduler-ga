@@ -38,7 +38,7 @@ def generate_summary(
             save_dir=output_dir,
             cmap_name=export_model.cmap_name,
             objectives=list(FitnessObjective),
-            ref_points=ga.context.nsga3.ref_points,
+            ref_points=ga.context.nsga3.ref_pts,
         ).plot()
 
     schedules = ga.pareto_front() if export_model.front_only else total_pop
