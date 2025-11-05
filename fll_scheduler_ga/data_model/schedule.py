@@ -40,15 +40,11 @@ class Schedule:
     team_roundreqs_array: ClassVar[np.ndarray]
     team_identities: ClassVar[dict[int, int | str]]
     total_num_events: ClassVar[int]
-    conflict_matrix: ClassVar[np.ndarray]
 
     def __post_init__(self) -> None:
         """Post-initialization to set up fitness array."""
         if self.schedule is None:
             self.schedule = np.full(Schedule.total_num_events, -1, dtype=int)
-
-        if self.team_events is None or self.team_rounds is None:
-            self._rebuild_state_from_array()
 
         if self.team_events is None:
             self.team_events = defaultdict(set)
@@ -87,23 +83,6 @@ class Schedule:
         if self._hash is None:
             self._hash = hash(frozenset(frozenset(events) for events in self.team_events.values()))
         return self._hash
-
-    @classmethod
-    def from_array(cls, schedule_array: np.ndarray, origin: str) -> Schedule:
-        """Create a Schedule from a given schedule array."""
-        return cls(schedule=schedule_array, origin=origin)
-
-    def _rebuild_state_from_array(self) -> None:
-        """Build the team_events and team_rounds attributes from the schedule array."""
-        self.team_events = defaultdict(set)
-        self.team_rounds = Schedule.team_roundreqs_array.copy()
-        roundtype_indices = Schedule.event_properties.roundtype_idx
-        for event_id, team_id in enumerate(self.schedule):
-            if team_id != -1:
-                roundtype = roundtype_indices[event_id]
-                self.team_events[team_id].add(event_id)
-                self.team_rounds[team_id, roundtype] -= 1
-        self._hash = None
 
     def swap_assignment(self, team: int, old_event: int, new_event: int) -> None:
         """Switch an event for a team in the schedule."""

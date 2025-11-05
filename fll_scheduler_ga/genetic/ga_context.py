@@ -68,7 +68,6 @@ class GaContext:
         ).run_checks()
 
         Schedule.teams = np.arange(tournament_config.num_teams, dtype=int)
-        Schedule.conflict_matrix = event_factory.build_conflict_matrix()
         Schedule.event_properties = event_properties
         Schedule.event_map = event_factory.as_mapping()
 
@@ -155,7 +154,7 @@ class GaContext:
             parent_dir.mkdir(parents=True, exist_ok=True)
             report_path = parent_dir / "report.txt"
             summary_gen = ScheduleSummaryGenerator()
-            summary_gen.generate(imported_schedule_csv, report_path)
+            summary_gen.export(imported_schedule_csv, report_path)
 
         if not runtime.add_import_to_population:
             logger.debug("Not adding imported schedule to population.")

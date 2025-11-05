@@ -138,13 +138,17 @@ class Repairer:
         while len(teams) >= 1:
             tkey = self.rng.choice(list(teams.keys()))
             t = teams.pop(tkey)
-            for i in self.rng.permutation(list(events.keys())):
-                e = events[i]
+
+            event_keys = list(events.keys())
+            self.rng.shuffle(event_keys)
+
+            for ekey in event_keys:
+                e = events[ekey]
                 if schedule.conflicts(t, e):
                     continue
 
                 schedule.assign(t, e)
-                events.pop(i)
+                events.pop(ekey)
                 break
             else:
                 teams[tkey] = t
@@ -178,14 +182,18 @@ class Repairer:
     def find_and_repair_match(self, t1: int, t2: int, events: dict[int, int], schedule: Schedule) -> bool:
         """Find an open match slot for two teams and populate it."""
         _paired_idx = self.event_properties.paired_idx
-        for i in self.rng.permutation(list(events.keys())):
-            e1 = events[i]
+
+        event_keys = list(events.keys())
+        self.rng.shuffle(event_keys)
+
+        for ekey in event_keys:
+            e1 = events[ekey]
             e2 = _paired_idx[e1]
             if schedule.conflicts(t1, e1) or schedule.conflicts(t2, e2):
                 continue
 
             schedule.assign(t1, e1)
             schedule.assign(t2, e2)
-            events.pop(i)
+            events.pop(ekey)
             return True
         return False

@@ -121,12 +121,12 @@ class GA:
             return [p for i in self.islands for p in i.pareto_front()]
         return [p for p in self.total_population if p.rank == 0]
 
-    def get_this_gen_fitness(self) -> tuple[float, ...]:
+    def get_this_gen_fitness(self) -> np.ndarray:
         """Calculate the average fitness of the current generation."""
         island_fitnesses = np.asarray([i.get_last_gen_fitness() for i in self.islands])
         return island_fitnesses.mean(axis=0)
 
-    def get_last_gen_fitness(self) -> tuple[float, ...]:
+    def get_last_gen_fitness(self) -> np.ndarray:
         """Get the fitness of the last generation."""
         return self.fitness_history[self.curr_gen - 1] if self.curr_gen > 0 else ()
 

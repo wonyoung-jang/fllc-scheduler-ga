@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from matplotlib.figure import Figure
 
     from ..config.constants import FitnessObjective
+    from ..config.schemas import ExportModel
     from ..genetic.ga import GA
 
 
@@ -32,15 +33,18 @@ class Plot:
 
     ga: GA
     save_dir: str | Path | None
-    cmap_name: str
     objectives: list[FitnessObjective]
     ref_points: np.ndarray
+    export_model: ExportModel
 
     def plot(self) -> None:
         """Create all plots."""
-        self.plot_fitness()
-        self.plot_parallel()
-        self.plot_scatter()
+        if self.export_model.plot_fitness:
+            self.plot_fitness()
+        if self.export_model.plot_parallel:
+            self.plot_parallel()
+        if self.export_model.plot_scatter:
+            self.plot_scatter()
 
     def plot_fitness(self) -> None:
         """Create figure that summarizes how the average fitness of the first Pareto front evolved by generation.
@@ -87,7 +91,7 @@ class Plot:
             ax=ax,
             linewidth=1.5,
             alpha=0.7,
-            colormap=self.cmap_name,
+            colormap=self.export_model.cmap_name,
         )
         ax.set(title="Trade-off parallel coordinates", xlabel="Objectives", ylabel="Score")
         ax.get_legend().remove()
@@ -109,7 +113,7 @@ class Plot:
         if len_obj == 2:
             fig, ax = plt.subplots(figsize=(10, 8))
             x_obj, y_obj = self.objectives
-            ax.scatter(dataframe[x_obj], dataframe[y_obj], c=ranks, cmap=self.cmap_name, s=60, alpha=0.8)
+            ax.scatter(dataframe[x_obj], dataframe[y_obj], c=ranks, cmap=self.export_model.cmap_name, s=60, alpha=0.8)
             ax.set(
                 title=f"{len(self.ga.context.evaluator.objectives)}D scatter plot of schedules",
                 xlabel=x_obj,
@@ -121,7 +125,9 @@ class Plot:
             fig, ax = plt.subplots(figsize=(10, 8), subplot_kw={"projection": "3d"})
             x_obj, y_obj, z_obj = self.objectives
             ax.view_init(azim=45, elev=40)
-            ax.scatter(dataframe[x_obj], dataframe[y_obj], dataframe[z_obj], c=ranks, cmap=self.cmap_name, s=60)
+            ax.scatter(
+                dataframe[x_obj], dataframe[y_obj], dataframe[z_obj], c=ranks, cmap=self.export_model.cmap_name, s=60
+            )
             ax.set(
                 title=f"{len(self.ga.context.evaluator.objectives)}D scatter plot of schedules",
                 xlabel=x_obj,
@@ -163,13 +169,13 @@ class Plot:
         unique_values = sorted(set(values))
 
         if len(unique_values) <= 10:
-            cmap = plt.get_cmap(self.cmap_name, len(unique_values))
+            cmap = plt.get_cmap(self.export_model.cmap_name, len(unique_values))
             norm = mcolors.BoundaryNorm(np.arange(min(values) - 0.5, max(values) + 1.5), cmap.N)
             sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
             cbar = plt.colorbar(mappable=sm, ax=ax, ticks=unique_values)
         else:
             norm = plt.Normalize(min(values), max(values))
-            sm = plt.cm.ScalarMappable(norm=norm, cmap=self.cmap_name)
+            sm = plt.cm.ScalarMappable(norm=norm, cmap=self.export_model.cmap_name)
             cbar = plt.colorbar(mappable=sm, ax=ax)
 
         sm.set_array([])

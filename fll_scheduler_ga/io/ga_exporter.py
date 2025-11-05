@@ -24,11 +24,7 @@ if TYPE_CHECKING:
 logger = getLogger(__name__)
 
 
-def generate_summary(
-    ga: GA,
-    output_dir: Path,
-    export_model: ExportModel,
-) -> None:
+def generate_summary(ga: GA, output_dir: Path, export_model: ExportModel) -> None:
     """Run the fll-scheduler-ga application and generate summary reports."""
     subdirs = OutputDirManager(output_dir).subdirs
     total_pop = ga.total_population
@@ -36,9 +32,9 @@ def generate_summary(
         Plot(
             ga=ga,
             save_dir=output_dir,
-            cmap_name=export_model.cmap_name,
             objectives=list(FitnessObjective),
             ref_points=ga.context.nsga3.ref_pts,
+            export_model=export_model,
         ).plot()
 
     schedules = ga.pareto_front() if export_model.front_only else total_pop
@@ -46,12 +42,12 @@ def generate_summary(
 
     time_fmt = ga.context.app_config.tournament.time_fmt
     event_properties = ga.context.event_properties
-    export_manager = ExportManager(schedules, subdirs, time_fmt, event_properties, ga)
+    export_manager = ExportManager(schedules, subdirs, time_fmt, event_properties, ga, export_model)
     export_manager.export_all()
 
     if export_model.pareto_summary:
         pareto_summary_gen = ParetoSummaryGenerator()
-        pareto_summary_gen.generate(total_pop, output_dir / "pareto_summary.csv")
+        pareto_summary_gen.export(total_pop, output_dir / "pareto_summary.csv")
 
 
 @dataclass(slots=True)
@@ -63,26 +59,28 @@ class ExportManager:
     time_fmt: str
     event_properties: EventProperties
     ga: GA
+    export_model: ExportModel
+
+    def get_exporters(self) -> list:
+        """Get the list of exporters based on the export model."""
+        exporters = []
+        if self.export_model.schedules_csv:
+            exporters.append((CsvScheduleExporter(self.time_fmt, self.event_properties), self.subdirs["csv"], "csv"))
+        if self.export_model.schedules_html:
+            exporters.append((HtmlScheduleExporter(self.time_fmt, self.event_properties), self.subdirs["html"], "html"))
+        if self.export_model.summary_reports:
+            exporters.append((ScheduleSummaryGenerator(), self.subdirs["txt"], "txt"))
+        if self.export_model.schedules_team_csv:
+            exporters.append((TeamScheduleGenerator(self.ga), self.subdirs["team"], "csv"))
+        return exporters
 
     def export_all(self) -> None:
         """Export all schedules to the different formats."""
-        csv_exporter = CsvScheduleExporter(self.time_fmt, self.event_properties)
-        html_exporter = HtmlScheduleExporter(self.time_fmt, self.event_properties)
-
-        csv_dir = self.subdirs["csv"]
-        html_dir = self.subdirs["html"]
-        txt_dir = self.subdirs["txt"]
-        team_sched_dir = self.subdirs["team"]
-
-        summary_gen = ScheduleSummaryGenerator()
-        team_sched_gen = TeamScheduleGenerator(self.ga)
-
-        for i, sched in enumerate(self.schedules, start=1):
-            name = f"fr_{sched.rank}_sched_{i}"
-            csv_exporter.export(sched, csv_dir / f"{name}.csv")
-            html_exporter.export(sched, html_dir / f"{name}.html")
-            summary_gen.generate(sched, txt_dir / f"{name}_summary.txt")
-            team_sched_gen.generate(sched.schedule, team_sched_dir / f"{name}_team.csv")
+        exporters = self.get_exporters()
+        for exporter, subdir, ext in exporters:
+            for i, sched in enumerate(self.schedules, start=1):
+                name = f"front{sched.rank}_sched{i}"
+                exporter.export(sched, subdir / f"{name}.{ext}")
 
 
 @dataclass(slots=True)
@@ -164,7 +162,7 @@ class ScheduleSummaryGenerator:
 
         return txt
 
-    def generate(self, schedule: Schedule, path: Path) -> None:
+    def export(self, schedule: Schedule, path: Path) -> None:
         """Generate a text summary report for a single schedule."""
         try:
             txt_data = self.get_text_summary(schedule)
@@ -209,7 +207,7 @@ class TeamScheduleGenerator:
             rows.append(r)
         return rows
 
-    def generate(self, schedule: Schedule, path: Path) -> None:
+    def export(self, schedule: Schedule, path: Path) -> None:
         """Generate a CSV file with team schedules, sorted by team IDs."""
         try:
             with path.open("w", newline="", encoding="utf-8") as f:
@@ -239,7 +237,7 @@ class ParetoSummaryGenerator:
             summary.append(row)
         return summary
 
-    def generate(self, pop: list[Schedule], path: Path) -> None:
+    def export(self, pop: list[Schedule], path: Path) -> None:
         """Generate a summary of the Pareto front."""
         try:
             with path.open("w", newline="", encoding="utf-8") as f:
