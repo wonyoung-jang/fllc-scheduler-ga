@@ -114,6 +114,18 @@ class AppConfig(BaseModel):
         all_timeslots = sorted(all_timeslots, key=lambda ts: ts.idx)
 
         max_events_per_team = sum(r.rounds_per_team for r in rounds)
+        starts_of_rounds = [r.start_time for r in rounds]
+        ends_of_rounds = [r.stop_time for r in rounds]
+        round_timeslots = []
+        for start, stop in zip(starts_of_rounds, ends_of_rounds, strict=True):
+            round_ts = TimeSlot(idx=0, start=start, stop=stop)
+            round_timeslots.append(round_ts)
+
+        is_interleaved = any(
+            round_timeslots[i].overlaps(round_timeslots[j])
+            for i in range(len(round_timeslots))
+            for j in range(i + 1, len(round_timeslots))
+        )
 
         return TournamentConfig(
             num_teams=len(teams),
@@ -129,6 +141,7 @@ class AppConfig(BaseModel):
             all_locations=all_locations,
             all_timeslots=all_timeslots,
             max_events_per_team=max_events_per_team,
+            is_interleaved=is_interleaved,
         )
 
     @classmethod

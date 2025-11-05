@@ -48,7 +48,7 @@ class Island:
         n_gen = self.ga_params.generations
         n_obj = len(self.context.evaluator.objectives)
         self.fitness_history = np.zeros((n_gen, n_obj), dtype=float)
-        self.curr_schedule_fitnesses = np.zeros((0, n_obj), dtype=float)
+        self.curr_schedule_fitnesses = np.zeros((1, n_obj), dtype=float)
 
     def __len__(self) -> int:
         """Return the number of individuals in the island's population."""
@@ -62,7 +62,7 @@ class Island:
         """Update the fitness history with the current generation's fitness."""
         curr_fits = self.curr_schedule_fitnesses
         if curr_fits is not None and curr_fits.size > 0:
-            self.fitness_history[self.curr_gen] = curr_fits.mean(axis=0)
+            self.fitness_history[self.curr_gen] = curr_fits
 
     def pareto_front(self) -> list[Schedule]:
         """Get the Pareto front for each island in the population."""
@@ -167,7 +167,7 @@ class Island:
         schedule_fits, _ = self.evaluate_pop()
         fronts = self.context.nsga3.select(schedule_fits, n_pop)
         idx_to_select = [i for f in fronts for i in f]
-        self.curr_schedule_fitnesses = schedule_fits[idx_to_select]
+        self.curr_schedule_fitnesses = schedule_fits[idx_to_select].mean(axis=0)
         total_pop: list[Schedule] = self.selected[:]  # Copy current population
         self.selected = []
         for i in idx_to_select:

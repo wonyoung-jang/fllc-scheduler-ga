@@ -36,6 +36,9 @@ class GA:
     seed_file: Path
     save_front_only: bool
 
+    save: GASave = None
+    load: GALoad = None
+
     curr_gen: int = 0
     fitness_history: np.ndarray = None
     total_population: list[Schedule] = field(default_factory=list, repr=False)
@@ -78,10 +81,12 @@ class GA:
             for i in range(self.ga_params.num_islands)
         )
 
+        self.save = GASave(ga=self)
+        self.load = GALoad(ga=self)
+
     @classmethod
     def build(cls, context: GaContext) -> GA:
         """Build and return a GA instance with the provided configuration."""
-        context.handle_seed_file()
         return cls(
             context=context,
             rng=context.app_config.rng,
@@ -113,7 +118,7 @@ class GA:
         finally:
             self.finalize(start_time)
             self._notify_on_finish(self.total_population, self.pareto_front())
-            self.save()
+            self.save.save()
 
     def pareto_front(self) -> list[Schedule]:
         """Get the Pareto front for each island in the population."""
@@ -137,7 +142,7 @@ class GA:
     def initialize_population(self) -> None:
         """Initialize the population for each island."""
         s_path = self.seed_file
-        if s_path and s_path.exists() and (seed_pop := self.load()):
+        if s_path and s_path.exists() and (seed_pop := self.load.load()):
             self.rng.shuffle(seed_pop)
             n = self.ga_params.num_islands
             for idx, schedule in enumerate(seed_pop):
@@ -173,12 +178,12 @@ class GA:
             island.curr_gen += 1
 
     def migrate(self) -> None:
-        """Migrate the best individuals between islands using a random 1 -> 2 ring topology."""
+        """Migrate the best individuals between islands using a ring topology."""
         n = len(self.islands)
-        o = self.rng.integers(1, n)
-        for i, island in enumerate(self.islands):
-            j = (i + o) % n
-            island.receive_migrants(self.islands[j].give_migrants())
+        for i, receiving_island in enumerate(self.islands):
+            giving_island = self.islands[(i + 1) % n]
+            migrants = giving_island.give_migrants()
+            receiving_island.receive_migrants(migrants)
 
     def _notify_on_start(self, num_generations: int) -> None:
         """Notify observers when the genetic algorithm run starts."""
@@ -293,12 +298,20 @@ class GA:
             logger.debug("Island %d Fitness: %.2f", island.identity, sum(island.get_last_gen_fitness()))
         logger.debug("Total time taken: %.2f seconds", time() - start_time)
 
+
+@dataclass(slots=True)
+class GALoad:
+    """Loader for GA instances from seed files."""
+
+    ga: GA
+
     def load(self) -> list[Schedule] | None:
         """Load and integrate a population from a seed file."""
-        logger.debug("Loading seed population from: %s", self.seed_file)
+        ga = self.ga
+        logger.debug("Loading seed population from: %s", ga.seed_file)
         seed_data: dict[str, Any] = {}
         try:
-            with self.seed_file.open("rb") as f:
+            with ga.seed_file.open("rb") as f:
                 seed_data = pickle.load(f)
         except (OSError, pickle.PicklingError):
             logger.exception("Could not load or parse seed file. Starting with a fresh population.")
@@ -310,7 +323,7 @@ class GA:
             logger.warning("Seed population is missing config. Using current...")
             return None
 
-        if self.context.app_config.tournament != seed_config:
+        if ga.context.app_config.tournament != seed_config:
             logger.warning("Seed population does not match current config. Using current...")
             return None
 
@@ -321,9 +334,17 @@ class GA:
 
         return population
 
+
+@dataclass(slots=True)
+class GASave:
+    """Saver for GA instances to seed files."""
+
+    ga: GA
+
     def save(self) -> None:
         """Save the final population to a file to be used as a seed for a future run."""
-        pop = self.pareto_front() if self.save_front_only else self.total_population
+        ga = self.ga
+        pop = ga.pareto_front() if ga.save_front_only else ga.total_population
 
         if not pop:
             logger.warning("No population to save to seed file.")
@@ -331,10 +352,10 @@ class GA:
 
         data_to_cache = {
             "population": pop,
-            "config": self.context.app_config.tournament,
+            "config": ga.context.app_config.tournament,
         }
 
-        path = self.seed_file
+        path = ga.seed_file
         logger.debug("Saving final population of size %d to seed file: %s", len(pop), path)
 
         try:

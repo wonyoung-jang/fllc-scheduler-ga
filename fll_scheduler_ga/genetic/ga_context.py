@@ -50,6 +50,10 @@ class GaContext:
     crossovers: tuple[Crossover, ...]
     mutations: tuple[Mutation, ...]
 
+    def __post_init__(self) -> None:
+        """Post-initialization actions."""
+        self.handle_seed_file()
+
     @classmethod
     def build(cls, app_config: AppConfig) -> GaContext:
         """Build and return a GA context."""

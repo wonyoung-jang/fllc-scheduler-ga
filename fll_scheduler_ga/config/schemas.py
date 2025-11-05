@@ -359,6 +359,7 @@ class TournamentConfig(BaseModel):
     all_locations: list[Location]
     all_timeslots: list[TimeSlot]
     max_events_per_team: int
+    is_interleaved: bool
 
     def __str__(self) -> str:
         """Represent the TournamentConfig."""
@@ -377,6 +378,7 @@ class TournamentConfig(BaseModel):
             f"\n    all_locations             : {[str(loc) for loc in self.all_locations]}"
             f"\n    all_timeslots             : {[str(ts) for ts in self.all_timeslots]}"
             f"\n    max_events_per_team       : {self.max_events_per_team}"
+            f"\n    is_interleaved            : {self.is_interleaved}"
         )
 
 
