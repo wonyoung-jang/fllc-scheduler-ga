@@ -63,12 +63,12 @@ class Schedule:
     def __setitem__(self, event: int, team: int) -> None:
         """Assign a team to a specific event."""
         self.schedule[event] = team
-        self._hash = None
+        self.reset_hash()
 
     def __delitem__(self, event: int) -> None:
         """Remove a specific event from the schedule."""
         self.schedule[event] = -1
-        self._hash = None
+        self.reset_hash()
 
     def __contains__(self, event: int) -> bool:
         """Check if a specific event is scheduled."""
@@ -83,6 +83,25 @@ class Schedule:
         if self._hash is None:
             self._hash = hash(frozenset(frozenset(events) for events in self.team_events.values()))
         return self._hash
+
+    def clone(self) -> Schedule:
+        """Create a deep copy of the schedule."""
+        return Schedule(
+            schedule=self.schedule.copy(),
+            fitness=self.fitness.copy() if self.fitness is not None else None,
+            team_fitnesses=self.team_fitnesses.copy() if self.team_fitnesses is not None else None,
+            rank=self.rank,
+            origin=self.origin,
+            mutations=self.mutations,
+            clones=self.clones + 1,
+            _hash=self._hash,
+            team_events={k: v.copy() for k, v in self.team_events.items()},
+            team_rounds=self.team_rounds.copy(),
+        )
+
+    def reset_hash(self) -> None:
+        """Reset the cached hash value."""
+        self._hash = None
 
     def swap_assignment(self, team: int, old_event: int, new_event: int) -> None:
         """Switch an event for a team in the schedule."""
@@ -138,21 +157,6 @@ class Schedule:
 
         new_conflicts = Schedule.event_map[new_event].conflicts
         return not events_to_check.isdisjoint(new_conflicts)
-
-    def clone(self) -> Schedule:
-        """Create a deep copy of the schedule."""
-        return Schedule(
-            schedule=self.schedule.copy(),
-            fitness=self.fitness.copy() if self.fitness is not None else None,
-            team_fitnesses=self.team_fitnesses.copy() if self.team_fitnesses is not None else None,
-            rank=self.rank,
-            origin=self.origin,
-            mutations=self.mutations,
-            clones=self.clones + 1,
-            _hash=self._hash,
-            team_events={k: v.copy() for k, v in self.team_events.items()},
-            team_rounds=self.team_rounds.copy(),
-        )
 
     def scheduled_events(self) -> np.ndarray:
         """Return the indices of scheduled events."""

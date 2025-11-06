@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pickle
-from collections import Counter, defaultdict
+from collections import Counter
 from dataclasses import dataclass, field
 from logging import getLogger
 from pathlib import Path
@@ -36,9 +36,6 @@ class GA:
     seed_file: Path
     save_front_only: bool
 
-    save: GASave = None
-    load: GALoad = None
-
     curr_gen: int = 0
     fitness_history: np.ndarray = None
     total_population: list[Schedule] = field(default_factory=list, repr=False)
@@ -48,9 +45,9 @@ class GA:
     generations_array: np.ndarray = None
     migrate_generations: np.ndarray = None
 
-    _offspring_ratio: Counter = field(default_factory=Counter, repr=False)
-    _crossover_ratio: dict[str, Counter] = None
-    _mutation_ratio: dict[str, Counter] = None
+    offspring_ratio: Counter = field(default_factory=Counter, repr=False)
+    crossover_ratio: dict[str, Counter] = None
+    mutation_ratio: dict[str, Counter] = None
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
@@ -67,22 +64,19 @@ class GA:
         )
 
         trackers = ("success", "total")
-        self._crossover_ratio = {tr: Counter({str(c): 0 for c in self.context.crossovers}) for tr in trackers}
-        self._mutation_ratio = {tr: Counter({str(m): 0 for m in self.context.mutations}) for tr in trackers}
+        self.crossover_ratio = {tr: Counter({str(c): 0 for c in self.context.crossovers}) for tr in trackers}
+        self.mutation_ratio = {tr: Counter({str(m): 0 for m in self.context.mutations}) for tr in trackers}
 
         self.islands.extend(
             Island(
                 identity=i,
                 context=self.context,
-                offspring_ratio=self._offspring_ratio.copy(),
-                crossover_ratio=self._crossover_ratio.copy(),
-                mutation_ratio=self._mutation_ratio.copy(),
+                offspring_ratio=self.offspring_ratio.copy(),
+                crossover_ratio=self.crossover_ratio.copy(),
+                mutation_ratio=self.mutation_ratio.copy(),
             )
             for i in range(self.ga_params.num_islands)
         )
-
-        self.save = GASave(ga=self)
-        self.load = GALoad(ga=self)
 
     @classmethod
     def build(cls, context: GaContext) -> GA:
@@ -104,7 +98,8 @@ class GA:
         start_time = time()
         self._notify_on_start(self.ga_params.generations)
         try:
-            self.initialize_population()
+            seed_pop = GALoad(self).load()
+            self.initialize_population(seed_pop)
             if not any(i.selected for i in self.islands):
                 logger.critical("No valid schedule meeting all hard constraints was found.")
                 return False
@@ -116,9 +111,9 @@ class GA:
             logger.debug("Genetic algorithm run interrupted by user. Saving...")
             self.update_fitness_history()
         finally:
-            self.finalize(start_time)
+            GAFinalizer(self).finalize(start_time)
+            GASave(self).save()
             self._notify_on_finish(self.total_population, self.pareto_front())
-            self.save.save()
 
     def pareto_front(self) -> list[Schedule]:
         """Get the Pareto front for each island in the population."""
@@ -128,7 +123,7 @@ class GA:
 
     def get_this_gen_fitness(self) -> np.ndarray:
         """Calculate the average fitness of the current generation."""
-        island_fitnesses = np.asarray([i.get_last_gen_fitness() for i in self.islands])
+        island_fitnesses = np.asarray([i.get_last_gen_fitness() for i in self.islands], dtype=float)
         return island_fitnesses.mean(axis=0)
 
     def get_last_gen_fitness(self) -> np.ndarray:
@@ -139,16 +134,16 @@ class GA:
         """Update the fitness history with the current generation's fitness."""
         self.fitness_history[self.curr_gen] = self.get_this_gen_fitness()
 
-    def initialize_population(self) -> None:
+    def initialize_population(self, seed_pop: list[Schedule] | None) -> None:
         """Initialize the population for each island."""
-        s_path = self.seed_file
-        if s_path and s_path.exists() and (seed_pop := self.load.load()):
+        if seed_pop is not None:
             self.rng.shuffle(seed_pop)
             n = self.ga_params.num_islands
             for idx, schedule in enumerate(seed_pop):
                 self.islands[idx % n].add_to_population(schedule)
 
         logger.debug("Initializing %d islands...", self.ga_params.num_islands)
+
         for island in self.islands:
             island.initialize()
             island.evaluate_pop()
@@ -158,6 +153,7 @@ class GA:
         for gen in self.generations_array:
             if self.migrate_generations[gen]:
                 self.migrate()
+
             self.run_generation()
             self.update_fitness_history()
             self.curr_gen += 1
@@ -191,11 +187,7 @@ class GA:
             obs.on_start(num_generations)
 
     def _notify_on_generation_end(
-        self,
-        generation: int,
-        num_generations: int,
-        best_fitness: np.ndarray,
-        pop_size: int,
+        self, generation: int, num_generations: int, best_fitness: np.ndarray, pop_size: int
     ) -> None:
         """Notify observers at the end of a generation."""
         for obs in self.observers:
@@ -206,12 +198,37 @@ class GA:
         for obs in self.observers:
             obs.on_finish(pop, pareto_front)
 
+
+@dataclass(slots=True)
+class GAFinalizer:
+    """Finalizer for GA instances."""
+
+    ga: GA
+
+    def finalize(self, start_time: float) -> None:
+        """Aggregate islands and run a final selection to produce the final population."""
+        ga = self.ga
+        ctx = ga.context
+
+        self._deduplicate_population()
+        self._aggregate_stats_from_islands()
+        self._log_operators(name="crossover", ratios=ga.crossover_ratio, ops=ctx.crossovers)
+        self._log_operators(name="mutation", ratios=ga.mutation_ratio, ops=ctx.mutations)
+        self._log_aggregate_stats()
+        for island in ga.islands:
+            logger.debug("Island %d Fitness: %.2f", island.identity, sum(island.get_last_gen_fitness()))
+        logger.debug("Total time taken: %.2f seconds", time() - start_time)
+
     def _deduplicate_population(self) -> None:
         """Remove duplicate individuals from the population."""
-        unique_pop = [ind for island in self.islands for ind in island.selected]
-        pop_array = np.asarray([s.schedule for island in self.islands for s in island.selected])
-        schedule_fitness, team_fitnesses = self.context.evaluator.evaluate_population(pop_array)
-        fronts = self.context.nsga3.non_dominated_sort(schedule_fitness, len(pop_array))
+        ga = self.ga
+        ctx = ga.context
+
+        unique_pop = [ind for island in ga.islands for ind in island.selected]
+        pop_array = np.asarray([s.schedule for island in ga.islands for s in island.selected])
+        schedule_fitness, team_fitnesses = ctx.evaluator.evaluate_population(pop_array)
+        fronts = ctx.nsga3.non_dominated_sort(schedule_fitness, len(pop_array))
+
         selected = {}
         for rank, front in enumerate(fronts):
             for idx in front:
@@ -221,19 +238,22 @@ class GA:
                 sch.team_fitnesses = team_fitnesses[idx]
                 sch.rank = rank
                 selected[hash(sch)] = sch
-        self.total_population = sorted(selected.values(), key=lambda s: (s.rank, -s.fitness.sum()))
+
+        ga.total_population = sorted(selected.values(), key=lambda s: (s.rank, -s.fitness.sum()))
 
     def _aggregate_stats_from_islands(self) -> None:
         """Aggregate statistics from all islands."""
-        for island in self.islands:
+        ga = self.ga
+        for island in ga.islands:
             for tracker, crossovers in island.crossover_ratio.items():
-                self._crossover_ratio[tracker].update(crossovers)
+                ga.crossover_ratio[tracker].update(crossovers)
             for tracker, mutations in island.mutation_ratio.items():
-                self._mutation_ratio[tracker].update(mutations)
+                ga.mutation_ratio[tracker].update(mutations)
             for tracker, count in island.offspring_ratio.items():
-                self._offspring_ratio[tracker] += count
+                ga.offspring_ratio[tracker] += count
 
-    def _log_operators(self, name: str, ratios: dict[str, Counter], ops: tuple[Crossover | Mutation]) -> None:
+    @staticmethod
+    def _log_operators(name: str, ratios: dict[str, Counter], ops: tuple[Crossover | Mutation]) -> None:
         """Log statistics for crossover and mutation operators."""
         if not (op_strings := [f"{op!s}" for op in ops]):
             return
@@ -249,54 +269,28 @@ class GA:
 
     def _log_aggregate_stats(self) -> None:
         """Log aggregate statistics across all islands."""
+        ga = self.ga
         final_log = f"{'=' * 20}\nFinal statistics"
-        crs_suc = sum(self._crossover_ratio.get("success", {}).values())
-        crs_tot = sum(self._crossover_ratio.get("total", {}).values())
+        crs_suc = sum(ga.crossover_ratio.get("success", {}).values())
+        crs_tot = sum(ga.crossover_ratio.get("total", {}).values())
         crs_rte = f"{crs_suc / crs_tot if crs_tot > 0 else 0.0:.2%}"
-        mut_suc = sum(self._mutation_ratio.get("success", {}).values())
-        mut_tot = sum(self._mutation_ratio.get("total", {}).values())
+        mut_suc = sum(ga.mutation_ratio.get("success", {}).values())
+        mut_tot = sum(ga.mutation_ratio.get("total", {}).values())
         mut_rte = f"{mut_suc / mut_tot if mut_tot > 0 else 0.0:.2%}"
-        off_suc = self._offspring_ratio.get("success", 0)
-        off_tot = self._offspring_ratio.get("total", 0)
+        off_suc = ga.offspring_ratio.get("success", 0)
+        off_tot = ga.offspring_ratio.get("total", 0)
         off_rte = f"{off_suc / off_tot if off_tot > 0 else 0.0:.2%}"
-        unique_inds = len(self.total_population)
-        total_inds = len(self)
+        unique_inds = len(ga.total_population)
+        total_inds = len(ga)
         unique_rte = f"{unique_inds / total_inds if total_inds > 0 else 0.0:.2%}"
         final_log += (
-            f"\n  Total islands          : {len(self.islands)}"
+            f"\n  Total islands          : {len(ga.islands)}"
             f"\n  Unique individuals     : {unique_inds}/{total_inds} ({unique_rte})"
             f"\n  Crossover success rate : {crs_suc}/{crs_tot} ({crs_rte})"
             f"\n  Mutation success rate  : {mut_suc}/{mut_tot} ({mut_rte})"
             f"\n  Offspring success rate : {off_suc}/{off_tot} ({off_rte})"
         )
         logger.debug(final_log)
-
-    def _log_unique_events(self) -> None:
-        """Count unique event lists."""
-        unique_genes = Counter()
-        for schedule in self.total_population:
-            s = schedule.schedule
-            team_events = defaultdict(set)
-            for event_id, team_id in enumerate(s):
-                if team_id >= 0:
-                    team_events[team_id].add(event_id)
-
-            for events in team_events.values():
-                unique_genes[tuple(sorted(events))] += 1
-        for gene, count in unique_genes.most_common(n=10):
-            logger.debug("Event: %s, Count: %d", gene, count)
-
-    def finalize(self, start_time: float) -> None:
-        """Aggregate islands and run a final selection to produce the final population."""
-        self._deduplicate_population()
-        self._log_unique_events()
-        self._aggregate_stats_from_islands()
-        self._log_operators(name="crossover", ratios=self._crossover_ratio, ops=self.context.crossovers)
-        self._log_operators(name="mutation", ratios=self._mutation_ratio, ops=self.context.mutations)
-        self._log_aggregate_stats()
-        for island in self.islands:
-            logger.debug("Island %d Fitness: %.2f", island.identity, sum(island.get_last_gen_fitness()))
-        logger.debug("Total time taken: %.2f seconds", time() - start_time)
 
 
 @dataclass(slots=True)

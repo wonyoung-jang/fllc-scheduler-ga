@@ -173,13 +173,15 @@ class Island:
         for i in idx_to_select:
             self.add_to_population(total_pop[i])
 
-    def give_migrants(self) -> Iterator[Schedule]:
+    def give_migrants(self) -> list[Schedule]:
         """Randomly yield migrants from population."""
+        migrants = []
         for _ in range(self.ga_params.migration_size):
             i = self.rng.integers(0, len(self.selected))
-            yield self.selected.pop(i)
+            migrants.append(self.selected.pop(i))
+        return migrants
 
-    def receive_migrants(self, migrants: Iterator[Schedule]) -> None:
+    def receive_migrants(self, migrants: list[Schedule]) -> None:
         """Receive migrants from another island and add them to the current island's population."""
         for migrant in migrants:
             self.add_to_population(migrant)
