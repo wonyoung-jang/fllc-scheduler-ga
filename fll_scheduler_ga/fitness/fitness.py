@@ -46,6 +46,7 @@ class FitnessEvaluator:
     config: TournamentConfig
     event_properties: EventProperties
     benchmark: FitnessBenchmark
+
     objectives: list[FitnessObjective] = None
     penalty: float = FITNESS_PENALTY
     max_events_per_team: int = 0
@@ -57,9 +58,8 @@ class FitnessEvaluator:
     match_roundtypes: ClassVar[np.ndarray]
     rt_array: ClassVar[np.ndarray]
     min_matches: ClassVar[int]
-    loc_weight_primary: ClassVar[float] = 0.9
-    loc_weight_bonus: ClassVar[float] = 0.1
-    loc_norm_max: ClassVar[float] = (1.0 * loc_weight_primary) + (0.5 * loc_weight_bonus)
+    loc_weight_rounds_inter: ClassVar[float] = 0.9
+    loc_weight_rounds_intra: ClassVar[float] = 0.1
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the configuration."""
@@ -196,75 +196,71 @@ class FitnessEvaluator:
         return final_scores / (self.benchmark.best_timeslot_score or 1.0)
 
     def score_loc_consistency(self, loc_ids: np.ndarray, roundtype_ids: np.ndarray) -> np.ndarray:
-        """Calculate location consistency score."""
+        """Calculate location consistency score, prioritizing inter-round over intra-round consistency."""
         n_pop, n_teams, _ = loc_ids.shape
-
-        # Create mask for valid locations in match roundtypes
         match_roundtypes = FitnessEvaluator.match_roundtypes
         n_match_rt = len(match_roundtypes)
 
-        if n_match_rt == 0:
+        if n_match_rt < 2:  # Consistency score is only meaningful with 2+ match round types
+            return np.ones((n_pop, n_teams), dtype=float)
+
+        # Create a (pop, team, rt, loc) boolean mask
+        max_loc_idx = loc_ids.max()
+        if max_loc_idx < 0:  # No locations scheduled
             return np.ones((n_pop, n_teams), dtype=float)
 
         match_rt_mask = np.isin(roundtype_ids, match_roundtypes) & (loc_ids >= 0)
-
-        # Total matches per team
-        total_matches_per_team = match_rt_mask.sum(axis=2)
-
-        # Get all unique locations per team
-        max_loc_idx = loc_ids.max()
-
-        # 3D mask: (n_pop, n_teams, location_idx)
-        team_loc_mask = np.zeros((n_pop, n_teams, max_loc_idx + 1), dtype=bool)
-
-        # Get indices of all valid match events for vectorized assignment
         pop_indices, team_indices, _ = np.where(match_rt_mask)
         loc_vals = loc_ids[match_rt_mask]
-
-        # True where team has that location
-        team_loc_mask[pop_indices, team_indices, loc_vals] = True
-
-        # The number of unique locations is the sum along the location axis
-        total_unique_locs = team_loc_mask.sum(axis=2)
-
-        # Primary Score: fewer unique locations is better
-        max_negative = total_matches_per_team - 1
-        negative = total_unique_locs - 1
-        primary_scores = 1.0 - (negative / np.maximum(max_negative, 1))
-        primary_scores[max_negative <= 0] = 1.0  # If only one or zero matches, perfect score
-
-        # Bonus Score: intersection across round types
-        # Create a (pop, team, rt, loc) mask
         rt_values = roundtype_ids[match_rt_mask]
         mapped_rt_indices = FitnessEvaluator.rt_array[rt_values]
 
-        # A 4D mask for locations used per round type
         rt_loc_mask = np.zeros((n_pop, n_teams, n_match_rt, max_loc_idx + 1), dtype=bool)
         rt_loc_mask[pop_indices, team_indices, mapped_rt_indices, loc_vals] = True
 
-        # For each team, determine which roundtypes they actually participate in.
-        # Shape: (n_pop, n_teams, n_match_rts)
+        # Inter-Round Consistency (this gets weighted more)
+        # Rewards using the same location across different round types.
         participated_in_rt = np.any(rt_loc_mask, axis=3)
-
-        # Create eval mask where non-participated round types count as having all locations
+        # Mask for intersection: non-participated rounds count as using all locations
         eval_mask = np.where(~participated_in_rt[..., np.newaxis], True, rt_loc_mask)  # noqa: FBT003
 
-        # np.all() along the round-type axis
-        intersection_mask = np.all(eval_mask, axis=2)  # Shape: (n_pop, n_teams, max_loc)
-        overlap_count = np.sum(intersection_mask, axis=2)
+        # Intersection: locations used in ALL participated round types
+        intersection_mask = np.all(eval_mask, axis=2)
+        intersection_size = intersection_mask.sum(axis=2)
 
-        # Normalize the bonus score
-        min_matches = FitnessEvaluator.min_matches
-        bonus_scores = overlap_count / min_matches if min_matches > 0 else np.ones((n_pop, n_teams), dtype=float)
+        # Union: locations used in ANY participated round types
+        union_mask = np.any(rt_loc_mask, axis=2)
+        union_size = union_mask.sum(axis=2)
 
-        # Combine with weights
-        return (
-            (primary_scores * FitnessEvaluator.loc_weight_primary) + (bonus_scores * FitnessEvaluator.loc_weight_bonus)
-        ) / FitnessEvaluator.loc_norm_max
+        # Score is the ratio of intersection to union (Jaccard index)
+        inter_round_scores = intersection_size / (union_size + EPSILON)
+        inter_round_scores = np.nan_to_num(inter_round_scores, nan=1.0)  # Perfect score if no matches
+
+        # Intra-Round Consistency
+        # Rewards using only one location within a single round type.
+        unique_locs_per_rt = rt_loc_mask.sum(axis=3)
+        # Score for each round is 1 / (number of unique locations)
+        scores_per_rt = 1.0 / (unique_locs_per_rt + EPSILON)
+        # Ignore rounds not participated in by setting their score to 1 (perfect)
+        scores_per_rt[~participated_in_rt] = 1.0
+
+        num_participated_rts = participated_in_rt.sum(axis=2)
+        # Average the score across all participated rounds
+        intra_round_scores = scores_per_rt.sum(axis=2) / (num_participated_rts + EPSILON)
+        intra_round_scores = np.nan_to_num(intra_round_scores, nan=1.0)  # Perfect score if no matches
+
+        # Final Combination
+        # Handle edge case for teams with 1 or 0 total matches
+        total_matches_per_team = match_rt_mask.sum(axis=2)
+        final_scores = (inter_round_scores * FitnessEvaluator.loc_weight_rounds_inter) + (
+            intra_round_scores * FitnessEvaluator.loc_weight_rounds_intra
+        )
+        final_scores[total_matches_per_team <= 1] = 1.0  # Perfect score if consistency is not applicable
+        return final_scores
 
     def score_opp_variety(self, paired_evt_ids: np.ndarray, pop_array: np.ndarray) -> np.ndarray:
         """Vectorized opponent variety scoring."""
-        n_pop = pop_array.shape[0]
+        n_pop, _ = pop_array.shape
         valid_opp = paired_evt_ids >= 0
         lookup_opp_events = np.where(valid_opp, paired_evt_ids, 0)
         schedule_indices = np.arange(n_pop)[:, None, None]

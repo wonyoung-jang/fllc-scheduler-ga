@@ -1,14 +1,14 @@
 {
   "genetic": {
     "parameters": {
-      "generations": 300,
-      "population_size": 5,
-      "offspring_size": 2,
+      "generations": 100,
+      "population_size": 50,
+      "offspring_size": 10,
       "crossover_chance": 0.7,
       "mutation_chance": 0.4,
       "num_islands": 12,
-      "migration_interval": 50,
-      "migration_size": 1,
+      "migration_interval": 100,
+      "migration_size": 5,
       "rng_seed": null
     },
     "operator": {

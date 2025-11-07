@@ -68,9 +68,9 @@ class ExportManager:
             exporters.append(
                 (
                     CsvScheduleExporter(
-                        self.time_fmt,
-                        self.export_model.team_identities,
-                        self.event_properties,
+                        time_fmt=self.time_fmt,
+                        team_identities=self.export_model.team_identities,
+                        event_properties=self.event_properties,
                     ),
                     self.subdirs["csv"],
                     "csv",
@@ -80,18 +80,34 @@ class ExportManager:
             exporters.append(
                 (
                     HtmlScheduleExporter(
-                        self.time_fmt,
-                        self.export_model.team_identities,
-                        self.event_properties,
+                        time_fmt=self.time_fmt,
+                        team_identities=self.export_model.team_identities,
+                        event_properties=self.event_properties,
                     ),
                     self.subdirs["html"],
                     "html",
                 )
             )
         if self.export_model.summary_reports:
-            exporters.append((ScheduleSummaryGenerator(self.export_model.team_identities), self.subdirs["txt"], "txt"))
+            exporters.append(
+                (
+                    ScheduleSummaryGenerator(
+                        team_identities=self.export_model.team_identities,
+                    ),
+                    self.subdirs["txt"],
+                    "txt",
+                )
+            )
         if self.export_model.schedules_team_csv:
-            exporters.append((TeamScheduleGenerator(self.ga), self.subdirs["team"], "csv"))
+            exporters.append(
+                (
+                    TeamScheduleGenerator(
+                        ga=self.ga,
+                    ),
+                    self.subdirs["team"],
+                    "csv",
+                ),
+            )
         return exporters
 
     def export_all(self) -> None:
