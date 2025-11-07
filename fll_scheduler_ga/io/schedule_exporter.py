@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from logging import getLogger
 from typing import TYPE_CHECKING
 
+import numpy as np
+
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
@@ -20,11 +22,25 @@ if TYPE_CHECKING:
 logger = getLogger(__name__)
 
 
+def normalize_teams(schedule: np.ndarray, team_ids: dict[int, str]) -> np.ndarray:
+    """Normalize the schedule by reassigning team identities based on their order of appearance."""
+    normalized = np.array([-1] * len(team_ids), dtype=int)
+    count = 1
+    for team in schedule:
+        if normalized[team] != -1:
+            continue
+
+        normalized[team] = team_ids.get(count, count)
+        count += 1
+    return normalized
+
+
 @dataclass(slots=True)
 class ScheduleExporter(ABC):
     """Abstract base class for exporting schedules."""
 
     time_fmt: str
+    team_identities: dict[int, str]
     event_properties: EventProperties
 
     def export(self, schedule: Schedule, path: Path) -> None:
@@ -44,7 +60,7 @@ class ScheduleExporter(ABC):
     def _group_by_type(self, schedule: Schedule) -> dict[str, dict[int, int]]:
         """Group the schedule by round type."""
         grouped = {}
-        normalized_teams = schedule.normalized_teams()
+        normalized_teams = normalize_teams(schedule.schedule, self.team_identities)
         for event, team in enumerate(schedule.schedule):
             if team == -1:
                 continue

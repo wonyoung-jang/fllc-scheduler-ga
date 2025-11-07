@@ -160,6 +160,7 @@ class ExportModel(BaseModel):
     front_only: bool
     no_plotting: bool
     cmap_name: str
+    team_identities: dict[int, str] = Field(default_factory=dict)
 
 
 class TeamsModel(BaseModel):

@@ -15,30 +15,31 @@ logger = getLogger(__name__)
 
 
 @dataclass(slots=True)
-class NSGA3:
-    """Non-dominated Sorting Genetic Algorithm III (NSGA-III)."""
+class ReferenceDirections:
+    """Structured reference points for NSGA-III."""
 
-    rng: np.random.Generator
     n_obj: int
     n_pop: int
-
-    ref_pts: np.ndarray = None
+    points: np.ndarray = None
     norm_sq: np.ndarray = None
 
     def __post_init__(self) -> None:
         """Post-initialization to generate reference points."""
-        self.ref_pts = self.init_ref_points()
-        ns = np.sum(self.ref_pts**2, axis=1)
-        self.norm_sq = np.where(ns == 0.0, EPSILON, ns)
+        self.init_ref_points()
+        self.init_norm_sq()
 
-    def init_ref_points(self) -> np.ndarray:
+    def __len__(self) -> int:
+        """Return the number of reference points."""
+        return len(self.points)
+
+    def init_ref_points(self) -> None:
         """Generate a set of structured reference points."""
         m = self.n_obj
         p = 1
         while comb(m + p - 1, m - 1) < self.n_pop:
             p += 1
 
-        ref_pts = np.array([], dtype=float).reshape(0, m)
+        coordinates = []
         for dividers in combinations(range(m + p - 1), m - 1):
             coords = np.zeros(m, dtype=float)
             prev = -1
@@ -46,10 +47,23 @@ class NSGA3:
                 coords[i] = divider - prev - 1
                 prev = divider
             coords[-1] = m + p - 1 - dividers[-1] - 1
-            ref_pts = np.vstack([ref_pts, coords / p])
+            coordinates.append(coords / p)
+        self.points = np.array(coordinates, dtype=float)
+        logger.debug("Generated %d reference points:\n%s", len(self.points), self.points)
 
-        logger.debug("Generated %d reference points:\n%s", len(ref_pts), ref_pts)
-        return ref_pts
+    def init_norm_sq(self) -> None:
+        """Initialize the squared norms of the reference points."""
+        self.norm_sq = np.sum(self.points**2, axis=1)
+        self.norm_sq[self.norm_sq == 0.0] = EPSILON
+        logger.debug("Computed squared norms of reference points:\n%s", self.norm_sq)
+
+
+@dataclass(slots=True)
+class NSGA3:
+    """Non-dominated Sorting Genetic Algorithm III (NSGA-III)."""
+
+    rng: np.random.Generator
+    refs: ReferenceDirections
 
     def select(self, fits: np.ndarray, n: int) -> list[np.ndarray]:
         """Select the next generation using NSGA-III principles."""
@@ -172,10 +186,10 @@ class NSGA3:
 
         norm = (ideal - fits) / span
 
-        coeffs = (norm @ self.ref_pts.T) / self.norm_sq
+        coeffs = (norm @ self.refs.points.T) / self.refs.norm_sq
         coeffs = np.where(coeffs < 0.0, 0.0, coeffs)
 
-        proj = coeffs[:, :, None] * self.ref_pts[None, :, :]
+        proj = coeffs[:, :, None] * self.refs.points[None, :, :]
 
         residuals = norm[:, None, :] - proj
         dists: np.ndarray = np.linalg.norm(residuals, axis=2)
@@ -192,8 +206,7 @@ class NSGA3:
 
     def count(self, idx_to_count: np.ndarray) -> np.ndarray:
         """Count how many individuals are associated with each reference point."""
-        counts = np.zeros(len(self.ref_pts), dtype=int)
-        if idx_to_count.size > 0:
-            indices, count = np.unique(idx_to_count, return_counts=True)
-            counts[indices] = count
+        counts = np.zeros(len(self.refs), dtype=int)
+        indices, count = np.unique(idx_to_count, return_counts=True)
+        counts[indices] = count
         return counts

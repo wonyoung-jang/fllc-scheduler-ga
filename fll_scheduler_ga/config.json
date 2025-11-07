@@ -1,8 +1,8 @@
 {
   "genetic": {
     "parameters": {
-      "generations": 500,
-      "population_size": 3,
+      "generations": 300,
+      "population_size": 5,
       "offspring_size": 2,
       "crossover_chance": 0.7,
       "mutation_chance": 0.4,
@@ -61,8 +61,8 @@
     "teams": 40
   },
   "fitness": {
-    "weight_mean": 1,
-    "weight_variation": 1,
+    "weight_mean": 100,
+    "weight_variation": 10,
     "weight_range": 1
   },
   "time": {

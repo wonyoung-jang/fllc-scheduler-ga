@@ -148,10 +148,6 @@ class EventFactory:
         self.as_matches()
         self.as_roundtypes()
 
-        for rt, events in self._cached_roundtypes.items():
-            round_events_str = f"{rt} TournamentRound has {len(events)} events."
-            logger.debug("%s", round_events_str)
-
     def build(self) -> list[Event]:
         """Create and return all Events for the tournament."""
         if not self._list:
@@ -176,7 +172,9 @@ class EventFactory:
     def build_singles_or_side1_indices(self) -> list[int]:
         """Create and return all single-team Events or side 1 of paired Events."""
         if not self._list_singles_or_side1_indices:
-            self._list_singles_or_side1_indices = [e.idx for e in self.build_singles_or_side1()]
+            self._list_singles_or_side1_indices = [
+                e.idx for e in self.build() if e.paired == -1 or (e.paired != -1 and e.location.side == 1)
+            ]
         return self._list_singles_or_side1_indices
 
     def create_events(self, r: TournamentRound, event_idx_iter: Iterator[int]) -> Iterator[Event]:

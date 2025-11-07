@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 from ..config.constants import FitnessObjective
 from .plot import Plot
-from .schedule_exporter import CsvScheduleExporter, HtmlScheduleExporter
+from .schedule_exporter import CsvScheduleExporter, HtmlScheduleExporter, normalize_teams
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -33,7 +33,7 @@ def generate_summary(ga: GA, output_dir: Path, export_model: ExportModel) -> Non
             ga=ga,
             save_dir=output_dir,
             objectives=list(FitnessObjective),
-            ref_points=ga.context.nsga3.ref_pts,
+            ref_points=ga.context.nsga3.refs.points,
             export_model=export_model,
         ).plot()
 
@@ -65,11 +65,31 @@ class ExportManager:
         """Get the list of exporters based on the export model."""
         exporters = []
         if self.export_model.schedules_csv:
-            exporters.append((CsvScheduleExporter(self.time_fmt, self.event_properties), self.subdirs["csv"], "csv"))
+            exporters.append(
+                (
+                    CsvScheduleExporter(
+                        self.time_fmt,
+                        self.export_model.team_identities,
+                        self.event_properties,
+                    ),
+                    self.subdirs["csv"],
+                    "csv",
+                )
+            )
         if self.export_model.schedules_html:
-            exporters.append((HtmlScheduleExporter(self.time_fmt, self.event_properties), self.subdirs["html"], "html"))
+            exporters.append(
+                (
+                    HtmlScheduleExporter(
+                        self.time_fmt,
+                        self.export_model.team_identities,
+                        self.event_properties,
+                    ),
+                    self.subdirs["html"],
+                    "html",
+                )
+            )
         if self.export_model.summary_reports:
-            exporters.append((ScheduleSummaryGenerator(), self.subdirs["txt"], "txt"))
+            exporters.append((ScheduleSummaryGenerator(self.export_model.team_identities), self.subdirs["txt"], "txt"))
         if self.export_model.schedules_team_csv:
             exporters.append((TeamScheduleGenerator(self.ga), self.subdirs["team"], "csv"))
         return exporters
@@ -113,6 +133,8 @@ class OutputDirManager:
 class ScheduleSummaryGenerator:
     """Exporter for generating summaries of schedules."""
 
+    team_identities: dict[int, str]
+
     def get_text_summary(self, schedule: Schedule) -> list[str]:
         """Get a text summary of the schedule."""
         txt = []
@@ -152,7 +174,7 @@ class ScheduleSummaryGenerator:
         txt.append(header)
         txt.append("-" * len(header) + "\n")
 
-        normalized_teams = schedule.normalized_teams()
+        normalized_teams = normalize_teams(schedule.schedule, self.team_identities)
         for t, fit in sorted(zip(all_teams, team_fits, strict=True), key=lambda x: -x[1].sum()):
             fitness_row = (f"{score:<{len_objectives[i] + 1}.4f}" for i, score in enumerate(fit))
             fitness_str = "|".join(fitness_row)

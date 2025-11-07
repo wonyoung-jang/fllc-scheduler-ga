@@ -67,6 +67,7 @@ class AppConfig(BaseModel):
     @classmethod
     def build_from_model(cls, model: AppConfigModel) -> AppConfig:
         """Create and return the application configuration from a Pydantic model."""
+        model.exports.team_identities = model.teams.get_team_ids()
         return cls(
             runtime=model.runtime,
             exports=model.exports,
@@ -101,7 +102,6 @@ class AppConfig(BaseModel):
         total_slots_required = sum(r.slots_required for r in rounds)
         unique_opponents_possible = 1 <= max(r.rounds_per_team for r in rounds) <= len(teams) - 1
 
-        Schedule.team_identities = teams.get_team_ids()
         Schedule.total_num_events = total_slots_possible
         Schedule.team_roundreqs_array = roundreqs_array
 

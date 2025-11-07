@@ -90,7 +90,7 @@ docstring-code-line-length = "dynamic"
 [tool.vulture]
 paths = ["./fll_scheduler_ga", "whitelist.py"]
 ignore_decorators = ["@app.*"]
-min_confidence = 60
+min_confidence = 40
 verbose = false
 
 [dependency-groups]

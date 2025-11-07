@@ -38,7 +38,6 @@ class Schedule:
     event_map: ClassVar[dict[int, Event]]
     event_properties: ClassVar[EventProperties]
     team_roundreqs_array: ClassVar[np.ndarray]
-    team_identities: ClassVar[dict[int, int | str]]
     total_num_events: ClassVar[int]
 
     def __post_init__(self) -> None:
@@ -165,15 +164,3 @@ class Schedule:
     def unscheduled_events(self) -> np.ndarray:
         """Return the indices of unscheduled events."""
         return np.nonzero(self.schedule == -1)[0]
-
-    def normalized_teams(self) -> np.ndarray:
-        """Normalize the schedule by reassigning team identities based on their order of appearance."""
-        normalized = np.array([-1] * len(Schedule.teams), dtype=int)
-        count = 1
-        for team in self.schedule:
-            if normalized[team] != -1:
-                continue
-
-            normalized[team] = self.team_identities.get(count, count)
-            count += 1
-        return normalized

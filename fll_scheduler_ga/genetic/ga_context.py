@@ -19,7 +19,7 @@ from ..io.csv_importer import CsvImporter
 from ..io.ga_exporter import ScheduleSummaryGenerator
 from ..operators.crossover import build_crossovers
 from ..operators.mutation import build_mutations
-from ..operators.nsga3 import NSGA3
+from ..operators.nsga3 import NSGA3, ReferenceDirections
 from ..operators.repairer import Repairer
 from ..operators.selection import RandomSelect
 from .builder import ScheduleBuilder
@@ -98,10 +98,13 @@ class GaContext:
         ga_params = app_config.ga_params
         n_total_pop = ga_params.population_size * ga_params.num_islands
         n_objectives = len(evaluator.objectives)
-        nsga3 = NSGA3(
-            rng=rng,
+        ref_directions = ReferenceDirections(
             n_obj=n_objectives,
             n_pop=n_total_pop,
+        )
+        nsga3 = NSGA3(
+            rng=rng,
+            refs=ref_directions,
         )
 
         selection = RandomSelect(rng)
