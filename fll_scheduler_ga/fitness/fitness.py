@@ -48,7 +48,8 @@ class FitnessEvaluator:
     benchmark: FitnessBenchmark
 
     objectives: list[FitnessObjective] = None
-    penalty: float = FITNESS_PENALTY
+    _penalty: float = FITNESS_PENALTY
+    _epsilon: float = EPSILON
     max_events_per_team: int = 0
 
     max_int: ClassVar[int] = np.iinfo(np.int64).max
@@ -95,68 +96,96 @@ class FitnessEvaluator:
         """
         # Dims for reference
         n_pop, _ = pop_array.shape
+
         # Preallocate arrays
-        team_fitnesses = np.zeros((n_pop, FitnessEvaluator.n_teams, FitnessEvaluator.n_objs), dtype=float)
+        team_fitnesses = np.zeros((n_pop, self.n_teams, self.n_objs), dtype=float)
+
         # Get team-events mapping for the entire population
-        valid_events, lookup_events = self.get_team_events(pop_array)
+        valid_events_mask, team_events_pop = self.get_team_events(pop_array)
 
         # Slice event properties
-        starts = self.event_properties.start[lookup_events]
-        starts[~valid_events] = FitnessEvaluator.max_int
+        starts = self.event_properties.start[team_events_pop]
+        stops = self.event_properties.stop[team_events_pop]
+        loc_ids = self.event_properties.loc_idx[team_events_pop]
+        paired_evt_ids = self.event_properties.paired_idx[team_events_pop]
+        roundtype_ids = self.event_properties.roundtype_idx[team_events_pop]
 
-        stops = self.event_properties.stop[lookup_events]
-        stops[~valid_events] = FitnessEvaluator.max_int
-
-        loc_ids = self.event_properties.loc_idx[lookup_events]
-        loc_ids[~valid_events] = FitnessEvaluator.min_int
-
-        paired_evt_ids = self.event_properties.paired_idx[lookup_events]
-        paired_evt_ids[~valid_events] = FitnessEvaluator.min_int
-
-        roundtype_ids = self.event_properties.roundtype_idx[lookup_events]
-        roundtype_ids[~valid_events] = FitnessEvaluator.min_int
+        # Invalidate data for invalid events
+        starts[~valid_events_mask] = self.max_int
+        stops[~valid_events_mask] = self.max_int
+        loc_ids[~valid_events_mask] = self.min_int
+        paired_evt_ids[~valid_events_mask] = self.min_int
+        roundtype_ids[~valid_events_mask] = self.min_int
 
         # Calculate scores for each objective
-        team_fitnesses[..., 0] = self.score_break_time(starts, stops)
-        team_fitnesses[..., 1] = self.score_loc_consistency(loc_ids, roundtype_ids)
-        team_fitnesses[..., 2] = self.score_opp_variety(paired_evt_ids, pop_array)
+        team_fitnesses[:, :, 0] = self.score_break_time(starts, stops)
+        team_fitnesses[:, :, 1] = self.score_loc_consistency(loc_ids, roundtype_ids)
+        team_fitnesses[:, :, 2] = self.score_opp_variety(paired_evt_ids, pop_array)
 
         # Aggregate team scores into schedule scores
         mean_s = team_fitnesses.mean(axis=1)
-        std_devs = team_fitnesses.std(axis=1)
-        coeffs_of_variation = std_devs / (mean_s + EPSILON)
-        vari_s = 1.0 / (1.0 + coeffs_of_variation)
-        ranges = np.ptp(team_fitnesses, axis=1)
-        rnge_s = 1.0 / (1.0 + ranges)
+        coeffs_s = team_fitnesses.std(axis=1) / (mean_s + self._epsilon)
+        vari_s = 1.0 / (1.0 + coeffs_s)
+        ptp = np.ptp(team_fitnesses, axis=1)
+        range_s = 1.0 / (1.0 + ptp)
         mw, vw, rw = self.config.weights
-        schedule_fitnesses = (mean_s * mw) + (vari_s * vw) + (rnge_s * rw)
+        schedule_fitnesses = (mean_s * mw) + (vari_s * vw) + (range_s * rw)
+
         return schedule_fitnesses, team_fitnesses
 
     def get_team_events(self, pop_array: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Invert the (event -> team) mapping to a (team -> events) mapping for the entire population."""
-        n_pop = pop_array.shape[0]
-        team_events_pop = np.full((n_pop, FitnessEvaluator.n_teams, self.max_events_per_team), -1, dtype=int)
-        sched_indices, event_indices = np.where(pop_array >= 0)
+        n_pop, _ = pop_array.shape
+
+        # Preallocate the team-events array
+        team_events_pop = np.full((n_pop, self.n_teams, self.max_events_per_team), -1, dtype=int)
+
+        # Get indices of scheduled events
+        sched_indices, event_indices = np.nonzero(pop_array >= 0)
         team_indices = pop_array[sched_indices, event_indices]
-        if sched_indices.size > 0:
-            keys = (sched_indices * FitnessEvaluator.n_teams) + team_indices
-            order = np.lexsort((event_indices, keys))
-            keys_sorted = keys[order]
-            group_starts = np.r_[0, np.nonzero(keys_sorted[1:] != keys_sorted[:-1])[0] + 1]
-            group_lengths = np.diff(np.r_[group_starts, keys_sorted.size])
-            within_sorted = np.arange(keys_sorted.size, dtype=int) - np.repeat(group_starts, group_lengths)
-            within = np.empty_like(within_sorted)
-            within[order] = within_sorted
-            valid_mask = within < self.max_events_per_team
-            if np.any(valid_mask):
-                team_events_pop[
-                    sched_indices[valid_mask],
-                    team_indices[valid_mask],
-                    within[valid_mask],
-                ] = event_indices[valid_mask]
+
+        # Handle the case with no scheduled events
+        if sched_indices.size == 0:
+            valid_events_mask = np.zeros_like(team_events_pop, dtype=bool)
+            team_events_pop.fill(0)
+            return valid_events_mask, team_events_pop
+
+        # Create unique keys for (pop, team) pairs
+        keys = (sched_indices * self.n_teams) + team_indices
+
+        # Count occurrences of each (pop, team) pair to determine group sizes
+        counts = np.bincount(keys, minlength=n_pop * self.n_teams)
+
+        # Sort event indices by (pop, team)
+        order = np.argsort(keys)
+        sorted_event_indices = event_indices[order]
+
+        # Compute group starts for each (pop, team)
+        group_starts = np.zeros_like(counts, dtype=int)
+        group_starts[1:] = np.cumsum(counts[:-1])
+
+        # Compute within-group indices
+        repeated_starts = np.repeat(group_starts, counts)
+        within_group_indices = np.arange(sorted_event_indices.size, dtype=int) - repeated_starts
+
+        # Map back to original indices
+        sorted_keys = keys[order]
+        pop_indices_sorted = sorted_keys // self.n_teams
+        team_indices_sorted = sorted_keys % self.n_teams
+
+        # Filter to only valid slots within max_events_per_team
+        valid_mask = within_group_indices < self.max_events_per_team
+        pop_idx_final = pop_indices_sorted[valid_mask]
+        team_idx_final = team_indices_sorted[valid_mask]
+        slot_idx_final = within_group_indices[valid_mask]
+        event_idx_final = sorted_event_indices[valid_mask]
+        team_events_pop[pop_idx_final, team_idx_final, slot_idx_final] = event_idx_final
+
+        # Invalidate data for invalid events
         valid_events_mask = team_events_pop >= 0
-        lookup_events = np.where(valid_events_mask, team_events_pop, -1)
-        return valid_events_mask, lookup_events
+        team_events_pop[~valid_events_mask] = 0
+
+        return valid_events_mask, team_events_pop
 
     def score_break_time(self, starts: np.ndarray, stops: np.ndarray) -> np.ndarray:
         """Vectorized break time scoring."""
@@ -164,112 +193,143 @@ class FitnessEvaluator:
         order = np.argsort(starts, axis=2)
         starts_sorted = np.take_along_axis(starts, order, axis=2)
         stops_sorted = np.take_along_axis(stops, order, axis=2)
+
         # Calculate breaks between consecutive events
         start_next = starts_sorted[..., 1:]
         stop_curr = stops_sorted[..., :-1]
+
         # Valid consecutive events must have valid start and stop times
-        valid_consecutive = (start_next < FitnessEvaluator.max_int) & (stop_curr < FitnessEvaluator.max_int)
+        valid_mask = (start_next < self.max_int) & (stop_curr < self.max_int)
+
+        # Calculate break durations in minutes
         breaks_seconds = start_next - stop_curr
         breaks_minutes = breaks_seconds / 60
-        breaks_minutes[~valid_consecutive] = np.nan
+
         # Identify overlaps
-        overlap_mask = np.any(breaks_minutes < 0, axis=2)
+        overlap_mask = (breaks_minutes < 0).any(axis=2, where=valid_mask)
 
-        mean_break = np.nanmean(breaks_minutes, axis=2)
-        mean_break = np.nan_to_num(mean_break, nan=EPSILON)
-        mean_zero_mask = mean_break == 0
+        # Calculate mean
+        count = valid_mask.sum(axis=2, dtype=float)
+        mean_break = breaks_minutes.sum(axis=2, where=valid_mask) / (count + self._epsilon)
 
-        std_dev = np.nanstd(breaks_minutes, axis=2)
-        std_dev = np.nan_to_num(std_dev, nan=EPSILON)
+        # Calculate standard deviation
+        diff_sq: np.ndarray = np.square(breaks_minutes - mean_break[..., np.newaxis])
+        variance = diff_sq.sum(axis=2, where=valid_mask) / (count + self._epsilon)
+        std_dev: np.ndarray = np.sqrt(variance)
 
-        coeff = std_dev / mean_break
-        ratio = 1 / (1 + coeff)
+        # Calculate coefficient of variation
+        coeff = std_dev / (mean_break + self._epsilon)
+        ratio = 1.0 / (1.0 + coeff)
 
-        zeros = np.sum(breaks_minutes == 0, axis=2)
-        zeros_penalty = self.penalty**zeros
+        # Apply penalties for zero breaks
+        zeros = (breaks_minutes == 0).sum(axis=2, where=valid_mask)
+        zeros_penalty = self._penalty**zeros
 
+        # Apply penalties for overlapping breaks
         final_scores = ratio * zeros_penalty
-
-        final_scores[mean_zero_mask] = 0
-        final_scores[overlap_mask] = 0
+        final_scores[mean_break == 0] = 0.0
+        final_scores[overlap_mask] = 0.0
 
         return final_scores / (self.benchmark.best_timeslot_score or 1.0)
 
     def score_loc_consistency(self, loc_ids: np.ndarray, roundtype_ids: np.ndarray) -> np.ndarray:
         """Calculate location consistency score, prioritizing inter-round over intra-round consistency."""
         n_pop, n_teams, _ = loc_ids.shape
-        match_roundtypes = FitnessEvaluator.match_roundtypes
+        match_roundtypes = self.match_roundtypes
         n_match_rt = len(match_roundtypes)
 
-        if n_match_rt < 2:  # Consistency score is only meaningful with 2+ match round types
+        # Consistency score is only meaningful with 2+ match round types
+        if n_match_rt < 2:
             return np.ones((n_pop, n_teams), dtype=float)
 
         # Create a (pop, team, rt, loc) boolean mask
         max_loc_idx = loc_ids.max()
-        if max_loc_idx < 0:  # No locations scheduled
+        # No locations scheduled
+        if max_loc_idx < 0:
             return np.ones((n_pop, n_teams), dtype=float)
 
-        match_rt_mask = np.isin(roundtype_ids, match_roundtypes) & (loc_ids >= 0)
-        pop_indices, team_indices, _ = np.where(match_rt_mask)
+        # match_rt_mask = np.isin(roundtype_ids, match_roundtypes) & (loc_ids >= 0)
+        max_rt_id = max(roundtype_ids.max(), match_roundtypes.max())
+        is_match_rt_lookup = np.zeros(max_rt_id + 1, dtype=bool)
+        is_match_rt_lookup[match_roundtypes] = True
+        match_rt_mask = is_match_rt_lookup[roundtype_ids] & (loc_ids >= 0)
+
+        pop_indices, team_indices, _ = match_rt_mask.nonzero()
         loc_vals = loc_ids[match_rt_mask]
         rt_values = roundtype_ids[match_rt_mask]
-        mapped_rt_indices = FitnessEvaluator.rt_array[rt_values]
+        mapped_rt_indices = self.rt_array[rt_values]
 
-        rt_loc_mask = np.zeros((n_pop, n_teams, n_match_rt, max_loc_idx + 1), dtype=bool)
-        rt_loc_mask[pop_indices, team_indices, mapped_rt_indices, loc_vals] = True
+        # Inter-Round Consistency
+        rt_loc_counts = np.zeros((n_pop, n_teams, n_match_rt, max_loc_idx + 1), dtype=int)
+        # np.add.at(rt_loc_counts, (pop_indices, team_indices, mapped_rt_indices, loc_vals), 1)
+        rt_loc_counts[pop_indices, team_indices, mapped_rt_indices, loc_vals] = 1
 
-        # Inter-Round Consistency (this gets weighted more)
-        # Rewards using the same location across different round types.
-        participated_in_rt = np.any(rt_loc_mask, axis=3)
-        # Mask for intersection: non-participated rounds count as using all locations
-        eval_mask = np.where(~participated_in_rt[..., np.newaxis], True, rt_loc_mask)  # noqa: FBT003
+        # A team participated in a round type if its location counts for that RT are > 0.
+        participated_in_rt_counts = rt_loc_counts.sum(axis=3, dtype=int)
+        participated_in_rt = participated_in_rt_counts > 0
 
-        # Intersection: locations used in ALL participated round types
-        intersection_mask = np.all(eval_mask, axis=2)
+        # A location is in the intersection if its count across RTs equals the number of participated RTs.
+        num_participated_rts = participated_in_rt.sum(axis=2, dtype=float)
+
+        # Create a boolean mask of used locations (count > 0)
+        loc_used_in_rt_mask = rt_loc_counts > 0
+
+        # The result is the number of different round types a location was used in.
+        loc_usage_across_rts = loc_used_in_rt_mask.sum(axis=2, dtype=float)
+
+        # A location is in intersection if used in number of RTs equal to total number of RTs team participated in.
+        intersection_mask = loc_usage_across_rts == num_participated_rts[..., np.newaxis]
         intersection_size = intersection_mask.sum(axis=2)
 
-        # Union: locations used in ANY participated round types
-        union_mask = np.any(rt_loc_mask, axis=2)
+        # The union is the count of locations used in at least one round type.
+        union_mask = loc_usage_across_rts > 0
         union_size = union_mask.sum(axis=2)
 
-        # Score is the ratio of intersection to union (Jaccard index)
-        inter_round_scores = intersection_size / (union_size + EPSILON)
-        inter_round_scores = np.nan_to_num(inter_round_scores, nan=1.0)  # Perfect score if no matches
+        # Handle the zero-division case explicitly.
+        inter_round_scores = np.ones((n_pop, n_teams), dtype=float)
+        valid_union = union_size > 0
+        inter_round_scores[valid_union] = intersection_size[valid_union] / union_size[valid_union]
 
         # Intra-Round Consistency
-        # Rewards using only one location within a single round type.
-        unique_locs_per_rt = rt_loc_mask.sum(axis=3)
-        # Score for each round is 1 / (number of unique locations)
-        scores_per_rt = 1.0 / (unique_locs_per_rt + EPSILON)
-        # Ignore rounds not participated in by setting their score to 1 (perfect)
+        unique_locs_per_rt: np.ndarray = (rt_loc_counts > 0).sum(axis=3, dtype=float)
+        scores_per_rt = 1.0 / (unique_locs_per_rt + self._epsilon)
         scores_per_rt[~participated_in_rt] = 1.0
 
-        num_participated_rts = participated_in_rt.sum(axis=2)
-        # Average the score across all participated rounds
-        intra_round_scores = scores_per_rt.sum(axis=2) / (num_participated_rts + EPSILON)
-        intra_round_scores = np.nan_to_num(intra_round_scores, nan=1.0)  # Perfect score if no matches
+        # Handle the zero-division case explicitly.
+        intra_round_scores = np.ones((n_pop, n_teams), dtype=float)
+        valid_num_rts = num_participated_rts > 0
+        intra_round_scores[valid_num_rts] = (
+            scores_per_rt.sum(axis=2)[valid_num_rts] / num_participated_rts[valid_num_rts]
+        )
 
         # Final Combination
-        # Handle edge case for teams with 1 or 0 total matches
         total_matches_per_team = match_rt_mask.sum(axis=2)
-        final_scores = (inter_round_scores * FitnessEvaluator.loc_weight_rounds_inter) + (
-            intra_round_scores * FitnessEvaluator.loc_weight_rounds_intra
+        final_scores = (inter_round_scores * self.loc_weight_rounds_inter) + (
+            intra_round_scores * self.loc_weight_rounds_intra
         )
-        final_scores[total_matches_per_team <= 1] = 1.0  # Perfect score if consistency is not applicable
+        final_scores[total_matches_per_team <= 1] = 1.0
+
         return final_scores
 
     def score_opp_variety(self, paired_evt_ids: np.ndarray, pop_array: np.ndarray) -> np.ndarray:
         """Vectorized opponent variety scoring."""
         n_pop, _ = pop_array.shape
-        valid_opp = paired_evt_ids >= 0
-        lookup_opp_events = np.where(valid_opp, paired_evt_ids, 0)
-        schedule_indices = np.arange(n_pop)[:, None, None]
 
-        opponents = pop_array[schedule_indices, lookup_opp_events]
-        opponents[~valid_opp] = FitnessEvaluator.max_int
+        # Create a mask for valid opponent IDs
+        valid_opp = paired_evt_ids >= 0
+
+        # Invalidate opponent IDs for invalid events
+        paired_evt_ids[~valid_opp] = 0
+        schedule_indices = np.arange(n_pop, dtype=int)[:, None, None]
+
+        # Get opponents for each schedule
+        opponents = pop_array[schedule_indices, paired_evt_ids]
+        opponents[~valid_opp] = self.max_int
         opponents.sort(axis=2)
-        valid_mask = opponents[..., :-1] >= 0
+
+        # Changes between consecutive opponents
+        valid_mask = opponents[:, :, :-1] >= 0
         changes = np.diff(opponents, axis=2) != 0
-        unique_counts = np.sum(changes & valid_mask, axis=2)
+        unique_counts = (changes & valid_mask).sum(axis=2)
 
         return self.benchmark.opponents[unique_counts]

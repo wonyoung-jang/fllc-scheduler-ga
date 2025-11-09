@@ -65,16 +65,16 @@ class NSGA3:
     rng: np.random.Generator
     refs: ReferenceDirections
 
-    def select(self, fits: np.ndarray, n: int) -> list[np.ndarray]:
+    def select(self, fits: np.ndarray, n_pop: int) -> list[np.ndarray]:
         """Select the next generation using NSGA-III principles."""
-        fronts = self.non_dominated_sort(fits, n)
+        fronts = self.non_dominated_sort(fits, n_pop)
         last_idx = len(fronts) - 1
         selected_indices = np.array([i for f in fronts for i in f], dtype=int)
         selected_fits = fits[selected_indices]
         refs, distances = self.norm_and_associate(selected_fits)
 
         if len(fronts) == 1:
-            fronts[0] = self.rng.permutation(selected_indices)[:n]
+            fronts[0] = self.rng.permutation(selected_indices)[:n_pop]
             return fronts
 
         last_front_indices = fronts[last_idx]
@@ -83,7 +83,7 @@ class NSGA3:
         fronts = fronts[:last_idx]
 
         selected = selected_indices[:-n_last_front]
-        n_remaining = n - len(selected)
+        n_remaining = n_pop - len(selected)
         selected_refs = refs[:-n_last_front]
         counts = self.count(selected_refs)
         niches = self.niche(
@@ -97,7 +97,7 @@ class NSGA3:
         fronts.append(last_front_indices)
         return fronts
 
-    def non_dominated_sort(self, fits: np.ndarray, n: int) -> list[np.ndarray]:
+    def non_dominated_sort(self, fits: np.ndarray, n_pop: int) -> list[np.ndarray]:
         """Perform non-dominated sorting on the population."""
         n_pop = fits.shape[0]
         if n_pop == 0:
@@ -121,7 +121,7 @@ class NSGA3:
         n_ranked = current_front.size
 
         # Build subsequent fronts
-        while n_ranked < n and current_front.size > 0:
+        while n_ranked < n_pop and current_front.size > 0:
             # Sum of domination relationships from current_front to each j
             decrement = dom[current_front, :].sum(axis=0)
             dom_count = dom_count - decrement
@@ -182,12 +182,12 @@ class NSGA3:
         nadir = fits.min(axis=0)
 
         span = ideal - nadir
-        span = np.where(span == 0.0, EPSILON, span)
+        span[span == 0.0] = EPSILON
 
         norm = (ideal - fits) / span
 
         coeffs = (norm @ self.refs.points.T) / self.refs.norm_sq
-        coeffs = np.where(coeffs < 0.0, 0.0, coeffs)
+        coeffs[coeffs < 0.0] = 0.0
 
         proj = coeffs[:, :, None] * self.refs.points[None, :, :]
 
@@ -199,14 +199,14 @@ class NSGA3:
         ties = dists == min_dists[:, None]
         rand_matrix = self.rng.random(dists.shape)
         # Mask tied positions with random values
-        masked_random = np.where(ties, rand_matrix, -1.0)
-        chosen_refs = masked_random.argmax(axis=1)  # Index of chosen ref per individual
+        rand_matrix[~ties] = -1.0
+        chosen_refs = rand_matrix.argmax(axis=1)  # Index of chosen ref per individual
 
         return chosen_refs, min_dists
 
     def count(self, idx_to_count: np.ndarray) -> np.ndarray:
         """Count how many individuals are associated with each reference point."""
-        counts = np.zeros(len(self.refs), dtype=int)
+        counts = np.zeros(len(self.refs))
         indices, count = np.unique(idx_to_count, return_counts=True)
         counts[indices] = count
         return counts

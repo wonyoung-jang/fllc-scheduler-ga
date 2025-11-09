@@ -127,7 +127,7 @@ class Schedule:
 
     def all_rounds_needed(self, roundtype: int) -> np.ndarray:
         """Return all teams that still need roundtype."""
-        return np.where(self.team_rounds[:, roundtype] > 0)[0]
+        return np.nonzero(self.team_rounds[:, roundtype] > 0)[0]
 
     def any_rounds_needed(self) -> bool:
         """Check if any team still needs rounds."""

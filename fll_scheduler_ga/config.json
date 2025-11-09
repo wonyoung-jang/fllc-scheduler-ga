@@ -2,11 +2,11 @@
   "genetic": {
     "parameters": {
       "generations": 5000,
-      "population_size": 5,
+      "population_size": 8,
       "offspring_size": 1,
-      "crossover_chance": 0.7,
-      "mutation_chance": 0.4,
-      "num_islands": 12,
+      "crossover_chance": 0.6,
+      "mutation_chance": 0.3,
+      "num_islands": 8,
       "migration_interval": 25,
       "migration_size": 2,
       "rng_seed": null
@@ -33,7 +33,7 @@
   },
   "runtime": {
     "add_import_to_population": true,
-    "flush": false,
+    "flush": true,
     "flush_benchmarks": false,
     "import_file": "",
     "seed_file": "fll_scheduler_ga.pkl"
