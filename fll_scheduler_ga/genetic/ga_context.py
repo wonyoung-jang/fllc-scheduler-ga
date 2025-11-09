@@ -211,17 +211,12 @@ class PreFlightChecker:
     def check_location_time_overlaps(self) -> None:
         """Check if different round types are scheduled in the same locations at the same time."""
         ep = self.event_properties
-        location_strings = ep.loc_str
-        location_indices = ep.loc_idx
-        timeslots = ep.timeslot
-        roundtypes = ep.roundtype
-
         booked_slots: dict[int, list[tuple[TimeSlot, str]]] = defaultdict(list)
         for e in self.event_factory.build_indices():
-            loc_str = location_strings[e]
-            loc_idx = location_indices[e]
-            ts = timeslots[e]
-            rt = roundtypes[e]
+            loc_str = ep.loc_str[e]
+            loc_idx = ep.loc_idx[e]
+            ts = ep.timeslot[e]
+            rt = ep.roundtype[e]
             for existing_ts, existing_rt in booked_slots.get(loc_idx, []):
                 if ts.overlaps(existing_ts):
                     msg = (

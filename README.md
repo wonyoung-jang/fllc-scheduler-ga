@@ -77,6 +77,10 @@ Create a file named `config.json` to define your tournament's structure. The con
 -   `import_file`: Path to an existing schedule CSV to seed/compare or include in the initial population.
 -   `seed_file`: Path to a saved run/checkpoint (pickle) used to resume or bootstrap the population.
 
+#### Imports:
+
+-   `seed_pop_sort`: If set to **"random"**, seed schedules will be added to islands in random order. If set to **"best"**, seed schedules will be added to islands in order of the sum of their fitness values. 
+-   `seed_island_strategy`: If set to **"distributed"**, each island is added to at similar rates. If set to **"concentrated"**, an island is filled before filling the next one.
 
 #### Exports:
 
@@ -170,8 +174,12 @@ Create a file named `config.json` to define your tournament's structure. The con
     "add_import_to_population": true,
     "flush": false,
     "flush_benchmarks": false,
-    "import_file": "real_life_examples\\fllc_2022-2023\\schedule.csv",
+    "import_file": "",
     "seed_file": "fll_scheduler_ga.pkl"
+  },
+  "imports": {
+    "seed_pop_sort": "random",
+    "seed_island_strategy": "distributed"
   },
   "exports": {
     "output_dir": "fllc_schedule_outputs",

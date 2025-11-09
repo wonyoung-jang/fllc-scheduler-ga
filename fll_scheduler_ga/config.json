@@ -1,9 +1,9 @@
 {
   "genetic": {
     "parameters": {
-      "generations": 500,
+      "generations": 5000,
       "population_size": 5,
-      "offspring_size": 2,
+      "offspring_size": 1,
       "crossover_chance": 0.7,
       "mutation_chance": 0.4,
       "num_islands": 12,
@@ -39,8 +39,8 @@
     "seed_file": "fll_scheduler_ga.pkl"
   },
   "imports": {
-    "seed_pop_sort": "best",
-    "seed_island_strategy": "distributed"
+    "seed_pop_sort": "random",
+    "seed_island_strategy": "concentrated"
   },
   "exports": {
     "output_dir": "fllc_schedule_outputs",

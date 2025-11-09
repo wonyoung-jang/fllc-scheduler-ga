@@ -38,6 +38,10 @@
     "import_file": "",
     "seed_file": "fll_scheduler_ga.pkl"
   },
+  "imports": {
+    "seed_pop_sort": "random",
+    "seed_island_strategy": "distributed"
+  },
   "exports": {
     "output_dir": "fllc_schedule_outputs",
     "summary_reports": true,
