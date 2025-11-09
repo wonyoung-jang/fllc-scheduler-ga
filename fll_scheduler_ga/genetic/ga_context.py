@@ -52,7 +52,7 @@ class GaContext:
 
     def __post_init__(self) -> None:
         """Post-initialization actions."""
-        self.handle_seed_file()
+        self.handle_import_file()
 
     @classmethod
     def build(cls, app_config: AppConfig) -> GaContext:
@@ -133,8 +133,8 @@ class GaContext:
             mutations=mutations,
         )
 
-    def handle_seed_file(self) -> None:
-        """Handle the seed file for the genetic algorithm."""
+    def handle_import_file(self) -> None:
+        """Handle the import file for the genetic algorithm."""
         runtime = self.app_config.runtime
         config = self.app_config.tournament
         path = Path(runtime.seed_file).resolve()

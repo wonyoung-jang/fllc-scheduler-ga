@@ -20,6 +20,7 @@ from .schemas import (
     AppConfigModel,
     ExportModel,
     GaParameters,
+    ImportModel,
     LocationModel,
     LoggingModel,
     OperatorConfig,
@@ -41,6 +42,7 @@ class AppConfig(BaseModel):
 
     model_config: ConfigDict = ConfigDict(arbitrary_types_allowed=True)
     runtime: RuntimeModel
+    imports: ImportModel
     exports: ExportModel
     logging: LoggingModel
     tournament: TournamentConfig
@@ -70,6 +72,7 @@ class AppConfig(BaseModel):
         model.exports.team_identities = model.teams.get_team_ids()
         return cls(
             runtime=model.runtime,
+            imports=model.imports,
             exports=model.exports,
             logging=model.logging,
             tournament=cls.load_tournament_config(model),

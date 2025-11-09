@@ -63,3 +63,17 @@ class FitnessObjective(StrEnum):
     BREAK_TIME = "BreakTime"
     LOCATION_CONSISTENCY = "LocationConsistency"
     OPPONENT_VARIETY = "OpponentVariety"
+
+
+class SeedPopSort(StrEnum):
+    """Enumeration of seed population sorting strategies."""
+
+    RANDOM = "random"
+    BEST = "best"
+
+
+class SeedIslandStrategy(StrEnum):
+    """Enumeration of seed island distribution strategies."""
+
+    DISTRIBUTED = "distributed"
+    CONCENTRATED = "concentrated"

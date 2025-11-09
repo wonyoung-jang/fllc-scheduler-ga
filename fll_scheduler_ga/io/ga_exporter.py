@@ -161,7 +161,11 @@ class ScheduleSummaryGenerator:
 
         txt.append("\nAttributes:\n")
         txt.append("--------------------\n")
-        txt.extend(f"{slot}: {getattr(schedule, slot)}\n" for slot in schedule.__slots__)
+        txt.extend(
+            f"{slot}: {getattr(schedule, slot)}\n"
+            for slot in schedule.__slots__
+            if slot not in ("schedule", "fitness", "team_fitnesses", "team_events", "team_rounds")
+        )
         txt.append(f"Length: {len(schedule)}\n")
 
         txt.append("\nFitness:\n")

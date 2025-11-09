@@ -1,14 +1,14 @@
 {
   "genetic": {
     "parameters": {
-      "generations": 100,
-      "population_size": 50,
-      "offspring_size": 10,
+      "generations": 500,
+      "population_size": 5,
+      "offspring_size": 2,
       "crossover_chance": 0.7,
       "mutation_chance": 0.4,
       "num_islands": 12,
-      "migration_interval": 100,
-      "migration_size": 5,
+      "migration_interval": 25,
+      "migration_size": 2,
       "rng_seed": null
     },
     "operator": {
@@ -37,6 +37,10 @@
     "flush_benchmarks": false,
     "import_file": "",
     "seed_file": "fll_scheduler_ga.pkl"
+  },
+  "imports": {
+    "seed_pop_sort": "best",
+    "seed_island_strategy": "distributed"
   },
   "exports": {
     "output_dir": "fllc_schedule_outputs",

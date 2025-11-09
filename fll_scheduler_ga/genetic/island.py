@@ -92,6 +92,7 @@ class Island:
         """Initialize the population for each island."""
         needed = self.ga_params.population_size - len(self)
         if needed == 0:
+            logger.debug("Island %d: Population already full with %d individuals", self.identity, len(self))
             return
         logger.debug("Island %d: Initializing population with %d individuals", self.identity, needed)
         self.build_n_schedules(needed)

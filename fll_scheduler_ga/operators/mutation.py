@@ -361,17 +361,14 @@ class TimeSlotSequenceMutation(Mutation):
         self,
     ) -> tuple[dict[tuple[int, int], list[tuple[int, ...]]], dict[tuple[int, int], int]]:
         """Precompute candidate events for each timeslot."""
-        _loc_side = self.event_properties.loc_side
-        _paired_idx = self.event_properties.paired_idx
-        _teams_per_round = self.event_properties.teams_per_round
-
+        ep = self.event_properties
         timeslot_data = {}
         keys_to_tpr = {}
         timeslot_event_map = self.event_factory.as_timeslots()
         for key, events in timeslot_event_map.items():
-            candidates = [e for e in events if _loc_side[e] == 1 or _paired_idx[e] == -1]
-            timeslot_data[key] = [(e, _paired_idx[e]) for e in candidates]
-            keys_to_tpr[key] = _teams_per_round[events[0]]
+            candidates = [e for e in events if ep.loc_side[e] == 1 or ep.paired_idx[e] == -1]
+            timeslot_data[key] = [(e, ep.paired_idx[e]) for e in candidates]
+            keys_to_tpr[key] = ep.teams_per_round[events[0]]
         return timeslot_data, keys_to_tpr
 
     def get_candidates(self) -> tuple[list[tuple[int, ...]], int]:

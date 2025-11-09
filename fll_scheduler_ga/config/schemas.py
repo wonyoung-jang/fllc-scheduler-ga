@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from ..data_model.location import Location
 from ..data_model.time import TimeSlot
-from .constants import RANDOM_SEED_RANGE, TIME_FORMAT_MAP, CrossoverOp, MutationOp
+from .constants import RANDOM_SEED_RANGE, TIME_FORMAT_MAP, CrossoverOp, MutationOp, SeedIslandStrategy, SeedPopSort
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +145,29 @@ class LoggingModel(BaseModel):
     loglevel_console: str
 
 
+class ImportModel(BaseModel):
+    """Configuration for import options."""
+
+    seed_pop_sort: str = "random"
+    seed_island_strategy: str = "distributed"
+
+    @model_validator(mode="after")
+    def validate(self) -> "ImportModel":
+        """Validate import options."""
+        if self.seed_pop_sort not in list(SeedPopSort):
+            msg = f"Invalid seed_pop_sort: {self.seed_pop_sort}. Must be one of {[e.value for e in SeedPopSort]}."
+            raise ValueError(msg)
+
+        if self.seed_island_strategy not in list(SeedIslandStrategy):
+            msg = (
+                f"Invalid seed_island_strategy: {self.seed_island_strategy}. "
+                f"Must be one of {[e.value for e in SeedIslandStrategy]}."
+            )
+            raise ValueError(msg)
+
+        return self
+
+
 class ExportModel(BaseModel):
     """Configuration for export options."""
 
@@ -278,6 +301,7 @@ class AppConfigModel(BaseModel):
 
     genetic: GeneticModel
     runtime: RuntimeModel
+    imports: ImportModel
     exports: ExportModel
     logging: LoggingModel
     teams: TeamsModel

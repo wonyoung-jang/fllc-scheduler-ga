@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pickle
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from logging import getLogger
 from pathlib import Path
@@ -12,11 +12,14 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from ..config.constants import SeedIslandStrategy, SeedPopSort
 from ..io.observers import LoggingObserver, TqdmObserver
 from .island import Island
 
 if TYPE_CHECKING:
-    from ..config.schemas import GaParameters, TournamentConfig
+    from collections.abc import Iterator
+
+    from ..config.schemas import GaParameters, ImportModel, TournamentConfig
     from ..data_model.schedule import Schedule
     from ..io.observers import GaObserver
     from ..operators.crossover import Crossover
@@ -99,7 +102,8 @@ class GA:
         self._notify_on_start(self.ga_params.generations)
         try:
             seed_pop = GALoad(self).load()
-            self.initialize_population(seed_pop)
+            self.seed_population(seed_pop)
+            self.initialize_population()
             if not any(i.selected for i in self.islands):
                 logger.critical("No valid schedule meeting all hard constraints was found.")
                 return False
@@ -134,16 +138,26 @@ class GA:
         """Update the fitness history with the current generation's fitness."""
         self.fitness_history[self.curr_gen] = self.get_this_gen_fitness()
 
-    def initialize_population(self, seed_pop: list[Schedule] | None) -> None:
+    def seed_population(self, seed_pop: list[Schedule] | None) -> None:
+        """Seed the population for each island."""
+        seeder = GASeeder(
+            imports=self.context.app_config.imports,
+            ga_params=self.ga_params,
+            seed_pop=seed_pop,
+            rng=self.rng,
+        )
+        if not seeder.is_valid():
+            return
+
+        island_to_seed_idx = seeder.get_island_seeds()
+        for i, seed_indices in island_to_seed_idx.items():
+            island = self.islands[i]
+            for idx in seed_indices:
+                island.add_to_population(seed_pop[idx])
+
+    def initialize_population(self) -> None:
         """Initialize the population for each island."""
-        if seed_pop is not None:
-            self.rng.shuffle(seed_pop)
-            n = self.ga_params.num_islands
-            for idx, schedule in enumerate(seed_pop):
-                self.islands[idx % n].add_to_population(schedule)
-
         logger.debug("Initializing %d islands...", self.ga_params.num_islands)
-
         for island in self.islands:
             island.initialize()
             island.evaluate_pop()
@@ -197,6 +211,67 @@ class GA:
         """Notify observers when the genetic algorithm run is finished."""
         for obs in self.observers:
             obs.on_finish(pop, pareto_front)
+
+
+@dataclass(slots=True)
+class GASeeder:
+    """Seeding strategies for GA instances."""
+
+    imports: ImportModel
+    ga_params: GaParameters
+    seed_pop: list[Schedule] | None
+    rng: np.random.Generator
+
+    def is_valid(self) -> bool:
+        """Check if seeding is valid based on the provided seed population."""
+        if not self.seed_pop or self.seed_pop is None:
+            logger.debug("No seed population provided. Starting with a fresh population.")
+            return False
+        logger.debug("Seeding population with %d individuals from seed file.", len(self.seed_pop))
+        logger.debug(
+            "Seed pop sort: %s | Seed island strategy: %s",
+            self.imports.seed_pop_sort,
+            self.imports.seed_island_strategy,
+        )
+        return True
+
+    def get_island_seeds(self) -> dict[int, list[int]]:
+        """Get seed indices for each island."""
+        params = {
+            "seed_indices": self._iter_seeds(),
+            "n_islands": self.ga_params.num_islands,
+            "n_pop": self.ga_params.population_size,
+        }
+        seed_fn = {
+            SeedIslandStrategy.DISTRIBUTED: self._seed_distributed,
+            SeedIslandStrategy.CONCENTRATED: self._seed_concentrated,
+        }.get(self.imports.seed_island_strategy, self._seed_distributed)
+        return seed_fn(**params)
+
+    def _iter_seeds(self) -> Iterator[int]:
+        """Yield indices for seeding strategies."""
+        iter_fn = {
+            SeedPopSort.RANDOM: self.rng.permutation,
+            SeedPopSort.BEST: np.arange,
+        }.get(self.imports.seed_pop_sort, self.rng.permutation)
+        yield from iter_fn(len(self.seed_pop))
+
+    def _seed_distributed(self, **params: dict[str, Any]) -> dict[int, list[int]]:
+        """Get seed indices for distributed seeding strategy."""
+        island_to_seed_idx: dict[int, list[int]] = defaultdict(list)
+        for idx in params["seed_indices"]:
+            island_to_seed_idx[idx % params["n_islands"]].append(idx)
+        return island_to_seed_idx
+
+    def _seed_concentrated(self, **params: dict[str, Any]) -> dict[int, list[int]]:
+        """Get seed indices for concentrated seeding strategy."""
+        island_to_seed_idx: dict[int, list[int]] = defaultdict(list)
+        for i in range(params["n_islands"]):
+            while len(island_to_seed_idx[i]) < params["n_pop"]:
+                if (idx := next(params["seed_indices"], None)) is None:
+                    break
+                island_to_seed_idx[i].append(idx)
+        return island_to_seed_idx
 
 
 @dataclass(slots=True)
