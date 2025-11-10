@@ -24,7 +24,7 @@ from ..config.constants import EPSILON, FITNESS_PENALTY
 if TYPE_CHECKING:
     from ..config.schemas import TournamentConfig
     from ..data_model.event import EventFactory, EventProperties
-    from ..data_model.time import TimeSlot
+    from ..data_model.timeslot import TimeSlot
 
 logger = getLogger(__name__)
 

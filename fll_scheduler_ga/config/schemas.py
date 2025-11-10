@@ -7,7 +7,7 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ..data_model.location import Location
-from ..data_model.time import TimeSlot
+from ..data_model.timeslot import TimeSlot
 from .constants import RANDOM_SEED_RANGE, TIME_FORMAT_MAP, CrossoverOp, MutationOp, SeedIslandStrategy, SeedPopSort
 
 logger = logging.getLogger(__name__)

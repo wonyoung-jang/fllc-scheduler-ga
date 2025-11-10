@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 from ..config.schemas import TournamentConfig, TournamentRound
 from .location import Location
-from .time import TimeSlot
+from .timeslot import TimeSlot
 
 logger = logging.getLogger(__name__)
 
@@ -280,6 +280,4 @@ class EventFactory:
         return self._cached_matches
 
 
-TimeSlot.model_rebuild()
-Location.model_rebuild()
 Event.model_rebuild()

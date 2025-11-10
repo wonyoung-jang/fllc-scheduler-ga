@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, TextIO
 
 from ..config.constants import ASCII_OFFSET, RE_HHMM, TIME_HEADER
 from ..data_model.schedule import Schedule
-from ..data_model.time import TimeSlot
+from ..data_model.timeslot import TimeSlot
 
 if TYPE_CHECKING:
     from pathlib import Path

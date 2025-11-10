@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from ..data_model.event import EventProperties
     from ..data_model.location import Location
     from ..data_model.schedule import Schedule
-    from ..data_model.time import TimeSlot
+    from ..data_model.timeslot import TimeSlot
 
 logger = getLogger(__name__)
 

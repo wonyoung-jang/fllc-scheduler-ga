@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from fll_scheduler_ga.data_model.time import TimeSlot
+from fll_scheduler_ga.data_model.timeslot import TimeSlot
 
 FMT_24H = "%H:%M"
 FMT_12H = "%I:%M %p"

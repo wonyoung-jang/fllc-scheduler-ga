@@ -26,7 +26,7 @@ from .builder import ScheduleBuilder
 
 if TYPE_CHECKING:
     from ..config.app_config import AppConfig
-    from ..data_model.time import TimeSlot
+    from ..data_model.timeslot import TimeSlot
     from ..operators.crossover import Crossover
     from ..operators.mutation import Mutation
     from ..operators.selection import Selection

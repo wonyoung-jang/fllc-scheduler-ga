@@ -33,7 +33,7 @@
   },
   "runtime": {
     "add_import_to_population": true,
-    "flush": true,
+    "flush": false,
     "flush_benchmarks": false,
     "import_file": "",
     "seed_file": "fll_scheduler_ga.pkl"
@@ -65,8 +65,8 @@
     "teams": 40
   },
   "fitness": {
-    "weight_mean": 100,
-    "weight_variation": 10,
+    "weight_mean": 1,
+    "weight_variation": 1,
     "weight_range": 1
   },
   "time": {

@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict
 
 from ..data_model.location import Location
 from ..data_model.schedule import Schedule
-from ..data_model.time import TimeSlot
+from ..data_model.timeslot import TimeSlot
 from .constants import CONFIG_FILE
 from .schemas import (
     AppConfigModel,
