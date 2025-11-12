@@ -69,9 +69,6 @@
     "weight_variation": 1,
     "weight_range": 1
   },
-  "time": {
-    "format": 24
-  },
   "locations": [
     {
       "name": "Room",
@@ -90,7 +87,7 @@
       "location": "Room",
       "rounds_per_team": 1,
       "teams_per_round": 1,
-      "start_time": "08:00",
+      "start_time": "08:00 AM",
       "duration_minutes": 45
     },
     {
@@ -98,7 +95,7 @@
       "location": "Table",
       "rounds_per_team": 2,
       "teams_per_round": 2,
-      "start_time": "09:00",
+      "start_time": "09:00 AM",
       "duration_minutes": 15
     },
     {
@@ -106,7 +103,7 @@
       "location": "Table",
       "rounds_per_team": 3,
       "teams_per_round": 2,
-      "start_time": "13:30",
+      "start_time": "01:30 PM",
       "duration_minutes": 11
     }
   ]

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import itertools
 import json
+import logging
+from collections import Counter
 from datetime import UTC, datetime, timedelta
-from logging import getLogger
 from math import ceil
 from typing import TYPE_CHECKING
 
@@ -15,7 +16,7 @@ from pydantic import BaseModel, ConfigDict
 from ..data_model.location import Location
 from ..data_model.schedule import Schedule
 from ..data_model.timeslot import TimeSlot
-from .constants import CONFIG_FILE
+from .constants import CONFIG_FILE, TIME_FORMAT_MAP
 from .schemas import (
     AppConfigModel,
     ExportModel,
@@ -34,7 +35,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
 
-logger = getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class AppConfig(BaseModel):
@@ -85,7 +86,26 @@ class AppConfig(BaseModel):
     def load_tournament_config(cls, model: AppConfigModel) -> TournamentConfig:
         """Load and return the tournament configuration from the validated model."""
         teams = model.teams
-        time_fmt = model.time.time_fmt
+        time_fmt = ""
+
+        all_time_strs = []
+        for rnd in model.rounds:
+            if rnd.start_time:
+                all_time_strs.append(rnd.start_time)
+            if rnd.stop_time:
+                all_time_strs.append(rnd.stop_time)
+            all_time_strs.extend(rnd.times)
+
+        inferred_formats = [cls.infer_time_format(t) for t in all_time_strs if t]
+        time_fmt = ""
+        if inferred_formats:
+            format_counts = Counter(inferred_formats)
+            if len(format_counts) == 1:
+                time_fmt = format_counts.most_common(1)[0][0]
+            else:
+                msg = "Conflicting time formats found in configuration times."
+                raise ValueError(msg)
+
         TimeSlot.time_fmt = time_fmt
 
         if not (locations := cls.parse_location_config(model.locations)):
@@ -230,6 +250,18 @@ class AppConfig(BaseModel):
             minimum_duration = total_available // n_timeslots
             return max(1, minimum_duration // 60)
 
+        return None
+
+    @classmethod
+    def infer_time_format(cls, time_str: str) -> str | None:
+        """Infer the time format from a sample time string."""
+        for fmt in TIME_FORMAT_MAP.values():
+            try:
+                datetime.strptime(time_str.strip(), fmt).replace(tzinfo=UTC)
+            except ValueError:
+                continue
+            else:
+                return fmt
         return None
 
     @classmethod

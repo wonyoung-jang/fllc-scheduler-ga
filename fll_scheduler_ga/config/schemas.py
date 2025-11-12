@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from ..data_model.location import Location
 from ..data_model.timeslot import TimeSlot
-from .constants import RANDOM_SEED_RANGE, TIME_FORMAT_MAP, CrossoverOp, MutationOp, SeedIslandStrategy, SeedPopSort
+from .constants import RANDOM_SEED_RANGE, CrossoverOp, MutationOp, SeedIslandStrategy, SeedPopSort
 
 logger = logging.getLogger(__name__)
 
@@ -245,23 +245,6 @@ class FitnessModel(BaseModel):
         return tuple(w / sum_w for w in weights)
 
 
-class TimeModel(BaseModel):
-    """Configuration for time format."""
-
-    format: int
-    time_fmt: str = ""
-
-    @model_validator(mode="after")
-    def set_time_fmt(self) -> "TimeModel":
-        """Set the time_fmt field based on the format."""
-        if self.format not in TIME_FORMAT_MAP:
-            msg = "Invalid time format. Must be 12 or 24."
-            raise ValueError(msg)
-
-        self.time_fmt = TIME_FORMAT_MAP[self.format]
-        return self
-
-
 class LocationModel(BaseModel):
     """Input model for a location type."""
 
@@ -306,7 +289,6 @@ class AppConfigModel(BaseModel):
     logging: LoggingModel
     teams: TeamsModel
     fitness: FitnessModel
-    time: TimeModel
     locations: list[LocationModel]
     rounds: list[RoundModel]
 
