@@ -47,41 +47,38 @@ class FitnessEvaluator:
     event_properties: EventProperties
     benchmark: FitnessBenchmark
 
-    objectives: list[FitnessObjective] = None
-    _penalty: float = FITNESS_PENALTY
-    _epsilon: float = EPSILON
-    max_events_per_team: int = 0
-
+    objectives: ClassVar[list[FitnessObjective]] = list(FitnessObjective)
+    max_events_per_team: ClassVar[int] = 0
+    _penalty: ClassVar[float] = FITNESS_PENALTY
+    _epsilon: ClassVar[float] = EPSILON
     max_int: ClassVar[int] = np.iinfo(np.int64).max
     min_int: ClassVar[int] = -1
-    n_teams: ClassVar[int]
-    n_objs: ClassVar[int]
-    match_roundtypes: ClassVar[np.ndarray]
-    rt_array: ClassVar[np.ndarray]
-    min_matches: ClassVar[int]
+    n_teams: ClassVar[int] = 0
+    n_objs: ClassVar[int] = 0
+    match_roundtypes: ClassVar[np.ndarray] = None
+    rt_array: ClassVar[np.ndarray] = None
+    min_matches: ClassVar[int] = 0
     loc_weight_rounds_inter: ClassVar[float] = 0.9
     loc_weight_rounds_intra: ClassVar[float] = 0.1
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the configuration."""
-        self.objectives = list(FitnessObjective)
-        self.max_events_per_team = self.config.max_events_per_team
+        FitnessEvaluator.objectives = list(FitnessObjective)
+        FitnessEvaluator.max_events_per_team = self.config.max_events_per_team
         FitnessEvaluator.n_teams = self.config.num_teams
         FitnessEvaluator.n_objs = len(self.objectives)
-        match_roundtypes = np.array([rt_idx for rt_idx, tpr in self.config.round_idx_to_tpr.items() if tpr == 2])
-        FitnessEvaluator.match_roundtypes = match_roundtypes
-        min_matches = (
+        FitnessEvaluator.match_roundtypes = np.array(
+            [rt_idx for rt_idx, tpr in self.config.round_idx_to_tpr.items() if tpr == 2]
+        )
+        FitnessEvaluator.min_matches = (
             min(r.rounds_per_team for r in self.config.rounds if r.teams_per_round == 2)
-            if len(match_roundtypes) > 0
+            if len(FitnessEvaluator.match_roundtypes) > 0
             else 0
         )
-        FitnessEvaluator.min_matches = min_matches
-
-        max_rt_idx = match_roundtypes.max() if match_roundtypes.size > 0 else -1
-        rt_array = np.full(max_rt_idx + 1, -1, dtype=int)
-        for i, rt in enumerate(match_roundtypes):
-            rt_array[rt] = i
-        FitnessEvaluator.rt_array = rt_array
+        max_rt_idx = FitnessEvaluator.match_roundtypes.max() if FitnessEvaluator.match_roundtypes.size > 0 else -1
+        FitnessEvaluator.rt_array = np.full(max_rt_idx + 1, -1, dtype=int)
+        for i, rt in enumerate(FitnessEvaluator.match_roundtypes):
+            FitnessEvaluator.rt_array[rt] = i
 
     def evaluate_population(self, pop_array: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Evaluate an entire population of schedules.
@@ -133,12 +130,13 @@ class FitnessEvaluator:
 
         return schedule_fitnesses, team_fitnesses
 
-    def get_team_events(self, pop_array: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    @classmethod
+    def get_team_events(cls, pop_array: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Invert the (event -> team) mapping to a (team -> events) mapping for the entire population."""
         n_pop, _ = pop_array.shape
 
         # Preallocate the team-events array
-        team_events_pop = np.full((n_pop, self.n_teams, self.max_events_per_team), -1, dtype=int)
+        team_events_pop = np.full((n_pop, cls.n_teams, cls.max_events_per_team), -1, dtype=int)
 
         # Get indices of scheduled events
         sched_indices, event_indices = np.nonzero(pop_array >= 0)
@@ -151,10 +149,10 @@ class FitnessEvaluator:
             return valid_events_mask, team_events_pop
 
         # Create unique keys for (pop, team) pairs
-        keys = (sched_indices * self.n_teams) + team_indices
+        keys = (sched_indices * cls.n_teams) + team_indices
 
         # Count occurrences of each (pop, team) pair to determine group sizes
-        counts = np.bincount(keys, minlength=n_pop * self.n_teams)
+        counts = np.bincount(keys, minlength=n_pop * cls.n_teams)
 
         # Sort event indices by (pop, team)
         order = np.argsort(keys)
@@ -170,11 +168,11 @@ class FitnessEvaluator:
 
         # Map back to original indices
         sorted_keys = keys[order]
-        pop_indices_sorted = sorted_keys // self.n_teams
-        team_indices_sorted = sorted_keys % self.n_teams
+        pop_indices_sorted = sorted_keys // cls.n_teams
+        team_indices_sorted = sorted_keys % cls.n_teams
 
         # Filter to only valid slots within max_events_per_team
-        valid_mask = within_group_indices < self.max_events_per_team
+        valid_mask = within_group_indices < cls.max_events_per_team
         pop_idx_final = pop_indices_sorted[valid_mask]
         team_idx_final = team_indices_sorted[valid_mask]
         slot_idx_final = within_group_indices[valid_mask]
@@ -232,10 +230,11 @@ class FitnessEvaluator:
 
         return final_scores / (self.benchmark.best_timeslot_score or 1.0)
 
-    def score_loc_consistency(self, loc_ids: np.ndarray, roundtype_ids: np.ndarray) -> np.ndarray:
+    @classmethod
+    def score_loc_consistency(cls, loc_ids: np.ndarray, roundtype_ids: np.ndarray) -> np.ndarray:
         """Calculate location consistency score, prioritizing inter-round over intra-round consistency."""
         n_pop, n_teams, _ = loc_ids.shape
-        match_roundtypes = self.match_roundtypes
+        match_roundtypes = cls.match_roundtypes
         n_match_rt = len(match_roundtypes)
 
         # Consistency score is only meaningful with 2+ match round types
@@ -257,7 +256,7 @@ class FitnessEvaluator:
         pop_indices, team_indices, _ = match_rt_mask.nonzero()
         loc_vals = loc_ids[match_rt_mask]
         rt_values = roundtype_ids[match_rt_mask]
-        mapped_rt_indices = self.rt_array[rt_values]
+        mapped_rt_indices = cls.rt_array[rt_values]
 
         # Inter-Round Consistency
         rt_loc_counts = np.zeros((n_pop, n_teams, n_match_rt, max_loc_idx + 1), dtype=int)
@@ -292,7 +291,7 @@ class FitnessEvaluator:
 
         # Intra-Round Consistency
         unique_locs_per_rt: np.ndarray = (rt_loc_counts > 0).sum(axis=3, dtype=float)
-        scores_per_rt = 1.0 / (unique_locs_per_rt + self._epsilon)
+        scores_per_rt = 1.0 / (unique_locs_per_rt + cls._epsilon)
         scores_per_rt[~participated_in_rt] = 1.0
 
         # Handle the zero-division case explicitly.
@@ -304,8 +303,8 @@ class FitnessEvaluator:
 
         # Final Combination
         total_matches_per_team = match_rt_mask.sum(axis=2)
-        final_scores = (inter_round_scores * self.loc_weight_rounds_inter) + (
-            intra_round_scores * self.loc_weight_rounds_intra
+        final_scores = (inter_round_scores * cls.loc_weight_rounds_inter) + (
+            intra_round_scores * cls.loc_weight_rounds_intra
         )
         final_scores[total_matches_per_team <= 1] = 1.0
 

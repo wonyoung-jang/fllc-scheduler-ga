@@ -285,7 +285,7 @@ class RoundModel(BaseModel):
     @model_validator(mode="after")
     def validate(self) -> "RoundModel":
         """Validate that rounds_per_team and teams_per_round are positive."""
-        if not self.start_time and not self.times:
+        if not (self.start_time or self.times):
             msg = f"Round '{self.roundtype}' must have either start_time or times defined."
             raise ValueError(msg)
 

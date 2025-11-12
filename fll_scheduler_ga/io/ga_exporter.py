@@ -103,6 +103,7 @@ class ExportManager:
                 (
                     TeamScheduleGenerator(
                         ga=self.ga,
+                        team_identities=self.export_model.team_identities,
                     ),
                     self.subdirs["team"],
                     "csv",
@@ -219,6 +220,7 @@ class TeamScheduleGenerator:
     """Exporter for generating team schedules."""
 
     ga: GA
+    team_identities: dict[int, str]
 
     def get_team_schedule(self, schedule: Schedule) -> list[list[str]]:
         """Get the schedule for each team."""
@@ -235,14 +237,17 @@ class TeamScheduleGenerator:
 
         rows.append(headers)
 
+        normalized_teams = normalize_teams(schedule.schedule, self.team_identities)
         team_events: dict[int, set[int]] = defaultdict(set)
-        for event_id, team_id in enumerate(schedule):
-            if team_id >= 0:
-                team_events[team_id].add(event_id)
+        for event_id, t in enumerate(schedule):
+            if t == -1:
+                continue
+            team_id = normalized_teams[t]
+            team_events[team_id].add(event_id)
 
         ep = self.ga.context.event_properties
         for team_id, events in sorted(team_events.items()):
-            r = [str(team_id + 1)]
+            r = [str(team_id)]
             for event_id in sorted(events):
                 r.append(str(ep.timeslot[event_id]))
                 r.append(str(ep.location[event_id]))
