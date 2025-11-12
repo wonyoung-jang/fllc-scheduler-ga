@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from ..config.constants import SeedIslandStrategy, SeedPopSort
+from ..config.constants import DATA_MODEL_VERSION, SeedIslandStrategy, SeedPopSort
 from ..io.observers import LoggingObserver, TqdmObserver
 from .island import Island
 
@@ -384,15 +384,22 @@ class GALoad:
                 seed_data = pickle.load(f)
         except (OSError, pickle.PicklingError):
             logger.exception("Could not load or parse seed file. Starting with a fresh population.")
+            return None
         except EOFError:
             logger.debug("Pickle file is empty")
-
-        seed_config: TournamentConfig | None = seed_data.get("config")
-        if seed_config is None:
-            logger.warning("Seed population is missing config. Using current...")
             return None
 
-        if ga.context.app_config.tournament != seed_config:
+        loaded_version: int = seed_data.get("data_version")
+        if loaded_version != DATA_MODEL_VERSION:
+            logger.warning(
+                "Seed population data version mismatch: Expected (%d), found (%d). Dismissing old seed file...",
+                DATA_MODEL_VERSION,
+                loaded_version,
+            )
+            return None
+
+        seed_config: TournamentConfig | None = seed_data.get("config")
+        if seed_config is None or ga.context.app_config.tournament != seed_config:
             logger.warning("Seed population does not match current config. Using current...")
             return None
 
@@ -420,6 +427,7 @@ class GASave:
             return
 
         data_to_cache = {
+            "data_version": DATA_MODEL_VERSION,
             "population": pop,
             "config": ga.context.app_config.tournament,
         }
