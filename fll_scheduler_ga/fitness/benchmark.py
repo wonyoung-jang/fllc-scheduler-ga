@@ -11,17 +11,18 @@ from __future__ import annotations
 import hashlib
 import itertools
 import pickle
-from collections import Counter
-from dataclasses import dataclass, field
+from collections import Counter, defaultdict
+from dataclasses import dataclass
 from logging import getLogger
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..config.constants import EPSILON, FITNESS_PENALTY
+from ..config.constants import BENCHMARKS_CACHE, EPSILON, FITNESS_PENALTY
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from ..config.schemas import TournamentConfig
     from ..data_model.event import EventFactory, EventProperties
     from ..data_model.timeslot import TimeSlot
@@ -38,15 +39,13 @@ class FitnessBenchmark:
     event_properties: EventProperties
 
     penalty: float = FITNESS_PENALTY
-    cache_dir: Path = None
-    timeslots: dict[frozenset[int], float] = field(default_factory=dict, init=False, repr=False)
+    cache_dir: Path = BENCHMARKS_CACHE
     opponents: np.ndarray = None
     flush_benchmarks: bool = False
     best_timeslot_score: float = None
 
     def __post_init__(self) -> None:
         """Post-initialization to validate run benchmark."""
-        self.cache_dir = Path(".benchmarks_cache/")
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self._run_benchmarks()
 
@@ -74,7 +73,6 @@ class FitnessBenchmark:
         try:
             with path.open("rb") as f:
                 cached_data = pickle.load(f)
-                self.timeslots = cached_data["timeslots"]
                 self.opponents = cached_data["opponents"]
                 self.best_timeslot_score = cached_data["best_timeslot_score"]
         except (OSError, pickle.UnpicklingError, EOFError):
@@ -83,7 +81,6 @@ class FitnessBenchmark:
     def _save_to_cache(self, path: Path) -> None:
         """Save benchmark data to a pickle file."""
         data_to_cache = {
-            "timeslots": self.timeslots,
             "opponents": self.opponents,
             "best_timeslot_score": self.best_timeslot_score,
         }
@@ -204,6 +201,7 @@ class FitnessBenchmark:
         valid_scored_schedules = []
         total_combinations = 0
 
+        timeslots = defaultdict(int)
         for schedule_tuple in itertools.product(*round_slot_combos.values()):  # Cartesian product
             total_combinations += 1
             curr_indices = np.array(list(itertools.chain.from_iterable(schedule_tuple)), dtype=int)
@@ -213,12 +211,12 @@ class FitnessBenchmark:
 
             score = self._score_break_time(curr_timeslots)
             valid_scored_schedules.append([score, curr_indices])
-            self.timeslots[frozenset(curr_indices)] = score
+            timeslots[frozenset(curr_indices)] = score
 
         logger.debug("  Total combinations: %d", total_combinations)
-        logger.debug("  Valid (non-overlapping): %d", len(self.timeslots))
+        logger.debug("  Valid (non-overlapping): %d", len(timeslots))
 
-        if not self.timeslots:
+        if not timeslots:
             logger.warning("No valid schedules could be generated.")
             return
 
@@ -233,7 +231,7 @@ class FitnessBenchmark:
 
         for i, (score, indices) in enumerate(valid_scored_schedules):
             valid_scored_schedules[i][0] = score / self.best_timeslot_score
-            self.timeslots[frozenset(indices)] /= self.best_timeslot_score
+            timeslots[frozenset(indices)] /= self.best_timeslot_score
 
         unique_scores = Counter(score for score, _ in valid_scored_schedules)
         logger.debug("Unique scores found: %d", len(unique_scores))

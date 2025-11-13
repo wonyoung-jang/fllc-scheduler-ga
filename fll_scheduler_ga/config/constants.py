@@ -14,6 +14,7 @@ RANDOM_SEED_RANGE = (1, 2**32 - 1)
 EPSILON = 1e-12
 
 CONFIG_FILE = Path("fll_scheduler_ga/config.json")
+BENCHMARKS_CACHE = Path(".benchmarks_cache/")
 
 # For Importer
 TIME_HEADER = "Time"
