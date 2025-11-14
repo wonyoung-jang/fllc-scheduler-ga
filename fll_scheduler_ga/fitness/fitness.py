@@ -57,7 +57,6 @@ class FitnessEvaluator:
     n_objs: ClassVar[int] = 0
     match_roundtypes: ClassVar[np.ndarray] = None
     rt_array: ClassVar[np.ndarray] = None
-    min_matches: ClassVar[int] = 0
     loc_weight_rounds_inter: ClassVar[float] = 0.9
     loc_weight_rounds_intra: ClassVar[float] = 0.1
 
@@ -69,11 +68,6 @@ class FitnessEvaluator:
         FitnessEvaluator.n_objs = len(self.objectives)
         FitnessEvaluator.match_roundtypes = np.array(
             [rt_idx for rt_idx, tpr in self.config.round_idx_to_tpr.items() if tpr == 2]
-        )
-        FitnessEvaluator.min_matches = (
-            min(r.rounds_per_team for r in self.config.rounds if r.teams_per_round == 2)
-            if len(FitnessEvaluator.match_roundtypes) > 0
-            else 0
         )
         max_rt_idx = FitnessEvaluator.match_roundtypes.max() if FitnessEvaluator.match_roundtypes.size > 0 else -1
         FitnessEvaluator.rt_array = np.full(max_rt_idx + 1, -1, dtype=int)
