@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pickle
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from logging import getLogger
@@ -14,12 +13,13 @@ import numpy as np
 
 from ..config.constants import DATA_MODEL_VERSION, SeedIslandStrategy, SeedPopSort
 from ..io.observers import LoggingObserver, TqdmObserver
+from ..io.seed_ga import GALoad, GASave, GASeedData
 from .island import Island
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from ..config.schemas import GaParameters, ImportModel, TournamentConfig
+    from ..config.schemas import GaParameters, ImportModel
     from ..data_model.schedule import Schedule
     from ..io.observers import GaObserver
     from ..operators.crossover import Crossover
@@ -98,10 +98,15 @@ class GA:
 
     def run(self) -> None:
         """Run the genetic algorithm and return the best schedule found."""
-        start_time = time()
-        self._notify_on_start(self.ga_params.generations)
+        seed_file = self.seed_file
+        config = self.context.app_config.tournament
         try:
-            seed_pop = GALoad(self).load()
+            start_time = time()
+            self._notify_on_start(self.ga_params.generations)
+            seed_pop = GALoad(
+                seed_file=seed_file,
+                config=config,
+            ).load()
             self.seed_population(seed_pop)
             self.initialize_population()
             if not any(i.selected for i in self.islands):
@@ -116,7 +121,15 @@ class GA:
             self.update_fitness_history()
         finally:
             GAFinalizer(self).finalize(start_time)
-            GASave(self).save()
+            seed_ga_data = GASeedData(
+                version=DATA_MODEL_VERSION,
+                config=config,
+                population=self.pareto_front() if self.save_front_only else self.total_population,
+            )
+            GASave(
+                seed_file=seed_file,
+                data=seed_ga_data,
+            ).save()
             self._notify_on_finish(self.total_population, self.pareto_front())
 
     def pareto_front(self) -> list[Schedule]:
@@ -366,77 +379,3 @@ class GAFinalizer:
             f"\n  Offspring success rate : {off_suc}/{off_tot} ({off_rte})"
         )
         logger.debug(final_log)
-
-
-@dataclass(slots=True)
-class GALoad:
-    """Loader for GA instances from seed files."""
-
-    ga: GA
-
-    def load(self) -> list[Schedule] | None:
-        """Load and integrate a population from a seed file."""
-        ga = self.ga
-        logger.debug("Loading seed population from: %s", ga.seed_file)
-        seed_data: dict[str, Any] = {}
-        try:
-            with ga.seed_file.open("rb") as f:
-                seed_data = pickle.load(f)
-        except (OSError, pickle.PicklingError):
-            logger.exception("Could not load or parse seed file. Starting with a fresh population.")
-            return None
-        except EOFError:
-            logger.debug("Pickle file is empty")
-            return None
-
-        loaded_version: int = seed_data.get("data_version")
-        if loaded_version != DATA_MODEL_VERSION:
-            logger.warning(
-                "Seed population data version mismatch: Expected (%d), found (%d). Dismissing old seed file...",
-                DATA_MODEL_VERSION,
-                loaded_version,
-            )
-            return None
-
-        seed_config: TournamentConfig | None = seed_data.get("config")
-        if seed_config is None or ga.context.app_config.tournament != seed_config:
-            logger.warning("Seed population does not match current config. Using current...")
-            return None
-
-        population = seed_data.get("population")
-        if population is None:
-            logger.warning("Seed population is missing. Using current...")
-            return None
-
-        return population
-
-
-@dataclass(slots=True)
-class GASave:
-    """Saver for GA instances to seed files."""
-
-    ga: GA
-
-    def save(self) -> None:
-        """Save the final population to a file to be used as a seed for a future run."""
-        ga = self.ga
-        pop = ga.pareto_front() if ga.save_front_only else ga.total_population
-
-        if not pop:
-            logger.warning("No population to save to seed file.")
-            return
-
-        data_to_cache = {
-            "data_version": DATA_MODEL_VERSION,
-            "population": pop,
-            "config": ga.context.app_config.tournament,
-        }
-
-        path = ga.seed_file
-        logger.debug("Saving final population of size %d to seed file: %s", len(pop), path)
-
-        try:
-            with path.open("wb") as f:
-                pickle.dump(data_to_cache, f)
-        except (OSError, pickle.PicklingError, EOFError):
-            logger.exception("Error saving population to seed file: %s", path)

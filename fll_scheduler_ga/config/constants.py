@@ -6,7 +6,8 @@ import re
 from enum import StrEnum
 from pathlib import Path
 
-DATA_MODEL_VERSION = 1
+FITNESS_MODEL_VERSION = 1
+DATA_MODEL_VERSION = 2
 
 ASCII_OFFSET = 64
 FITNESS_PENALTY = 0.5

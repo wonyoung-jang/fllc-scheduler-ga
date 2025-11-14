@@ -66,13 +66,13 @@ class FitnessEvaluator:
         FitnessEvaluator.max_events_per_team = self.config.max_events_per_team
         FitnessEvaluator.n_teams = self.config.num_teams
         FitnessEvaluator.n_objs = len(self.objectives)
-        FitnessEvaluator.match_roundtypes = np.array(
-            [rt_idx for rt_idx, tpr in self.config.round_idx_to_tpr.items() if tpr == 2]
-        )
-        max_rt_idx = FitnessEvaluator.match_roundtypes.max() if FitnessEvaluator.match_roundtypes.size > 0 else -1
-        FitnessEvaluator.rt_array = np.full(max_rt_idx + 1, -1, dtype=int)
-        for i, rt in enumerate(FitnessEvaluator.match_roundtypes):
-            FitnessEvaluator.rt_array[rt] = i
+        match_rts = np.array([rt_idx for rt_idx, tpr in self.config.round_idx_to_tpr.items() if tpr == 2])
+        max_rt_idx = match_rts.max() if match_rts.size > 0 else -1
+        rt_array = np.full(max_rt_idx + 1, -1, dtype=int)
+        for i, rt in enumerate(match_rts):
+            rt_array[rt] = i
+        FitnessEvaluator.match_roundtypes = match_rts
+        FitnessEvaluator.rt_array = rt_array
 
     def evaluate_population(self, pop_array: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Evaluate an entire population of schedules.
