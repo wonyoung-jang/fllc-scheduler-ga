@@ -15,7 +15,7 @@ from ..config.constants import DATA_MODEL_VERSION, SeedIslandStrategy, SeedPopSo
 from ..io.observers import LoggingObserver, TqdmObserver
 from ..io.seed_ga import GALoad, GASave, GASeedData
 from .island import Island
-from .stagnation import FitnessHistory
+from .stagnation import FitnessHistory, OperatorStats
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -41,17 +41,14 @@ class GA:
     save_front_only: bool
 
     curr_gen: int = 0
-    fitness_history: FitnessHistory = None
     total_population: list[Schedule] = field(default_factory=list, repr=False)
     islands: list[Island] = field(default_factory=list, repr=False)
-    ga_params: GaParameters = None
 
+    fitness_history: FitnessHistory = None
+    operator_stats: OperatorStats = None
+    ga_params: GaParameters = None
     generations_array: np.ndarray = None
     migrate_generations: np.ndarray = None
-
-    offspring_ratio: Counter = field(default_factory=Counter, repr=False)
-    crossover_ratio: dict[str, Counter] = None
-    mutation_ratio: dict[str, Counter] = None
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
@@ -71,8 +68,13 @@ class GA:
         )
 
         trackers = ("success", "total")
-        self.crossover_ratio = {tr: Counter({str(c): 0 for c in self.context.crossovers}) for tr in trackers}
-        self.mutation_ratio = {tr: Counter({str(m): 0 for m in self.context.mutations}) for tr in trackers}
+        crossover_counters = {str(c): 0 for c in self.context.crossovers}
+        mutation_counters = {str(m): 0 for m in self.context.mutations}
+        self.operator_stats = OperatorStats(
+            offspring=Counter(),
+            crossover={tr: Counter(crossover_counters) for tr in trackers},
+            mutation={tr: Counter(mutation_counters) for tr in trackers},
+        )
 
         self.islands.extend(
             Island(
@@ -80,9 +82,7 @@ class GA:
                 context=self.context,
                 rng=self.rng,
                 ga_params=self.ga_params,
-                offspring_ratio=self.offspring_ratio,
-                crossover_ratio=self.crossover_ratio,
-                mutation_ratio=self.mutation_ratio,
+                operator_stats=self.operator_stats,
             )
             for i in range(self.ga_params.num_islands)
         )
@@ -305,8 +305,8 @@ class GAFinalizer:
         ctx = ga.context
 
         self._deduplicate_population()
-        self._log_operators(name="crossover", ratios=ga.crossover_ratio, ops=ctx.crossovers)
-        self._log_operators(name="mutation", ratios=ga.mutation_ratio, ops=ctx.mutations)
+        self._log_operators(name="crossover", ratios=ga.operator_stats.crossover, ops=ctx.crossovers)
+        self._log_operators(name="mutation", ratios=ga.operator_stats.mutation, ops=ctx.mutations)
         self._log_aggregate_stats()
         for island in ga.islands:
             logger.debug("Island %d Fitness: %.2f", island.identity, sum(island.fitness_history.get_last_gen_fitness()))
@@ -353,14 +353,14 @@ class GAFinalizer:
         """Log aggregate statistics across all islands."""
         ga = self.ga
         final_log = f"{'=' * 20}\nFinal statistics"
-        crs_suc = sum(ga.crossover_ratio.get("success", {}).values())
-        crs_tot = sum(ga.crossover_ratio.get("total", {}).values())
+        crs_suc = sum(ga.operator_stats.crossover.get("success", {}).values())
+        crs_tot = sum(ga.operator_stats.crossover.get("total", {}).values())
         crs_rte = f"{crs_suc / crs_tot if crs_tot > 0 else 0.0:.2%}"
-        mut_suc = sum(ga.mutation_ratio.get("success", {}).values())
-        mut_tot = sum(ga.mutation_ratio.get("total", {}).values())
+        mut_suc = sum(ga.operator_stats.mutation.get("success", {}).values())
+        mut_tot = sum(ga.operator_stats.mutation.get("total", {}).values())
         mut_rte = f"{mut_suc / mut_tot if mut_tot > 0 else 0.0:.2%}"
-        off_suc = ga.offspring_ratio.get("success", 0)
-        off_tot = ga.offspring_ratio.get("total", 0)
+        off_suc = ga.operator_stats.offspring.get("success", 0)
+        off_tot = ga.operator_stats.offspring.get("total", 0)
         off_rte = f"{off_suc / off_tot if off_tot > 0 else 0.0:.2%}"
         unique_inds = len(ga.total_population)
         total_inds = len(ga)

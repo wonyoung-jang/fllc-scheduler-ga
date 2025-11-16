@@ -8,10 +8,9 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from .stagnation import FitnessHistory
+from .stagnation import FitnessHistory, OperatorStats
 
 if TYPE_CHECKING:
-    from collections import Counter
     from collections.abc import Iterator
 
     from ..config.schemas import GaParameters
@@ -32,15 +31,13 @@ class Island:
     context: GaContext
     rng: np.random.Generator
     ga_params: GaParameters
-    offspring_ratio: Counter
-    crossover_ratio: dict[str, Counter]
-    mutation_ratio: dict[str, Counter]
+
+    curr_gen: int = 0
+    selected: list[Schedule] = field(default_factory=list, repr=False)
 
     fitness_history: FitnessHistory = None
-
+    operator_stats: OperatorStats = None
     builder: ScheduleBuilder = None
-    selected: list[Schedule] = field(default_factory=list, repr=False)
-    curr_gen: int = 0
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
@@ -64,10 +61,10 @@ class Island:
 
     def add_to_population(self, schedule: Schedule) -> bool:
         """Add a schedule to a specific island's population if it's not a duplicate."""
-        self.offspring_ratio["total"] += 1
+        self.operator_stats.offspring["total"] += 1
         if schedule not in self.selected:
             self.selected.append(schedule)
-            self.offspring_ratio["success"] += 1
+            self.operator_stats.offspring["success"] += 1
             return True
         return False
 
@@ -103,9 +100,9 @@ class Island:
         """Mutate a child schedule."""
         m: Mutation = self.rng.choice(self.context.mutations)
         m_str = str(m)
-        self.mutation_ratio["total"][m_str] += 1
+        self.operator_stats.mutation["total"][m_str] += 1
         if m.mutate(schedule):
-            self.mutation_ratio["success"][m_str] += 1
+            self.operator_stats.mutation["success"][m_str] += 1
             schedule.mutations += 1
             return True
         return False
@@ -115,9 +112,9 @@ class Island:
         c: Crossover = self.rng.choice(self.context.crossovers)
         c_str = str(c)
         for child in c.cross(parents):
-            self.crossover_ratio["total"][c_str] += 1
+            self.operator_stats.crossover["total"][c_str] += 1
             if self.context.checker.check(child):
-                self.crossover_ratio["success"][c_str] += 1
+                self.operator_stats.crossover["success"][c_str] += 1
             if self.context.repairer.repair(child):
                 yield child
 
