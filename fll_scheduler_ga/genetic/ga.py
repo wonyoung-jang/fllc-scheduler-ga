@@ -15,6 +15,7 @@ from ..config.constants import DATA_MODEL_VERSION, SeedIslandStrategy, SeedPopSo
 from ..io.observers import LoggingObserver, TqdmObserver
 from ..io.seed_ga import GALoad, GASave, GASeedData
 from .island import Island
+from .stagnation import FitnessHistory, OperatorStats
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -40,17 +41,14 @@ class GA:
     save_front_only: bool
 
     curr_gen: int = 0
-    fitness_history: np.ndarray = None
     total_population: list[Schedule] = field(default_factory=list, repr=False)
     islands: list[Island] = field(default_factory=list, repr=False)
-    ga_params: GaParameters = None
 
+    fitness_history: FitnessHistory = None
+    operator_stats: OperatorStats = None
+    ga_params: GaParameters = None
     generations_array: np.ndarray = None
     migrate_generations: np.ndarray = None
-
-    offspring_ratio: Counter = field(default_factory=Counter, repr=False)
-    crossover_ratio: dict[str, Counter] = None
-    mutation_ratio: dict[str, Counter] = None
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
@@ -60,23 +58,33 @@ class GA:
         if self.ga_params.num_islands > 1 and self.ga_params.migration_size > 0:
             self.migrate_generations[:: self.ga_params.migration_interval] = 1
 
-        self.fitness_history = np.full(
-            (self.ga_params.generations, len(self.context.evaluator.objectives)),
-            fill_value=-1,
-            dtype=float,
+        n_gen = self.ga_params.generations
+        n_obj = len(self.context.evaluator.objectives)
+        self.fitness_history = FitnessHistory(
+            curr_gen=self.curr_gen,
+            curr_fit=np.zeros((1, n_obj), dtype=float),
+            history=np.full((n_gen, n_obj), fill_value=-1, dtype=float),
         )
 
         trackers = ("success", "total")
-        self.crossover_ratio = {tr: Counter({str(c): 0 for c in self.context.crossovers}) for tr in trackers}
-        self.mutation_ratio = {tr: Counter({str(m): 0 for m in self.context.mutations}) for tr in trackers}
+        crossover_counters = {str(c): 0 for c in self.context.crossovers}
+        mutation_counters = {str(m): 0 for m in self.context.mutations}
+        self.operator_stats = OperatorStats(
+            offspring=Counter(),
+            crossover={tr: Counter(crossover_counters) for tr in trackers},
+            mutation={tr: Counter(mutation_counters) for tr in trackers},
+        )
 
         self.islands.extend(
             Island(
                 identity=i,
+                curr_gen=self.curr_gen,
                 context=self.context,
-                offspring_ratio=self.offspring_ratio.copy(),
-                crossover_ratio=self.crossover_ratio.copy(),
-                mutation_ratio=self.mutation_ratio.copy(),
+                rng=self.rng,
+                ga_params=self.ga_params,
+                operator_stats=self.operator_stats,
+                fitness_history=self.fitness_history.copy(),
+                builder=self.context.builder,
             )
             for i in range(self.ga_params.num_islands)
         )
@@ -106,6 +114,7 @@ class GA:
             seed_pop = GALoad(
                 seed_file=seed_file,
                 config=config,
+                evaluator=self.context.evaluator,
             ).load()
             self.seed_population(seed_pop)
             self.initialize_population()
@@ -115,10 +124,12 @@ class GA:
             self.run_epochs()
         except Exception:
             logger.exception("An error occurred during the genetic algorithm run.")
-            self.update_fitness_history()
+            self.fitness_history.curr_fit = self.aggregate_island_fitness()
+            self.fitness_history.update_fitness_history()
         except KeyboardInterrupt:
             logger.debug("Genetic algorithm run interrupted by user. Saving...")
-            self.update_fitness_history()
+            self.fitness_history.curr_fit = self.aggregate_island_fitness()
+            self.fitness_history.update_fitness_history()
         finally:
             GAFinalizer(self).finalize(start_time)
             seed_ga_data = GASeedData(
@@ -138,18 +149,10 @@ class GA:
             return [p for i in self.islands for p in i.pareto_front()]
         return [p for p in self.total_population if p.rank == 0]
 
-    def get_this_gen_fitness(self) -> np.ndarray:
+    def aggregate_island_fitness(self) -> np.ndarray:
         """Calculate the average fitness of the current generation."""
-        island_fitnesses = np.asarray([i.get_last_gen_fitness() for i in self.islands], dtype=float)
+        island_fitnesses = np.asarray([i.fitness_history.get_last_gen_fitness() for i in self.islands], dtype=float)
         return island_fitnesses.mean(axis=0)
-
-    def get_last_gen_fitness(self) -> np.ndarray:
-        """Get the fitness of the last generation."""
-        return self.fitness_history[self.curr_gen - 1] if self.curr_gen > 0 else ()
-
-    def update_fitness_history(self) -> None:
-        """Update the fitness history with the current generation's fitness."""
-        self.fitness_history[self.curr_gen] = self.get_this_gen_fitness()
 
     def seed_population(self, seed_pop: list[Schedule] | None) -> None:
         """Seed the population for each island."""
@@ -182,12 +185,17 @@ class GA:
                 self.migrate()
 
             self.run_generation()
-            self.update_fitness_history()
+
+            self.fitness_history.curr_fit = self.aggregate_island_fitness()
+            self.fitness_history.update_fitness_history()
+
+            self.fitness_history.curr_gen += 1
             self.curr_gen += 1
+
             self._notify_on_generation_end(
                 generation=gen,
                 num_generations=self.ga_params.generations,
-                best_fitness=self.get_last_gen_fitness(),
+                best_fitness=self.fitness_history.get_last_gen_fitness(),
                 pop_size=len(self),
             )
 
@@ -197,7 +205,8 @@ class GA:
             island.handle_underpopulation()
             island.evolve()
             island.select_next_generation()
-            island.update_fitness_history()
+            island.fitness_history.update_fitness_history()
+            island.fitness_history.curr_gen += 1
             island.curr_gen += 1
 
     def migrate(self) -> None:
@@ -299,12 +308,11 @@ class GAFinalizer:
         ctx = ga.context
 
         self._deduplicate_population()
-        self._aggregate_stats_from_islands()
-        self._log_operators(name="crossover", ratios=ga.crossover_ratio, ops=ctx.crossovers)
-        self._log_operators(name="mutation", ratios=ga.mutation_ratio, ops=ctx.mutations)
+        self._log_operators(name="crossover", ratios=ga.operator_stats.crossover, ops=ctx.crossovers)
+        self._log_operators(name="mutation", ratios=ga.operator_stats.mutation, ops=ctx.mutations)
         self._log_aggregate_stats()
         for island in ga.islands:
-            logger.debug("Island %d Fitness: %.2f", island.identity, sum(island.get_last_gen_fitness()))
+            logger.debug("Island %d Fitness: %.2f", island.identity, sum(island.fitness_history.get_last_gen_fitness()))
         logger.debug("Total time taken: %.2f seconds", time() - start_time)
 
     def _deduplicate_population(self) -> None:
@@ -329,17 +337,6 @@ class GAFinalizer:
 
         ga.total_population = sorted(selected.values(), key=lambda s: (s.rank, -s.fitness.sum()))
 
-    def _aggregate_stats_from_islands(self) -> None:
-        """Aggregate statistics from all islands."""
-        ga = self.ga
-        for island in ga.islands:
-            for tracker, crossovers in island.crossover_ratio.items():
-                ga.crossover_ratio[tracker].update(crossovers)
-            for tracker, mutations in island.mutation_ratio.items():
-                ga.mutation_ratio[tracker].update(mutations)
-            for tracker, count in island.offspring_ratio.items():
-                ga.offspring_ratio[tracker] += count
-
     @staticmethod
     def _log_operators(name: str, ratios: dict[str, Counter], ops: tuple[Crossover | Mutation]) -> None:
         """Log statistics for crossover and mutation operators."""
@@ -359,14 +356,14 @@ class GAFinalizer:
         """Log aggregate statistics across all islands."""
         ga = self.ga
         final_log = f"{'=' * 20}\nFinal statistics"
-        crs_suc = sum(ga.crossover_ratio.get("success", {}).values())
-        crs_tot = sum(ga.crossover_ratio.get("total", {}).values())
+        crs_suc = sum(ga.operator_stats.crossover.get("success", {}).values())
+        crs_tot = sum(ga.operator_stats.crossover.get("total", {}).values())
         crs_rte = f"{crs_suc / crs_tot if crs_tot > 0 else 0.0:.2%}"
-        mut_suc = sum(ga.mutation_ratio.get("success", {}).values())
-        mut_tot = sum(ga.mutation_ratio.get("total", {}).values())
+        mut_suc = sum(ga.operator_stats.mutation.get("success", {}).values())
+        mut_tot = sum(ga.operator_stats.mutation.get("total", {}).values())
         mut_rte = f"{mut_suc / mut_tot if mut_tot > 0 else 0.0:.2%}"
-        off_suc = ga.offspring_ratio.get("success", 0)
-        off_tot = ga.offspring_ratio.get("total", 0)
+        off_suc = ga.operator_stats.offspring.get("success", 0)
+        off_tot = ga.operator_stats.offspring.get("total", 0)
         off_rte = f"{off_suc / off_tot if off_tot > 0 else 0.0:.2%}"
         unique_inds = len(ga.total_population)
         total_inds = len(ga)

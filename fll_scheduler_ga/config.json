@@ -65,8 +65,8 @@
     "teams": 40
   },
   "fitness": {
-    "weight_mean": 1,
-    "weight_variation": 1,
+    "weight_mean": 3,
+    "weight_variation": 2,
     "weight_range": 1
   },
   "locations": [

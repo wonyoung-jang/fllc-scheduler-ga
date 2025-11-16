@@ -56,7 +56,7 @@ class Plot:
             save_dir: Directory to save the figure. If None, the plot is shown.
 
         """
-        history = self.ga.fitness_history
+        history = self.ga.fitness_history.history
         history = history[history[:, 0] >= 0]  # Filter out generations (if program terminated early)
         if not history.any():
             logger.error("Cannot plot fitness. No generation history was recorded.")

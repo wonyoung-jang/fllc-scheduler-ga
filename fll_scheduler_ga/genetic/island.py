@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
-    from collections import Counter
     from collections.abc import Iterator
 
     from ..config.schemas import GaParameters
@@ -18,6 +17,7 @@ if TYPE_CHECKING:
     from ..operators.mutation import Mutation
     from .builder import ScheduleBuilder
     from .ga_context import GaContext
+    from .stagnation import FitnessHistory, OperatorStats
 
 logger = getLogger(__name__)
 
@@ -27,42 +27,19 @@ class Island:
     """Genetic algorithm island for the FLL Scheduler GA."""
 
     identity: int
+    curr_gen: int
     context: GaContext
-    offspring_ratio: Counter
-    crossover_ratio: dict[str, Counter]
-    mutation_ratio: dict[str, Counter]
+    rng: np.random.Generator
+    ga_params: GaParameters
+    operator_stats: OperatorStats
+    fitness_history: FitnessHistory
+    builder: ScheduleBuilder
 
-    rng: np.random.Generator = None
-    builder: ScheduleBuilder = None
-    ga_params: GaParameters = None
     selected: list[Schedule] = field(default_factory=list, repr=False)
-    curr_gen: int = 0
-    fitness_history: np.ndarray = None
-    curr_schedule_fitnesses: np.ndarray = None
-
-    def __post_init__(self) -> None:
-        """Post-initialization to set up the initial state."""
-        self.rng = self.context.app_config.rng
-        self.builder = self.context.builder
-        self.ga_params = self.context.app_config.ga_params
-        n_gen = self.ga_params.generations
-        n_obj = len(self.context.evaluator.objectives)
-        self.fitness_history = np.zeros((n_gen, n_obj), dtype=float)
-        self.curr_schedule_fitnesses = np.zeros((1, n_obj), dtype=float)
 
     def __len__(self) -> int:
         """Return the number of individuals in the island's population."""
         return len(self.selected)
-
-    def get_last_gen_fitness(self) -> tuple[float, ...]:
-        """Get the fitness of the last generation."""
-        return self.fitness_history[self.curr_gen - 1] if self.curr_gen > 0 else ()
-
-    def update_fitness_history(self) -> None:
-        """Update the fitness history with the current generation's fitness."""
-        curr_fits = self.curr_schedule_fitnesses
-        if curr_fits is not None and curr_fits.size > 0:
-            self.fitness_history[self.curr_gen] = curr_fits
 
     def pareto_front(self) -> list[Schedule]:
         """Get the Pareto front for each island in the population."""
@@ -70,10 +47,10 @@ class Island:
 
     def add_to_population(self, schedule: Schedule) -> bool:
         """Add a schedule to a specific island's population if it's not a duplicate."""
-        self.offspring_ratio["total"] += 1
+        self.operator_stats.offspring["total"] += 1
         if schedule not in self.selected:
             self.selected.append(schedule)
-            self.offspring_ratio["success"] += 1
+            self.operator_stats.offspring["success"] += 1
             return True
         return False
 
@@ -109,9 +86,9 @@ class Island:
         """Mutate a child schedule."""
         m: Mutation = self.rng.choice(self.context.mutations)
         m_str = str(m)
-        self.mutation_ratio["total"][m_str] += 1
+        self.operator_stats.mutation["total"][m_str] += 1
         if m.mutate(schedule):
-            self.mutation_ratio["success"][m_str] += 1
+            self.operator_stats.mutation["success"][m_str] += 1
             schedule.mutations += 1
             return True
         return False
@@ -121,9 +98,9 @@ class Island:
         c: Crossover = self.rng.choice(self.context.crossovers)
         c_str = str(c)
         for child in c.cross(parents):
-            self.crossover_ratio["total"][c_str] += 1
+            self.operator_stats.crossover["total"][c_str] += 1
             if self.context.checker.check(child):
-                self.crossover_ratio["success"][c_str] += 1
+                self.operator_stats.crossover["success"][c_str] += 1
             if self.context.repairer.repair(child):
                 yield child
 
@@ -168,8 +145,12 @@ class Island:
         schedule_fits, _ = self.evaluate_pop()
         fronts = self.context.nsga3.select(schedule_fits, n_pop)
         idx_to_select = [i for f in fronts for i in f]
-        self.curr_schedule_fitnesses = schedule_fits[idx_to_select].mean(axis=0)
-        total_pop: list[Schedule] = self.selected[:]  # Copy current population
+
+        curr_fit = schedule_fits[idx_to_select].mean(axis=0)
+        self.fitness_history.curr_fit = curr_fit
+
+        total_pop: list[Schedule] = self.selected
+
         self.selected = []
         for i in idx_to_select:
             self.add_to_population(total_pop[i])
