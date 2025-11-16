@@ -60,7 +60,6 @@ class GA:
 
         n_gen = self.ga_params.generations
         n_obj = len(self.context.evaluator.objectives)
-
         self.fitness_history = FitnessHistory(
             curr_gen=self.curr_gen,
             curr_fit=np.zeros((1, n_obj), dtype=float),
@@ -83,6 +82,7 @@ class GA:
                 rng=self.rng,
                 ga_params=self.ga_params,
                 operator_stats=self.operator_stats,
+                fitness_history=self.fitness_history.copy(),
             )
             for i in range(self.ga_params.num_islands)
         )

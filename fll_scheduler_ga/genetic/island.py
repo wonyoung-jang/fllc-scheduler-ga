@@ -8,8 +8,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from .stagnation import FitnessHistory, OperatorStats
-
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
@@ -19,6 +17,7 @@ if TYPE_CHECKING:
     from ..operators.mutation import Mutation
     from .builder import ScheduleBuilder
     from .ga_context import GaContext
+    from .stagnation import FitnessHistory, OperatorStats
 
 logger = getLogger(__name__)
 
@@ -31,25 +30,17 @@ class Island:
     context: GaContext
     rng: np.random.Generator
     ga_params: GaParameters
+    operator_stats: OperatorStats
+    fitness_history: FitnessHistory
 
     curr_gen: int = 0
     selected: list[Schedule] = field(default_factory=list, repr=False)
 
-    fitness_history: FitnessHistory = None
-    operator_stats: OperatorStats = None
     builder: ScheduleBuilder = None
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
         self.builder = self.context.builder
-        n_gen = self.ga_params.generations
-        n_obj = len(self.context.evaluator.objectives)
-
-        self.fitness_history = FitnessHistory(
-            curr_gen=self.curr_gen,
-            curr_fit=np.zeros((1, n_obj), dtype=float),
-            history=np.zeros((n_gen, n_obj), dtype=float),
-        )
 
     def __len__(self) -> int:
         """Return the number of individuals in the island's population."""
