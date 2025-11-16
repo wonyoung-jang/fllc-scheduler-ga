@@ -74,9 +74,9 @@ class GA:
             Island(
                 identity=i,
                 context=self.context,
-                offspring_ratio=self.offspring_ratio.copy(),
-                crossover_ratio=self.crossover_ratio.copy(),
-                mutation_ratio=self.mutation_ratio.copy(),
+                offspring_ratio=self.offspring_ratio,
+                crossover_ratio=self.crossover_ratio,
+                mutation_ratio=self.mutation_ratio,
             )
             for i in range(self.ga_params.num_islands)
         )
@@ -299,7 +299,6 @@ class GAFinalizer:
         ctx = ga.context
 
         self._deduplicate_population()
-        self._aggregate_stats_from_islands()
         self._log_operators(name="crossover", ratios=ga.crossover_ratio, ops=ctx.crossovers)
         self._log_operators(name="mutation", ratios=ga.mutation_ratio, ops=ctx.mutations)
         self._log_aggregate_stats()
@@ -328,17 +327,6 @@ class GAFinalizer:
                 selected[hash(sch)] = sch
 
         ga.total_population = sorted(selected.values(), key=lambda s: (s.rank, -s.fitness.sum()))
-
-    def _aggregate_stats_from_islands(self) -> None:
-        """Aggregate statistics from all islands."""
-        ga = self.ga
-        for island in ga.islands:
-            for tracker, crossovers in island.crossover_ratio.items():
-                ga.crossover_ratio[tracker].update(crossovers)
-            for tracker, mutations in island.mutation_ratio.items():
-                ga.mutation_ratio[tracker].update(mutations)
-            for tracker, count in island.offspring_ratio.items():
-                ga.offspring_ratio[tracker] += count
 
     @staticmethod
     def _log_operators(name: str, ratios: dict[str, Counter], ops: tuple[Crossover | Mutation]) -> None:
