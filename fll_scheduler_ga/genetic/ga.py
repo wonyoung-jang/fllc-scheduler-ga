@@ -78,11 +78,13 @@ class GA:
         self.islands.extend(
             Island(
                 identity=i,
+                curr_gen=self.curr_gen,
                 context=self.context,
                 rng=self.rng,
                 ga_params=self.ga_params,
                 operator_stats=self.operator_stats,
                 fitness_history=self.fitness_history.copy(),
+                builder=self.context.builder,
             )
             for i in range(self.ga_params.num_islands)
         )
@@ -112,6 +114,7 @@ class GA:
             seed_pop = GALoad(
                 seed_file=seed_file,
                 config=config,
+                evaluator=self.context.evaluator,
             ).load()
             self.seed_population(seed_pop)
             self.initialize_population()

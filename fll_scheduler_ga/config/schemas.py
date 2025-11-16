@@ -388,6 +388,31 @@ class TournamentConfig(BaseModel):
             f"\n    is_interleaved            : {self.is_interleaved}"
         )
 
+    def __eq__(self, other: object) -> bool:
+        """Check equality between two TournamentConfig instances."""
+        if not isinstance(other, TournamentConfig):
+            return NotImplemented
+
+        return (
+            self.num_teams == other.num_teams
+            and self.time_fmt == other.time_fmt
+            and self.rounds == other.rounds
+            and self.roundreqs == other.roundreqs
+            and self.round_str_to_idx == other.round_str_to_idx
+            and self.round_idx_to_tpr == other.round_idx_to_tpr
+            and self.total_slots_possible == other.total_slots_possible
+            and self.total_slots_required == other.total_slots_required
+            and self.unique_opponents_possible == other.unique_opponents_possible
+            and self.all_locations == other.all_locations
+            and self.all_timeslots == other.all_timeslots
+            and self.max_events_per_team == other.max_events_per_team
+            and self.is_interleaved == other.is_interleaved
+        )
+
+    def __hash__(self) -> int:
+        """Generate a hash for the TournamentConfig."""
+        return super().__hash__()
+
 
 TournamentRound.model_rebuild()
 TournamentConfig.model_rebuild()

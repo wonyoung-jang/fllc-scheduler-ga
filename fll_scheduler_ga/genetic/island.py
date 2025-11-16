@@ -27,20 +27,15 @@ class Island:
     """Genetic algorithm island for the FLL Scheduler GA."""
 
     identity: int
+    curr_gen: int
     context: GaContext
     rng: np.random.Generator
     ga_params: GaParameters
     operator_stats: OperatorStats
     fitness_history: FitnessHistory
+    builder: ScheduleBuilder
 
-    curr_gen: int = 0
     selected: list[Schedule] = field(default_factory=list, repr=False)
-
-    builder: ScheduleBuilder = None
-
-    def __post_init__(self) -> None:
-        """Post-initialization to set up the initial state."""
-        self.builder = self.context.builder
 
     def __len__(self) -> int:
         """Return the number of individuals in the island's population."""
