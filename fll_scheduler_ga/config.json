@@ -1,7 +1,7 @@
 {
   "genetic": {
     "parameters": {
-      "generations": 2048,
+      "generations": 4096,
       "population_size": 8,
       "offspring_size": 1,
       "crossover_chance": 0.6,
