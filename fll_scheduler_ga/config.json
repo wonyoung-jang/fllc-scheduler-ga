@@ -1,7 +1,7 @@
 {
   "genetic": {
     "parameters": {
-      "generations": 5000,
+      "generations": 2048,
       "population_size": 8,
       "offspring_size": 1,
       "crossover_chance": 0.6,
@@ -28,7 +28,12 @@
           "Inversion",
           "Scramble"
         ]
-      }
+      } 
+    },
+    "stagnation": {
+      "enable": true,
+      "proportion": 0.8,
+      "threshold": 50
     }
   },
   "runtime": {

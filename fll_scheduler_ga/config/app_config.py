@@ -20,11 +20,10 @@ from .constants import CONFIG_FILE, TIME_FORMAT_MAP
 from .schemas import (
     AppConfigModel,
     ExportModel,
-    GaParameters,
+    GeneticModel,
     ImportModel,
     LocationModel,
     LoggingModel,
-    OperatorConfig,
     RoundModel,
     RuntimeModel,
     TournamentConfig,
@@ -46,9 +45,8 @@ class AppConfig(BaseModel):
     imports: ImportModel
     exports: ExportModel
     logging: LoggingModel
+    genetic: GeneticModel
     tournament: TournamentConfig
-    operators: OperatorConfig
-    ga_params: GaParameters
     rng: np.random.Generator
 
     @classmethod
@@ -71,14 +69,13 @@ class AppConfig(BaseModel):
     def build_from_model(cls, model: AppConfigModel) -> AppConfig:
         """Create and return the application configuration from a Pydantic model."""
         model.exports.team_identities = model.teams.get_team_ids()
-        return cls(
+        return AppConfig(
             runtime=model.runtime,
             imports=model.imports,
             exports=model.exports,
             logging=model.logging,
+            genetic=model.genetic,
             tournament=cls.load_tournament_config(model),
-            operators=model.genetic.operator,
-            ga_params=model.genetic.parameters,
             rng=np.random.default_rng(model.genetic.parameters.rng_seed),
         )
 
@@ -323,6 +320,6 @@ class AppConfig(BaseModel):
         if sum(self.tournament.weights) == 0:
             logger.debug("All fitness weights are zero; using equal weights.")
         logger.debug("Initialized tournament configuration: %s", self.tournament)
-        logger.debug("Initialized operator configuration: %s", self.operators)
-        logger.debug("Initialized genetic algorithm parameters: %s", self.ga_params)
+        logger.debug("Initialized operator configuration: %s", self.genetic.operator)
+        logger.debug("Initialized genetic algorithm parameters: %s", self.genetic.parameters)
         logger.debug("Initialized random number generator: %s.", self.rng.bit_generator.state["state"])

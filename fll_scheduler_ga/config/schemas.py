@@ -120,11 +120,20 @@ class OperatorConfig(BaseModel):
         )
 
 
+class StagnationModel(BaseModel):
+    """Configuration for stagnation handling."""
+
+    enable: bool = False
+    proportion: float = 0.8
+    threshold: int = 20
+
+
 class GeneticModel(BaseModel):
     """Configuration for the genetic algorithm."""
 
     parameters: GaParameters
     operator: OperatorConfig
+    stagnation: StagnationModel
 
 
 class RuntimeModel(BaseModel):
