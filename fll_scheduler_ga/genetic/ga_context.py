@@ -95,7 +95,7 @@ class GaContext:
             benchmark=benchmark,
         )
 
-        ga_params = app_config.ga_params
+        ga_params = app_config.genetic.parameters
         n_total_pop = ga_params.population_size * ga_params.num_islands
         n_objectives = len(evaluator.objectives)
         ref_directions = ReferenceDirections(
@@ -108,7 +108,7 @@ class GaContext:
         )
 
         selection = RandomSelect(rng)
-        operators = app_config.operators
+        operators = app_config.genetic.operator
         crossovers = build_crossovers(rng, operators, event_factory, event_properties)
         mutations = build_mutations(rng, operators, event_factory, event_properties)
 

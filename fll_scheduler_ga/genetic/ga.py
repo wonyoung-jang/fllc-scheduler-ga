@@ -14,13 +14,14 @@ import numpy as np
 from ..config.constants import DATA_MODEL_VERSION, SeedIslandStrategy, SeedPopSort
 from ..io.observers import LoggingObserver, TqdmObserver
 from ..io.seed_ga import GALoad, GASave, GASeedData
+from .ga_generation import GaGeneration
 from .island import Island
-from .stagnation import FitnessHistory, OperatorStats
+from .stagnation import FitnessHistory, OperatorStats, StagnationHandler
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from ..config.schemas import GaParameters, ImportModel
+    from ..config.schemas import GaParameters, GeneticModel, ImportModel
     from ..data_model.schedule import Schedule
     from ..io.observers import GaObserver
     from ..operators.crossover import Crossover
@@ -35,37 +36,77 @@ class GA:
     """Genetic algorithm for the FLL Scheduler GA."""
 
     context: GaContext
+    genetic_model: GeneticModel
     rng: np.random.Generator
     observers: tuple[GaObserver]
     seed_file: Path
     save_front_only: bool
 
-    curr_gen: int = 0
+    generation: GaGeneration = None
+    stagnation: StagnationHandler = None
     total_population: list[Schedule] = field(default_factory=list, repr=False)
     islands: list[Island] = field(default_factory=list, repr=False)
 
     fitness_history: FitnessHistory = None
     operator_stats: OperatorStats = None
-    ga_params: GaParameters = None
     generations_array: np.ndarray = None
     migrate_generations: np.ndarray = None
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
-        self.ga_params = self.context.app_config.ga_params
-        self.generations_array = np.arange(1, self.ga_params.generations + 1)
-        self.migrate_generations: np.ndarray = np.zeros(self.ga_params.generations + 1, dtype=int)
-        if self.ga_params.num_islands > 1 and self.ga_params.migration_size > 0:
-            self.migrate_generations[:: self.ga_params.migration_interval] = 1
+        self.generation = GaGeneration(curr=0)
 
-        n_gen = self.ga_params.generations
+        self.generations_array = np.arange(1, self.genetic_model.parameters.generations + 1)
+        self.migrate_generations = np.zeros(self.genetic_model.parameters.generations + 1, dtype=int)
+        if self.genetic_model.parameters.num_islands > 1 and self.genetic_model.parameters.migration_size > 0:
+            self.migrate_generations[:: self.genetic_model.parameters.migration_interval] = 1
+
+        self._init_fitness_history()
+        self._init_operator_stats()
+
+        self.islands.extend(
+            Island(
+                identity=i,
+                generation=self.generation,
+                context=self.context,
+                genetic_model=self.genetic_model,
+                rng=self.rng,
+                operator_stats=self.operator_stats,
+                fitness_history=self.fitness_history.copy(),
+                builder=self.context.builder,
+            )
+            for i in range(self.genetic_model.parameters.num_islands)
+        )
+
+    @classmethod
+    def build(cls, context: GaContext) -> GA:
+        """Build and return a GA instance with the provided configuration."""
+        _app_config = context.app_config
+        return cls(
+            context=context,
+            genetic_model=_app_config.genetic,
+            rng=_app_config.rng,
+            observers=(TqdmObserver(), LoggingObserver()),
+            seed_file=Path(_app_config.runtime.seed_file),
+            save_front_only=_app_config.exports.front_only,
+        )
+
+    def __len__(self) -> int:
+        """Return the number of individuals in the population."""
+        return sum(len(i) for i in self.islands)
+
+    def _init_fitness_history(self) -> None:
+        """Initialize the fitness history for the GA."""
+        n_gen = self.genetic_model.parameters.generations
         n_obj = len(self.context.evaluator.objectives)
         self.fitness_history = FitnessHistory(
-            curr_gen=self.curr_gen,
-            curr_fit=np.zeros((1, n_obj), dtype=float),
+            generation=self.generation,
+            current=np.zeros((1, n_obj), dtype=float),
             history=np.full((n_gen, n_obj), fill_value=-1, dtype=float),
         )
 
+    def _init_operator_stats(self) -> None:
+        """Initialize the operator statistics for the GA."""
         trackers = ("success", "total")
         crossover_counters = {str(c): 0 for c in self.context.crossovers}
         mutation_counters = {str(m): 0 for m in self.context.mutations}
@@ -75,34 +116,12 @@ class GA:
             mutation={tr: Counter(mutation_counters) for tr in trackers},
         )
 
-        self.islands.extend(
-            Island(
-                identity=i,
-                curr_gen=self.curr_gen,
-                context=self.context,
-                rng=self.rng,
-                ga_params=self.ga_params,
-                operator_stats=self.operator_stats,
-                fitness_history=self.fitness_history.copy(),
-                builder=self.context.builder,
-            )
-            for i in range(self.ga_params.num_islands)
+    def _init_stagnation_handler(self) -> StagnationHandler:
+        """Initialize the stagnation handler for the GA."""
+        return StagnationHandler(
+            generation=self.generation,
+            fitness_history=self.fitness_history.copy(),
         )
-
-    @classmethod
-    def build(cls, context: GaContext) -> GA:
-        """Build and return a GA instance with the provided configuration."""
-        return cls(
-            context=context,
-            rng=context.app_config.rng,
-            observers=(TqdmObserver(), LoggingObserver()),
-            seed_file=Path(context.app_config.runtime.seed_file),
-            save_front_only=context.app_config.exports.front_only,
-        )
-
-    def __len__(self) -> int:
-        """Return the number of individuals in the population."""
-        return sum(len(i) for i in self.islands)
 
     def run(self) -> None:
         """Run the genetic algorithm and return the best schedule found."""
@@ -110,7 +129,7 @@ class GA:
         config = self.context.app_config.tournament
         try:
             start_time = time()
-            self._notify_on_start(self.ga_params.generations)
+            self._notify_on_start(self.genetic_model.parameters.generations)
             seed_pop = GALoad(
                 seed_file=seed_file,
                 config=config,
@@ -124,11 +143,11 @@ class GA:
             self.run_epochs()
         except Exception:
             logger.exception("An error occurred during the genetic algorithm run.")
-            self.fitness_history.curr_fit = self.aggregate_island_fitness()
+            self.fitness_history.current = self.aggregate_island_fitness()
             self.fitness_history.update_fitness_history()
         except KeyboardInterrupt:
             logger.debug("Genetic algorithm run interrupted by user. Saving...")
-            self.fitness_history.curr_fit = self.aggregate_island_fitness()
+            self.fitness_history.current = self.aggregate_island_fitness()
             self.fitness_history.update_fitness_history()
         finally:
             GAFinalizer(self).finalize(start_time)
@@ -158,7 +177,7 @@ class GA:
         """Seed the population for each island."""
         seeder = GASeeder(
             imports=self.context.app_config.imports,
-            ga_params=self.ga_params,
+            ga_params=self.genetic_model.parameters,
             seed_pop=seed_pop,
             rng=self.rng,
         )
@@ -173,7 +192,7 @@ class GA:
 
     def initialize_population(self) -> None:
         """Initialize the population for each island."""
-        logger.debug("Initializing %d islands...", self.ga_params.num_islands)
+        logger.debug("Initializing %d islands...", self.genetic_model.parameters.num_islands)
         for island in self.islands:
             island.initialize()
             island.evaluate_pop()
@@ -184,30 +203,34 @@ class GA:
             if self.migrate_generations[gen]:
                 self.migrate()
 
-            self.run_generation()
+            # Run the generations
+            for island in self.islands:
+                island.handle_underpopulation()
+                island.evolve()
+                island.select_next_generation()
+                island.fitness_history.update_fitness_history()
+                if island.stagnation.is_stagnant():
+                    idx_to_pop = island.stagnation.handle_stagnation(len(island.selected))
+                    island.selected.pop(idx_to_pop)
+                    logger.debug(
+                        "Stagnation. Island: %d. Generation: %d. Schedule Removed: %d.",
+                        island.identity,
+                        gen,
+                        idx_to_pop,
+                    )
+                island.handle_underpopulation()
 
-            self.fitness_history.curr_fit = self.aggregate_island_fitness()
+            self.fitness_history.current = self.aggregate_island_fitness()
             self.fitness_history.update_fitness_history()
 
-            self.fitness_history.curr_gen += 1
-            self.curr_gen += 1
+            self.generation.increment()
 
             self._notify_on_generation_end(
                 generation=gen,
-                num_generations=self.ga_params.generations,
+                num_generations=self.genetic_model.parameters.generations,
                 best_fitness=self.fitness_history.get_last_gen_fitness(),
                 pop_size=len(self),
             )
-
-    def run_generation(self) -> None:
-        """Run a single epoch of the genetic algorithm."""
-        for island in self.islands:
-            island.handle_underpopulation()
-            island.evolve()
-            island.select_next_generation()
-            island.fitness_history.update_fitness_history()
-            island.fitness_history.curr_gen += 1
-            island.curr_gen += 1
 
     def migrate(self) -> None:
         """Migrate the best individuals between islands using a ring topology."""
