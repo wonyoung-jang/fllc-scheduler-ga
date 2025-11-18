@@ -1,14 +1,14 @@
 {
   "genetic": {
     "parameters": {
-      "generations": 4096,
-      "population_size": 8,
-      "offspring_size": 1,
-      "crossover_chance": 0.6,
-      "mutation_chance": 0.3,
+      "generations": 2500,
+      "population_size": 50,
+      "offspring_size": 20,
+      "crossover_chance": 0.7,
+      "mutation_chance": 0.4,
       "num_islands": 8,
-      "migration_interval": 25,
-      "migration_size": 2,
+      "migration_interval": 100,
+      "migration_size": 3,
       "rng_seed": null
     },
     "operator": {
@@ -28,10 +28,10 @@
           "Inversion",
           "Scramble"
         ]
-      } 
+      }
     },
     "stagnation": {
-      "enable": true,
+      "enable": false,
       "proportion": 0.8,
       "threshold": 50
     }
@@ -45,7 +45,7 @@
   },
   "imports": {
     "seed_pop_sort": "random",
-    "seed_island_strategy": "concentrated"
+    "seed_island_strategy": "distributed"
   },
   "exports": {
     "output_dir": "fllc_schedule_outputs",
@@ -67,22 +67,22 @@
     "loglevel_console": "INFO"
   },
   "teams": {
-    "teams": 40
+    "teams": 52
   },
   "fitness": {
-    "weight_mean": 3,
-    "weight_variation": 2,
-    "weight_range": 1
+    "weight_mean": 1,
+    "weight_variation": 0,
+    "weight_range": 0
   },
   "locations": [
     {
       "name": "Room",
-      "count": 6,
+      "count": 9,
       "sides": 1
     },
     {
       "name": "Table",
-      "count": 3,
+      "count": 4,
       "sides": 2
     }
   ],
@@ -92,7 +92,7 @@
       "location": "Room",
       "rounds_per_team": 1,
       "teams_per_round": 1,
-      "start_time": "08:00 AM",
+      "start_time": "08:15",
       "duration_minutes": 45
     },
     {
@@ -100,16 +100,37 @@
       "location": "Table",
       "rounds_per_team": 2,
       "teams_per_round": 2,
-      "start_time": "09:00 AM",
-      "duration_minutes": 15
+      "start_time": "09:00",
+      "duration_minutes": 11
     },
     {
       "roundtype": "Table",
       "location": "Table",
       "rounds_per_team": 3,
       "teams_per_round": 2,
-      "start_time": "01:30 PM",
-      "duration_minutes": 11
+      "times": [
+        "14:00",
+        "14:07",
+        "14:15",
+        "14:22",
+        "14:30",
+        "14:37",
+        "14:45",
+        "14:52",
+        "15:00",
+        "15:07",
+        "15:15",
+        "15:22",
+        "15:30",
+        "15:37",
+        "15:45",
+        "15:52",
+        "16:00",
+        "16:07",
+        "16:15",
+        "16:22"
+      ],
+      "duration_minutes": 8
     }
   ]
 }

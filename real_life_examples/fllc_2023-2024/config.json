@@ -29,6 +29,11 @@
           "Scramble"
         ]
       }
+    },
+    "stagnation": {
+      "enable": false,
+      "proportion": 0.8,
+      "threshold": 50
     }
   },
   "runtime": {
@@ -68,9 +73,6 @@
     "weight_mean": 3,
     "weight_variation": 1,
     "weight_range": 0
-  },
-  "time": {
-    "format": 24
   },
   "locations": [
     {

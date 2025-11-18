@@ -162,7 +162,7 @@ class Island:
         n_pop = self.genetic_model.parameters.population_size
         schedule_fits, _ = self.evaluate_pop()
         fronts = self.context.nsga3.select(schedule_fits, n_pop)
-        idx_to_select = [i for f in fronts for i in f]
+        idx_to_select = [i for f in fronts for i in f][:n_pop]
 
         curr_fit = schedule_fits[idx_to_select].mean(axis=0)
         self.fitness_history.current = curr_fit
