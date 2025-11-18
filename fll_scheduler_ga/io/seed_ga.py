@@ -66,7 +66,7 @@ class GALoad:
             pop = seed_ga_data.population
 
         # Handle changes in fitness weights to not flush cache
-        if seed_ga_data.config.weights != self.config.weights:
+        if pop is not None and seed_ga_data.config.weights != self.config.weights:
             logger.info(
                 "Updating seed population fitnesses to match current weights. Old weights: %s, New weights: %s",
                 seed_ga_data.config.weights,

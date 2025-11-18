@@ -100,3 +100,6 @@ dev = [
     "snakeviz>=2.2.2",
     "vulture>=2.14",
 ]
+docs = [
+    "sphinx>=8.2.3",
+]

@@ -214,10 +214,10 @@ class FitnessEvaluator:
         ratio = 1.0 / (1.0 + coeff)
 
         # Apply penalties for zero breaks
-        zeros = (breaks_minutes == 0).sum(axis=2, where=valid_mask)
-        zeros_penalty = self._penalty**zeros
+        zeros_count = (breaks_minutes == 0).sum(axis=2, where=valid_mask)
+        zeros_penalty = self._penalty**zeros_count
 
-        # Apply penalties for overlapping breaks
+        # Apply penalties
         final_scores = ratio * zeros_penalty
         final_scores[mean_break == 0] = 0.0
         final_scores[overlap_mask] = 0.0

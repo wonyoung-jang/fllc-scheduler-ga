@@ -16,7 +16,7 @@ from ..io.observers import LoggingObserver, TqdmObserver
 from ..io.seed_ga import GALoad, GASave, GASeedData
 from .ga_generation import GaGeneration
 from .island import Island
-from .stagnation import FitnessHistory, OperatorStats, StagnationHandler
+from .stagnation import FitnessHistory, OperatorStats
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -43,7 +43,6 @@ class GA:
     save_front_only: bool
 
     generation: GaGeneration = None
-    stagnation: StagnationHandler = None
     total_population: list[Schedule] = field(default_factory=list, repr=False)
     islands: list[Island] = field(default_factory=list, repr=False)
 
@@ -114,13 +113,6 @@ class GA:
             offspring=Counter(),
             crossover={tr: Counter(crossover_counters) for tr in trackers},
             mutation={tr: Counter(mutation_counters) for tr in trackers},
-        )
-
-    def _init_stagnation_handler(self) -> StagnationHandler:
-        """Initialize the stagnation handler for the GA."""
-        return StagnationHandler(
-            generation=self.generation,
-            fitness_history=self.fitness_history.copy(),
         )
 
     def run(self) -> None:

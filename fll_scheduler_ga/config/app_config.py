@@ -280,7 +280,7 @@ class AppConfig(BaseModel):
         cls, start_times: list[datetime], dur_tdelta: timedelta, n_timeslots: int, start_dt: datetime
     ) -> Iterator[tuple[datetime, datetime]]:
         """Initialize the timeslots for the round."""
-        if start_times and start_dt:
+        if start_times and dur_tdelta:
             stop_times = start_times[1:]
             stop_times.append(stop_times[-1] + dur_tdelta)
             time_pairs = zip(start_times, stop_times, strict=True)

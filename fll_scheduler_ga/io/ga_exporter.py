@@ -203,6 +203,16 @@ class ScheduleSummaryGenerator:
                 continue
             txt.append(f"{team_id:<5}|{fitness_str}|{sum(fit):.4f}\n")
 
+        txt.append(
+            "\nTeam Events (sorted, for dev use, diff check with others to ensure truly different schedules created):\n"
+        )
+        txt.append("------------------------------------------------------------\n")
+        team_events = [sorted(events) for events in schedule.team_events.values()]
+        team_events.sort()
+        for events in team_events:
+            events_str = ", ".join(str(e) for e in events) + "\n"
+            txt.append(events_str)
+
         return txt
 
     def export(self, schedule: Schedule, path: Path) -> None:
