@@ -86,15 +86,12 @@ numpy==2.3.3
     #   contourpy
     #   fll-scheduler-ga
     #   matplotlib
-    #   pandas
 packaging==25.0
     # via
     #   matplotlib
     #   pyinstaller
     #   pyinstaller-hooks-contrib
     #   pytest
-pandas==2.3.0
-    # via fll-scheduler-ga
 pefile==2023.2.7 ; sys_platform == 'win32'
     # via pyinstaller
 pillow==11.3.0
@@ -119,15 +116,11 @@ pyparsing==3.2.5
     # via matplotlib
 pytest==8.4.1
 python-dateutil==2.9.0.post0
-    # via
-    #   matplotlib
-    #   pandas
+    # via matplotlib
 python-dotenv==1.1.1
     # via uvicorn
 python-multipart==0.0.20
     # via fastapi
-pytz==2025.2
-    # via pandas
 pywin32-ctypes==0.2.3 ; sys_platform == 'win32'
     # via pyinstaller
 pyyaml==6.0.3
@@ -177,8 +170,6 @@ typing-extensions==4.15.0
     #   typing-inspection
 typing-inspection==0.4.2
     # via pydantic
-tzdata==2025.2
-    # via pandas
 urllib3==2.5.0
     # via sentry-sdk
 uvicorn==0.38.0

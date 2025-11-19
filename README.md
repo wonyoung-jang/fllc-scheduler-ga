@@ -23,7 +23,6 @@ This project requires Python 3.13+ and the following packages:
 -   `fastapi[standard]`
 -   `matplotlib`
 -   `numpy`
--   `pandas`
 -   `pydantic`
 -   `tqdm`
 
