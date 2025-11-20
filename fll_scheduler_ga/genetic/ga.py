@@ -122,12 +122,12 @@ class GA:
         try:
             start_time = time()
             self._notify_on_start(self.genetic_model.parameters.generations)
-            seed_pop = GALoad(
+            seed_data = GALoad(
                 seed_file=seed_file,
                 config=config,
                 evaluator=self.context.evaluator,
             ).load()
-            self.seed_population(seed_pop)
+            self.seed_population(seed_data)
             self.initialize_population()
             if not any(i.selected for i in self.islands):
                 logger.critical("No valid schedule meeting all hard constraints was found.")
@@ -165,12 +165,12 @@ class GA:
         island_fitnesses = np.asarray([i.fitness_history.get_last_gen_fitness() for i in self.islands], dtype=float)
         return island_fitnesses.mean(axis=0)
 
-    def seed_population(self, seed_pop: list[Schedule] | None) -> None:
+    def seed_population(self, seed_data: GASeedData) -> None:
         """Seed the population for each island."""
         seeder = GASeeder(
             imports=self.context.app_config.imports,
             ga_params=self.genetic_model.parameters,
-            seed_pop=seed_pop,
+            seed_pop=seed_data.population,
             rng=self.rng,
         )
         if not seeder.is_valid():
@@ -180,7 +180,7 @@ class GA:
         for i, seed_indices in island_to_seed_idx.items():
             island = self.islands[i]
             for idx in seed_indices:
-                island.add_to_population(seed_pop[idx])
+                island.add_to_population(seed_data.population[idx])
 
     def initialize_population(self) -> None:
         """Initialize the population for each island."""

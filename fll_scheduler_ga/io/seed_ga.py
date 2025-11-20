@@ -38,7 +38,7 @@ class GALoad:
     config: TournamentConfig
     evaluator: FitnessEvaluator
 
-    def load(self) -> list[Schedule] | None:
+    def load(self) -> GASeedData | None:
         """Load and integrate a population from a seed file."""
         try:
             logger.debug("Loading seed population from: %s", self.seed_file)
@@ -79,7 +79,8 @@ class GALoad:
                 schedule.team_fitnesses = team_fitnesses[i]
             pop.sort(key=lambda s: -s.fitness.sum())
 
-        return pop
+        seed_ga_data.population = pop
+        return seed_ga_data
 
 
 @dataclass(slots=True)

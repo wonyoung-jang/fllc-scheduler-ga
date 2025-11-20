@@ -1,4 +1,4 @@
-"""Module to hold constants for the FLL Scheduler GA."""
+"""Module to hold constants for the scheduler."""
 
 from __future__ import annotations
 
@@ -62,11 +62,19 @@ class MutationOp(StrEnum):
 
 
 class FitnessObjective(StrEnum):
-    """Enumeration of fitness objectives for the FLL Scheduler GA."""
+    """Enumeration of fitness objectives for the scheduler."""
 
     BREAK_TIME = "BreakTime"
     LOCATION_CONSISTENCY = "LocationConsistency"
     OPPONENT_VARIETY = "OpponentVariety"
+
+
+class FitnessGroup(StrEnum):
+    """Enumeration of fitness groups for the scheduler."""
+
+    BREAKTIME = "BreakTime"
+    LOCATION = "Location"
+    OPPONENT = "Opponent"
 
 
 class SeedPopSort(StrEnum):
