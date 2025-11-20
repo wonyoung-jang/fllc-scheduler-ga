@@ -13,6 +13,10 @@ ASCII_OFFSET = 64
 FITNESS_PENALTY = 0.001
 RANDOM_SEED_RANGE = (1, 2**32 - 1)
 EPSILON = 1e-12
+TIME_FORMAT_MAP = {
+    12: "%I:%M %p",
+    24: "%H:%M",
+}
 
 CONFIG_FILE = Path("fll_scheduler_ga/config.json")
 BENCHMARKS_CACHE = Path(".benchmarks_cache/")
@@ -21,13 +25,8 @@ BENCHMARKS_CACHE = Path(".benchmarks_cache/")
 TIME_HEADER = "Time"
 RE_HHMM = re.compile(r"\d{2}:\d{2}")
 
-# For API
-API_OUTPUT_DIR = Path("fllc_api_outputs")
-
-TIME_FORMAT_MAP = {
-    12: "%I:%M %p",
-    24: "%H:%M",
-}
+# For API (future)
+# API_OUTPUT_DIR = Path("fllc_api_outputs")
 
 
 class SelectionOp(StrEnum):
@@ -67,14 +66,6 @@ class FitnessObjective(StrEnum):
     BREAK_TIME = "BreakTime"
     LOCATION_CONSISTENCY = "LocationConsistency"
     OPPONENT_VARIETY = "OpponentVariety"
-
-
-class FitnessGroup(StrEnum):
-    """Enumeration of fitness groups for the scheduler."""
-
-    BREAKTIME = "BreakTime"
-    LOCATION = "Location"
-    OPPONENT = "Opponent"
 
 
 class SeedPopSort(StrEnum):
