@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from .population import SchedulePopulation
 from .stagnation import StagnationHandler
 
 if TYPE_CHECKING:
@@ -39,16 +40,18 @@ class Island:
     builder: ScheduleBuilder
 
     selected: list[Schedule] = field(default_factory=list, repr=False)
+    population: SchedulePopulation = None
 
     stagnation: StagnationHandler = None
 
     def __post_init__(self) -> None:
         """Post-initialization."""
+        self.population = SchedulePopulation()
         self._init_stagnation()
 
     def __len__(self) -> int:
         """Return the number of individuals in the island's population."""
-        return len(self.selected)
+        return len(self.population)
 
     def _init_stagnation(self) -> None:
         """Initialize stagnation handler."""
@@ -58,10 +61,6 @@ class Island:
             fitness_history=self.fitness_history,
             model=self.genetic_model.stagnation,
         )
-
-    def pareto_front(self) -> list[Schedule]:
-        """Get the Pareto front for each island in the population."""
-        return [s for s in self.selected if s.rank == 0]
 
     def add_to_population(self, schedule: Schedule) -> bool:
         """Add a schedule to a specific island's population if it's not a duplicate."""
@@ -81,24 +80,30 @@ class Island:
         while created < needed:
             s = self.builder.build()
             if self.context.repairer.repair(s) and self.add_to_population(s):
+                self.population.add_schedule(s.schedule)
                 created += 1
+
+    @property
+    def n_needed(self) -> int:
+        """Return the number of individuals needed to fill the population."""
+        return self.genetic_model.parameters.population_size - len(self)
 
     def initialize(self) -> None:
         """Initialize the population for each island."""
-        needed = self.genetic_model.parameters.population_size - len(self)
-        if needed == 0:
+        need = self.n_needed
+        if need == 0:
             logger.debug("Island %d: Population already full with %d individuals", self.identity, len(self))
             return
-        logger.debug("Island %d: Initializing population with %d individuals", self.identity, needed)
-        self.build_n_schedules(needed)
+        logger.debug("Island %d: Initializing population with %d individuals", self.identity, need)
+        self.build_n_schedules(need)
 
     def handle_underpopulation(self) -> None:
         """Handle underpopulation by creating new individuals."""
-        needed = self.genetic_model.parameters.population_size - len(self)
-        if needed == 0:
+        need = self.n_needed
+        if need == 0:
             return
-        logger.debug("Island %d: Handling underpopulation with %d individuals", self.identity, needed)
-        self.build_n_schedules(needed)
+        logger.debug("Island %d: Handling underpopulation with %d individuals", self.identity, need)
+        self.build_n_schedules(need)
 
     def mutate_schedule(self, schedule: Schedule) -> bool:
         """Mutate a child schedule."""
@@ -141,9 +146,9 @@ class Island:
                 m_roll = self.genetic_model.parameters.mutation_chance > self.rng.random()
                 if m_roll and self.context.mutations:
                     self.mutate_schedule(child)
-                if self.context.checker.check(child):
-                    self.add_to_population(child)
 
+                if self.add_to_population(child):
+                    self.population.add_schedule(child.schedule)
                 created_cycle += 1
                 if created_cycle >= self.genetic_model.parameters.offspring_size:
                     break
@@ -154,24 +159,23 @@ class Island:
 
     def evaluate_pop(self) -> tuple[np.ndarray, np.ndarray]:
         """Evaluate the entire population."""
-        pop_array = np.array([s.schedule for s in self.selected], dtype=int)
+        pop_array = self.population.schedules
         return self.context.evaluator.evaluate_population(pop_array)
 
     def select_next_generation(self) -> None:
         """Select the next generation using NSGA-III principles."""
         n_pop = self.genetic_model.parameters.population_size
         schedule_fits, _ = self.evaluate_pop()
-        fronts = self.context.nsga3.select(schedule_fits, n_pop)
-        idx_to_select = [i for f in fronts for i in f][:n_pop]
+        _, flat, _ = self.context.nsga3.select(schedule_fits, n_pop)
 
-        curr_fit = schedule_fits[idx_to_select].mean(axis=0)
-        self.fitness_history.current = curr_fit
+        self.fitness_history.current = schedule_fits[flat].mean(axis=0)
 
         total_pop: list[Schedule] = self.selected
-
         self.selected = []
-        for i in idx_to_select:
+        for i in flat:
             self.add_to_population(total_pop[i])
+
+        self.population.schedules = self.population.schedules[flat]
 
     def give_migrants(self) -> list[Schedule]:
         """Randomly yield migrants from population."""
@@ -179,9 +183,11 @@ class Island:
         for _ in range(self.genetic_model.parameters.migration_size):
             i = self.rng.integers(0, len(self.selected))
             migrants.append(self.selected.pop(i))
+            self.population.schedules = np.delete(self.population.schedules, i, axis=0)
         return migrants
 
     def receive_migrants(self, migrants: list[Schedule]) -> None:
         """Receive migrants from another island and add them to the current island's population."""
         for migrant in migrants:
-            self.add_to_population(migrant)
+            if self.add_to_population(migrant):
+                self.population.add_schedule(migrant.schedule)

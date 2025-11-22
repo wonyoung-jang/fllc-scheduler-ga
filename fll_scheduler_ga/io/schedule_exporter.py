@@ -24,14 +24,12 @@ logger = getLogger(__name__)
 
 def normalize_teams(schedule: np.ndarray, team_ids: dict[int, str]) -> np.ndarray:
     """Normalize the schedule by reassigning team identities based on their order of appearance."""
-    normalized = np.array([-1] * len(team_ids), dtype=int)
+    normalized = np.full(len(team_ids), -1, dtype=int)
     count = 1
     for team in schedule:
-        if normalized[team] != -1:
-            continue
-
-        normalized[team] = team_ids.get(count, count)
-        count += 1
+        if team != -1 and normalized[team] == -1:
+            normalized[team] = team_ids.get(count, count)
+            count += 1
     return normalized
 
 

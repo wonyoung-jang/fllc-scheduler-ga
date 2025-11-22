@@ -157,8 +157,6 @@ class GA:
 
     def pareto_front(self) -> list[Schedule]:
         """Get the Pareto front for each island in the population."""
-        if not self.total_population:
-            return [p for i in self.islands for p in i.pareto_front()]
         return [p for p in self.total_population if p.rank == 0]
 
     def aggregate_island_fitness(self) -> np.ndarray:
@@ -182,13 +180,13 @@ class GA:
             island = self.islands[i]
             for idx in seed_indices:
                 island.add_to_population(seed_data.population[idx])
+                island.population.add_schedule(seed_data.population[idx].schedule)
 
     def initialize_population(self) -> None:
         """Initialize the population for each island."""
         logger.debug("Initializing %d islands...", self.genetic_model.parameters.num_islands)
         for island in self.islands:
             island.initialize()
-            island.evaluate_pop()
 
     def run_epochs(self) -> None:
         """Perform main evolution loop: generations and migrations."""
@@ -205,6 +203,7 @@ class GA:
                 if island.stagnation.is_stagnant():
                     idx_to_pop = island.stagnation.handle_stagnation(len(island.selected))
                     island.selected.pop(idx_to_pop)
+                    island.population.schedules = np.delete(island.population.schedules, idx_to_pop, axis=0)
                     logger.debug(
                         "Stagnation. Island: %d. Generation: %d. Schedule Removed: %d.",
                         island.identity,
@@ -339,17 +338,16 @@ class GAFinalizer:
         unique_pop = [ind for island in ga.islands for ind in island.selected]
         pop_array = np.asarray([s.schedule for island in ga.islands for s in island.selected])
         schedule_fitness, team_fitnesses = ctx.evaluator.evaluate_population(pop_array)
-        fronts = ctx.nsga3.non_dominated_sort(schedule_fitness, len(pop_array))
+        _, flat, ranks = ctx.nsga3.select(schedule_fitness, len(unique_pop))
 
         selected = {}
-        for rank, front in enumerate(fronts):
-            for idx in front:
-                idx: int
-                sch = unique_pop[idx]
-                sch.fitness = schedule_fitness[idx]
-                sch.team_fitnesses = team_fitnesses[idx]
-                sch.rank = rank
-                selected[hash(sch)] = sch
+        for rank, idx in zip(ranks, flat, strict=True):
+            idx: int
+            sch = unique_pop[idx]
+            sch.fitness = schedule_fitness[idx]
+            sch.team_fitnesses = team_fitnesses[idx]
+            sch.rank = rank
+            selected[hash(sch)] = sch
 
         ga.total_population = sorted(selected.values(), key=lambda s: (s.rank, -s.fitness.sum()))
 

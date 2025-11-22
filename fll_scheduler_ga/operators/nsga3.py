@@ -65,7 +65,7 @@ class NSGA3:
     rng: np.random.Generator
     refs: ReferenceDirections
 
-    def select(self, fits: np.ndarray, n_pop: int) -> list[np.ndarray]:
+    def select(self, fits: np.ndarray, n_pop: int) -> tuple[np.ndarray, ...]:
         """Select the next generation using NSGA-III principles."""
         fronts = self.non_dominated_sort(fits, n_pop)
         last_idx = len(fronts) - 1
@@ -75,15 +75,17 @@ class NSGA3:
 
         if len(fronts) == 1:
             fronts[0] = self.rng.permutation(selected_indices)[:n_pop]
-            return fronts
+            flat = np.concatenate(fronts)
+            ranks = self.ranks_from_fronts(fronts, fits.shape[0])
+            return fronts, flat, ranks[flat]
 
         last_front_indices = fronts[last_idx]
-        n_last_front = len(last_front_indices)
+        n_last_front = last_front_indices.size
 
         fronts = fronts[:last_idx]
 
         selected = selected_indices[:-n_last_front]
-        n_remaining = n_pop - len(selected)
+        n_remaining = n_pop - selected.size
         selected_refs = refs[:-n_last_front]
         counts = self.count(selected_refs)
         niches = self.niche(
@@ -95,12 +97,14 @@ class NSGA3:
         )
         last_front_indices = last_front_indices[niches]
         fronts.append(last_front_indices)
-        return fronts
+        flat = np.concatenate(fronts)
+        ranks = self.ranks_from_fronts(fronts, fits.shape[0])
+        return fronts, flat, ranks[flat]
 
     def non_dominated_sort(self, fits: np.ndarray, n_pop: int) -> list[np.ndarray]:
         """Perform non-dominated sorting on the population."""
-        n_pop = fits.shape[0]
-        if n_pop == 0:
+        n_fit = fits.shape[0]
+        if n_fit == 0:
             return []
 
         # Pairwise comparisons using broadcasting
@@ -111,7 +115,7 @@ class NSGA3:
         # Number of individuals that dominate j = sum over i dom[i,j]
         dom_count = dom.sum(axis=0)
         # Adjacency lists: who each i dominates
-        assigned = np.zeros(n_pop, dtype=bool)
+        assigned = np.zeros(n_fit, dtype=bool)
         fronts: list[np.ndarray] = []
 
         # Initial front: those not dominated by anybody
@@ -137,6 +141,13 @@ class NSGA3:
             current_front = next_front
         return fronts
 
+    def ranks_from_fronts(self, fronts: list[np.ndarray], n_individuals: int) -> np.ndarray:
+        """Assign ranks to individuals based on their fronts."""
+        ranks = np.full(n_individuals, fill_value=-1, dtype=int)
+        for rank, front in enumerate(fronts):
+            ranks[front] = rank
+        return ranks
+
     def niche(
         self,
         counts: np.ndarray,
@@ -146,8 +157,6 @@ class NSGA3:
         niche_dists: np.ndarray,
     ) -> np.ndarray:
         """Select k individuals from the last front using a niching mechanism."""
-        shuffle = self.rng.shuffle
-        permutation = self.rng.permutation
         # Mask of individuals in the last front still available for selection
         mask = np.full(n_last_front, fill_value=True)
         n_selected = 0
@@ -162,16 +171,18 @@ class NSGA3:
             # Number of individuals to select from this niche
             n_select = n_remaining - n_selected
             niche_indices = available_refs[np.nonzero(ref_counts == min_count)[0]]
-            niche_indices = niche_indices[permutation(len(niche_indices))[:n_select]]
+            niche_indices = niche_indices[self.rng.permutation(niche_indices.size)[:n_select]]
 
             for niche_idx in niche_indices:
                 # Indices of individuals in this niche still available
                 next_i = np.nonzero((niche_refs == niche_idx) & mask)[0]
-                shuffle(next_i)
+                self.rng.shuffle(next_i)
                 index = next_i[np.argmin(niche_dists[next_i])] if counts[niche_idx] == 0 else next_i[0]
                 mask[index] = False
                 counts[niche_idx] += 1
                 n_selected += 1
+                if n_selected >= n_remaining:
+                    break
 
         # Return the masked indices
         return np.nonzero(~mask)[0]
