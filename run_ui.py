@@ -5,7 +5,6 @@ import time
 import webbrowser
 
 import uvicorn
-
 from fll_scheduler_ga.api.main import app
 
 HOST = "127.0.0.1"

@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict
 from ..data_model.location import Location
 from ..data_model.schedule import Schedule
 from ..data_model.timeslot import TimeSlot
-from .constants import CONFIG_FILE, TIME_FORMAT_MAP
+from .constants import CONFIG_FILE_DEFAULT, TIME_FORMAT_MAP
 from .schemas import (
     AppConfigModel,
     ExportModel,
@@ -53,7 +53,7 @@ class AppConfig(BaseModel):
     def build(cls, path: Path | None = None) -> AppConfig:
         """Create and return the application configuration."""
         if path is None:
-            path = CONFIG_FILE.resolve()
+            path = CONFIG_FILE_DEFAULT.resolve()
 
         if not path.exists():
             msg = f"Configuration file does not exist at: {path}"

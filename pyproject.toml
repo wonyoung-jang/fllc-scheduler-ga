@@ -55,8 +55,12 @@ exclude = [
     "node_modules",
     "site-packages",
     "venv",
-    "scratch",
 ]
+extend-exclude = [
+    "docs",
+    ".playground",
+]
+
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F"]
@@ -71,6 +75,7 @@ ignore = [
     "PLR2004",  
     "S", 
     "TID252",  
+    "T201",
 ]
 fixable = ["ALL"]
 unfixable = []

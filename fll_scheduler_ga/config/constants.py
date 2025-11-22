@@ -18,8 +18,10 @@ TIME_FORMAT_MAP = {
     24: "%H:%M",
 }
 
-CONFIG_FILE = Path("fll_scheduler_ga/config.json")
-BENCHMARKS_CACHE = Path(".benchmarks_cache/")
+CONFIG_DIR = Path(".configs/").resolve()
+CONFIG_FILE_DEFAULT = Path("fll_scheduler_ga/config.json").resolve()
+CONFIG_FILE_ACTIVE = Path(".configs/_active_config.txt").resolve()
+BENCHMARKS_CACHE = Path(".benchmarks_cache/").resolve()
 
 # For Importer
 TIME_HEADER = "Time"
