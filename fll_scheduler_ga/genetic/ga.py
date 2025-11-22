@@ -127,7 +127,8 @@ class GA:
                 config=config,
                 evaluator=self.context.evaluator,
             ).load()
-            self.seed_population(seed_data)
+            if seed_data is not None:
+                self.seed_population(seed_data)
             self.initialize_population()
             if not any(i.selected for i in self.islands):
                 logger.critical("No valid schedule meeting all hard constraints was found.")
