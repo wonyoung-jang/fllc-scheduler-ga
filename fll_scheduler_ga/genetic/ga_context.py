@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pickle
 from collections import defaultdict
 from dataclasses import dataclass
 from logging import getLogger
@@ -17,6 +16,7 @@ from ..fitness.benchmark import FitnessBenchmark
 from ..fitness.fitness import FitnessEvaluator, HardConstraintChecker
 from ..io.csv_importer import CsvImporter
 from ..io.ga_exporter import ScheduleSummaryGenerator
+from ..io.seed_ga import GALoad, GASave
 from ..operators.crossover import build_crossovers
 from ..operators.mutation import build_mutations
 from ..operators.nsga3 import NSGA3, ReferenceDirections
@@ -160,37 +160,26 @@ class GaContext:
             parent_dir = import_path.parent
             parent_dir.mkdir(parents=True, exist_ok=True)
             report_path = parent_dir / "report.txt"
-            summary_gen = ScheduleSummaryGenerator()
+            summary_gen = ScheduleSummaryGenerator(self.app_config.exports.team_identities)
             summary_gen.export(imported_schedule_csv, report_path)
 
         if not runtime.add_import_to_population:
             logger.debug("Not adding imported schedule to population.")
             return
 
-        population = []
-        try:
-            with path.open("rb") as f:
-                seed_data = pickle.load(f)
-                population.extend(seed_data.get("population", []))
-        except (OSError, pickle.PicklingError):
-            logger.exception("Error loading seed file")
-        except EOFError:
-            logger.debug("Pickle file is empty")
+        seed_data = GALoad(
+            seed_file=path,
+            config=self.app_config.tournament,
+            evaluator=self.evaluator,
+        ).load()
 
-        if imported_schedule_csv not in population:
-            population.append(imported_schedule_csv)
+        if imported_schedule_csv not in seed_data.population:
+            seed_data.population.append(imported_schedule_csv)
 
-        try:
-            with path.open("wb") as f:
-                data_to_cache = {
-                    "population": population,
-                    "config": self.app_config.tournament,
-                }
-                pickle.dump(data_to_cache, f)
-        except (OSError, pickle.PicklingError):
-            logger.exception("Error loading seed file")
-        except EOFError:
-            logger.debug("Pickle file is empty")
+        GASave(
+            seed_file=path,
+            data=seed_data,
+        ).save()
 
 
 @dataclass(slots=True)

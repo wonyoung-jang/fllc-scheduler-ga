@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -64,12 +63,12 @@ class Plot:
 
         fig, ax = plt.subplots(figsize=(12, 7))
         columns = [f.value for f in self.objectives]
-        history_df = pd.DataFrame(data=history, columns=columns)
-        history_df.plot(kind="line", ax=ax, linewidth=2.5, alpha=0.9)
 
-        x = np.arange(len(history_df))
-        for col in history_df.columns:
-            y = history_df[col].to_numpy()
+        x = np.arange(len(history))
+        for i, col in enumerate(columns):
+            y = history[:, i]
+            ax.plot(x, y, linewidth=2.5, alpha=0.9, label=col)
+
             z = np.polyfit(x, y, 3)
             p = np.poly1d(z)
             ax.plot(x, p(x), linestyle="--", linewidth=0.8, label=f"{col} Trend (deg={len(z) - 1})")
@@ -81,62 +80,58 @@ class Plot:
 
     def plot_parallel(self) -> None:
         """Create the parallel coordinates plot."""
-        data = [[p.fitness[i] for i, _ in enumerate(self.objectives)] + [p.rank] for p in self.ga.total_population]
-        objectives = [*self.objectives, "Rank"]
-        dataframe = pd.DataFrame(data=data, columns=objectives)
+        data = np.array([p.fitness for p in self.ga.total_population])
+        ranks = np.array([p.rank for p in self.ga.total_population])
         fig, ax = plt.subplots(figsize=(12, 7))
-        pd.plotting.parallel_coordinates(
-            frame=dataframe,
-            class_column=objectives[-1],
-            ax=ax,
-            linewidth=1.5,
-            alpha=0.7,
-            colormap=self.export_model.cmap_name,
-        )
+
+        x = range(len(self.objectives))
+        colors = plt.get_cmap(self.export_model.cmap_name)(np.linspace(0, 1, len(self.ga.total_population)))
+        for i, ind_fitness in enumerate(data):
+            ax.plot(x, ind_fitness, color=colors[i], alpha=0.7, linewidth=1.5)
+
+        ax.set_xticks(x)
+        ax.set_xticklabels(self.objectives, rotation=15, ha="right")
         ax.set(title="Trade-off parallel coordinates", xlabel="Objectives", ylabel="Score")
-        ax.get_legend().remove()
         plt.xticks(rotation=15, ha="right")
-        ranks = dataframe[objectives[-1]].tolist()
         self._attach_colorbar(ax, ranks, label="Rank")
         self.finalize(fig, "pareto_parallel.png")
 
     def plot_scatter(self) -> None:
         """Create a 2D or 3D scatter plot of the Pareto front."""
-        len_obj = len(self.objectives)
-        if len_obj not in (2, 3):
-            logger.error("Cannot plot Pareto scatter for %d objectives. Only 2D and 3D supported.", len_obj)
+        n_objectives = len(self.objectives)
+        if n_objectives not in (2, 3):
+            logger.error("Cannot plot Pareto scatter for %d objectives. Only 2D and 3D supported.", n_objectives)
             return
 
-        dataframe = pd.DataFrame(data=[p.fitness for p in self.ga.total_population], columns=self.objectives)
-        ranks = [p.rank for p in self.ga.total_population]
+        cmap_name = self.export_model.cmap_name
+        data = np.array([p.fitness for p in self.ga.total_population])
+        ranks = np.array([p.rank for p in self.ga.total_population])
 
-        if len_obj == 2:
+        if n_objectives == 2:
             fig, ax = plt.subplots(figsize=(10, 8))
             x_obj, y_obj = self.objectives
-            ax.scatter(dataframe[x_obj], dataframe[y_obj], c=ranks, cmap=self.export_model.cmap_name, s=60, alpha=0.8)
+            ax.scatter(data[:, 0], data[:, 1], c=ranks, cmap=cmap_name, s=60, alpha=0.8)
             ax.set(
-                title=f"{len(self.ga.context.evaluator.objectives)}D scatter plot of schedules",
+                title=f"{n_objectives}D scatter plot of schedules",
                 xlabel=x_obj,
                 ylabel=y_obj,
             )
             self._attach_colorbar(ax, ranks, label="Rank")
-            self.finalize(fig, f"pareto_scatter_{len_obj}d.png")
-        elif len_obj == 3:
+            self.finalize(fig, f"pareto_scatter_{n_objectives}d.png")
+        elif n_objectives == 3:
             fig, ax = plt.subplots(figsize=(10, 8), subplot_kw={"projection": "3d"})
             x_obj, y_obj, z_obj = self.objectives
             ax.view_init(azim=45, elev=40)
-            ax.scatter(
-                dataframe[x_obj], dataframe[y_obj], dataframe[z_obj], c=ranks, cmap=self.export_model.cmap_name, s=60
-            )
+            ax.scatter(data[:, 0], data[:, 1], data[:, 2], c=ranks, cmap=cmap_name, s=60)
             ax.set(
-                title=f"{len(self.ga.context.evaluator.objectives)}D scatter plot of schedules",
+                title=f"{n_objectives}D scatter plot of schedules",
                 xlabel=x_obj,
                 ylabel=y_obj,
                 zlabel=z_obj,
                 box_aspect=[1, 1, 1],
             )
             self._attach_colorbar(ax, ranks, label="Rank")
-            self.finalize(fig, f"pareto_scatter_{len_obj}d.png")
+            self.finalize(fig, f"pareto_scatter_{n_objectives}d.png")
             ax.scatter(
                 self.ref_points[:, 0],
                 self.ref_points[:, 1],
@@ -146,7 +141,7 @@ class Plot:
                 label="Reference Points",
             )
             ax.legend()
-            self.finalize(fig, f"pareto_scatter_{len_obj}d_ref.png")
+            self.finalize(fig, f"pareto_scatter_{n_objectives}d_ref.png")
 
     def finalize(self, fig: Figure, filename: str) -> None:
         """Finalize the plot by saving or showing it."""
