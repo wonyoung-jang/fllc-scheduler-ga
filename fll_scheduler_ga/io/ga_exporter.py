@@ -152,7 +152,7 @@ class ScheduleSummaryGenerator:
 
     team_identities: dict[int, str]
 
-    def get_text_summary(self, schedule: Schedule) -> list[str]:
+    def get_text_summary(self, schedule: Schedule) -> list[str]:  # noqa: PLR0915
         """Get a text summary of the schedule."""
         txt = []
         objectives = list(FitnessObjective)
@@ -176,6 +176,19 @@ class ScheduleSummaryGenerator:
         txt.append(f"{'-' * (max_len_obj + 15)}\n")
         txt.append(f"{'Total':<{max_len_obj}}: {sum(schedule.fitness):.6f}\n")
         txt.append(f"{'Percentage':<{max_len_obj}}: {sum(schedule.fitness) / len(schedule.fitness):.2%}\n")
+
+        team_fits = schedule.team_fitnesses
+        min_obj = team_fits.min(axis=0)
+        max_obj = team_fits.max(axis=0)
+        mean_obj = team_fits.mean(axis=0)
+
+        txt.append("\nPer-Objective Statistics (Team Distribution):\n")
+        txt.append("-" * 65 + "\n")
+        txt.append(f"{'Objective':<25} | {'Min':<8} | {'Max':<8} | {'Avg':<8}\n")
+        txt.append("-" * 65 + "\n")
+
+        for i, name in enumerate(objectives):
+            txt.append(f"{name:<25} | {min_obj[i]:<8.4f} | {max_obj[i]:<8.4f} | {mean_obj[i]:<8.4f}\n")
 
         all_teams = schedule.teams
         team_fits = schedule.team_fitnesses
