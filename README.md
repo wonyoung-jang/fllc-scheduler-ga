@@ -2,7 +2,26 @@
 
 ![Image of scatterplot](/assets/2022-2023/after_512_generations/pareto_scatter_3d.png)
 
+## Table of Contents
+
+- [Features](#features)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+- [Usage](#usage)
+  - [Create a Configuration File](#1-create-a-configuration-file)
+  - [Run the Scheduler](#2-run-the-scheduler)
+  - [Review the Output](#3-review-the-output)
+- [Setup Configuration with CLI](#setup-configuration-with-cli)
+  - [How to use a different configuration](#how-to-use-a-different-configuration)
+  - [How to list the current configs](#how-to-list-the-current-configs)
+  - [How to set a new active config](#how-to-set-a-new-active-config)
+  - [How to add a config](#how-to-add-a-config)
+  - [How to remove a config](#how-to-remove-a-config)
+
 FLL-C Scheduler NSGA-III uses a multi-objective optimization non-dominated sorting genetic algorithm (NSGA-III) to generate tournament schedules for FIRST LEGO League Challenge.
+
+
 
 ## [Click here for a run through of a comparison with a real FLLC schedule](/REAL_LIFE_EXAMPLES.md)
 
@@ -75,6 +94,12 @@ Create a file named `config.json` to define your tournament's structure. The con
 ##### Mutation
 
 -   `types`: List of mutation operator names to sample from (e.g., `SwapMatch_CrossTimeLocation`, `SwapMatch_SameLocation`, `SwapMatch_SameTime`, `SwapTeam_CrossTimeLocation`, `SwapTeam_SameLocation`, `SwapTeam_SameTime`, `SwapTableSide`, `Inversion`, `Scramble`).
+
+#### Stagnation Handler:
+
+-   `enable`: If true, handle stagnation in fitness.
+-   `proportion`: Proportion of schedules that are not better than the first in the threshold for the algorithm to be considered stagnant.
+-   `threshold`: Number of previous generations to compare.
 
 #### Runtime:
 
@@ -175,6 +200,11 @@ Create a file named `config.json` to define your tournament's structure. The con
           "Scramble"
         ]
       }
+    },
+    "stagnation": {
+      "enable": false,
+      "proportion": 0.8,
+      "threshold": 50
     }
   }
   "runtime": {
@@ -277,3 +307,48 @@ After the run is complete, the following files will be created in the directory 
 -   `fitness_vs_generation.png`: A line graph showing how the average fitness of the best solutions improved over each generation.
 -   `pareto_front.png`: A parallel coordinates plot showing the trade-offs between the different objectives for all optimal solutions found.
 -   `pareto_scatter_(2d or 3d).png`: (For 2 or 3 objectives) A scatter plot visualizing the Pareto front.
+
+
+## Setup Configuration with CLI
+
+Configurations will be kept in a `/.configs` directory created at the root of this project. The current active configuration's path will be stored in a `/.configs/_active_config.txt` file. The default configuration will be the `/fll_scheduler_ga/config.json` of this repo. 
+
+### How to use a different configuration
+
+Use `--config` or `-c`, plus the path to the config.json.
+
+```bash
+uv run fll_scheduler_ga --config "path_to_other_config"
+```
+
+### How to list the current configs
+
+Use `--list` or `-l`. 
+
+```bash
+uv run fll_scheduler_ga --list
+```
+
+### How to set a new active config
+
+Use `--set` or `s`, plus either the index, name, or path of the config within the `.configs` directory.
+
+```bash
+uv run fll_scheduler_ga --set "config_4"
+```
+
+### How to add a config
+
+Use `--add` or `a`, plus the path of the config.json, and optionally the desired name of the config.
+
+```bash
+uv run fll_scheduler_ga --add "path_to_config" "config_2"
+```
+
+### How to remove a config
+
+Use `--remove` or `r`, plus the index, name, or path of the config within the `.configs` directory.
+
+```bash
+uv run fll_scheduler_ga --remove 0
+```
