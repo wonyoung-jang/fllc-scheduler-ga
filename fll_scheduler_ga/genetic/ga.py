@@ -196,21 +196,7 @@ class GA:
 
             # Run the generations
             for island in self.islands:
-                island.handle_underpopulation()
-                island.evolve()
-                island.select_next_generation()
-                island.fitness_history.update_fitness_history()
-                if island.stagnation.is_stagnant():
-                    idx_to_pop = island.stagnation.handle_stagnation(len(island.selected))
-                    island.selected.pop(idx_to_pop)
-                    island.population.schedules = np.delete(island.population.schedules, idx_to_pop, axis=0)
-                    logger.debug(
-                        "Stagnation. Island: %d. Generation: %d. Schedule Removed: %d.",
-                        island.identity,
-                        gen,
-                        idx_to_pop,
-                    )
-                island.handle_underpopulation()
+                island.run_epoch()
 
             self.fitness_history.current = self.aggregate_island_fitness()
             self.fitness_history.update_fitness_history()

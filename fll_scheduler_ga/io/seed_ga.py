@@ -51,7 +51,7 @@ class GALoad:
             logger.debug("Pickle file is empty")
             return None
 
-        pop = None
+        pop = []
         if seed_ga_data.version != DATA_MODEL_VERSION:
             logger.warning(
                 "Seed population data version mismatch: Expected (%d), found (%d). Dismissing old seed file...",
@@ -60,6 +60,7 @@ class GALoad:
             )
         elif seed_ga_data.config != self.config:
             logger.warning("Seed population does not match current config. Using current...")
+            seed_ga_data.config = self.config
         elif not seed_ga_data.population:
             logger.warning("Seed population is missing. Using current...")
         else:

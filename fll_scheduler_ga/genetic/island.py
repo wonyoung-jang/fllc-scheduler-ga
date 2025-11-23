@@ -53,6 +53,24 @@ class Island:
         """Return the number of individuals in the island's population."""
         return len(self.population)
 
+    def run_epoch(self) -> None:
+        """Run a full epoch: evaluate, select, evolve, and handle stagnation."""
+        self.handle_underpopulation()
+        self.evolve()
+        self.select_next_generation()
+        self.fitness_history.update_fitness_history()
+        if self.stagnation.is_stagnant():
+            idx_to_pop = self.stagnation.handle_stagnation(len(self.selected))
+            self.selected.pop(idx_to_pop)
+            self.population.schedules = np.delete(self.population.schedules, idx_to_pop, axis=0)
+            logger.debug(
+                "Stagnation. Island: %d. Generation: %d. Schedule Removed: %d.",
+                self.identity,
+                self.generation.curr,
+                idx_to_pop,
+            )
+        self.handle_underpopulation()
+
     def _init_stagnation(self) -> None:
         """Initialize stagnation handler."""
         self.stagnation = StagnationHandler(
