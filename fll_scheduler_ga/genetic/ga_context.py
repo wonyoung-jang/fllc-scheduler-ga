@@ -26,6 +26,7 @@ from .builder import ScheduleBuilder
 
 if TYPE_CHECKING:
     from ..config.app_config import AppConfig
+    from ..config.schemas import ExportModel, RuntimeModel, TournamentConfig
     from ..data_model.timeslot import TimeSlot
     from ..operators.crossover import Crossover
     from ..operators.mutation import Mutation
@@ -49,10 +50,6 @@ class GaContext:
     selection: Selection
     crossovers: tuple[Crossover, ...]
     mutations: tuple[Mutation, ...]
-
-    def __post_init__(self) -> None:
-        """Post-initialization actions."""
-        self.handle_import_file()
 
     @classmethod
     def build(cls, app_config: AppConfig) -> GaContext:
@@ -133,53 +130,68 @@ class GaContext:
             mutations=mutations,
         )
 
-    def handle_import_file(self) -> None:
+
+@dataclass(slots=True)
+class RuntimeStartup:
+    """Handle start of runtime with seed file handling and CSV import."""
+
+    runtime: RuntimeModel
+    exports: ExportModel
+    config: TournamentConfig
+    event_factory: EventFactory
+    event_properties: EventProperties
+    evaluator: FitnessEvaluator
+
+    def run(self) -> None:
+        """Run the import schedule handler."""
+        seed_file = Path(self.runtime.seed_file).resolve()
+        self._flush(seed_file)
+        if imported_schedule := self._import():
+            self._add(seed_file, imported_schedule)
+
+    def _flush(self, seed_file: Path) -> None:
+        """Flush the seed file if specified in runtime settings."""
+        if self.runtime.flush and seed_file.exists():
+            seed_file.unlink(missing_ok=True)
+            logger.debug("Flushed seed file at: %s", seed_file)
+        seed_file.touch(exist_ok=True)
+
+    def _import(self) -> Schedule | None:
         """Handle the import file for the genetic algorithm."""
-        runtime = self.app_config.runtime
-        config = self.app_config.tournament
-        path = Path(runtime.seed_file).resolve()
-
-        if runtime.flush and path.exists():
-            path.unlink(missing_ok=True)
-        path.touch(exist_ok=True)
-
-        if not runtime.import_file:
+        if not self.runtime.import_file:
             logger.debug("No import file specified, skipping import step.")
-            return
+            return None
 
-        import_path = Path(runtime.import_file).resolve()
-        csv_importer = CsvImporter(import_path, config, self.event_factory, self.event_properties)
-        imported_schedule_csv = csv_importer.schedule
+        import_path = Path(self.runtime.import_file).resolve()
+        csv_importer = CsvImporter(import_path, self.config, self.event_factory, self.event_properties)
+        imported_schedule = csv_importer.schedule
 
-        pop = np.array([imported_schedule_csv.schedule], dtype=int)
+        pop = np.array([imported_schedule.schedule], dtype=int)
 
         if fits := self.evaluator.evaluate_population(pop):
             sched_fits, team_fits = fits
-            imported_schedule_csv.fitness = sched_fits[0]
-            imported_schedule_csv.team_fitnesses = team_fits[0]
+            imported_schedule.fitness = sched_fits[0]
+            imported_schedule.team_fitnesses = team_fits[0]
             parent_dir = import_path.parent
             parent_dir.mkdir(parents=True, exist_ok=True)
             report_path = parent_dir / "report.txt"
-            summary_gen = ScheduleSummaryGenerator(self.app_config.exports.team_identities)
-            summary_gen.export(imported_schedule_csv, report_path)
+            summary_gen = ScheduleSummaryGenerator(self.exports.team_identities)
+            summary_gen.export(imported_schedule, report_path)
 
-        if not runtime.add_import_to_population:
+        return imported_schedule
+
+    def _add(self, seed_file: Path, imported_schedule: Schedule) -> None:
+        """Add an imported schedule to the GA population."""
+        if not self.runtime.add_import_to_population:
             logger.debug("Not adding imported schedule to population.")
             return
 
-        seed_data = GALoad(
-            seed_file=path,
-            config=self.app_config.tournament,
-            evaluator=self.evaluator,
-        ).load()
+        seed_data = GALoad(seed_file=seed_file, config=self.config, evaluator=self.evaluator).load()
 
-        if imported_schedule_csv not in seed_data.population:
-            seed_data.population.append(imported_schedule_csv)
+        if imported_schedule not in seed_data.population:
+            seed_data.population.append(imported_schedule)
 
-        GASave(
-            seed_file=path,
-            data=seed_data,
-        ).save()
+        GASave(seed_file=seed_file, data=seed_data).save()
 
 
 @dataclass(slots=True)

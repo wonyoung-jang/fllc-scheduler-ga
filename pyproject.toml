@@ -100,6 +100,7 @@ verbose = false
 dev = [
     "pyinstaller>=6.16.0",
     "pytest>=8.4.1",
+    "pytest-cov>=7.0.0",
     "snakeviz>=2.2.2",
     "vulture>=2.14",
 ]

@@ -38,9 +38,7 @@ class CsvImporter:
     def __post_init__(self) -> None:
         """Post-initialization to validate the CSV file."""
         self.validate_inputs()
-
         self.round_configs = {r.roundtype: r for r in self.config.rounds}
-
         self.rtl_map = {}
         for e in self.event_factory.build_indices():
             rt = self.event_properties.roundtype[e]
@@ -52,9 +50,7 @@ class CsvImporter:
             key = (rt, (ts.start, ts.stop), (loc_type, loc_name, teams_per_round, loc_side))
             self.rtl_map[key] = e
 
-        self.schedule = Schedule(origin="CSV Importer")
         self.import_schedule()
-
         if not self.schedule:
             logger.error("Failed to reconstruct schedule from CSV. Aborting.")
             return
@@ -72,6 +68,7 @@ class CsvImporter:
     def import_schedule(self) -> None:
         """Import schedule from the CSV file."""
         try:
+            self.schedule = Schedule(origin="CSV Importer")
             with self.csv_path.open(encoding="utf-8-sig") as f:
                 self.schedule_from_csv(f)
         except FileNotFoundError:

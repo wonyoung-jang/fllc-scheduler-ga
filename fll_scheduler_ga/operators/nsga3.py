@@ -20,6 +20,8 @@ class ReferenceDirections:
 
     n_obj: int
     n_pop: int
+
+    n_refs: int = 0
     points: np.ndarray = None
     norm_sq: np.ndarray = None
 
@@ -30,7 +32,7 @@ class ReferenceDirections:
 
     def __len__(self) -> int:
         """Return the number of reference points."""
-        return len(self.points)
+        return self.n_refs
 
     def init_ref_points(self) -> None:
         """Generate a set of structured reference points."""
@@ -49,7 +51,8 @@ class ReferenceDirections:
             coords[-1] = m + p - 1 - dividers[-1] - 1
             coordinates.append(coords / p)
         self.points = np.array(coordinates, dtype=float)
-        logger.debug("Generated %d reference points:\n%s", len(self.points), self.points)
+        self.n_refs = self.points.shape[0]
+        logger.debug("Generated %d reference points:\n%s", self.n_refs, self.points)
 
     def init_norm_sq(self) -> None:
         """Initialize the squared norms of the reference points."""
@@ -59,49 +62,11 @@ class ReferenceDirections:
 
 
 @dataclass(slots=True)
-class NSGA3:
-    """Non-dominated Sorting Genetic Algorithm III (NSGA-III)."""
+class NonDominatedSorting:
+    """Non-dominated sorting utility."""
 
-    rng: np.random.Generator
-    refs: ReferenceDirections
-
-    def select(self, fits: np.ndarray, n_pop: int) -> tuple[np.ndarray, ...]:
-        """Select the next generation using NSGA-III principles."""
-        fronts = self.non_dominated_sort(fits, n_pop)
-        last_idx = len(fronts) - 1
-        selected_indices = np.array([i for f in fronts for i in f], dtype=int)
-        selected_fits = fits[selected_indices]
-        refs, distances = self.norm_and_associate(selected_fits)
-
-        if len(fronts) == 1:
-            fronts[0] = self.rng.permutation(selected_indices)[:n_pop]
-            flat = np.concatenate(fronts)
-            ranks = self.ranks_from_fronts(fronts, fits.shape[0])
-            return fronts, flat, ranks[flat]
-
-        last_front_indices = fronts[last_idx]
-        n_last_front = last_front_indices.size
-
-        fronts = fronts[:last_idx]
-
-        selected = selected_indices[:-n_last_front]
-        n_remaining = n_pop - selected.size
-        selected_refs = refs[:-n_last_front]
-        counts = self.count(selected_refs)
-        niches = self.niche(
-            counts=counts,
-            n_last_front=n_last_front,
-            n_remaining=n_remaining,
-            niche_refs=refs[-n_last_front:],
-            niche_dists=distances[-n_last_front:],
-        )
-        last_front_indices = last_front_indices[niches]
-        fronts.append(last_front_indices)
-        flat = np.concatenate(fronts)
-        ranks = self.ranks_from_fronts(fronts, fits.shape[0])
-        return fronts, flat, ranks[flat]
-
-    def non_dominated_sort(self, fits: np.ndarray, n_pop: int) -> list[np.ndarray]:
+    @staticmethod
+    def get_fronts(fits: np.ndarray, n_pop: int) -> list[np.ndarray]:
         """Perform non-dominated sorting on the population."""
         n_fit = fits.shape[0]
         if n_fit == 0:
@@ -141,6 +106,56 @@ class NSGA3:
             current_front = next_front
         return fronts
 
+
+@dataclass(slots=True)
+class NSGA3:
+    """Non-dominated Sorting Genetic Algorithm III (NSGA-III)."""
+
+    rng: np.random.Generator
+    refs: ReferenceDirections
+
+    sorting: NonDominatedSorting = None
+
+    def __post_init__(self) -> None:
+        """Post-initialization checks."""
+        self.sorting = NonDominatedSorting()
+
+    def select(self, fits: np.ndarray, n_pop: int) -> tuple[np.ndarray, ...]:
+        """Select the next generation using NSGA-III principles."""
+        fronts = self.sorting.get_fronts(fits, n_pop)
+        last_idx = len(fronts) - 1
+        selected_indices = np.array([i for f in fronts for i in f], dtype=int)
+        selected_fits = fits[selected_indices]
+        refs, distances = self.norm_and_associate(selected_fits)
+
+        if len(fronts) == 1:
+            fronts[0] = self.rng.permutation(selected_indices)[:n_pop]
+            flat = np.concatenate(fronts)
+            ranks = self.ranks_from_fronts(fronts, fits.shape[0])
+            return fronts, flat, ranks[flat]
+
+        last_front_indices = fronts[last_idx]
+        n_last_front = last_front_indices.size
+
+        fronts = fronts[:last_idx]
+
+        selected = selected_indices[:-n_last_front]
+        n_remaining = n_pop - selected.size
+        niche_selected = refs[:-n_last_front]
+        counts = self.count(niche_selected)
+        niches = self.niche(
+            counts=counts,
+            n_last_front=n_last_front,
+            n_remaining=n_remaining,
+            niche_refs=refs[-n_last_front:],
+            niche_dists=distances[-n_last_front:],
+        )
+        last_front_indices = last_front_indices[niches]
+        fronts.append(last_front_indices)
+        flat = np.concatenate(fronts)
+        ranks = self.ranks_from_fronts(fronts, fits.shape[0])
+        return fronts, flat, ranks[flat]
+
     def ranks_from_fronts(self, fronts: list[np.ndarray], n_individuals: int) -> np.ndarray:
         """Assign ranks to individuals based on their fronts."""
         ranks = np.full(n_individuals, fill_value=-1, dtype=int)
@@ -158,7 +173,7 @@ class NSGA3:
     ) -> np.ndarray:
         """Select k individuals from the last front using a niching mechanism."""
         # Mask of individuals in the last front still available for selection
-        mask = np.full(n_last_front, fill_value=True)
+        mask = np.full(n_last_front, fill_value=True, dtype=bool)
         n_selected = 0
         while n_selected < n_remaining:
             # All reference points associated with individuals still available
@@ -187,7 +202,7 @@ class NSGA3:
         # Return the masked indices
         return np.nonzero(~mask)[0]
 
-    def norm_and_associate(self, fits: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    def norm_and_associate(self, fits: np.ndarray) -> tuple[np.ndarray, ...]:
         """Normalize objectives then associate individuals with nearest reference points."""
         ideal = fits.max(axis=0)
         nadir = fits.min(axis=0)
@@ -215,9 +230,9 @@ class NSGA3:
 
         return chosen_refs, min_dists
 
-    def count(self, idx_to_count: np.ndarray) -> np.ndarray:
+    def count(self, niche_selected: np.ndarray) -> np.ndarray:
         """Count how many individuals are associated with each reference point."""
-        counts = np.zeros(len(self.refs))
-        indices, count = np.unique(idx_to_count, return_counts=True)
+        counts = np.zeros(self.refs.n_refs, dtype=int)
+        indices, count = np.unique(niche_selected, return_counts=True)
         counts[indices] = count
         return counts
