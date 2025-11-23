@@ -26,7 +26,6 @@ from .builder import ScheduleBuilder
 
 if TYPE_CHECKING:
     from ..config.app_config import AppConfig
-    from ..config.schemas import ExportModel, RuntimeModel, TournamentConfig
     from ..data_model.timeslot import TimeSlot
     from ..operators.crossover import Crossover
     from ..operators.mutation import Mutation
@@ -116,7 +115,7 @@ class GaContext:
             rng=rng,
         )
 
-        return cls(
+        ga_context_instance = cls(
             app_config=app_config,
             event_factory=event_factory,
             event_properties=event_properties,
@@ -130,63 +129,71 @@ class GaContext:
             mutations=mutations,
         )
 
+        RuntimeStartup(
+            config=app_config,
+            context=ga_context_instance,
+        ).run()
+
+        return ga_context_instance
+
 
 @dataclass(slots=True)
 class RuntimeStartup:
     """Handle start of runtime with seed file handling and CSV import."""
 
-    runtime: RuntimeModel
-    exports: ExportModel
-    config: TournamentConfig
-    event_factory: EventFactory
-    event_properties: EventProperties
-    evaluator: FitnessEvaluator
+    config: AppConfig
+    context: GaContext
 
     def run(self) -> None:
         """Run the import schedule handler."""
-        seed_file = Path(self.runtime.seed_file).resolve()
+        seed_file = Path(self.config.runtime.seed_file).resolve()
         self._flush(seed_file)
         if imported_schedule := self._import():
             self._add(seed_file, imported_schedule)
 
     def _flush(self, seed_file: Path) -> None:
         """Flush the seed file if specified in runtime settings."""
-        if self.runtime.flush and seed_file.exists():
+        if self.config.runtime.flush and seed_file.exists():
             seed_file.unlink(missing_ok=True)
             logger.debug("Flushed seed file at: %s", seed_file)
         seed_file.touch(exist_ok=True)
 
     def _import(self) -> Schedule | None:
         """Handle the import file for the genetic algorithm."""
-        if not self.runtime.import_file:
+        if not self.config.runtime.import_file:
             logger.debug("No import file specified, skipping import step.")
             return None
 
-        import_path = Path(self.runtime.import_file).resolve()
-        csv_importer = CsvImporter(import_path, self.config, self.event_factory, self.event_properties)
+        import_path = Path(self.config.runtime.import_file).resolve()
+        csv_importer = CsvImporter(
+            import_path,
+            self.config.tournament,
+            self.context.event_factory,
+            self.context.event_properties,
+        )
         imported_schedule = csv_importer.schedule
 
         pop = np.array([imported_schedule.schedule], dtype=int)
 
-        if fits := self.evaluator.evaluate_population(pop):
+        if fits := self.context.evaluator.evaluate_population(pop):
             sched_fits, team_fits = fits
             imported_schedule.fitness = sched_fits[0]
             imported_schedule.team_fitnesses = team_fits[0]
             parent_dir = import_path.parent
             parent_dir.mkdir(parents=True, exist_ok=True)
             report_path = parent_dir / "report.txt"
-            summary_gen = ScheduleSummaryGenerator(self.exports.team_identities)
+            summary_gen = ScheduleSummaryGenerator(self.config.exports.team_identities)
             summary_gen.export(imported_schedule, report_path)
 
         return imported_schedule
 
     def _add(self, seed_file: Path, imported_schedule: Schedule) -> None:
         """Add an imported schedule to the GA population."""
-        if not self.runtime.add_import_to_population:
+        if not self.config.runtime.add_import_to_population:
             logger.debug("Not adding imported schedule to population.")
             return
 
-        seed_data = GALoad(seed_file=seed_file, config=self.config, evaluator=self.evaluator).load()
+        seed_data = GALoad(seed_file=seed_file, config=self.config.tournament, evaluator=self.context.evaluator).load()
 
         if imported_schedule not in seed_data.population:
             seed_data.population.append(imported_schedule)

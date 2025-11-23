@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 import fll_scheduler_ga.io.ga_exporter as ga_export
 from fll_scheduler_ga.genetic.ga import GA
-from fll_scheduler_ga.genetic.ga_context import GaContext, RuntimeStartup
+from fll_scheduler_ga.genetic.ga_context import GaContext
 
 if TYPE_CHECKING:
     from .config.app_config import AppConfig
@@ -53,14 +53,6 @@ def run_ga_instance(app_config: AppConfig) -> None:
     """
     try:
         context = GaContext.build(app_config)
-        RuntimeStartup(
-            runtime=app_config.runtime,
-            exports=app_config.exports,
-            config=app_config.tournament,
-            event_factory=context.event_factory,
-            event_properties=context.event_properties,
-            evaluator=context.evaluator,
-        ).run()
         ga = GA.build(context)
     except Exception:
         logger.exception("Error building GA context from app_config")
