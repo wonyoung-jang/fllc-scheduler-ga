@@ -294,13 +294,13 @@ class ParetoSummaryGenerator:
     def get_pareto_summary(self, pop: list[Schedule]) -> list[list[str]]:
         """Get a summary of the Pareto front."""
         summary: list[list[str]] = []
-        header = ["Schedule", "ID", "Hash", "Rank"]
+        header = ["Schedule", "ID", "Hash", "Length", "Rank"]
         header.extend(name.value for name in FitnessObjective)
         header.extend(["Sum", "Origin", "Mutations", "Clones"])
         summary.append(header)
 
         for i, s in enumerate(pop, start=1):
-            row = [str(i), str(id(s)), str(hash(s)), str(s.rank)]
+            row = [str(i), str(id(s)), str(hash(s)), str(len(s)), str(s.rank)]
             row.extend(f"{score:.4f}" for score in s.fitness)
             row.append(f"{s.fitness.sum():.4f}")
             row.extend([s.origin, str(s.mutations), str(s.clones)])

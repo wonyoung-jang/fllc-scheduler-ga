@@ -57,8 +57,8 @@ class Repairer:
             filled = True
             for key, teams_for_rt in teams.items():
                 _, tpr = key
-                if len(set(teams_for_rt)) < tpr:
-                    continue  # Not enough unique teams to fill a match, skip
+                # if len(set(teams_for_rt)) < tpr:
+                #     continue  # Not enough unique teams to fill a match, skip
 
                 if not (events_for_rt := events.get(key)):
                     msg = f"No available events for round type {key[0]} with teams per round {tpr}"
@@ -160,9 +160,6 @@ class Repairer:
         self, teams: dict[int, int], events: dict[int, int], schedule: Schedule
     ) -> tuple[list[int], list[int]]:
         """Assign match events to teams that need them."""
-        if len(teams) % 2 != 0:
-            logger.debug("Odd number of teams (%d) for match assignment, one team will be left out.", len(teams))
-
         while len(teams) >= 2:
             tkey = self.rng.choice(list(teams.keys()))
             t1 = teams.pop(tkey)
@@ -176,6 +173,22 @@ class Repairer:
             else:
                 teams[tkey] = t1
                 break
+
+        # Handle case where odd number of teams and odd number of events required
+        if len(teams) == 1 and events:
+            tkey = next(iter(teams.keys()))
+            t_solo = teams.pop(tkey)
+            event_keys = list(events.keys())
+            self.rng.shuffle(event_keys)
+            for ekey in event_keys:
+                e1 = events[ekey]
+                if schedule.conflicts(t_solo, e1):
+                    continue
+                schedule.assign(t_solo, e1)
+                events.pop(ekey)
+                break
+            else:
+                teams[tkey] = t_solo
 
         return list(teams.values()), list(events.values())
 

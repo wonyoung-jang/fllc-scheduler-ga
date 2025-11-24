@@ -179,8 +179,8 @@ class GA:
         for i, seed_indices in island_to_seed_idx.items():
             island = self.islands[i]
             for idx in seed_indices:
-                island.add_to_population(seed_data.population[idx])
-                island.population.add_schedule(seed_data.population[idx].schedule)
+                if island.add_to_population(seed_data.population[idx]):
+                    island.population.add_schedule(seed_data.population[idx].schedule)
 
     def initialize_population(self) -> None:
         """Initialize the population for each island."""

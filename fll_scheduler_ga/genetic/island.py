@@ -83,7 +83,7 @@ class Island:
     def add_to_population(self, schedule: Schedule) -> bool:
         """Add a schedule to a specific island's population if it's not a duplicate."""
         self.operator_stats.offspring["total"] += 1
-        if schedule not in self.selected:
+        if self.context.checker.check(schedule) and schedule not in self.selected:
             self.selected.append(schedule)
             self.operator_stats.offspring["success"] += 1
             return True
