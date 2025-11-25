@@ -181,14 +181,17 @@ class ScheduleSummaryGenerator:
         min_obj = team_fits.min(axis=0)
         max_obj = team_fits.max(axis=0)
         mean_obj = team_fits.mean(axis=0)
+        range_obj = max_obj - min_obj
 
         txt.append("\nPer-Objective Statistics (Team Distribution):\n")
         txt.append("-" * 65 + "\n")
-        txt.append(f"{'Objective':<25} | {'Min':<8} | {'Max':<8} | {'Avg':<8}\n")
+        txt.append(f"{'Objective':<25} | {'Min':<8} | {'Max':<8} | {'Avg':<8} | {'Range':<8}\n")
         txt.append("-" * 65 + "\n")
 
         for i, name in enumerate(objectives):
-            txt.append(f"{name:<25} | {min_obj[i]:<8.4f} | {max_obj[i]:<8.4f} | {mean_obj[i]:<8.4f}\n")
+            txt.append(
+                f"{name:<25} | {min_obj[i]:<8.4f} | {max_obj[i]:<8.4f} | {mean_obj[i]:<8.4f} | {range_obj[i]:<8.4f}\n"
+            )
 
         all_teams = schedule.teams
         team_fits = schedule.team_fitnesses

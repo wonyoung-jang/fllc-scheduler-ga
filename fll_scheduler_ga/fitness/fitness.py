@@ -114,11 +114,18 @@ class FitnessEvaluator:
         team_fitnesses[:, :, 2] = self.score_opp_variety(paired_evt_ids, pop_array)
 
         # Aggregate team scores into schedule scores
+        min_s = team_fitnesses.min(axis=1)
         mean_s = team_fitnesses.mean(axis=1)
-        coeffs_s = team_fitnesses.std(axis=1) / (mean_s + self._epsilon)
-        vari_s = 1.0 / (1.0 + coeffs_s)
+        mean_s = (mean_s * 0.5) + (min_s * 0.5)
+        mean_s[mean_s == 0] = self._epsilon
+
+        stddev_s = team_fitnesses.std(axis=1)
+        coeff_s = stddev_s / mean_s
+        vari_s = 1.0 / (1.0 + coeff_s)
+
         ptp = np.ptp(team_fitnesses, axis=1)
         range_s = 1.0 / (1.0 + ptp)
+
         mw, vw, rw = self.config.weights
         schedule_fitnesses = (mean_s * mw) + (vari_s * vw) + (range_s * rw)
 
@@ -202,23 +209,31 @@ class FitnessEvaluator:
 
         # Calculate mean
         count = valid_mask.sum(axis=2, dtype=float)
-        mean_break = breaks_minutes.sum(axis=2, where=valid_mask) / (count + self._epsilon)
+        count[count == 0] = self._epsilon
+
+        mean_break = breaks_minutes.sum(axis=2, where=valid_mask) / count
+        mean_break[mean_break <= 0] = self._epsilon
 
         # Calculate standard deviation
         diff_sq: np.ndarray = np.square(breaks_minutes - mean_break[..., np.newaxis])
-        variance = diff_sq.sum(axis=2, where=valid_mask) / (count + self._epsilon)
+        variance = diff_sq.sum(axis=2, where=valid_mask) / count
         std_dev: np.ndarray = np.sqrt(variance)
 
         # Calculate coefficient of variation
-        coeff = std_dev / (mean_break + self._epsilon)
+        coeff = std_dev / mean_break
         ratio = 1.0 / (1.0 + coeff)
+
+        # Apply minimum break penalty
+        threshold = 12  # minutes
+        minbreak_count = ((breaks_minutes < threshold) & valid_mask).sum(axis=2)
+        minbreak_penalty = (self._penalty * 100) ** minbreak_count
 
         # Apply penalties for zero breaks
         zeros_count = (breaks_minutes == 0).sum(axis=2, where=valid_mask)
-        zeros_penalty = self._penalty**zeros_count
+        zeros_penalty = 0**zeros_count
 
         # Apply penalties
-        final_scores = ratio * zeros_penalty
+        final_scores = ratio * zeros_penalty * minbreak_penalty
         final_scores[mean_break == 0] = 0.0
         final_scores[overlap_mask] = 0.0
 
@@ -285,7 +300,9 @@ class FitnessEvaluator:
 
         # Intra-Round Consistency
         unique_locs_per_rt: np.ndarray = (rt_loc_counts > 0).sum(axis=3, dtype=float)
-        scores_per_rt = 1.0 / (unique_locs_per_rt + cls._epsilon)
+        unique_locs_per_rt[unique_locs_per_rt == 0] = cls._epsilon
+
+        scores_per_rt = 1.0 / unique_locs_per_rt
         scores_per_rt[~participated_in_rt] = 1.0
 
         # Handle the zero-division case explicitly.
