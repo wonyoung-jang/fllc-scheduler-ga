@@ -172,9 +172,9 @@ class ScheduleSummaryGenerator:
         txt.append("\nFitness:\n")
         txt.append("--------------------------\n")
         for name, score in zip(objectives, schedule.fitness, strict=True):
-            txt.append(f"{name:<{max_len_obj}}: {score:.6f}\n")
+            txt.append(f"{name:<{max_len_obj}}: {score}\n")
         txt.append(f"{'-' * (max_len_obj + 15)}\n")
-        txt.append(f"{'Total':<{max_len_obj}}: {sum(schedule.fitness):.6f}\n")
+        txt.append(f"{'Total':<{max_len_obj}}: {sum(schedule.fitness)}\n")
         txt.append(f"{'Percentage':<{max_len_obj}}: {sum(schedule.fitness) / len(schedule.fitness):.2%}\n")
 
         team_fits = schedule.team_fitnesses

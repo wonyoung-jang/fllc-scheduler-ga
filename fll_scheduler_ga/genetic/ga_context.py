@@ -10,13 +10,14 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from ..config.constants import DATA_MODEL_VERSION
 from ..data_model.event import EventFactory, EventProperties
 from ..data_model.schedule import Schedule
 from ..fitness.benchmark import FitnessBenchmark
 from ..fitness.fitness import FitnessEvaluator, HardConstraintChecker
 from ..io.csv_importer import CsvImporter
 from ..io.ga_exporter import ScheduleSummaryGenerator
-from ..io.seed_ga import GALoad, GASave
+from ..io.seed_ga import GALoad, GASave, GASeedData
 from ..operators.crossover import build_crossovers
 from ..operators.mutation import build_mutations
 from ..operators.nsga3 import NSGA3, ReferenceDirections
@@ -89,6 +90,7 @@ class GaContext:
             config=tournament_config,
             event_properties=event_properties,
             benchmark=benchmark,
+            model=app_config.fitness,
         )
 
         ga_params = app_config.genetic.parameters
@@ -193,7 +195,10 @@ class RuntimeStartup:
             logger.debug("Not adding imported schedule to population.")
             return
 
-        seed_data = GALoad(seed_file=seed_file, config=self.config.tournament, evaluator=self.context.evaluator).load()
+        seed_data = GALoad(seed_file=seed_file, config=self.config.tournament).load()
+
+        if seed_data is None:
+            seed_data = GASeedData(version=DATA_MODEL_VERSION, config=self.config.tournament, population=[])
 
         if imported_schedule not in seed_data.population:
             seed_data.population.append(imported_schedule)

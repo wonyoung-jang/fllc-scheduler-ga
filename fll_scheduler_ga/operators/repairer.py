@@ -62,7 +62,8 @@ class Repairer:
 
                 if not (events_for_rt := events.get(key)):
                     msg = f"No available events for round type {key[0]} with teams per round {tpr}"
-                    raise ValueError(msg)
+                    logger.debug(msg)
+                    break
 
                 if not (repair_fn := repair_map.get(tpr)):
                     msg = f"No assignment function for teams per round: {tpr}"

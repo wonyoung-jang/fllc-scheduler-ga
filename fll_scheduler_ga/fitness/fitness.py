@@ -8,10 +8,10 @@ from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
 
-from ..config.constants import EPSILON, FITNESS_PENALTY, FitnessObjective
+from ..config.constants import EPSILON, FitnessObjective
 
 if TYPE_CHECKING:
-    from ..config.schemas import TournamentConfig
+    from ..config.schemas import FitnessModel, TournamentConfig
     from ..data_model.event import EventProperties
     from ..data_model.schedule import Schedule
     from .benchmark import FitnessBenchmark
@@ -46,10 +46,10 @@ class FitnessEvaluator:
     config: TournamentConfig
     event_properties: EventProperties
     benchmark: FitnessBenchmark
+    model: FitnessModel
 
     objectives: ClassVar[list[FitnessObjective]] = list(FitnessObjective)
     max_events_per_team: ClassVar[int] = 0
-    _penalty: ClassVar[float] = FITNESS_PENALTY
     _epsilon: ClassVar[float] = EPSILON
     max_int: ClassVar[int] = np.iinfo(np.int64).max
     min_int: ClassVar[int] = -1
@@ -59,6 +59,7 @@ class FitnessEvaluator:
     rt_array: ClassVar[np.ndarray] = None
     loc_weight_rounds_inter: ClassVar[float] = 0.9
     loc_weight_rounds_intra: ClassVar[float] = 0.1
+    obj_weights: ClassVar[tuple[float, ...]] = ()
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the configuration."""
@@ -73,6 +74,7 @@ class FitnessEvaluator:
             rt_array[rt] = i
         FitnessEvaluator.match_roundtypes = match_rts
         FitnessEvaluator.rt_array = rt_array
+        FitnessEvaluator.obj_weights = np.array(self.model.get_obj_weights(), dtype=float)
 
     def evaluate_population(self, pop_array: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Evaluate an entire population of schedules.
@@ -128,6 +130,8 @@ class FitnessEvaluator:
 
         mw, vw, rw = self.config.weights
         schedule_fitnesses = (mean_s * mw) + (vari_s * vw) + (range_s * rw)
+
+        schedule_fitnesses = schedule_fitnesses * self.obj_weights
 
         return schedule_fitnesses, team_fitnesses
 
@@ -224,20 +228,19 @@ class FitnessEvaluator:
         ratio = 1.0 / (1.0 + coeff)
 
         # Apply minimum break penalty
-        threshold = 12  # minutes
-        minbreak_count = ((breaks_minutes < threshold) & valid_mask).sum(axis=2)
-        minbreak_penalty = (self._penalty * 100) ** minbreak_count
+        minbreak_count = ((breaks_minutes < self.model.minbreak_target) & valid_mask).sum(axis=2)
+        minbreak_penalty = self.model.minbreak_penalty**minbreak_count
 
         # Apply penalties for zero breaks
         zeros_count = (breaks_minutes == 0).sum(axis=2, where=valid_mask)
-        zeros_penalty = 0**zeros_count
+        zeros_penalty = self.model.zeros_penalty**zeros_count
 
         # Apply penalties
         final_scores = ratio * zeros_penalty * minbreak_penalty
         final_scores[mean_break == 0] = 0.0
         final_scores[overlap_mask] = 0.0
 
-        return final_scores / (self.benchmark.best_timeslot_score or 1.0)
+        return final_scores  # / (self.benchmark.best_timeslot_score or 1.0)
 
     @classmethod
     def score_loc_consistency(cls, loc_ids: np.ndarray, roundtype_ids: np.ndarray) -> np.ndarray:

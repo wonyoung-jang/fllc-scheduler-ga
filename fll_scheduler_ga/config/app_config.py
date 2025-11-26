@@ -20,6 +20,7 @@ from .constants import CONFIG_FILE_DEFAULT, TIME_FORMAT_MAP
 from .schemas import (
     AppConfigModel,
     ExportModel,
+    FitnessModel,
     GeneticModel,
     ImportModel,
     LocationModel,
@@ -46,6 +47,7 @@ class AppConfig(BaseModel):
     exports: ExportModel
     logging: LoggingModel
     genetic: GeneticModel
+    fitness: FitnessModel
     tournament: TournamentConfig
     rng: np.random.Generator
 
@@ -75,6 +77,7 @@ class AppConfig(BaseModel):
             exports=model.exports,
             logging=model.logging,
             genetic=model.genetic,
+            fitness=model.fitness,
             tournament=cls.load_tournament_config(model),
             rng=np.random.default_rng(model.genetic.parameters.rng_seed),
         )

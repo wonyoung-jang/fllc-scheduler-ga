@@ -125,7 +125,6 @@ class GA:
             seed_data = GALoad(
                 seed_file=seed_file,
                 config=config,
-                evaluator=self.context.evaluator,
             ).load()
             if seed_data is not None:
                 self.seed_population(seed_data)

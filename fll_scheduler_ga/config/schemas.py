@@ -224,6 +224,12 @@ class FitnessModel(BaseModel):
     weight_mean: float
     weight_variation: float
     weight_range: float
+    obj_weight_breaktime: float = 1.0
+    obj_weight_opponents: float = 1.0
+    obj_weight_locations: float = 1.0
+    zeros_penalty: float = 0.0001
+    minbreak_penalty: float = 0.1
+    minbreak_target: int = 30
 
     @model_validator(mode="after")
     def validate(self) -> "FitnessModel":
@@ -249,6 +255,16 @@ class FitnessModel(BaseModel):
             self.weight_mean,
             self.weight_variation,
             self.weight_range,
+        )
+        sum_w = sum(weights)
+        return tuple(w / sum_w for w in weights)
+
+    def get_obj_weights(self) -> tuple[float, ...]:
+        """Return the objective weights as a tuple."""
+        weights = (
+            self.obj_weight_breaktime,
+            self.obj_weight_opponents,
+            self.obj_weight_locations,
         )
         sum_w = sum(weights)
         return tuple(w / sum_w for w in weights)

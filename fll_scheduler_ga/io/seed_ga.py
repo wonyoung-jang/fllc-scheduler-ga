@@ -7,8 +7,6 @@ from dataclasses import dataclass
 from logging import getLogger
 from typing import TYPE_CHECKING
 
-import numpy as np
-
 from ..config.constants import DATA_MODEL_VERSION
 
 if TYPE_CHECKING:
@@ -16,7 +14,6 @@ if TYPE_CHECKING:
 
     from ..config.schemas import TournamentConfig
     from ..data_model.schedule import Schedule
-    from ..fitness.fitness import FitnessEvaluator
 
 logger = getLogger(__name__)
 
@@ -36,7 +33,6 @@ class GALoad:
 
     seed_file: Path
     config: TournamentConfig
-    evaluator: FitnessEvaluator
 
     def load(self) -> GASeedData | None:
         """Load and integrate a population from a seed file."""
@@ -65,20 +61,6 @@ class GALoad:
             logger.warning("Seed population is missing. Using current...")
         else:
             pop = seed_ga_data.population
-
-        # Handle changes in fitness weights to not flush cache
-        if pop is not None and seed_ga_data.config.weights != self.config.weights:
-            logger.info(
-                "Updating seed population fitnesses to match current weights. Old weights: %s, New weights: %s",
-                seed_ga_data.config.weights,
-                self.config.weights,
-            )
-            pop_arr = np.array([s.schedule for s in pop], dtype=int)
-            schedule_fitness, team_fitnesses = self.evaluator.evaluate_population(pop_arr)
-            for i, schedule in enumerate(pop):
-                schedule.fitness = schedule_fitness[i]
-                schedule.team_fitnesses = team_fitnesses[i]
-            pop.sort(key=lambda s: -s.fitness.sum())
 
         seed_ga_data.population = pop
         return seed_ga_data
