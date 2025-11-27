@@ -63,7 +63,7 @@ class StagnationHandler:
     generation: GaGeneration
     fitness_history: FitnessHistory
     model: StagnationModel
-    _cooldown_counter: int = 200
+    cooldown_counter: int = 50
     _last_stagnant_gen: int = -1
 
     def is_stagnant(self) -> bool:
@@ -87,7 +87,7 @@ class StagnationHandler:
 
         # Determine stagnation
         if equal_count > self.model.threshold * self.model.proportion:
-            if curr - self._last_stagnant_gen < self._cooldown_counter:
+            if curr - self._last_stagnant_gen < self.cooldown_counter:
                 return False
             self._last_stagnant_gen = curr
             return True

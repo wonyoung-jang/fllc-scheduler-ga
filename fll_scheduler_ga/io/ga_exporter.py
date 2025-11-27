@@ -190,7 +190,7 @@ class ScheduleSummaryGenerator:
 
         for i, name in enumerate(objectives):
             txt.append(
-                f"{name:<25} | {min_obj[i]:<8.4f} | {max_obj[i]:<8.4f} | {mean_obj[i]:<8.4f} | {range_obj[i]:<8.4f}\n"
+                f"{name:<25} | {min_obj[i]:<8.6f} | {max_obj[i]:<8.6f} | {mean_obj[i]:<8.6f} | {range_obj[i]:<8.6f}\n"
             )
 
         all_teams = schedule.teams
@@ -213,7 +213,7 @@ class ScheduleSummaryGenerator:
 
         normalized_teams = normalize_teams(schedule.schedule, self.team_identities)
         for t, fit in sorted(zip(all_teams, team_fits, strict=True), key=lambda x: -x[1].sum()):
-            fitness_row = (f"{score:<{len_objectives[i] + 1}.4f}" for i, score in enumerate(fit))
+            fitness_row = (f"{score:<{len_objectives[i] + 1}.6f}" for i, score in enumerate(fit))
             fitness_str = "|".join(fitness_row)
             if (team_id := normalized_teams[t]) == -1:
                 continue

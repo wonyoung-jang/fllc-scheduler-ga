@@ -43,6 +43,7 @@ class Island:
     population: SchedulePopulation = None
 
     stagnation: StagnationHandler = None
+    curr_schedule_fits: np.ndarray = None
 
     def __post_init__(self) -> None:
         """Post-initialization."""
@@ -60,7 +61,11 @@ class Island:
         self.select_next_generation()
         self.fitness_history.update_fitness_history()
         if self.stagnation.is_stagnant():
-            idx_to_pop = self.stagnation.handle_stagnation(len(self.selected))
+            # Get the index of the schedule with the best fitness
+            sum_fits = self.curr_schedule_fits.sum(axis=1)
+            max_idx = int(np.argmax(sum_fits))
+            # Pop not the best schedule
+            idx_to_pop = self.rng.choice([i for i in range(len(self.selected)) if i != max_idx])
             self.selected.pop(idx_to_pop)
             self.population.schedules = np.delete(self.population.schedules, idx_to_pop, axis=0)
             logger.debug(
@@ -78,6 +83,7 @@ class Island:
             generation=self.generation,
             fitness_history=self.fitness_history,
             model=self.genetic_model.stagnation,
+            cooldown_counter=50,  # Hardcoded
         )
 
     def add_to_population(self, schedule: Schedule) -> bool:
@@ -194,6 +200,7 @@ class Island:
             self.add_to_population(total_pop[i])
 
         self.population.schedules = self.population.schedules[flat]
+        self.curr_schedule_fits = schedule_fits[flat]
 
     def give_migrants(self) -> list[Schedule]:
         """Randomly yield migrants from population."""

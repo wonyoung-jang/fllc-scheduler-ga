@@ -116,9 +116,11 @@ class FitnessEvaluator:
         team_fitnesses[:, :, 2] = self.score_opp_variety(paired_evt_ids, pop_array)
 
         # Aggregate team scores into schedule scores
+        team_fitnesses.min(axis=1)
         min_s = team_fitnesses.min(axis=1)
         mean_s = team_fitnesses.mean(axis=1)
-        mean_s = (mean_s * 0.5) + (min_s * 0.5)
+        min_fitness_weight = self.model.min_fitness_weight
+        mean_s = (mean_s * (1.0 - min_fitness_weight)) + (min_s * min_fitness_weight)
         mean_s[mean_s == 0] = self._epsilon
 
         stddev_s = team_fitnesses.std(axis=1)
@@ -229,7 +231,14 @@ class FitnessEvaluator:
 
         # Apply minimum break penalty
         minbreak_count = ((breaks_minutes < self.model.minbreak_target) & valid_mask).sum(axis=2)
-        minbreak_penalty = self.model.minbreak_penalty**minbreak_count
+        where_breaks_lt_target = (breaks_minutes < self.model.minbreak_target) & (breaks_minutes > 0)
+        max_diff_breaktimes = np.zeros_like(minbreak_count)
+        if where_breaks_lt_target.any():
+            diffs = self.model.minbreak_target - breaks_minutes
+            diffs[~where_breaks_lt_target] = 0.0
+            max_diff_breaktimes = diffs.max(axis=2) / self.model.minbreak_target
+        minbreak_exp = minbreak_count + max_diff_breaktimes
+        minbreak_penalty = self.model.minbreak_penalty**minbreak_exp
 
         # Apply penalties for zero breaks
         zeros_count = (breaks_minutes == 0).sum(axis=2, where=valid_mask)

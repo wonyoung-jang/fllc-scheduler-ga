@@ -57,8 +57,6 @@ class Repairer:
             filled = True
             for key, teams_for_rt in teams.items():
                 _, tpr = key
-                # if len(set(teams_for_rt)) < tpr:
-                #     continue  # Not enough unique teams to fill a match, skip
 
                 if not (events_for_rt := events.get(key)):
                     msg = f"No available events for round type {key[0]} with teams per round {tpr}"

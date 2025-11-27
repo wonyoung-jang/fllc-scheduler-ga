@@ -221,15 +221,16 @@ class TeamsModel(BaseModel):
 class FitnessModel(BaseModel):
     """Configuration for fitness weights."""
 
-    weight_mean: float
-    weight_variation: float
-    weight_range: float
-    obj_weight_breaktime: float = 1.0
-    obj_weight_opponents: float = 1.0
-    obj_weight_locations: float = 1.0
+    weight_mean: int
+    weight_variation: int
+    weight_range: int
+    obj_weight_breaktime: int = 1
+    obj_weight_opponents: int = 1
+    obj_weight_locations: int = 1
     zeros_penalty: float = 0.0001
     minbreak_penalty: float = 0.1
     minbreak_target: int = 30
+    min_fitness_weight: float = 0.5
 
     @model_validator(mode="after")
     def validate(self) -> "FitnessModel":
@@ -247,6 +248,11 @@ class FitnessModel(BaseModel):
             self.weight_variation = 1.0
             self.weight_range = 1.0
             logger.warning("All fitness weights were zero; defaulting all weights to 1.0.")
+
+        if self.minbreak_penalty <= 0.0:
+            self.minbreak_penalty = 0.1
+            logger.warning("minbreak_penalty must be positive; defaulting to 0.1.")
+
         return self
 
     def get_fitness_tuple(self) -> tuple[float, ...]:
@@ -266,8 +272,8 @@ class FitnessModel(BaseModel):
             self.obj_weight_opponents,
             self.obj_weight_locations,
         )
-        sum_w = sum(weights)
-        return tuple(w / sum_w for w in weights)
+        denom_w = max(*weights)
+        return tuple(w / denom_w for w in weights)
 
 
 class LocationModel(BaseModel):

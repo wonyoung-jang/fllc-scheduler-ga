@@ -71,14 +71,15 @@
   },
   "fitness": {
     "weight_mean": 1,
-    "weight_variation": 0,
-    "weight_range": 0,
-    "obj_weight_breaktime": 1.0,
-    "obj_weight_opponents": 1.0,
-    "obj_weight_locations": 1.0,
+    "weight_variation": 1,
+    "weight_range": 1,
+    "obj_weight_breaktime": 1,
+    "obj_weight_opponents": 1,
+    "obj_weight_locations": 1,
     "zeros_penalty": 0.0001,
     "minbreak_penalty": 0.1,
-    "minbreak_target": 30
+    "minbreak_target": 30,
+    "min_fitness_weight": 0.3
   },
   "locations": [
     {
