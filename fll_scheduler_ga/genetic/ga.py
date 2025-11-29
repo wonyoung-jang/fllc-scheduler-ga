@@ -337,7 +337,7 @@ class GAFinalizer:
         ga.total_population = sorted(selected.values(), key=lambda s: (s.rank, -s.fitness.sum()))
 
     @staticmethod
-    def _log_operators(name: str, ratios: dict[str, Counter], ops: tuple[Crossover | Mutation]) -> None:
+    def _log_operators(name: str, ratios: dict[str, Counter], ops: tuple[Crossover | Mutation, ...]) -> None:
         """Log statistics for crossover and mutation operators."""
         if not (op_strings := [f"{op!s}" for op in ops]):
             return

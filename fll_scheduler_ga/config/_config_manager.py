@@ -53,9 +53,9 @@ class ConfigManager:
 
         try:
             active = self.active_config.read_text(encoding="utf-8").strip()
-            active = Path(active)
+            active_path = Path(active)
             for path in self._available:
-                if path.name == active.name:
+                if path.name == active_path.name:
                     return path
         except OSError:
             return None
@@ -121,9 +121,10 @@ class ConfigManager:
             f.write(str(selected.resolve()))
         print(f"Set active configuration to {selected.name}")
 
-    def add_config(self, source_path: str, dest_name: str | None = None) -> None:
+    def add_config(self, source_path: Path | str, dest_name: str | None = None) -> None:
         """Import a new configuration file."""
-        src = Path(source_path)
+        src = Path(source_path) if isinstance(source_path, str) else source_path
+
         if not src.exists():
             msg = f"Source file {src} does not exist."
             raise FileNotFoundError(msg)

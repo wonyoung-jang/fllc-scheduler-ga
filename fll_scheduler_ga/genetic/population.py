@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 class SchedulePopulation:
     """Population of schedules in the genetic algorithm."""
 
-    schedules: np.ndarray = None
-    ranks: np.ndarray = None
+    schedules: np.ndarray | None = None
+    ranks: np.ndarray | None = None
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the schedules array."""
