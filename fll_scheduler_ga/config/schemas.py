@@ -269,8 +269,8 @@ class FitnessModel(BaseModel):
         """Return the objective weights as a tuple."""
         weights = (
             self.obj_weight_breaktime,
-            self.obj_weight_opponents,
             self.obj_weight_locations,
+            self.obj_weight_opponents,
         )
         denom_w = max(*weights)
         return tuple(w / denom_w for w in weights)
