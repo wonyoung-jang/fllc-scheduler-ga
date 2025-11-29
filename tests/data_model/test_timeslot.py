@@ -16,7 +16,7 @@ def timeslot() -> TimeSlot:
     start = datetime.strptime("09:00", FMT_24H).replace(tzinfo=UTC)
     stop = datetime.strptime("10:00", FMT_24H).replace(tzinfo=UTC)
     TimeSlot.time_fmt = FMT_24H
-    return TimeSlot(0, start, stop)
+    return TimeSlot(idx=0, start=start, stop=stop)
 
 
 def _parse(dt_str: str, fmt: str) -> datetime:
@@ -36,7 +36,7 @@ def test_timeslot_str(start_str: str, stop_str: str, fmt: str, expected: str) ->
     start = _parse(start_str, fmt)
     stop = _parse(stop_str, fmt)
     TimeSlot.time_fmt = fmt
-    timeslot = TimeSlot(0, start, stop)
+    timeslot = TimeSlot(idx=0, start=start, stop=stop)
     assert str(timeslot) == expected
 
 
@@ -52,7 +52,7 @@ def test_timeslot_str(start_str: str, stop_str: str, fmt: str, expected: str) ->
 def test_less_than_timeslot(timeslot: TimeSlot, delta_minutes: int, *, expect_lt: bool, expect_gt: bool) -> None:
     """Parametrized less-than / greater-than comparisons for TimeSlot."""
     other = TimeSlot(
-        0,
+        idx=0,
         start=timeslot.start + timedelta(minutes=delta_minutes),
         stop=timeslot.stop + timedelta(minutes=delta_minutes),
     )
@@ -95,7 +95,7 @@ def test_overlaps_timeslot(timeslot: TimeSlot, start_offset_min: int, stop_offse
     Offsets are minutes relative to timeslot.start (so original stop is +60).
     """
     other = TimeSlot(
-        0,
+        idx=0,
         start=timeslot.start + timedelta(minutes=start_offset_min),
         stop=timeslot.stop + timedelta(minutes=stop_offset_min),
     )

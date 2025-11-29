@@ -92,7 +92,3 @@ class StagnationHandler:
             self._last_stagnant_gen = curr
             return True
         return False
-
-    def handle_stagnation(self, n_selected: int) -> int:
-        """Handle stagnation by determining how many individuals to reinitialize."""
-        return self.rng.integers(0, n_selected)
