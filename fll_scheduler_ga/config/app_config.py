@@ -14,7 +14,6 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict
 
 from ..data_model.location import Location
-from ..data_model.schedule import Schedule
 from ..data_model.timeslot import TimeSlot
 from .constants import CONFIG_FILE_DEFAULT, TIME_FORMAT_MAP
 from .schemas import (
@@ -118,15 +117,11 @@ class AppConfig(BaseModel):
 
         rounds.sort(key=lambda r: r.start_time)
         roundreqs = {r.roundtype: r.rounds_per_team for r in rounds}
-        roundreqs_array = np.tile(list(roundreqs.values()), (len(teams), 1))
         round_str_to_idx = {r.roundtype: r.roundtype_idx for r in rounds}
         round_idx_to_tpr = {r.roundtype_idx: r.teams_per_round for r in rounds}
         total_slots_possible = sum(r.slots_total for r in rounds)
         total_slots_required = sum(r.slots_required for r in rounds)
         unique_opponents_possible = 1 <= max(r.rounds_per_team for r in rounds) <= len(teams) - 1
-
-        Schedule.total_num_events = total_slots_possible
-        Schedule.team_roundreqs_array = roundreqs_array
 
         weights = model.fitness.get_fitness_tuple()
 

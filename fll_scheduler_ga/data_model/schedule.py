@@ -16,6 +16,17 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
+class ScheduleContext:
+    """Holds class-level context for Schedule instances."""
+
+    event_map: dict[int, Event]
+    event_props: EventProperties
+    teams_list: np.ndarray
+    teams_roundreqs_arr: np.ndarray
+    n_total_events: int
+
+
+@dataclass(slots=True)
 class Schedule:
     """Represents a schedule (individual) with its associated fitness score."""
 
@@ -34,22 +45,18 @@ class Schedule:
     team_rounds: np.ndarray = None
 
     # Class variables
-    teams: ClassVar[np.ndarray]
-    event_map: ClassVar[dict[int, Event]]
-    event_properties: ClassVar[EventProperties]
-    team_roundreqs_array: ClassVar[np.ndarray]
-    total_num_events: ClassVar[int]
+    ctx: ClassVar[ScheduleContext]
 
     def __post_init__(self) -> None:
         """Post-initialization to set up fitness array."""
         if self.schedule is None:
-            self.schedule = np.full(Schedule.total_num_events, -1, dtype=int)
+            self.schedule = np.full(Schedule.ctx.n_total_events, -1, dtype=int)
 
         if self.team_events is None:
             self.team_events = defaultdict(set)
 
         if self.team_rounds is None:
-            self.team_rounds = Schedule.team_roundreqs_array.copy()
+            self.team_rounds = Schedule.ctx.teams_roundreqs_arr.copy()
 
     def __len__(self) -> int:
         """Return the number of scheduled events."""
@@ -109,14 +116,14 @@ class Schedule:
 
     def assign(self, team: int, event: int) -> None:
         """Add an event to a team's scheduled events."""
-        roundtype = Schedule.event_properties.roundtype_idx[event]
+        roundtype = Schedule.ctx.event_props.roundtype_idx[event]
         self.team_events[team].add(event)
         self.team_rounds[team, roundtype] -= 1
         self[event] = team
 
     def unassign(self, team: int, event: int) -> None:
         """Remove an event from a team's scheduled events."""
-        roundtype = Schedule.event_properties.roundtype_idx[event]
+        roundtype = Schedule.ctx.event_props.roundtype_idx[event]
         self.team_events[team].remove(event)
         self.team_rounds[team, roundtype] += 1
         del self[event]
@@ -154,7 +161,7 @@ class Schedule:
         if new_event in events_to_check:
             return True
 
-        new_conflicts = Schedule.event_map[new_event].conflicts
+        new_conflicts = Schedule.ctx.event_map[new_event].conflicts
         return not events_to_check.isdisjoint(new_conflicts)
 
     def scheduled_events(self) -> np.ndarray:

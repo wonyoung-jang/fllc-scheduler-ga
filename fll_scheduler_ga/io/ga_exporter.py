@@ -193,7 +193,7 @@ class ScheduleSummaryGenerator:
                 f"{name:<25} | {min_obj[i]:<8.6f} | {max_obj[i]:<8.6f} | {mean_obj[i]:<8.6f} | {range_obj[i]:<8.6f}\n"
             )
 
-        all_teams = schedule.teams
+        all_teams = schedule.ctx.teams_list
         team_fits = schedule.team_fitnesses
         total_fits = team_fits.sum(axis=1)
         max_team_f = total_fits.max()

@@ -64,8 +64,12 @@ class Island:
             # Get the index of the schedule with the best fitness
             sum_fits = self.curr_schedule_fits.sum(axis=1)
             max_idx = int(np.argmax(sum_fits))
-            # Pop not the best schedule
-            idx_to_pop = self.rng.choice([i for i in range(len(self.selected)) if i != max_idx])
+            # 10% chance to remove the best schedule to encourage diversity
+            if self.rng.random() < 0.1:
+                idx_to_pop = max_idx
+            else:
+                idx_to_pop = self.rng.choice([i for i in range(len(self.selected)) if i != max_idx])
+
             self.selected.pop(idx_to_pop)
             self.population.schedules = np.delete(self.population.schedules, idx_to_pop, axis=0)
             logger.debug(

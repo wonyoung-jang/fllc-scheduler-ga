@@ -12,7 +12,7 @@ import numpy as np
 
 from ..config.constants import DATA_MODEL_VERSION
 from ..data_model.event import EventFactory, EventProperties
-from ..data_model.schedule import Schedule
+from ..data_model.schedule import Schedule, ScheduleContext
 from ..fitness.benchmark import FitnessBenchmark
 from ..fitness.fitness import FitnessEvaluator, HardConstraintChecker
 from ..io.csv_importer import CsvImporter
@@ -68,9 +68,15 @@ class GaContext:
             event_properties=event_properties,
         ).run_checks()
 
-        Schedule.teams = np.arange(tournament_config.num_teams, dtype=int)
-        Schedule.event_properties = event_properties
-        Schedule.event_map = event_factory.as_mapping()
+        roundreqs_array = np.tile(list(tournament_config.roundreqs.values()), (tournament_config.num_teams, 1))
+        schedule_context = ScheduleContext(
+            event_map=event_factory.as_mapping(),
+            event_props=event_properties,
+            teams_list=np.arange(tournament_config.num_teams, dtype=int),
+            teams_roundreqs_arr=roundreqs_array,
+            n_total_events=tournament_config.total_slots_possible,
+        )
+        Schedule.ctx = schedule_context
 
         checker = HardConstraintChecker(tournament_config)
         repairer = Repairer(

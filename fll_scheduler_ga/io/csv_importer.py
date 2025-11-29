@@ -176,11 +176,11 @@ class CsvImporter:
             created_event_key = (curr_rt, time_str, loc_name_full)
             created_events[created_event_key] = event
 
-            team = self.schedule.teams[team_id - 1]
+            team = self.schedule.ctx.teams_list[team_id - 1]
             if team == -1:
                 logger.error("Team ID %d (%d) from CSV not found.", team_id, team_id - 1)
-                logger.error("%s", self.schedule.teams)
-                logger.error("%s", self.schedule.teams[team_id - 1])
+                logger.error("%s", self.schedule.ctx.teams_list)
+                logger.error("%s", self.schedule.ctx.teams_list[team_id - 1])
                 continue
 
             if event != -1:
