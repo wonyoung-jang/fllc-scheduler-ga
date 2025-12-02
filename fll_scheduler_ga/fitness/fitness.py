@@ -49,7 +49,6 @@ class FitnessEvaluator:
     model: FitnessModel
 
     objectives: ClassVar[list[FitnessObjective]] = list(FitnessObjective)
-    max_events_per_team: ClassVar[int] = 0
     _epsilon: ClassVar[float] = EPSILON
     max_int: ClassVar[int] = np.iinfo(np.int64).max
     min_int: ClassVar[int] = -1
@@ -63,8 +62,6 @@ class FitnessEvaluator:
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the configuration."""
-        FitnessEvaluator.objectives = list(FitnessObjective)
-        FitnessEvaluator.max_events_per_team = self.config.max_events_per_team
         FitnessEvaluator.n_teams = self.config.num_teams
         FitnessEvaluator.n_objs = len(self.objectives)
         match_rts = np.array([rt_idx for rt_idx, tpr in self.config.round_idx_to_tpr.items() if tpr == 2])
@@ -137,13 +134,12 @@ class FitnessEvaluator:
 
         return schedule_fitnesses, team_fitnesses
 
-    @classmethod
-    def get_team_events(cls, pop_array: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    def get_team_events(self, pop_array: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Invert the (event -> team) mapping to a (team -> events) mapping for the entire population."""
         n_pop, _ = pop_array.shape
 
         # Preallocate the team-events array
-        team_events_pop = np.full((n_pop, cls.n_teams, cls.max_events_per_team), -1, dtype=int)
+        team_events_pop = np.full((n_pop, self.n_teams, self.config.max_events_per_team), -1, dtype=int)
 
         # Get indices of scheduled events
         sched_indices, event_indices = np.nonzero(pop_array >= 0)
@@ -156,10 +152,10 @@ class FitnessEvaluator:
             return valid_events_mask, team_events_pop
 
         # Create unique keys for (pop, team) pairs
-        keys = (sched_indices * cls.n_teams) + team_indices
+        keys = (sched_indices * self.n_teams) + team_indices
 
         # Count occurrences of each (pop, team) pair to determine group sizes
-        counts = np.bincount(keys, minlength=n_pop * cls.n_teams)
+        counts = np.bincount(keys, minlength=n_pop * self.n_teams)
 
         # Sort event indices by (pop, team)
         order = np.argsort(keys)
@@ -175,11 +171,11 @@ class FitnessEvaluator:
 
         # Map back to original indices
         sorted_keys = keys[order]
-        pop_indices_sorted = sorted_keys // cls.n_teams
-        team_indices_sorted = sorted_keys % cls.n_teams
+        pop_indices_sorted = sorted_keys // self.n_teams
+        team_indices_sorted = sorted_keys % self.n_teams
 
         # Filter to only valid slots within max_events_per_team
-        valid_mask = within_group_indices < cls.max_events_per_team
+        valid_mask = within_group_indices < self.config.max_events_per_team
         pop_idx_final = pop_indices_sorted[valid_mask]
         team_idx_final = team_indices_sorted[valid_mask]
         slot_idx_final = within_group_indices[valid_mask]
