@@ -148,7 +148,7 @@ class AppConfig(BaseModel):
         return TournamentConfig(
             num_teams=len(teams),
             time_fmt=time_fmt,
-            rounds=rounds,
+            rounds=tuple(rounds),
             roundreqs=roundreqs,
             round_str_to_idx=round_str_to_idx,
             round_idx_to_tpr=round_idx_to_tpr,
@@ -156,8 +156,8 @@ class AppConfig(BaseModel):
             total_slots_required=total_slots_required,
             unique_opponents_possible=unique_opponents_possible,
             weights=weights,
-            all_locations=all_locations,
-            all_timeslots=all_timeslots,
+            all_locations=tuple(all_locations),
+            all_timeslots=tuple(all_timeslots),
             max_events_per_team=max_events_per_team,
             is_interleaved=is_interleaved,
         )
