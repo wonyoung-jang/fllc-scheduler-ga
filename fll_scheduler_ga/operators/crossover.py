@@ -9,7 +9,6 @@ from logging import getLogger
 from typing import TYPE_CHECKING
 
 import numpy as np
-from line_profiler import profile
 
 from ..config.constants import CrossoverOp
 from ..data_model.schedule import Schedule
@@ -179,7 +178,6 @@ class KPoint(EventCrossover):
             logger.warning("Invalid k value for KPoint crossover: %d. Setting k to 1.", self.k)
             self.k = 1
 
-    @profile
     def get_genes(self) -> tuple[np.ndarray, np.ndarray]:
         """Get the genes for KPoint crossover."""
         n = self.n_evts

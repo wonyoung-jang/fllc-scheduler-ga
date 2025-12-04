@@ -386,7 +386,7 @@ class TournamentConfig(BaseModel):
     model_config: ConfigDict = ConfigDict(arbitrary_types_allowed=True, frozen=True)
     num_teams: int
     time_fmt: str
-    rounds: list[TournamentRound]
+    rounds: tuple[TournamentRound, ...]
     roundreqs: dict[str, int]
     round_str_to_idx: dict[str, int]
     round_idx_to_tpr: dict[int, int]
@@ -394,8 +394,8 @@ class TournamentConfig(BaseModel):
     total_slots_required: int
     unique_opponents_possible: bool
     weights: tuple[float, ...]
-    all_locations: list[Location]
-    all_timeslots: list[TimeSlot]
+    all_locations: tuple[Location, ...]
+    all_timeslots: tuple[TimeSlot, ...]
     max_events_per_team: int
     is_interleaved: bool
 
