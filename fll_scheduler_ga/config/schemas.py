@@ -163,11 +163,11 @@ class ImportModel(BaseModel):
     @model_validator(mode="after")
     def validate(self) -> "ImportModel":
         """Validate import options."""
-        if self.seed_pop_sort not in list(SeedPopSort):
+        if self.seed_pop_sort not in tuple(SeedPopSort):
             msg = f"Invalid seed_pop_sort: {self.seed_pop_sort}. Must be one of {[e.value for e in SeedPopSort]}."
             raise ValueError(msg)
 
-        if self.seed_island_strategy not in list(SeedIslandStrategy):
+        if self.seed_island_strategy not in tuple(SeedIslandStrategy):
             msg = (
                 f"Invalid seed_island_strategy: {self.seed_island_strategy}. "
                 f"Must be one of {[e.value for e in SeedIslandStrategy]}."

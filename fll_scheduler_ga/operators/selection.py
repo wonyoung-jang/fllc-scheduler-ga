@@ -10,12 +10,10 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+
+import numpy as np
 
 from ..config.constants import SelectionOp
-
-if TYPE_CHECKING:
-    import numpy as np
 
 
 @dataclass(slots=True)
@@ -48,4 +46,17 @@ class RandomSelect(Selection):
 
     def select(self, n: int, k: int = 2) -> np.ndarray:
         """Select individuals from the population to form the next generation."""
-        return self.rng.choice(n, size=k, replace=False)
+        if k == 2:
+            # Two random indices
+            i1 = self.rng.integers(0, n)
+            i2 = self.rng.integers(0, n)
+
+            # Ensure distinct
+            while i1 == i2:
+                i2 = self.rng.integers(0, n)
+
+            return np.array([i1, i2], dtype=np.int16)
+
+        choices = np.arange(n)
+        self.rng.shuffle(choices)
+        return choices[:k]

@@ -68,7 +68,7 @@ class GaContext:
             event_properties=event_properties,
         ).run_checks()
 
-        roundreqs_array = np.tile(list(tournament_config.roundreqs.values()), (tournament_config.num_teams, 1))
+        roundreqs_array = np.tile(tuple(tournament_config.roundreqs.values()), (tournament_config.num_teams, 1))
         schedule_context = ScheduleContext(
             event_map=event_factory.as_mapping(),
             event_props=event_properties,
@@ -100,11 +100,10 @@ class GaContext:
         )
 
         ga_params = app_config.genetic.parameters
-        n_total_pop = ga_params.population_size * ga_params.num_islands
-        n_objectives = len(evaluator.objectives)
+        n_objectives = evaluator.n_objectives
         ref_directions = ReferenceDirections(
             n_obj=n_objectives,
-            n_pop=n_total_pop,
+            n_pop=ga_params.population_size,
         )
         nsga3 = NSGA3(
             rng=rng,

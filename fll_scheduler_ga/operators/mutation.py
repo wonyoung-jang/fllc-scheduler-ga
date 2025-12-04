@@ -8,12 +8,12 @@ from dataclasses import dataclass
 from logging import getLogger
 from typing import TYPE_CHECKING
 
+import numpy as np
+
 from ..config.constants import MutationOp
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
-
-    import numpy as np
 
     from ..config.schemas import OperatorConfig
     from ..data_model.event import EventFactory, EventProperties
@@ -223,9 +223,6 @@ class SwapTeamMutation(SwapMutation):
             e2a, e2b = match2_data
             t1a, t1b = schedule[e1a], schedule[e1b]
             t2a, t2b = schedule[e2a], schedule[e2b]
-            if -1 in (t1a, t1b, t2a, t2b):
-                continue
-
             match_team_ids = {t1a, t1b, t2a, t2b}
             if (
                 len(match_team_ids) < 4
@@ -333,8 +330,7 @@ class SwapTableSideMutation(SwapMutation):
             match_data, _ = self.swap_candidates[idx]
             e1, e2 = match_data
             t1, t2 = schedule[e1], schedule[e2]
-            if -1 not in (t1, t2):
-                return e1, e2, t1, t2
+            return e1, e2, t1, t2
         return None
 
 
@@ -343,13 +339,13 @@ class TimeSlotSequenceMutation(Mutation):
     """Abstract base class for mutations that permute assignments within a single timeslot."""
 
     timeslot_candidates: dict[tuple[int, int], list[tuple[int, ...]]] = None
-    timeslot_keys: list[tuple[int, int]] = None
+    timeslot_keys: tuple[tuple[int, int]] = None
     key_to_tpr: dict[tuple[int, int], int] = None
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
         self.timeslot_candidates, self.key_to_tpr = self.init_candidates()
-        self.timeslot_keys = list(self.timeslot_candidates.keys())
+        self.timeslot_keys = tuple(self.timeslot_candidates.keys())
 
     @abstractmethod
     def permute(self, items: list) -> list:
@@ -373,7 +369,9 @@ class TimeSlotSequenceMutation(Mutation):
 
     def get_candidates(self) -> tuple[list[tuple[int, ...]], int]:
         """Get a list of candidate events for mutation within a specific timeslot."""
-        idx = self.rng.choice(len(self.timeslot_keys))
+        indices = np.arange(len(self.timeslot_keys))
+        self.rng.shuffle(indices)
+        idx = indices[0]
         key = self.timeslot_keys[idx]
         candidates = self.timeslot_candidates[key]
         tpr = self.key_to_tpr[key]
@@ -396,11 +394,8 @@ class TimeSlotSequenceMutation(Mutation):
             if old_team == new_team:
                 continue
 
-            if old_team != -1:
-                schedule.unassign(old_team, event)
-
-            if new_team != -1:
-                schedule.assign(new_team, event)
+            schedule.unassign(old_team, event)
+            schedule.assign(new_team, event)
 
         return True
 
@@ -418,15 +413,13 @@ class TimeSlotSequenceMutation(Mutation):
             if old_id_pair == new_id_pair:
                 continue
 
-            if -1 not in old_id_pair:
-                old_t1, old_t2 = old_id_pair
-                schedule.unassign(old_t1, e1)
-                schedule.unassign(old_t2, e2)
+            old_t1, old_t2 = old_id_pair
+            schedule.unassign(old_t1, e1)
+            schedule.unassign(old_t2, e2)
 
-            if -1 not in new_id_pair:
-                new_t1, new_t2 = new_id_pair
-                schedule.assign(new_t1, e1)
-                schedule.assign(new_t2, e2)
+            new_t1, new_t2 = new_id_pair
+            schedule.assign(new_t1, e1)
+            schedule.assign(new_t2, e2)
 
         return True
 

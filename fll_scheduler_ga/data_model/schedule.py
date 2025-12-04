@@ -111,11 +111,17 @@ class Schedule:
 
     def swap_assignment(self, team: int, old_event: int, new_event: int) -> None:
         """Switch an event for a team in the schedule."""
+        if team == -1:
+            return
+
         self.unassign(team, old_event)
         self.assign(team, new_event)
 
     def assign(self, team: int, event: int) -> None:
         """Add an event to a team's scheduled events."""
+        if team == -1:
+            return
+
         roundtype = Schedule.ctx.event_props.roundtype_idx[event]
         self.team_events[team].add(event)
         self.team_rounds[team, roundtype] -= 1
@@ -123,6 +129,9 @@ class Schedule:
 
     def unassign(self, team: int, event: int) -> None:
         """Remove an event from a team's scheduled events."""
+        if team == -1:
+            return
+
         roundtype = Schedule.ctx.event_props.roundtype_idx[event]
         self.team_events[team].remove(event)
         self.team_rounds[team, roundtype] += 1
@@ -130,6 +139,9 @@ class Schedule:
 
     def needs_round(self, team: int, roundtype: int) -> bool:
         """Check if a team still needs to participate in a given round type."""
+        if team == -1:
+            return False
+
         return self.team_rounds[team, roundtype] > 0
 
     def all_rounds_needed(self, roundtype: int) -> np.ndarray:
@@ -152,6 +164,9 @@ class Schedule:
             bool: True if there is a conflict, False otherwise.
 
         """
+        if team == -1:
+            return False
+
         team_events = self.team_events[team]
         events_to_check = team_events
 

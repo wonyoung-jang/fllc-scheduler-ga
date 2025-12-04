@@ -16,8 +16,6 @@ if TYPE_CHECKING:
 
     from ..config.schemas import GeneticModel
     from ..data_model.schedule import Schedule
-    from ..operators.crossover import Crossover
-    from ..operators.mutation import Mutation
     from .builder import ScheduleBuilder
     from .ga_context import GaContext
     from .ga_generation import GaGeneration
@@ -68,7 +66,9 @@ class Island:
             if self.rng.random() < 0.1:
                 idx_to_pop = max_idx
             else:
-                idx_to_pop = self.rng.choice([i for i in range(len(self.selected)) if i != max_idx])
+                non_max_indices = [i for i in range(len(self.selected)) if i != max_idx]
+                i = self.rng.integers(0, len(non_max_indices))
+                idx_to_pop = non_max_indices[i]
 
             self.selected.pop(idx_to_pop)
             self.population.schedules = np.delete(self.population.schedules, idx_to_pop, axis=0)
@@ -135,7 +135,8 @@ class Island:
 
     def mutate_schedule(self, schedule: Schedule) -> bool:
         """Mutate a child schedule."""
-        m: Mutation = self.rng.choice(self.context.mutations)
+        m_idx = self.rng.integers(0, len(self.context.mutations))
+        m = self.context.mutations[m_idx]
         m_str = str(m)
         self.operator_stats.mutation["total"][m_str] += 1
         if m.mutate(schedule):
@@ -146,7 +147,8 @@ class Island:
 
     def crossover_schedule(self, parents: Iterator[Schedule]) -> Iterator[Schedule]:
         """Perform crossover between two parent schedules."""
-        c: Crossover = self.rng.choice(self.context.crossovers)
+        c_idx = self.rng.integers(0, len(self.context.crossovers))
+        c = self.context.crossovers[c_idx]
         c_str = str(c)
         for child in c.cross(parents):
             self.operator_stats.crossover["total"][c_str] += 1

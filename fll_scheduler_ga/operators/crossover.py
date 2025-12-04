@@ -9,6 +9,7 @@ from logging import getLogger
 from typing import TYPE_CHECKING
 
 import numpy as np
+from line_profiler import profile
 
 from ..config.constants import CrossoverOp
 from ..data_model.schedule import Schedule
@@ -112,12 +113,11 @@ class Crossover(ABC):
         """Assign genes."""
         p1_gene_pairs = self.event_properties.paired_idx[p1_genes]
         for e1, e2 in zip(p1_genes, p1_gene_pairs, strict=True):
-            if (t1 := p1[e1]) == -1:
-                continue
-
+            t1 = p1[e1]
             if e2 == -1:
                 child.assign(t1, e1)
-            elif (t2 := p1[e2]) != -1:
+            else:
+                t2 = p1[e2]
                 child.assign(t1, e1)
                 child.assign(t2, e2)
 
@@ -126,17 +126,17 @@ class Crossover(ABC):
         p2_genes_pairs = self.event_properties.paired_idx[p2_genes]
         p2_genes_rt = self.event_properties.roundtype_idx[p2_genes]
         for e1, e2, rt in zip(p2_genes, p2_genes_pairs, p2_genes_rt, strict=True):
-            if (t1 := p2[e1]) == -1:
-                continue
-
+            t1 = p2[e1]
             if not child.needs_round(t1, rt) or child.conflicts(t1, e1):
                 continue
 
             if e2 == -1:
                 child.assign(t1, e1)
-            elif (t2 := p2[e2]) != -1 and child.needs_round(t2, rt) and not child.conflicts(t2, e2):
-                child.assign(t1, e1)
-                child.assign(t2, e2)
+            else:
+                t2 = p2[e2]
+                if child.needs_round(t2, rt) and not child.conflicts(t2, e2):
+                    child.assign(t1, e1)
+                    child.assign(t2, e2)
 
 
 @dataclass(slots=True)
@@ -179,14 +179,23 @@ class KPoint(EventCrossover):
             logger.warning("Invalid k value for KPoint crossover: %d. Setting k to 1.", self.k)
             self.k = 1
 
+    @profile
     def get_genes(self) -> tuple[np.ndarray, np.ndarray]:
         """Get the genes for KPoint crossover."""
-        # Select k random split points from the middle of the indices.
-        splits = self.rng.choice(self.events[1:-1], size=self.k, replace=False)
-        splits.sort()
-        # Create segments and alternate between parents.
-        segments = np.split(self.events, splits)
-        return np.concatenate(segments[::2]), np.concatenate(segments[1::2])
+        n = self.n_evts
+
+        # Single-point crossover
+        if self.k == 1:
+            # Pick a split point index directly (1 to n-1)
+            split = self.rng.integers(1, n)
+            return self.events[:split], self.events[split:]
+
+        # Multi-point crossover
+        splits = self.rng.choice(n - 1, size=self.k, replace=False) + 1
+        mask = np.zeros(n, dtype=bool)
+        mask[splits] = True
+        np.bitwise_xor.accumulate(mask, out=mask)
+        return self.events[mask], self.events[~mask]
 
 
 @dataclass(slots=True)
@@ -215,7 +224,7 @@ class Uniform(EventCrossover):
     def get_genes(self) -> tuple[np.ndarray, np.ndarray]:
         """Get the genes for Uniform crossover."""
         # Create a mask for selecting genes from each parent.
-        mask = self.rng.choice([True, False], size=self.n_evts)
+        mask = self.rng.random(self.n_evts) < 0.5
         return self.events[mask], self.events[~mask]
 
 
@@ -260,13 +269,14 @@ class RoundTypeCrossover(StructureCrossover):
             rt = self.event_properties.roundtype_idx[e]
             eventmap[rt].append(e)
 
-        roundtypes = list(eventmap.keys())
-        self.array = np.full((len(roundtypes), max(len(evts) for evts in eventmap.values())), -1, dtype=int)
+        roundtypes = tuple(eventmap.keys())
+        n_roundtypes = len(roundtypes)
+        self.array = np.full((n_roundtypes, max(len(evts) for evts in eventmap.values())), -1, dtype=int)
         for j, rt in enumerate(roundtypes):
             evts = eventmap[rt]
             self.array[j, : len(evts)] = evts
 
-        self.events = np.arange(len(roundtypes))
+        self.events = np.arange(n_roundtypes)
 
 
 @dataclass(slots=True)

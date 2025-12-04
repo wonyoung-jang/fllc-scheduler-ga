@@ -8,10 +8,10 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "matplotlib>=3.10.7",
-    "numpy>=2.3.3",
-    "pydantic>=2.12.3",
-    "tqdm>=4.67",
+    "matplotlib>=3.0.0",
+    "numpy>=2.0.0",
+    "pydantic>=2.0.0",
+    "tqdm>=4.0",
 ]
 
 [project.scripts]
@@ -107,13 +107,16 @@ ignore_patterns = []
 
 [dependency-groups]
 dev = [
-    "pyinstaller>=6.16.0",
-    "pytest>=8.4.1",
+    "line-profiler>=5.0.0",
+    "memory-profiler>=0.0.0",
+    "psutil>=7.0.0",
+    "pyinstaller>=6.0.0",
+    "pytest>=8.0.0",
     "pytest-cov>=7.0.0",
-    "pytest-watcher>=0.4.3",
-    "snakeviz>=2.2.2",
-    "vulture>=2.14",
+    "pytest-watcher>=0.0.0",
+    "snakeviz>=2.0.0",
+    "vulture>=2.0",
 ]
 docs = [
-    "sphinx>=8.2.3",
+    "sphinx>=8.0.0",
 ]

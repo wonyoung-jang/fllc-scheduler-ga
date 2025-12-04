@@ -97,7 +97,7 @@ class GA:
     def _init_fitness_history(self) -> None:
         """Initialize the fitness history for the GA."""
         n_gen = self.genetic_model.parameters.generations
-        n_obj = len(self.context.evaluator.objectives)
+        n_obj = self.context.evaluator.n_objectives
         self.fitness_history = FitnessHistory(
             generation=self.generation,
             current=np.zeros((1, n_obj), dtype=float),

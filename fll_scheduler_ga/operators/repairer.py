@@ -7,9 +7,9 @@ from dataclasses import dataclass
 from logging import getLogger
 from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    import numpy as np
+import numpy as np
 
+if TYPE_CHECKING:
     from ..config.schemas import TournamentConfig
     from ..data_model.event import EventFactory, EventProperties
     from ..data_model.schedule import Schedule
@@ -29,12 +29,18 @@ class Repairer:
     checker: HardConstraintChecker
     repair_map: dict[int, Any] = None
 
+    _rt_to_tpr: np.ndarray = None
+
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
         self.repair_map = {
             1: self.repair_singles,
             2: self.repair_matches,
         }
+        max_rt = max(self.config.round_idx_to_tpr.keys())
+        self._rt_to_tpr = np.zeros(max_rt + 1, dtype=np.int32)
+        for rt, tpr in self.config.round_idx_to_tpr.items():
+            self._rt_to_tpr[rt] = tpr
 
     def repair(self, schedule: Schedule) -> bool:
         """Repair missing assignments in the schedule.
@@ -81,7 +87,8 @@ class Repairer:
                 return True
 
             event_indices = schedule.scheduled_events()
-            event = self.rng.choice(event_indices)
+            self.rng.shuffle(event_indices)
+            event = event_indices[0]
             e_rt_idx = self.event_properties.roundtype_idx[event]
             ek = (e_rt_idx, self.config.round_idx_to_tpr[e_rt_idx])
             e1, e2 = event, None
@@ -98,8 +105,9 @@ class Repairer:
             schedule.unassign(t1, e1)
             if e2 is not None:
                 t2 = schedule[e2]
-                teams[ek].append(t2)
-                schedule.unassign(t2, e2)
+                if t2 != -1:
+                    teams[ek].append(t2)
+                    schedule.unassign(t2, e2)
 
         return len(schedule) == self.config.total_slots_required
 
@@ -107,26 +115,50 @@ class Repairer:
         self, schedule: Schedule
     ) -> tuple[dict[tuple[int, int], list[int]], dict[tuple[int, int], list[int]]]:
         """Get the round type to team/player maps for the current schedule."""
-        rt_tpr_config = self.config.round_idx_to_tpr
-
+        # 1. Team Map
         teams: dict[tuple[int, int], list[int]] = defaultdict(list)
-        for t, roundreqs in enumerate(schedule.team_rounds):
-            for rt, n in enumerate(roundreqs):
-                k = (rt, rt_tpr_config[rt])
-                teams[k].extend([t] * n)
 
-        _paired_idx = self.event_properties.paired_idx
-        _loc_side = self.event_properties.loc_side
-        _rt_idx = self.event_properties.roundtype_idx
+        # Find (team_id, roundtype_id) where rounds are needed (>0)
+        # team_rounds is shape (n_teams, n_round_types)
+        t_idxs, rt_idxs = np.nonzero(schedule.team_rounds > 0)
 
+        if t_idxs.size > 0:
+            # Get the counts (how many rounds needed)
+            counts = schedule.team_rounds[t_idxs, rt_idxs]
+
+            # If a team needs 2 rounds, we need 2 entries
+            t_repeated = np.repeat(t_idxs, counts)
+            rt_repeated = np.repeat(rt_idxs, counts)
+
+            # Map roundtype to teams_per_round
+            tpr_repeated = self._rt_to_tpr[rt_repeated]
+
+            # Grouping by (rt, tpr)
+            for i in range(len(t_repeated)):
+                k = (rt_repeated[i], tpr_repeated[i])
+                teams[k].append(t_repeated[i])
+
+        # 2. Event Map
         events: dict[tuple[int, int], list[int]] = defaultdict(list)
-        for e in schedule.unscheduled_events():
-            paired_e = _paired_idx[e]
-            if (paired_e != -1 and _loc_side[e] == 1) or paired_e == -1:
-                rt = _rt_idx[e]
-                k = (rt, rt_tpr_config[rt])
-                if k in teams:
-                    events[k].append(e)
+
+        unscheduled = schedule.unscheduled_events()
+        if unscheduled.size > 0:
+            # Filter logic: (paired != -1 and side == 1) OR (paired == -1)
+            paired = self.event_properties.paired_idx[unscheduled]
+            sides = self.event_properties.loc_side[unscheduled]
+
+            # Mask for valid repair candidates (singles or side 1 of matches)
+            mask = (paired == -1) | (sides == 1)
+            valid_events = unscheduled[mask]
+
+            if valid_events.size > 0:
+                valid_rts = self.event_properties.roundtype_idx[valid_events]
+                valid_tprs = self._rt_to_tpr[valid_rts]
+
+                for i in range(len(valid_events)):
+                    k = (valid_rts[i], valid_tprs[i])
+                    if k in teams:
+                        events[k].append(valid_events[i])
 
         return teams, events
 
@@ -135,7 +167,9 @@ class Repairer:
     ) -> tuple[list[int], list[int]]:
         """Assign single-team events to teams that need them."""
         while len(teams) >= 1:
-            tkey = self.rng.choice(list(teams.keys()))
+            team_keys = list(teams.keys())
+            self.rng.shuffle(team_keys)
+            tkey = team_keys[0]
             t = teams.pop(tkey)
 
             event_keys = list(events.keys())
@@ -160,8 +194,11 @@ class Repairer:
     ) -> tuple[list[int], list[int]]:
         """Assign match events to teams that need them."""
         while len(teams) >= 2:
-            tkey = self.rng.choice(list(teams.keys()))
+            team_keys = list(teams.keys())
+            self.rng.shuffle(team_keys)
+            tkey = team_keys[0]
             t1 = teams.pop(tkey)
+
             for i, t2 in teams.items():
                 if t1 == t2:
                     continue

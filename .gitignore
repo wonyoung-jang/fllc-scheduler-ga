@@ -14,6 +14,7 @@ wheels/
 
 # Other
 *.log
+*.lprof
 *.prof
 *.pkl
 *.dbm

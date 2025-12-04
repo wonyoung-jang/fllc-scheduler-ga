@@ -168,7 +168,7 @@ class FitnessBenchmark:
         if diff <= 0:
             diff = EPSILON
 
-        raw_scores = list(cache_scorer.values())
+        raw_scores = tuple(cache_scorer.values())
         logger.debug("Raw location/opponent scores: %s", raw_scores)
         opponents = [abs((s - maximum_score) / diff) if s != 0 else 0 for s in raw_scores]
         self.opponents = np.array(opponents, dtype=float)
@@ -197,7 +197,7 @@ class FitnessBenchmark:
         round_slot_combos = {}
         for rt, num_needed in self.config.roundreqs.items():
             available_slots = timeslots_by_round.get(rt, [])
-            round_slot_combos[rt] = list(itertools.combinations(available_slots, num_needed))
+            round_slot_combos[rt] = tuple(itertools.combinations(available_slots, num_needed))
             logger.debug("  %s: %d round combinations", f"{rt:<10}", len(round_slot_combos[rt]))
             logger.debug("    %s", ", ".join(str(combo) for combo in round_slot_combos[rt]))
 
@@ -210,7 +210,7 @@ class FitnessBenchmark:
         timeslots = defaultdict(int)
         for schedule_tuple in itertools.product(*round_slot_combos.values()):  # Cartesian product
             total_combinations += 1
-            curr_indices = np.array(list(itertools.chain.from_iterable(schedule_tuple)), dtype=int)
+            curr_indices = np.array(tuple(itertools.chain.from_iterable(schedule_tuple)), dtype=int)
             curr_timeslots = ts_ints[curr_indices]
             if self._has_overlaps(curr_timeslots):
                 continue

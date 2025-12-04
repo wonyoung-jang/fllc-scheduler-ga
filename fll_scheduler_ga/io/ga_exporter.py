@@ -32,7 +32,7 @@ def generate_summary(ga: GA, output_dir: Path, export_model: ExportModel) -> Non
         Plot(
             ga=ga,
             save_dir=output_dir,
-            objectives=list(FitnessObjective),
+            objectives=tuple(FitnessObjective),
             ref_points=ga.context.nsga3.refs.points,
             export_model=export_model,
         ).plot()
@@ -155,9 +155,9 @@ class ScheduleSummaryGenerator:
     def get_text_summary(self, schedule: Schedule) -> list[str]:  # noqa: PLR0915
         """Get a text summary of the schedule."""
         txt = []
-        objectives = list(FitnessObjective)
-        len_objectives = [len(name) for name in objectives]
-        max_len_obj = max(len_objectives, default=0) + 1
+        objectives = tuple(FitnessObjective)
+        length_objectives = [len(name) for name in objectives]
+        max_len_obj = max(length_objectives, default=0) + 1
         txt.append(f"FLL Scheduler GA Summary Report (ID: {id(schedule)} | Hash: {hash(schedule)})\n")
 
         txt.append("\nAttributes:\n")
@@ -206,14 +206,14 @@ class ScheduleSummaryGenerator:
         txt.append(f"Range   : {max_team_f - min_team_f:.6f}\n")
         txt.append(f"Average : {sum(total_fits) / len(total_fits):.6f}\n")
 
-        objs_header = "|".join(f"{name:<{len_objectives[i] + 1}}" for i, name in enumerate(objectives))
+        objs_header = "|".join(f"{name:<{length_objectives[i] + 1}}" for i, name in enumerate(objectives))
         header = f"\n{'Team':<5}|{objs_header}|Sum\n"
         txt.append(header)
         txt.append("-" * len(header) + "\n")
 
         normalized_teams = normalize_teams(schedule.schedule, self.team_identities)
         for t, fit in sorted(zip(all_teams, team_fits, strict=True), key=lambda x: -x[1].sum()):
-            fitness_row = (f"{score:<{len_objectives[i] + 1}.6f}" for i, score in enumerate(fit))
+            fitness_row = (f"{score:<{length_objectives[i] + 1}.6f}" for i, score in enumerate(fit))
             fitness_str = "|".join(fitness_row)
             if (team_id := normalized_teams[t]) == -1:
                 continue

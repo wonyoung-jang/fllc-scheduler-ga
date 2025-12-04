@@ -32,7 +32,7 @@ class Plot:
 
     ga: GA
     save_dir: str | Path | None
-    objectives: list[FitnessObjective]
+    objectives: tuple[FitnessObjective]
     ref_points: np.ndarray
     export_model: ExportModel
 

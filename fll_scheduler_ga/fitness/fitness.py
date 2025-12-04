@@ -48,12 +48,10 @@ class FitnessEvaluator:
     benchmark: FitnessBenchmark
     model: FitnessModel
 
-    objectives: ClassVar[list[FitnessObjective]] = list(FitnessObjective)
     _epsilon: ClassVar[float] = EPSILON
     max_int: ClassVar[int] = np.iinfo(np.int64).max
-    min_int: ClassVar[int] = -1
     n_teams: ClassVar[int] = 0
-    n_objs: ClassVar[int] = 0
+    n_objectives: ClassVar[int] = len(tuple(FitnessObjective))
     match_roundtypes: ClassVar[np.ndarray] = None
     rt_array: ClassVar[np.ndarray] = None
     loc_weight_rounds_inter: ClassVar[float] = 0.9
@@ -63,7 +61,6 @@ class FitnessEvaluator:
     def __post_init__(self) -> None:
         """Post-initialization to validate the configuration."""
         FitnessEvaluator.n_teams = self.config.num_teams
-        FitnessEvaluator.n_objs = len(self.objectives)
         match_rts = np.array([rt_idx for rt_idx, tpr in self.config.round_idx_to_tpr.items() if tpr == 2])
         max_rt_idx = match_rts.max() if match_rts.size > 0 else -1
         rt_array = np.full(max_rt_idx + 1, -1, dtype=int)
@@ -73,6 +70,7 @@ class FitnessEvaluator:
         FitnessEvaluator.rt_array = rt_array
         FitnessEvaluator.obj_weights = np.array(self.model.get_obj_weights(), dtype=float)
 
+    # @profile
     def evaluate_population(self, pop_array: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Evaluate an entire population of schedules.
 
@@ -88,24 +86,17 @@ class FitnessEvaluator:
         n_pop, _ = pop_array.shape
 
         # Preallocate arrays
-        team_fitnesses = np.zeros((n_pop, self.n_teams, self.n_objs), dtype=float)
+        team_fitnesses = np.zeros((n_pop, self.n_teams, self.n_objectives), dtype=float)
 
         # Get team-events mapping for the entire population
-        valid_events_mask, team_events_pop = self.get_team_events(pop_array)
+        team_events = self.get_team_events(pop_array)
 
         # Slice event properties
-        starts = self.event_properties.start[team_events_pop]
-        stops = self.event_properties.stop[team_events_pop]
-        loc_ids = self.event_properties.loc_idx[team_events_pop]
-        paired_evt_ids = self.event_properties.paired_idx[team_events_pop]
-        roundtype_ids = self.event_properties.roundtype_idx[team_events_pop]
-
-        # Invalidate data for invalid events
-        starts[~valid_events_mask] = self.max_int
-        stops[~valid_events_mask] = self.max_int
-        loc_ids[~valid_events_mask] = self.min_int
-        paired_evt_ids[~valid_events_mask] = self.min_int
-        roundtype_ids[~valid_events_mask] = self.min_int
+        starts = self.event_properties.start[team_events]
+        stops = self.event_properties.stop[team_events]
+        loc_ids = self.event_properties.loc_idx[team_events]
+        paired_evt_ids = self.event_properties.paired_idx[team_events]
+        roundtype_ids = self.event_properties.roundtype_idx[team_events]
 
         # Calculate scores for each objective
         team_fitnesses[:, :, 0] = self.score_break_time(starts, stops)
@@ -113,7 +104,6 @@ class FitnessEvaluator:
         team_fitnesses[:, :, 2] = self.score_opp_variety(paired_evt_ids, pop_array)
 
         # Aggregate team scores into schedule scores
-        team_fitnesses.min(axis=1)
         min_s = team_fitnesses.min(axis=1)
         mean_s = team_fitnesses.mean(axis=1)
         min_fitness_weight = self.model.min_fitness_weight
@@ -134,24 +124,24 @@ class FitnessEvaluator:
 
         return schedule_fitnesses, team_fitnesses
 
-    def get_team_events(self, pop_array: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    # @profile
+    def get_team_events(self, pop_array: np.ndarray) -> np.ndarray:
         """Invert the (event -> team) mapping to a (team -> events) mapping for the entire population."""
         n_pop, _ = pop_array.shape
 
         # Preallocate the team-events array
-        team_events_pop = np.full((n_pop, self.n_teams, self.config.max_events_per_team), -1, dtype=int)
+        team_events = np.full((n_pop, self.n_teams, self.config.max_events_per_team), -1, dtype=int)
 
         # Get indices of scheduled events
         sched_indices, event_indices = np.nonzero(pop_array >= 0)
-        team_indices = pop_array[sched_indices, event_indices]
 
         # Handle the case with no scheduled events
         if sched_indices.size == 0:
-            valid_events_mask = np.zeros_like(team_events_pop, dtype=bool)
-            team_events_pop.fill(0)
-            return valid_events_mask, team_events_pop
+            team_events.fill(0)
+            return team_events
 
         # Create unique keys for (pop, team) pairs
+        team_indices = pop_array[sched_indices, event_indices]
         keys = (sched_indices * self.n_teams) + team_indices
 
         # Count occurrences of each (pop, team) pair to determine group sizes
@@ -166,7 +156,7 @@ class FitnessEvaluator:
         group_starts[1:] = np.cumsum(counts[:-1])
 
         # Compute within-group indices
-        repeated_starts = np.repeat(group_starts, counts)
+        repeated_starts = group_starts.repeat(counts)
         within_group_indices = np.arange(sorted_event_indices.size, dtype=int) - repeated_starts
 
         # Map back to original indices
@@ -180,13 +170,9 @@ class FitnessEvaluator:
         team_idx_final = team_indices_sorted[valid_mask]
         slot_idx_final = within_group_indices[valid_mask]
         event_idx_final = sorted_event_indices[valid_mask]
-        team_events_pop[pop_idx_final, team_idx_final, slot_idx_final] = event_idx_final
+        team_events[pop_idx_final, team_idx_final, slot_idx_final] = event_idx_final
 
-        # Invalidate data for invalid events
-        valid_events_mask = team_events_pop >= 0
-        team_events_pop[~valid_events_mask] = 0
-
-        return valid_events_mask, team_events_pop
+        return team_events
 
     def score_break_time(self, starts: np.ndarray, stops: np.ndarray) -> np.ndarray:
         """Vectorized break time scoring."""
@@ -203,15 +189,15 @@ class FitnessEvaluator:
         valid_mask = (start_next < self.max_int) & (stop_curr < self.max_int)
 
         # Calculate break durations in minutes
-        breaks_seconds = start_next - stop_curr
+        breaks_seconds = start_next.astype(np.int16) - stop_curr.astype(np.int16)
         breaks_minutes = breaks_seconds / 60
 
         # Identify overlaps
-        overlap_mask = (breaks_minutes < 0).any(axis=2, where=valid_mask)
+        overlap_mask = ((breaks_minutes < 0) & valid_mask).any(axis=2)
 
         # Calculate mean
         count = valid_mask.sum(axis=2, dtype=float)
-        count[count == 0] = self._epsilon
+        count[count <= self._epsilon] = self._epsilon
 
         mean_break = breaks_minutes.sum(axis=2, where=valid_mask) / count
         mean_break[mean_break <= 0] = self._epsilon
@@ -347,7 +333,8 @@ class FitnessEvaluator:
 
         # Changes between consecutive opponents
         valid_mask = opponents[:, :, :-1] >= 0
-        changes = np.diff(opponents, axis=2) != 0
+        diffs = np.diff(opponents, axis=2)
+        changes = diffs != 0
         unique_counts = (changes & valid_mask).sum(axis=2)
 
         return self.benchmark.opponents[unique_counts]
