@@ -90,8 +90,10 @@ class GaContext:
             config=tournament_config,
             event_factory=event_factory,
             event_properties=event_properties,
+            model=app_config.fitness,
             flush_benchmarks=app_config.runtime.flush_benchmarks,
         )
+        benchmark.run()
         evaluator = FitnessEvaluator(
             config=tournament_config,
             event_properties=event_properties,

@@ -35,10 +35,12 @@ class BenchmarkLoad:
         """Load benchmark data from a pickle file."""
         try:
             with self.path.open("rb") as f:
-                return pickle.load(f)
-        except (OSError, pickle.UnpicklingError, EOFError):
+                seed_data = pickle.load(f)
+        except (OSError, pickle.UnpicklingError, EOFError, AttributeError):
             logger.exception("Failed to load fitness benchmarks from cache.")
             return None
+
+        return seed_data
 
 
 @dataclass(slots=True)

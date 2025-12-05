@@ -196,7 +196,10 @@ class Island:
         """Select the next generation using NSGA-III principles."""
         n_pop = self.genetic_model.parameters.population_size
         schedule_fits, _ = self.evaluate_pop()
-        _, flat, _ = self.context.nsga3.select(schedule_fits, n_pop)
+        if schedule_fits.shape[0] != n_pop:
+            _, flat, _ = self.context.nsga3.select(schedule_fits, n_pop)
+        else:
+            flat = np.arange(n_pop)
 
         self.fitness_history.current = schedule_fits[flat].mean(axis=0)
 

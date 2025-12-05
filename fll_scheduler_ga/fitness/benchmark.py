@@ -13,13 +13,13 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..config.constants import BENCHMARKS_CACHE, EPSILON, FITNESS_MODEL_VERSION, FITNESS_PENALTY
+from ..config.constants import BENCHMARKS_CACHE, EPSILON, FITNESS_MODEL_VERSION
 from ..io.seed_fitness_benchmark import BenchmarkLoad, BenchmarkSave, BenchmarkSeedData
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from ..config.schemas import TournamentConfig
+    from ..config.schemas import FitnessModel, TournamentConfig
     from ..data_model.event import EventFactory, EventProperties
 
 logger = getLogger(__name__)
@@ -32,18 +32,12 @@ class FitnessBenchmark:
     config: TournamentConfig
     event_factory: EventFactory
     event_properties: EventProperties
+    model: FitnessModel
 
-    penalty: float = FITNESS_PENALTY
     seed_file: Path = None
     opponents: np.ndarray = None
     flush_benchmarks: bool = False
     best_timeslot_score: float = None
-    lookup_breaktime_keys: np.ndarray = None
-    lookup_breaktime_values: np.ndarray = None
-
-    def __post_init__(self) -> None:
-        """Post-initialization to validate run benchmark."""
-        self.run()
 
     def run(self) -> None:
         """Run the fitness benchmarking process."""
@@ -68,6 +62,9 @@ class FitnessBenchmark:
         try:
             logger.debug("Loading fitness benchmarks from cache: %s", self.seed_file)
             seed_benchmark_data = BenchmarkLoad(self.seed_file).load()
+            if seed_benchmark_data is None:
+                logger.warning("No benchmark data found in cache. Recalculating benchmarks.")
+                return False
             if seed_benchmark_data.version != FITNESS_MODEL_VERSION:
                 logger.warning(
                     "Benchmark data version mismatch: Expected (%d), found (%d). Recalculating benchmarks...",
@@ -131,7 +128,14 @@ class FitnessBenchmark:
         req_tuple = tuple(sorted(self.config.roundreqs.items()))
 
         # Include the penalty in the hash
-        config_representation = (round_tuples, req_tuple, self.penalty, self.config.num_teams)
+        config_representation = (
+            round_tuples,
+            req_tuple,
+            self.model.minbreak_target,
+            self.model.minbreak_penalty,
+            self.model.zeros_penalty,
+            self.config.num_teams,
+        )
 
         # Using hashlib over built-in hash for stability
         return int(hashlib.sha256(str(config_representation).encode()).hexdigest(), 16)
@@ -192,26 +196,12 @@ class FitnessBenchmark:
 
         logger.debug("Finding timeslots per round type:")
         timeslots_by_round = {r.roundtype: [ts.idx for ts in r.timeslots] for r in self.config.rounds}
-        for rt, timeslot_idx in timeslots_by_round.items():
-            roundtype = f"{rt:<10}"
-            n_timeslots = len(timeslot_idx)
-            ts_idx_to_str = ", ".join(str(ts) for ts in timeslot_idx)
-            logger.debug("  %s: %d unique timeslots\n    %s", roundtype, n_timeslots, ts_idx_to_str)
 
         # Generate intra-round combinations
-        logger.debug("Generating all possible schedules per round type:")
-        round_slot_combos = []
-        for rt, num_needed in self.config.roundreqs.items():
-            available_slots = timeslots_by_round.get(rt, [])
-            combos = tuple(itertools.combinations(available_slots, num_needed))
-            round_slot_combos.append(combos)
-            logger.debug("  %s: %d round combinations", f"{rt:<10}", len(combos))
-            logger.debug("    %s", ", ".join(str(combo) for combo in combos))
+        round_slot_combos = self.generate_intra_round_breaktime_combinations(timeslots_by_round)
 
         # Filter, score, and store valid schedules
         logger.debug("Generating and filtering all possible team schedules")
-        np.array(self.config.all_timeslots, dtype=object)
-        total_combinations = 0
 
         raw_product = itertools.product(*round_slot_combos)  # Cartesian product of round combinations
         flattened_indices = [list(itertools.chain.from_iterable(p)) for p in raw_product]
@@ -223,14 +213,11 @@ class FitnessBenchmark:
         indices_matrix = np.array(flattened_indices, dtype=int)
         total_combinations = indices_matrix.shape[0]
 
-        logger.debug("raw_product: %s", raw_product)
-        logger.debug("flattened_indices: %s", flattened_indices)
+        logger.debug("indices_matrix (Shape: %s):\n%s", indices_matrix.shape, indices_matrix)
         logger.debug("total_combinations: %d", total_combinations)
         logger.debug("calculating breaktime scores vectorized...")
 
-        scores, valid_mask = self._score_breaktime_vectorized(indices_matrix, all_starts, all_stops)
-        valid_indices = indices_matrix[valid_mask]
-        valid_scores = scores[valid_mask]
+        valid_scores, valid_indices = self._score_breaktime_vectorized(indices_matrix, all_starts, all_stops)
         num_valid = valid_scores.shape[0]
         logger.debug("num_valid: %d", num_valid)
         if num_valid == 0:
@@ -246,26 +233,8 @@ class FitnessBenchmark:
         # Normalize
         normalized_scores = valid_scores / self.best_timeslot_score
 
-        # Caching frozenset implementation
-        cache_data = {frozenset(row): score for row, score in zip(valid_indices, normalized_scores, strict=True)}
-        size_frozenset_cache = sys.getsizeof(cache_data)
-        logger.debug("Size of frozenset cache: %d bytes", size_frozenset_cache)
-
-        # Caching numpy array implementation
-        # One should be able to index a set of indices and get a single score
-        valid_indices.sort(axis=1)
-        n_cols = valid_indices.shape[1]
-        dtype_view = np.dtype((np.void, valid_indices.dtype.itemsize * n_cols))
-        compact_keys = np.ascontiguousarray(valid_indices).view(dtype_view).ravel()
-
-        sort_order = np.argsort(compact_keys)
-        self.lookup_breaktime_keys = compact_keys[sort_order]
-        self.lookup_breaktime_values = normalized_scores[sort_order]
-
-        total_np_bytes = self.lookup_breaktime_keys.nbytes + self.lookup_breaktime_values.nbytes
-        logger.debug("--- Memory Comparison ---")
-        logger.debug("Python Dict (Struct only): %d bytes", size_frozenset_cache)
-        logger.debug("NumPy Compact (Total):     %d bytes", total_np_bytes)
+        # Caching
+        self.cache_breaktime_score(valid_indices, normalized_scores)
 
         # Reporting
         unique_scores = Counter(normalized_scores)
@@ -278,6 +247,33 @@ class FitnessBenchmark:
         avg_score = sum(score for score, _ in most_common) / len(most_common)
         logger.debug("Average score of most common: %f", avg_score)
 
+    def generate_intra_round_breaktime_combinations(
+        self, timeslots_by_round: dict[str, list[int]]
+    ) -> list[tuple[tuple[int, ...], ...]]:
+        """Generate all intra-round breaktime combinations."""
+        logger.debug("Generating all possible schedules per round type:")
+
+        round_slot_combos = []
+        for rt, num_needed in self.config.roundreqs.items():
+            timeslot_indices = timeslots_by_round.get(rt, [])
+            combos = tuple(itertools.combinations(timeslot_indices, num_needed))
+            round_slot_combos.append(combos)
+
+            logger.debug("  roundtype: %s", rt)
+            logger.debug("    %d timeslots", len(timeslot_indices))
+            logger.debug("      timeslots: %s", timeslot_indices)
+            logger.debug("    %d combinations", len(combos))
+            logger.debug("      combinations: %s", combos)
+
+        return round_slot_combos
+
+    def cache_breaktime_score(self, indices: np.ndarray, scores: np.ndarray) -> None:
+        """Cache breaktime scores using numpy arrays for efficient lookup."""
+        # Caching frozenset implementation
+        cache_data = {frozenset(row): score for row, score in zip(indices, scores, strict=True)}
+        size_frozenset_cache = sys.getsizeof(cache_data)
+        logger.debug("Size of frozenset cache: %d bytes", size_frozenset_cache)
+
     def _score_breaktime_vectorized(
         self, indices: np.ndarray, all_starts: np.ndarray, all_stops: np.ndarray
     ) -> tuple[np.ndarray, ...]:
@@ -289,24 +285,47 @@ class FitnessBenchmark:
         starts_sorted = np.take_along_axis(starts, order, axis=1)
         stops_sorted = np.take_along_axis(stops, order, axis=1)
 
-        breaks_seconds = starts_sorted[:, 1:] - stops_sorted[:, :-1]
+        start_next = starts_sorted[:, 1:]
+        stop_curr = stops_sorted[:, :-1]
+
+        breaks_seconds = start_next - stop_curr
         breaks_minutes = breaks_seconds / 60
 
-        has_overlap = np.any(breaks_minutes < 0, axis=1)
-        valid_mask = ~has_overlap
+        overlap_mask = (breaks_minutes < 0).any(axis=1)
+        non_overlap_mask = ~overlap_mask
 
-        mean_break = breaks_minutes.mean(axis=1)
-        mean_break[mean_break == 0] = EPSILON
+        valid_mask = breaks_minutes >= 0
+        count = valid_mask.sum(axis=1, dtype=int)
 
-        std_dev = breaks_minutes.std(axis=1)
+        mean_break = breaks_minutes.sum(axis=1) / count
+        mean_break_zero_mask = mean_break == 0
+        mean_break[mean_break_zero_mask] = EPSILON
+
+        diff_sq: np.ndarray = np.square(breaks_minutes - mean_break[:, np.newaxis])
+        variance = diff_sq.sum(axis=1) / count
+        std_dev: np.ndarray = np.sqrt(variance)
 
         coeff = std_dev / mean_break
         ratio = 1 / (1 + coeff)
 
-        zeros_count = np.sum(breaks_minutes == 0, axis=1)
-        zeros_penalty = self.penalty**zeros_count
+        minbreak_count = (breaks_minutes < self.model.minbreak_target).sum(axis=1)
+        where_breaks_lt_target = (breaks_minutes < self.model.minbreak_target) & (breaks_minutes > 0)
+        max_diff_breaktimes = np.zeros_like(minbreak_count)
+        if where_breaks_lt_target.any():
+            diffs = self.model.minbreak_target - breaks_minutes
+            diffs[~where_breaks_lt_target] = 0.0
+            max_diff_breaktimes = diffs.max(axis=1) / self.model.minbreak_target
+        minbreak_exp = minbreak_count + max_diff_breaktimes
+        minbreak_penalty = self.model.minbreak_penalty**minbreak_exp
 
-        final_scores = ratio * zeros_penalty
-        final_scores[has_overlap] = 0.0
+        zeros_count = (breaks_minutes == 0).sum(axis=1)
+        zeros_penalty = self.model.zeros_penalty**zeros_count
 
-        return final_scores, valid_mask
+        final_scores = ratio * zeros_penalty * minbreak_penalty
+        final_scores[mean_break_zero_mask] = 0.0
+        final_scores[overlap_mask] = 0.0
+
+        final_scores = final_scores[non_overlap_mask]
+        indices = indices[non_overlap_mask]
+
+        return final_scores, indices

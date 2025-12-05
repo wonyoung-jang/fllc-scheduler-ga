@@ -7,6 +7,7 @@ from logging import getLogger
 from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
+from line_profiler import profile
 
 from ..config.constants import EPSILON, FitnessObjective
 
@@ -70,7 +71,7 @@ class FitnessEvaluator:
         FitnessEvaluator.rt_array = rt_array
         FitnessEvaluator.obj_weights = np.array(self.model.get_obj_weights(), dtype=float)
 
-    # @profile
+    @profile
     def evaluate_population(self, pop_array: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Evaluate an entire population of schedules.
 
@@ -124,7 +125,6 @@ class FitnessEvaluator:
 
         return schedule_fitnesses, team_fitnesses
 
-    # @profile
     def get_team_events(self, pop_array: np.ndarray) -> np.ndarray:
         """Invert the (event -> team) mapping to a (team -> events) mapping for the entire population."""
         n_pop, _ = pop_array.shape
@@ -174,6 +174,7 @@ class FitnessEvaluator:
 
         return team_events
 
+    @profile
     def score_break_time(self, starts: np.ndarray, stops: np.ndarray) -> np.ndarray:
         """Vectorized break time scoring."""
         # Sort events by start time
@@ -182,37 +183,35 @@ class FitnessEvaluator:
         stops_sorted = np.take_along_axis(stops, order, axis=2)
 
         # Calculate breaks between consecutive events
-        start_next = starts_sorted[..., 1:]
-        stop_curr = stops_sorted[..., :-1]
-
-        # Valid consecutive events must have valid start and stop times
-        valid_mask = (start_next < self.max_int) & (stop_curr < self.max_int)
+        start_next = starts_sorted[:, :, 1:]
+        stop_curr = stops_sorted[:, :, :-1]
 
         # Calculate break durations in minutes
-        breaks_seconds = start_next.astype(np.int16) - stop_curr.astype(np.int16)
+        breaks_seconds = start_next - stop_curr
         breaks_minutes = breaks_seconds / 60
 
         # Identify overlaps
-        overlap_mask = ((breaks_minutes < 0) & valid_mask).any(axis=2)
+        overlap_mask = (breaks_minutes < 0).any(axis=2)
 
         # Calculate mean
-        count = valid_mask.sum(axis=2, dtype=float)
-        count[count <= self._epsilon] = self._epsilon
+        valid_mask = breaks_minutes >= 0
+        count = valid_mask.sum(axis=2, dtype=int)
 
-        mean_break = breaks_minutes.sum(axis=2, where=valid_mask) / count
-        mean_break[mean_break <= 0] = self._epsilon
+        mean_break = breaks_minutes.sum(axis=2) / count
+        mean_break_zero_mask = mean_break == 0
+        mean_break[mean_break_zero_mask] = self._epsilon
 
         # Calculate standard deviation
-        diff_sq: np.ndarray = np.square(breaks_minutes - mean_break[..., np.newaxis])
-        variance = diff_sq.sum(axis=2, where=valid_mask) / count
+        diff_sq: np.ndarray = np.square(breaks_minutes - mean_break[:, :, np.newaxis])
+        variance = diff_sq.sum(axis=2) / count
         std_dev: np.ndarray = np.sqrt(variance)
 
         # Calculate coefficient of variation
         coeff = std_dev / mean_break
-        ratio = 1.0 / (1.0 + coeff)
+        ratio = 1 / (1 + coeff)
 
         # Apply minimum break penalty
-        minbreak_count = ((breaks_minutes < self.model.minbreak_target) & valid_mask).sum(axis=2)
+        minbreak_count = (breaks_minutes < self.model.minbreak_target).sum(axis=2)
         where_breaks_lt_target = (breaks_minutes < self.model.minbreak_target) & (breaks_minutes > 0)
         max_diff_breaktimes = np.zeros_like(minbreak_count)
         if where_breaks_lt_target.any():
@@ -223,15 +222,15 @@ class FitnessEvaluator:
         minbreak_penalty = self.model.minbreak_penalty**minbreak_exp
 
         # Apply penalties for zero breaks
-        zeros_count = (breaks_minutes == 0).sum(axis=2, where=valid_mask)
+        zeros_count = (breaks_minutes == 0).sum(axis=2)
         zeros_penalty = self.model.zeros_penalty**zeros_count
 
         # Apply penalties
         final_scores = ratio * zeros_penalty * minbreak_penalty
-        final_scores[mean_break == 0] = 0.0
+        final_scores[mean_break_zero_mask] = 0.0
         final_scores[overlap_mask] = 0.0
 
-        return final_scores  # / (self.benchmark.best_timeslot_score or 1.0)
+        return final_scores / self.benchmark.best_timeslot_score
 
     @classmethod
     def score_loc_consistency(cls, loc_ids: np.ndarray, roundtype_ids: np.ndarray) -> np.ndarray:
