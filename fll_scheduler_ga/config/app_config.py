@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict
 
 from ..data_model.location import Location
 from ..data_model.timeslot import TimeSlot
-from .constants import CONFIG_FILE_DEFAULT, TIME_FORMAT_MAP
+from .constants import CONFIG_FILE_DEFAULT
 from .schemas import (
     AppConfigModel,
     ExportModel,
@@ -35,6 +35,10 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 logger = logging.getLogger(__name__)
+TIME_FORMAT_MAP = {
+    12: "%I:%M %p",
+    24: "%H:%M",
+}
 
 
 class AppConfig(BaseModel):
@@ -115,7 +119,6 @@ class AppConfig(BaseModel):
             msg = "No rounds defined in the configuration file."
             raise ValueError(msg)
 
-        rounds.sort(key=lambda r: r.start_time)
         roundreqs = {r.roundtype: r.rounds_per_team for r in rounds}
         round_str_to_idx = {r.roundtype: r.roundtype_idx for r in rounds}
         round_idx_to_tpr = {r.roundtype_idx: r.teams_per_round for r in rounds}
@@ -148,7 +151,7 @@ class AppConfig(BaseModel):
         return TournamentConfig(
             num_teams=len(teams),
             time_fmt=time_fmt,
-            rounds=tuple(rounds),
+            rounds=rounds,
             roundreqs=roundreqs,
             round_str_to_idx=round_str_to_idx,
             round_idx_to_tpr=round_idx_to_tpr,
@@ -171,9 +174,9 @@ class AppConfig(BaseModel):
     @classmethod
     def parse_rounds_config(
         cls, round_models: list[RoundModel], num_teams: int, time_fmt: str, locations: list[Location]
-    ) -> list[TournamentRound]:
-        """Parse and return a list of TournamentRound objects from the configuration."""
-        tournament_rounds = []
+    ) -> tuple[TournamentRound, ...]:
+        """Parse and return TournamentRound objects from the configuration."""
+        rounds: list[TournamentRound] = []
         timeslot_idx_iter = itertools.count()
         for roundtype_idx, rnd in enumerate(round_models):
             start_dt = cls._parse_time(rnd.start_time, time_fmt)
@@ -223,8 +226,9 @@ class AppConfig(BaseModel):
                 slots_empty=slots_empty,
                 unfilled_allowed=unfilled_allowed,
             )
-            tournament_rounds.append(tournament_round)
-        return tournament_rounds
+            rounds.append(tournament_round)
+        rounds.sort(key=lambda r: r.start_time)
+        return tuple(rounds)
 
     @classmethod
     def validate_duration(

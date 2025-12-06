@@ -125,7 +125,8 @@ class Schedule:
         roundtype = Schedule.ctx.event_props.roundtype_idx[event]
         self.team_events[team].add(event)
         self.team_rounds[team, roundtype] -= 1
-        self[event] = team
+        self.schedule[event] = team
+        self._hash = None
 
     def unassign(self, team: int, event: int) -> None:
         """Remove an event from a team's scheduled events."""
@@ -135,7 +136,8 @@ class Schedule:
         roundtype = Schedule.ctx.event_props.roundtype_idx[event]
         self.team_events[team].remove(event)
         self.team_rounds[team, roundtype] += 1
-        del self[event]
+        self.schedule[event] = -1
+        self._hash = None
 
     def needs_round(self, team: int, roundtype: int) -> bool:
         """Check if a team still needs to participate in a given round type."""

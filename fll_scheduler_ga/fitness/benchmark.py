@@ -9,20 +9,21 @@ import sys
 from collections import Counter
 from dataclasses import dataclass
 from logging import getLogger
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..config.constants import BENCHMARKS_CACHE, EPSILON, FITNESS_MODEL_VERSION
+from ..config.constants import EPSILON
 from ..io.seed_fitness_benchmark import BenchmarkLoad, BenchmarkSave, BenchmarkSeedData
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from ..config.schemas import FitnessModel, TournamentConfig
     from ..data_model.event import EventFactory, EventProperties
 
 logger = getLogger(__name__)
+BENCHMARKS_CACHE = Path(".benchmarks_cache/").resolve()
+FITNESS_MODEL_VERSION = 1
 
 
 @dataclass(slots=True)

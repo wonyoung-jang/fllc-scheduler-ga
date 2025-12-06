@@ -27,6 +27,3 @@ class TimeSlot(BaseModel):
     def overlaps(self, other: "TimeSlot") -> bool:
         """Check if this time slot overlaps with another."""
         return self.start < other.stop and other.start < self.stop
-
-
-TimeSlot.model_rebuild()

@@ -2,32 +2,12 @@
 
 from __future__ import annotations
 
-import re
 from enum import StrEnum
 from pathlib import Path
 
-FITNESS_MODEL_VERSION = 1
-DATA_MODEL_VERSION = 2
-
 ASCII_OFFSET = 64
-RANDOM_SEED_RANGE = (1, 2**32 - 1)
 EPSILON = 1e-12
-TIME_FORMAT_MAP = {
-    12: "%I:%M %p",
-    24: "%H:%M",
-}
-
-CONFIG_DIR = Path(".configs/").resolve()
 CONFIG_FILE_DEFAULT = Path("fll_scheduler_ga/config.json").resolve()
-CONFIG_FILE_ACTIVE = Path(".configs/_active_config.txt").resolve()
-BENCHMARKS_CACHE = Path(".benchmarks_cache/").resolve()
-
-# For Importer
-TIME_HEADER = "Time"
-RE_HHMM = re.compile(r"\d{2}:\d{2}")
-
-# For API (future)
-# API_OUTPUT_DIR = Path("fllc_api_outputs")
 
 
 class SelectionOp(StrEnum):

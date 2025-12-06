@@ -8,9 +8,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from ..data_model.location import Location
 from ..data_model.timeslot import TimeSlot
-from .constants import RANDOM_SEED_RANGE, CrossoverOp, MutationOp, SeedIslandStrategy, SeedPopSort
+from .constants import CrossoverOp, MutationOp, SeedIslandStrategy, SeedPopSort
 
 logger = logging.getLogger(__name__)
+RANDOM_SEED_RANGE = (1, 2**32 - 1)
 
 
 class GaParameters(BaseModel):

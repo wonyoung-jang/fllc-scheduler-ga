@@ -7,8 +7,6 @@ from dataclasses import dataclass
 from logging import getLogger
 from typing import TYPE_CHECKING
 
-from ..config.constants import DATA_MODEL_VERSION
-
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -16,15 +14,16 @@ if TYPE_CHECKING:
     from ..data_model.schedule import Schedule
 
 logger = getLogger(__name__)
+DATA_MODEL_VERSION = 2
 
 
 @dataclass(slots=True)
 class GASeedData:
     """GA seed data object."""
 
-    version: int
-    config: TournamentConfig
-    population: list[Schedule]
+    version: int = DATA_MODEL_VERSION
+    config: TournamentConfig | None = None
+    population: list[Schedule] | None = None
 
 
 @dataclass(slots=True)

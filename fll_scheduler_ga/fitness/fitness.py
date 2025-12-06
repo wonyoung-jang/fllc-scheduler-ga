@@ -7,7 +7,6 @@ from logging import getLogger
 from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
-from line_profiler import profile
 
 from ..config.constants import EPSILON, FitnessObjective
 
@@ -18,9 +17,6 @@ if TYPE_CHECKING:
     from .benchmark import FitnessBenchmark
 
 logger = getLogger(__name__)
-
-# import sys
-# np.set_printoptions(threshold=sys.maxsize, linewidth=200, edgeitems=30)
 
 
 @dataclass(slots=True)
@@ -71,7 +67,6 @@ class FitnessEvaluator:
         FitnessEvaluator.rt_array = rt_array
         FitnessEvaluator.obj_weights = np.array(self.model.get_obj_weights(), dtype=float)
 
-    @profile
     def evaluate_population(self, pop_array: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Evaluate an entire population of schedules.
 
@@ -174,7 +169,6 @@ class FitnessEvaluator:
 
         return team_events
 
-    @profile
     def score_break_time(self, starts: np.ndarray, stops: np.ndarray) -> np.ndarray:
         """Vectorized break time scoring."""
         # Sort events by start time

@@ -28,6 +28,3 @@ class Location(BaseModel):
         if self.side:
             return hash((self.name, self.side))
         return hash(self.name)
-
-
-Location.model_rebuild()

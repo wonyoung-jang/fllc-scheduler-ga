@@ -8,9 +8,11 @@ import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from fll_scheduler_ga.config.constants import CONFIG_DIR, CONFIG_FILE_ACTIVE, CONFIG_FILE_DEFAULT
+from fll_scheduler_ga.config.constants import CONFIG_FILE_DEFAULT
 
 logger = logging.getLogger(__name__)
+CONFIG_DIR = Path(".configs/").resolve()
+CONFIG_FILE_ACTIVE = Path(".configs/_active_config.txt").resolve()
 
 
 @dataclass(slots=True)

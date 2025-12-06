@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..config.constants import DATA_MODEL_VERSION
 from ..data_model.event import EventFactory, EventProperties
 from ..data_model.schedule import Schedule, ScheduleContext
 from ..fitness.benchmark import FitnessBenchmark
@@ -205,7 +204,7 @@ class RuntimeStartup:
         seed_data = GALoad(seed_file=seed_file, config=self.config.tournament).load()
 
         if seed_data is None:
-            seed_data = GASeedData(version=DATA_MODEL_VERSION, config=self.config.tournament, population=[])
+            seed_data = GASeedData(config=self.config.tournament, population=[])
 
         if imported_schedule not in seed_data.population:
             seed_data.population.append(imported_schedule)

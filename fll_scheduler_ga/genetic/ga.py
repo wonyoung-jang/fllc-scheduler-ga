@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from ..config.constants import DATA_MODEL_VERSION, SeedIslandStrategy, SeedPopSort
+from ..config.constants import SeedIslandStrategy, SeedPopSort
 from ..io.observers import LoggingObserver, TqdmObserver
 from ..io.seed_ga import GALoad, GASave, GASeedData
 from .ga_generation import GaGeneration
@@ -144,7 +144,6 @@ class GA:
         finally:
             GAFinalizer(self).finalize(start_time)
             seed_ga_data = GASeedData(
-                version=DATA_MODEL_VERSION,
                 config=config,
                 population=self.pareto_front() if self.save_front_only else self.total_population,
             )

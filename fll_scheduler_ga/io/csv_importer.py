@@ -4,12 +4,13 @@
 from __future__ import annotations
 
 import csv
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from logging import getLogger
 from typing import TYPE_CHECKING, TextIO
 
-from ..config.constants import ASCII_OFFSET, RE_HHMM, TIME_HEADER
+from ..config.constants import ASCII_OFFSET
 from ..data_model.schedule import Schedule
 from ..data_model.timeslot import TimeSlot
 
@@ -20,6 +21,8 @@ if TYPE_CHECKING:
     from ..data_model.event import EventFactory, EventProperties
 
 logger = getLogger(__name__)
+RE_HHMM = re.compile(r"\d{2}:\d{2}")
+TIME_HEADER = "Time"
 
 
 @dataclass(slots=True)
