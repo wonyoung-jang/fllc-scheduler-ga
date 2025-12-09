@@ -14,9 +14,10 @@ FMT_12H = "%I:%M %p"
 def timeslot() -> TimeSlot:
     """Create a sample TimeSlot for testing."""
     start = datetime.strptime("09:00", FMT_24H).replace(tzinfo=UTC)
-    stop = datetime.strptime("10:00", FMT_24H).replace(tzinfo=UTC)
+    stop_active = datetime.strptime("09:15", FMT_24H).replace(tzinfo=UTC)
+    stop_cycle = datetime.strptime("10:00", FMT_24H).replace(tzinfo=UTC)
     TimeSlot.time_fmt = FMT_24H
-    return TimeSlot(idx=0, start=start, stop=stop)
+    return TimeSlot(idx=0, start=start, stop_active=stop_active, stop_cycle=stop_cycle)
 
 
 def _parse(dt_str: str, fmt: str) -> datetime:
@@ -24,19 +25,20 @@ def _parse(dt_str: str, fmt: str) -> datetime:
 
 
 @pytest.mark.parametrize(
-    ("start_str", "stop_str", "fmt", "expected"),
+    ("start_str", "stop_active_str", "stop_cycle_str", "fmt", "expected"),
     [
-        ("09:00 AM", "10:00 AM", FMT_12H, "09:00 AM-10:00 AM"),
-        ("09:00", "10:00", FMT_24H, "09:00-10:00"),
+        ("09:00 AM", "09:15 AM", "10:00 AM", FMT_12H, "09:00 AM-10:00 AM"),
+        ("09:00", "09:15", "10:00", FMT_24H, "09:00-10:00"),
     ],
     ids=["12h", "24h"],
 )
-def test_timeslot_str(start_str: str, stop_str: str, fmt: str, expected: str) -> None:
+def test_timeslot_str(start_str: str, stop_active_str: str, stop_cycle_str: str, fmt: str, expected: str) -> None:
     """Parametrized tests for string representation of TimeSlot."""
     start = _parse(start_str, fmt)
-    stop = _parse(stop_str, fmt)
+    stop_active = _parse(stop_active_str, fmt)
+    stop_cycle = _parse(stop_cycle_str, fmt)
     TimeSlot.time_fmt = fmt
-    timeslot = TimeSlot(idx=0, start=start, stop=stop)
+    timeslot = TimeSlot(idx=0, start=start, stop_active=stop_active, stop_cycle=stop_cycle)
     assert str(timeslot) == expected
 
 
@@ -54,7 +56,8 @@ def test_less_than_timeslot(timeslot: TimeSlot, delta_minutes: int, *, expect_lt
     other = TimeSlot(
         idx=0,
         start=timeslot.start + timedelta(minutes=delta_minutes),
-        stop=timeslot.stop + timedelta(minutes=delta_minutes),
+        stop_active=timeslot.stop_active + timedelta(minutes=delta_minutes),
+        stop_cycle=timeslot.stop_cycle + timedelta(minutes=delta_minutes),
     )
     assert (other < timeslot) is expect_lt
     assert (other > timeslot) is expect_gt
@@ -97,6 +100,7 @@ def test_overlaps_timeslot(timeslot: TimeSlot, start_offset_min: int, stop_offse
     other = TimeSlot(
         idx=0,
         start=timeslot.start + timedelta(minutes=start_offset_min),
-        stop=timeslot.stop + timedelta(minutes=stop_offset_min),
+        stop_active=timeslot.stop_active + timedelta(minutes=stop_offset_min),
+        stop_cycle=timeslot.stop_cycle + timedelta(minutes=stop_offset_min),
     )
     assert other.overlaps(timeslot) is expected

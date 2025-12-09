@@ -179,8 +179,11 @@ class RuntimeStartup:
             self.context.event_factory,
             self.context.event_properties,
         )
-        imported_schedule = csv_importer.schedule
+        if not csv_importer.validate_inputs():
+            return None
 
+        csv_importer.run()
+        imported_schedule = csv_importer.schedule
         pop = np.array([imported_schedule.schedule], dtype=int)
 
         if fits := self.context.evaluator.evaluate_population(pop):

@@ -1,14 +1,14 @@
 {
   "genetic": {
     "parameters": {
-      "generations": 2500,
-      "population_size": 5,
-      "offspring_size": 1,
-      "crossover_chance": 0.7,
-      "mutation_chance": 0.4,
+      "generations": 50000,
+      "population_size": 16,
+      "offspring_size": 2,
+      "crossover_chance": 0.5,
+      "mutation_chance": 0.05,
       "num_islands": 8,
-      "migration_interval": 100,
-      "migration_size": 3,
+      "migration_interval": 200,
+      "migration_size": 1,
       "rng_seed": null
     },
     "operator": {
@@ -31,9 +31,9 @@
       }
     },
     "stagnation": {
-      "enable": false,
+      "enable": true,
       "proportion": 0.8,
-      "threshold": 50
+      "threshold": 400
     }
   },
   "runtime": {
@@ -45,7 +45,7 @@
   },
   "imports": {
     "seed_pop_sort": "random",
-    "seed_island_strategy": "distributed"
+    "seed_island_strategy": "concentrated"
   },
   "exports": {
     "output_dir": "fllc_schedule_outputs",
@@ -67,10 +67,10 @@
     "loglevel_console": "INFO"
   },
   "teams": {
-    "teams": 52
+    "teams": 53
   },
   "fitness": {
-    "weight_mean": 1,
+    "weight_mean": 3,
     "weight_variation": 1,
     "weight_range": 1,
     "obj_weight_breaktime": 1,
@@ -100,7 +100,8 @@
       "rounds_per_team": 1,
       "teams_per_round": 1,
       "start_time": "08:15",
-      "duration_minutes": 45
+      "duration_cycle": 45,
+      "duration_active": 30
     },
     {
       "roundtype": "Practice",
@@ -108,7 +109,8 @@
       "rounds_per_team": 2,
       "teams_per_round": 2,
       "start_time": "09:00",
-      "duration_minutes": 11
+      "duration_cycle": 11,
+      "duration_active": 2
     },
     {
       "roundtype": "Table",
@@ -137,7 +139,8 @@
         "16:15",
         "16:22"
       ],
-      "duration_minutes": 8
+      "duration_cycle": 8,
+      "duration_active": 2
     }
   ]
 }

@@ -138,8 +138,13 @@ class AppConfig(BaseModel):
         starts_of_rounds = [r.start_time for r in rounds]
         ends_of_rounds = [r.stop_time for r in rounds]
         round_timeslots = []
-        for start, stop in zip(starts_of_rounds, ends_of_rounds, strict=True):
-            round_ts = TimeSlot(idx=0, start=start, stop=stop)
+        for start, stop_cycle in zip(starts_of_rounds, ends_of_rounds, strict=True):
+            round_ts = TimeSlot(
+                idx=0,
+                start=start,
+                stop_active=stop_cycle,
+                stop_cycle=stop_cycle,
+            )
             round_timeslots.append(round_ts)
 
         is_interleaved = any(
@@ -188,17 +193,27 @@ class AppConfig(BaseModel):
 
             n_timeslots = cls.calc_num_timeslots(len(times_dt), len(locations_in_sec), num_teams, rnd.rounds_per_team)
 
-            dur_raw = rnd.duration_minutes
-            dur_valid = cls.validate_duration(start_dt, stop_dt, times_dt, dur_raw, n_timeslots)
-            dur_tdelta = timedelta(minutes=dur_valid)
+            dur_raw_cycle = rnd.duration_cycle
+            dur_valid_cycle = cls.validate_duration(start_dt, stop_dt, times_dt, dur_raw_cycle, n_timeslots)
+            dur_raw_active = rnd.duration_active
+            dur_valid_active = cls.validate_duration(start_dt, stop_dt, times_dt, dur_raw_active, n_timeslots)
+            dur_tdelta_cycle = timedelta(minutes=dur_valid_cycle)
+            dur_tdelta_active = timedelta(minutes=dur_valid_active)
 
             timeslots = [
-                TimeSlot(idx=next(timeslot_idx_iter), start=start, stop=stop)
-                for start, stop in cls.init_timeslots(times_dt, dur_tdelta, n_timeslots, start_dt)
+                TimeSlot(
+                    idx=next(timeslot_idx_iter),
+                    start=start,
+                    stop_active=stop_active,
+                    stop_cycle=stop_cycle,
+                )
+                for start, stop_active, stop_cycle in cls.init_timeslots(
+                    times_dt, dur_tdelta_cycle, dur_tdelta_active, n_timeslots, start_dt
+                )
             ]
 
             final_start_time = timeslots[0].start
-            final_stop_time = timeslots[-1].stop
+            final_stop_time = timeslots[-1].stop_cycle
 
             times_dt = times_dt if times_dt else [ts.start for ts in timeslots]
 
@@ -216,7 +231,7 @@ class AppConfig(BaseModel):
                 times=times_dt,
                 start_time=final_start_time,
                 stop_time=final_stop_time,
-                duration_minutes=dur_tdelta,
+                duration_minutes=dur_tdelta_cycle,
                 location_type=rnd.location,
                 locations=locations_in_sec,
                 num_timeslots=n_timeslots,
@@ -232,7 +247,12 @@ class AppConfig(BaseModel):
 
     @classmethod
     def validate_duration(
-        cls, start_dt: datetime | None, stop_dt: datetime | None, times_dt: list[datetime], dur: int, n_timeslots: int
+        cls,
+        start_dt: datetime | None,
+        stop_dt: datetime | None,
+        times_dt: list[datetime],
+        dur: int,
+        n_timeslots: int,
     ) -> int | None:
         """Validate the times configuration for a round.
 
@@ -279,21 +299,28 @@ class AppConfig(BaseModel):
 
     @classmethod
     def init_timeslots(
-        cls, start_times: list[datetime], dur_tdelta: timedelta, n_timeslots: int, start_dt: datetime
-    ) -> Iterator[tuple[datetime, datetime]]:
+        cls,
+        start_times: list[datetime],
+        dur_tdelta_cycle: timedelta,
+        dur_tdelta_active: timedelta,
+        n_timeslots: int,
+        start_dt: datetime,
+    ) -> Iterator[tuple[datetime, ...]]:
         """Initialize the timeslots for the round."""
-        if start_times and dur_tdelta:
-            stop_times = start_times[1:]
-            stop_times.append(stop_times[-1] + dur_tdelta)
-            time_pairs = zip(start_times, stop_times, strict=True)
-            yield from time_pairs
+        if start_times and dur_tdelta_active and dur_tdelta_cycle:
+            stop_cycle_times = start_times[1:]
+            stop_cycle_times.append(stop_cycle_times[-1] + dur_tdelta_cycle)
+            stop_active_times = (start + dur_tdelta_active for start in start_times)
+            time_groups = zip(start_times, stop_active_times, stop_cycle_times, strict=True)
+            yield from time_groups
             return
 
         current = start_dt
         for _ in range(n_timeslots):
-            stop = current + dur_tdelta
-            yield (current, stop)
-            current = stop
+            stop_cycle = current + dur_tdelta_cycle
+            stop_active = current + dur_tdelta_active
+            yield (current, stop_active, stop_cycle)
+            current = stop_cycle
 
     @classmethod
     def parse_location_config(cls, location_models: list[LocationModel]) -> list[Location]:

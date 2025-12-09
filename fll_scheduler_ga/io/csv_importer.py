@@ -38,9 +38,8 @@ class CsvImporter:
     round_configs: dict[str, TournamentRound] = None
     rtl_map: dict[tuple[str, tuple[datetime, ...], tuple[str, int, int, int]], int] = None
 
-    def __post_init__(self) -> None:
-        """Post-initialization to validate the CSV file."""
-        self.validate_inputs()
+    def run(self) -> None:
+        """Run the CSV importer to build the schedule."""
         self.round_configs = {r.roundtype: r for r in self.config.rounds}
         self.rtl_map = {}
         for e in self.event_factory.build_indices():
@@ -50,7 +49,7 @@ class CsvImporter:
             loc_name = self.event_properties.loc_name[e]
             teams_per_round = self.event_properties.teams_per_round[e]
             loc_side = self.event_properties.loc_side[e]
-            key = (rt, (ts.start, ts.stop), (loc_type, loc_name, teams_per_round, loc_side))
+            key = (rt, (ts.start, ts.stop_active), (loc_type, loc_name, teams_per_round, loc_side))
             self.rtl_map[key] = e
 
         self.import_schedule()
@@ -58,15 +57,19 @@ class CsvImporter:
             logger.error("Failed to reconstruct schedule from CSV. Aborting.")
             return
 
-    def validate_inputs(self) -> None:
+    def validate_inputs(self) -> bool:
         """Validate the inputs for the CSV importer."""
         if not self.csv_path or not self.csv_path.exists():
             msg = f"CSV file does not exist at: {self.csv_path}"
-            raise FileNotFoundError(msg)
+            logger.warning(msg)
+            return False
 
         if not self.config.rounds:
             msg = "Tournament configuration is required."
-            raise ValueError(msg)
+            logger.warning(msg)
+            return False
+
+        return True
 
     def import_schedule(self) -> None:
         """Import schedule from the CSV file."""
@@ -153,11 +156,19 @@ class CsvImporter:
         TimeSlot.time_fmt = time_fmt
         timeslot_t = (start, stop)
 
+        team_counter = 1
+        team_denormal_dict = {}
+
         for i, team_id_str in enumerate(row[1:]):
             if not (team_id_str := team_id_str.strip()):
                 continue
 
             team_id = int(team_id_str)
+            team_id_norm = team_denormal_dict.get(team_id)
+            if team_id_norm is None:
+                team_id_norm = team_counter
+                team_denormal_dict[team_id] = team_id_norm
+                team_counter += 1
 
             loc_name_full = header_locations[i]
             loc_name_split = loc_name_full.split(" ")
@@ -179,11 +190,11 @@ class CsvImporter:
             created_event_key = (curr_rt, time_str, loc_name_full)
             created_events[created_event_key] = event
 
-            team = self.schedule.ctx.teams_list[team_id - 1]
+            team = self.schedule.ctx.teams_list[team_id_norm - 1]
             if team == -1:
-                logger.error("Team ID %d (%d) from CSV not found.", team_id, team_id - 1)
+                logger.error("Team ID %d (%d) from CSV not found.", team_id_norm, team_id_norm - 1)
                 logger.error("%s", self.schedule.ctx.teams_list)
-                logger.error("%s", self.schedule.ctx.teams_list[team_id - 1])
+                logger.error("%s", self.schedule.ctx.teams_list[team_id_norm - 1])
                 continue
 
             if event != -1:

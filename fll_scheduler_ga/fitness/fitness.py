@@ -7,6 +7,7 @@ from logging import getLogger
 from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
+from line_profiler import profile
 
 from ..config.constants import EPSILON, FitnessObjective
 
@@ -89,13 +90,14 @@ class FitnessEvaluator:
 
         # Slice event properties
         starts = self.event_properties.start[team_events]
-        stops = self.event_properties.stop[team_events]
+        stops_active = self.event_properties.stop_active[team_events]
+        stops_cycle = self.event_properties.stop_cycle[team_events]
         loc_ids = self.event_properties.loc_idx[team_events]
         paired_evt_ids = self.event_properties.paired_idx[team_events]
         roundtype_ids = self.event_properties.roundtype_idx[team_events]
 
         # Calculate scores for each objective
-        team_fitnesses[:, :, 0] = self.score_break_time(starts, stops)
+        team_fitnesses[:, :, 0] = self.score_break_time(starts, stops_active, stops_cycle)
         team_fitnesses[:, :, 1] = self.score_loc_consistency(loc_ids, roundtype_ids)
         team_fitnesses[:, :, 2] = self.score_opp_variety(paired_evt_ids, pop_array)
 
@@ -120,6 +122,7 @@ class FitnessEvaluator:
 
         return schedule_fitnesses, team_fitnesses
 
+    @profile
     def get_team_events(self, pop_array: np.ndarray) -> np.ndarray:
         """Invert the (event -> team) mapping to a (team -> events) mapping for the entire population."""
         n_pop, _ = pop_array.shape
@@ -169,34 +172,39 @@ class FitnessEvaluator:
 
         return team_events
 
-    def score_break_time(self, starts: np.ndarray, stops: np.ndarray) -> np.ndarray:
+    def score_break_time(self, starts: np.ndarray, stops_active: np.ndarray, stops_cycle: np.ndarray) -> np.ndarray:
         """Vectorized break time scoring."""
         # Sort events by start time
         order = np.argsort(starts, axis=2)
         starts_sorted = np.take_along_axis(starts, order, axis=2)
-        stops_sorted = np.take_along_axis(stops, order, axis=2)
+        stops_active_sorted = np.take_along_axis(stops_active, order, axis=2)
+        stops_cycle_sorted = np.take_along_axis(stops_cycle, order, axis=2)
 
         # Calculate breaks between consecutive events
         start_next = starts_sorted[:, :, 1:]
-        stop_curr = stops_sorted[:, :, :-1]
+        stop_active_curr = stops_active_sorted[:, :, :-1]
+        stop_cycle_curr = stops_cycle_sorted[:, :, :-1]
 
         # Calculate break durations in minutes
-        breaks_seconds = start_next - stop_curr
-        breaks_minutes = breaks_seconds / 60
+        breaks_active_seconds = start_next - stop_active_curr
+        breaks_active_minutes = breaks_active_seconds / 60
+
+        breaks_cycle_seconds = start_next - stop_cycle_curr
+        breaks_cycle_minutes = breaks_cycle_seconds / 60
 
         # Identify overlaps
-        overlap_mask = (breaks_minutes < 0).any(axis=2)
+        overlap_mask = (breaks_cycle_minutes < 0).any(axis=2)
 
         # Calculate mean
-        valid_mask = breaks_minutes >= 0
+        valid_mask = breaks_cycle_minutes >= 0
         count = valid_mask.sum(axis=2, dtype=int)
 
-        mean_break = breaks_minutes.sum(axis=2) / count
+        mean_break = breaks_cycle_minutes.sum(axis=2) / count
         mean_break_zero_mask = mean_break == 0
         mean_break[mean_break_zero_mask] = self._epsilon
 
         # Calculate standard deviation
-        diff_sq: np.ndarray = np.square(breaks_minutes - mean_break[:, :, np.newaxis])
+        diff_sq: np.ndarray = np.square(breaks_cycle_minutes - mean_break[:, :, np.newaxis])
         variance = diff_sq.sum(axis=2) / count
         std_dev: np.ndarray = np.sqrt(variance)
 
@@ -205,18 +213,18 @@ class FitnessEvaluator:
         ratio = 1 / (1 + coeff)
 
         # Apply minimum break penalty
-        minbreak_count = (breaks_minutes < self.model.minbreak_target).sum(axis=2)
-        where_breaks_lt_target = (breaks_minutes < self.model.minbreak_target) & (breaks_minutes > 0)
+        minbreak_count = (breaks_active_minutes < self.model.minbreak_target).sum(axis=2)
+        where_breaks_lt_target = (breaks_active_minutes < self.model.minbreak_target) & (breaks_active_minutes > 0)
         max_diff_breaktimes = np.zeros_like(minbreak_count)
         if where_breaks_lt_target.any():
-            diffs = self.model.minbreak_target - breaks_minutes
+            diffs = self.model.minbreak_target - breaks_active_minutes
             diffs[~where_breaks_lt_target] = 0.0
             max_diff_breaktimes = diffs.max(axis=2) / self.model.minbreak_target
         minbreak_exp = minbreak_count + max_diff_breaktimes
         minbreak_penalty = self.model.minbreak_penalty**minbreak_exp
 
         # Apply penalties for zero breaks
-        zeros_count = (breaks_minutes == 0).sum(axis=2)
+        zeros_count = (breaks_cycle_minutes == 0).sum(axis=2)
         zeros_penalty = self.model.zeros_penalty**zeros_count
 
         # Apply penalties

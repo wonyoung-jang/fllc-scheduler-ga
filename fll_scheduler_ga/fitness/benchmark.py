@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 logger = getLogger(__name__)
 BENCHMARKS_CACHE = Path(".benchmarks_cache/").resolve()
-FITNESS_MODEL_VERSION = 1
+FITNESS_MODEL_VERSION = 2
 
 
 @dataclass(slots=True)
@@ -193,7 +193,8 @@ class FitnessBenchmark:
         logger.info("Running break time consistency benchmarks...")
         all_ts = self.config.all_timeslots
         all_starts = np.array([int(ts.start.timestamp()) for ts in all_ts], dtype=int)
-        all_stops = np.array([int(ts.stop.timestamp()) for ts in all_ts], dtype=int)
+        all_stops_active = np.array([int(ts.stop_active.timestamp()) for ts in all_ts], dtype=int)
+        all_stops_cycle = np.array([int(ts.stop_cycle.timestamp()) for ts in all_ts], dtype=int)
 
         logger.debug("Finding timeslots per round type:")
         timeslots_by_round = {r.roundtype: [ts.idx for ts in r.timeslots] for r in self.config.rounds}
@@ -218,7 +219,9 @@ class FitnessBenchmark:
         logger.debug("total_combinations: %d", total_combinations)
         logger.debug("calculating breaktime scores vectorized...")
 
-        valid_scores, valid_indices = self._score_breaktime_vectorized(indices_matrix, all_starts, all_stops)
+        valid_scores, valid_indices = self.score_breaktime(
+            indices_matrix, all_starts, all_stops_active, all_stops_cycle
+        )
         num_valid = valid_scores.shape[0]
         logger.debug("num_valid: %d", num_valid)
         if num_valid == 0:
@@ -275,51 +278,57 @@ class FitnessBenchmark:
         size_frozenset_cache = sys.getsizeof(cache_data)
         logger.debug("Size of frozenset cache: %d bytes", size_frozenset_cache)
 
-    def _score_breaktime_vectorized(
-        self, indices: np.ndarray, all_starts: np.ndarray, all_stops: np.ndarray
+    def score_breaktime(
+        self, indices: np.ndarray, starts: np.ndarray, stops_active: np.ndarray, stops_cycle: np.ndarray
     ) -> tuple[np.ndarray, ...]:
         """Calculate breaktime fitnesses vectorized."""
-        starts = all_starts[indices]
-        stops = all_stops[indices]
+        starts = starts[indices]
+        stops = stops_active[indices]
+        stops_cycle = stops_cycle[indices]
 
         order = np.argsort(starts, axis=1)
         starts_sorted = np.take_along_axis(starts, order, axis=1)
-        stops_sorted = np.take_along_axis(stops, order, axis=1)
+        stops_active_sorted = np.take_along_axis(stops, order, axis=1)
+        stops_cycle_sorted = np.take_along_axis(stops_cycle, order, axis=1)
 
         start_next = starts_sorted[:, 1:]
-        stop_curr = stops_sorted[:, :-1]
+        stop_active_curr = stops_active_sorted[:, :-1]
+        stop_cycle_curr = stops_cycle_sorted[:, :-1]
 
-        breaks_seconds = start_next - stop_curr
-        breaks_minutes = breaks_seconds / 60
+        breaks_active_seconds = start_next - stop_active_curr
+        breaks_active_minutes = breaks_active_seconds / 60
 
-        overlap_mask = (breaks_minutes < 0).any(axis=1)
+        breaks_cycle_seconds = start_next - stop_cycle_curr
+        breaks_cycle_minutes = breaks_cycle_seconds / 60
+
+        overlap_mask = (breaks_cycle_minutes < 0).any(axis=1)
         non_overlap_mask = ~overlap_mask
 
-        valid_mask = breaks_minutes >= 0
+        valid_mask = breaks_cycle_minutes >= 0
         count = valid_mask.sum(axis=1, dtype=int)
 
-        mean_break = breaks_minutes.sum(axis=1) / count
+        mean_break = breaks_cycle_minutes.sum(axis=1) / count
         mean_break_zero_mask = mean_break == 0
         mean_break[mean_break_zero_mask] = EPSILON
 
-        diff_sq: np.ndarray = np.square(breaks_minutes - mean_break[:, np.newaxis])
+        diff_sq: np.ndarray = np.square(breaks_cycle_minutes - mean_break[:, np.newaxis])
         variance = diff_sq.sum(axis=1) / count
         std_dev: np.ndarray = np.sqrt(variance)
 
         coeff = std_dev / mean_break
         ratio = 1 / (1 + coeff)
 
-        minbreak_count = (breaks_minutes < self.model.minbreak_target).sum(axis=1)
-        where_breaks_lt_target = (breaks_minutes < self.model.minbreak_target) & (breaks_minutes > 0)
+        minbreak_count = (breaks_active_minutes < self.model.minbreak_target).sum(axis=1)
+        where_breaks_lt_target = (breaks_active_minutes < self.model.minbreak_target) & (breaks_active_minutes > 0)
         max_diff_breaktimes = np.zeros_like(minbreak_count)
         if where_breaks_lt_target.any():
-            diffs = self.model.minbreak_target - breaks_minutes
+            diffs = self.model.minbreak_target - breaks_active_minutes
             diffs[~where_breaks_lt_target] = 0.0
             max_diff_breaktimes = diffs.max(axis=1) / self.model.minbreak_target
         minbreak_exp = minbreak_count + max_diff_breaktimes
         minbreak_penalty = self.model.minbreak_penalty**minbreak_exp
 
-        zeros_count = (breaks_minutes == 0).sum(axis=1)
+        zeros_count = (breaks_cycle_minutes == 0).sum(axis=1)
         zeros_penalty = self.model.zeros_penalty**zeros_count
 
         final_scores = ratio * zeros_penalty * minbreak_penalty

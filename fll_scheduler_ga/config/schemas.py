@@ -295,7 +295,8 @@ class RoundModel(BaseModel):
     start_time: str = ""
     stop_time: str = ""
     times: list[str] = Field(default_factory=list)
-    duration_minutes: int = 0
+    duration_cycle: int = 0
+    duration_active: int
 
     @model_validator(mode="after")
     def validate(self) -> "RoundModel":
@@ -306,6 +307,10 @@ class RoundModel(BaseModel):
 
         if self.stop_time and not self.start_time:
             msg = f"Round '{self.roundtype}' has stop_time defined but no start_time."
+            raise ValueError(msg)
+
+        if self.duration_active > self.duration_cycle:
+            msg = f"Round '{self.roundtype}' has duration_active greater than duration_cycle."
             raise ValueError(msg)
 
         return self
@@ -444,7 +449,3 @@ class TournamentConfig(BaseModel):
     def __hash__(self) -> int:
         """Generate a hash for the TournamentConfig."""
         return super().__hash__()
-
-
-TournamentRound.model_rebuild()
-TournamentConfig.model_rebuild()

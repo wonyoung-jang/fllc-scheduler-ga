@@ -12,13 +12,14 @@ class TimeSlot(BaseModel):
     model_config = {"arbitrary_types_allowed": True, "frozen": True}
     idx: int
     start: datetime
-    stop: datetime
+    stop_active: datetime
+    stop_cycle: datetime
     time_fmt: ClassVar[str]
 
     def __str__(self) -> str:
         """Get a string representation of the time slot."""
         fmt = TimeSlot.time_fmt
-        return f"{self.start.strftime(fmt)}-{self.stop.strftime(fmt)}"
+        return f"{self.start.strftime(fmt)}-{self.stop_cycle.strftime(fmt)}"
 
     def __lt__(self, other: "TimeSlot") -> bool:
         """Less-than comparison based on start time."""
@@ -26,4 +27,4 @@ class TimeSlot(BaseModel):
 
     def overlaps(self, other: "TimeSlot") -> bool:
         """Check if this time slot overlaps with another."""
-        return self.start < other.stop and other.start < self.stop
+        return self.start < other.stop_cycle and other.start < self.stop_cycle

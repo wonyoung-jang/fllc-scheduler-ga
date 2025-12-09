@@ -7,6 +7,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 
 import numpy as np
+from line_profiler import profile
 from pydantic import BaseModel, Field
 
 from ..config.schemas import TournamentConfig, TournamentRound
@@ -26,7 +27,8 @@ class EventProperties:
     timeslot: np.ndarray
     timeslot_idx: np.ndarray
     start: np.ndarray
-    stop: np.ndarray
+    stop_active: np.ndarray
+    stop_cycle: np.ndarray
     location: np.ndarray
     loc_str: np.ndarray
     loc_type: np.ndarray
@@ -36,6 +38,7 @@ class EventProperties:
     teams_per_round: np.ndarray
     paired_idx: np.ndarray
 
+    @profile
     @classmethod
     def build(cls, num_events: int, event_map: dict[int, "Event"]) -> "EventProperties":
         """Build EventProperties from an event mapping."""
@@ -46,7 +49,8 @@ class EventProperties:
                 ("timeslot", object),
                 ("timeslot_idx", int),
                 ("start", int),
-                ("stop", int),
+                ("stop_active", int),
+                ("stop_cycle", int),
                 ("location", object),
                 ("loc_str", "U50"),
                 ("loc_type", "U50"),
@@ -65,7 +69,8 @@ class EventProperties:
             event_properties[i]["timeslot"] = e.timeslot
             event_properties[i]["timeslot_idx"] = e.timeslot.idx
             event_properties[i]["start"] = int(e.timeslot.start.timestamp())
-            event_properties[i]["stop"] = int(e.timeslot.stop.timestamp())
+            event_properties[i]["stop_active"] = int(e.timeslot.stop_active.timestamp())
+            event_properties[i]["stop_cycle"] = int(e.timeslot.stop_cycle.timestamp())
             event_properties[i]["location"] = e.location
             event_properties[i]["loc_str"] = str(e.location)
             event_properties[i]["loc_type"] = e.location.locationtype
@@ -84,7 +89,8 @@ class EventProperties:
             timeslot=event_properties["timeslot"],
             timeslot_idx=event_properties["timeslot_idx"],
             start=event_properties["start"],
-            stop=event_properties["stop"],
+            stop_active=event_properties["stop_active"],
+            stop_cycle=event_properties["stop_cycle"],
             location=event_properties["location"],
             loc_str=event_properties["loc_str"],
             loc_type=event_properties["loc_type"],
@@ -104,7 +110,6 @@ class Event(BaseModel):
     roundtype: str = Field(min_length=1)
     roundtype_idx: int = Field(ge=0)
     timeslot: TimeSlot
-    timeslot_idx: int = Field(ge=0)
     location: Location
     paired: int = Field(default=-1, ge=-1)
     conflicts: list[int] = Field(default_factory=list)
@@ -196,7 +201,6 @@ class EventFactory:
                         roundtype=r.roundtype,
                         roundtype_idx=r.roundtype_idx,
                         timeslot=ts,
-                        timeslot_idx=ts.idx,
                         location=loc,
                     )
                     yield event
@@ -208,7 +212,6 @@ class EventFactory:
                             roundtype=r.roundtype,
                             roundtype_idx=r.roundtype_idx,
                             timeslot=ts,
-                            timeslot_idx=ts.idx,
                             location=loc,
                         )
                     elif loc.side == 2:
@@ -217,7 +220,6 @@ class EventFactory:
                             roundtype=r.roundtype,
                             roundtype_idx=r.roundtype_idx,
                             timeslot=ts,
-                            timeslot_idx=ts.idx,
                             location=loc,
                         )
                         event1.pair(event2)
@@ -266,7 +268,7 @@ class EventFactory:
         if self._cached_timeslots is None:
             self._cached_timeslots = defaultdict(list)
             for e in self.build():
-                self._cached_timeslots[(e.roundtype_idx, e.timeslot_idx)].append(e.idx)
+                self._cached_timeslots[(e.roundtype_idx, e.timeslot.idx)].append(e.idx)
         return self._cached_timeslots
 
     def as_matches(self) -> dict[int, list[tuple[int, int]]]:

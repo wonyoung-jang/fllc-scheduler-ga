@@ -213,7 +213,10 @@ class ScheduleSummaryGenerator:
 
         normalized_teams = normalize_teams(schedule.schedule, self.team_identities)
         for t, fit in sorted(zip(all_teams, team_fits, strict=True), key=lambda x: -x[1].sum()):
-            fitness_row = (f"{score:<{length_objectives[i] + 1}.6f}" for i, score in enumerate(fit))
+            fitness_row = (
+                f"{score:<{length_objectives[i] + 1}.6f}" if score > 0.000001 else f"{0:<{length_objectives[i] + 1}}"
+                for i, score in enumerate(fit)
+            )
             fitness_str = "|".join(fitness_row)
             if (team_id := normalized_teams[t]) == -1:
                 continue
