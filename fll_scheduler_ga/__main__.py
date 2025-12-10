@@ -43,11 +43,8 @@ def main_cli() -> None:
             with manager.active_config.open("w") as f:
                 f.write(selected.name)
             print(f"Set active configuration to {selected.name}")
+            manager.list_configs()
             sys.exit(0)
-
-        # Main Execution
-        active_config_path = manager.get_config(args.config)
-        app_config = AppConfig.build(active_config_path)
     except (FileNotFoundError, ValueError) as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
@@ -58,6 +55,9 @@ def main_cli() -> None:
         logger.exception("GA process failed unexpectedly.")
         sys.exit(1)
 
+    # Main Execution
+    active_config_path = manager.get_config(args.config)
+    app_config = AppConfig.build(active_config_path)
     init_logging(app_config)
     run_ga_instance(app_config)
     logger.debug("Starting GA with configuration: %s", active_config_path.name)

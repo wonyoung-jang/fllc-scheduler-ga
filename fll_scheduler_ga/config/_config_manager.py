@@ -73,7 +73,7 @@ class ConfigManager:
             marker = "*" if active and path.name == active.name else " "
             print(f"{marker}[{idx}] {path.name}")
         print("-" * 50)
-        print("(*) Denotes active configuration")
+        print("(*) = active configuration")
 
     def get_config(self, identifier: str | None) -> Path:
         """Select a config based on index (int) or filename (str)."""
@@ -159,7 +159,18 @@ class ConfigManager:
         print(f"Successfully removed: {target.name}")
 
 
-def parse_config_args() -> argparse.Namespace:
+@dataclass(slots=True)
+class ConfigArgsNamespace:
+    """Dataclass for holding parsed command line arguments."""
+
+    config: str | None = None
+    set: str | None = None
+    list: bool = False
+    add: list[str] | None = None
+    remove: str | None = None
+
+
+def parse_config_args() -> ConfigArgsNamespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
         description="FLL Scheduler Genetic Algorithm Application",
@@ -202,4 +213,5 @@ def parse_config_args() -> argparse.Namespace:
         help="Remove a configuration file (by Index or Name) and exit.",
     )
 
-    return parser.parse_args()
+    c = ConfigArgsNamespace()
+    return parser.parse_args(namespace=c)
