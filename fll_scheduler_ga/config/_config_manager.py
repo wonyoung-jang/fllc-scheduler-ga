@@ -166,23 +166,21 @@ def parse_config_args() -> argparse.Namespace:
         formatter_class=argparse.RawTextHelpFormatter,
     )
 
-    # Selection Group
-    parser.add_argument(
+    # Management Group
+    group = parser.add_argument_group("Configuration Management")
+    group.add_argument(
         "-c",
         "--config",
         type=str,
         help="Select configuration to use by Index (0, 1...) or Name ('my_config.json').\n"
         "Defaults to the first file found if omitted.",
     )
-    parser.add_argument(
+    group.add_argument(
         "-s",
         "--set",
         type=str,
         help="Set the active configuration file by Index or Name and exit.",
     )
-
-    # Management Group
-    group = parser.add_argument_group("Management Commands")
     group.add_argument(
         "-l",
         "--list",
