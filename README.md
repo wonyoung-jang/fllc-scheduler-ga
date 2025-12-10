@@ -37,19 +37,9 @@ FLL-C Scheduler NSGA-III uses a multi-objective optimization non-dominated sorti
 
 ### Prerequisites
 
-This project requires Python 3.13+ and the following packages:
+Python 3.12 or above.
 
--   `matplotlib`
--   `numpy`
--   `pydantic`
--   `tqdm`
-
-The following are dev dependencies, mostly optional:
-
--   `pyinstaller`
--   `pytest`
--   `snakeviz`
--   `vulture`
+See the [requirements.txt](/requirements.txt) for a list of the necessary packages.
 
 ### Installation
 
