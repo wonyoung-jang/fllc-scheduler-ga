@@ -342,8 +342,7 @@ class AppConfig(BaseModel):
 
     def log_creation_info(self) -> None:
         """Log information about the application configuration creation."""
-        logger.debug("AppConfig created successfully.")
-        logger.debug("Initialized argument configuration: %s", self.runtime)
+        logger.debug("AppConfig created successfully.\n%s", self)
         for r in self.tournament.rounds:
             logger.debug("Initialized tournament round: %s", r)
         if sum(self.tournament.weights) == 0:

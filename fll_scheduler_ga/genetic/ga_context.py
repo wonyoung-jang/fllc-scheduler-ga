@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
 from dataclasses import dataclass
 from logging import getLogger
 from pathlib import Path
@@ -23,10 +22,10 @@ from ..operators.nsga3 import NSGA3, ReferenceDirections
 from ..operators.repairer import Repairer
 from ..operators.selection import RandomSelect
 from .builder import ScheduleBuilder
+from .preflight_checker import PreFlightChecker
 
 if TYPE_CHECKING:
     from ..config.app_config import AppConfig
-    from ..data_model.timeslot import TimeSlot
     from ..operators.crossover import Crossover
     from ..operators.mutation import Mutation
     from ..operators.selection import Selection
@@ -62,10 +61,7 @@ class GaContext:
         )
 
         # Run pre-flight checks before fitness benchmarking
-        PreFlightChecker(
-            event_factory=event_factory,
-            event_properties=event_properties,
-        ).run_checks()
+        PreFlightChecker.build_then_run(event_properties, event_factory)
 
         roundreqs_array = np.tile(tuple(tournament_config.roundreqs.values()), (tournament_config.num_teams, 1))
         schedule_context = ScheduleContext(
@@ -213,40 +209,3 @@ class RuntimeStartup:
             seed_data.population.append(imported_schedule)
 
         GASave(seed_file=seed_file, data=seed_data).save()
-
-
-@dataclass(slots=True)
-class PreFlightChecker:
-    """Run pre-flight checks on the tournament configuration."""
-
-    event_properties: EventProperties
-    event_factory: EventFactory
-
-    def run_checks(self) -> None:
-        """Run all pre-flight checks."""
-        try:
-            self.check_location_time_overlaps()
-        except ValueError:
-            logger.exception("Preflight checks failed. Please review the configuration.")
-        logger.debug("All preflight checks passed successfully.")
-
-    def check_location_time_overlaps(self) -> None:
-        """Check if different round types are scheduled in the same locations at the same time."""
-        ep = self.event_properties
-        booked_slots: dict[int, list[tuple[TimeSlot, str]]] = defaultdict(list)
-        for e in self.event_factory.build_indices():
-            loc_str = ep.loc_str[e]
-            loc_idx = ep.loc_idx[e]
-            ts = ep.timeslot[e]
-            rt = ep.roundtype[e]
-            for existing_ts, existing_rt in booked_slots.get(loc_idx, []):
-                if ts.overlaps(existing_ts):
-                    msg = (
-                        f"Configuration conflict: TournamentRound '{rt}' and '{existing_rt}' "
-                        f"are scheduled in the same location ({loc_str} {loc_idx}) "
-                        f"at overlapping times ({ts} and "
-                        f"{existing_ts})."
-                    )
-                    raise ValueError(msg)
-            booked_slots[loc_idx].append((ts, rt))
-        logger.debug("Check passed: No location/time overlaps found.")

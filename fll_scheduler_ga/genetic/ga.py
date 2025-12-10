@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from ..config.constants import SeedIslandStrategy, SeedPopSort
-from ..io.observers import LoggingObserver, TqdmObserver
+from ..io.observers import LoggingObserver
 from ..io.seed_ga import GALoad, GASave, GASeedData
 from .ga_generation import GaGeneration
 from .island import Island
@@ -85,7 +85,7 @@ class GA:
             context=context,
             genetic_model=_app_config.genetic,
             rng=_app_config.rng,
-            observers=(TqdmObserver(), LoggingObserver()),
+            observers=(LoggingObserver(),),
             seed_file=Path(_app_config.runtime.seed_file),
             save_front_only=_app_config.exports.front_only,
         )

@@ -22,7 +22,7 @@ class ConfigManager:
     directory: Path = CONFIG_DIR
     default_template: Path = CONFIG_FILE_DEFAULT
     active_config: Path = CONFIG_FILE_ACTIVE
-    _available: list[Path] = field(default_factory=list, init=False)
+    available: list[Path] = field(default_factory=list, init=False)
 
     def __post_init__(self) -> None:
         """Ensure directory structure exists and is populated."""
@@ -30,7 +30,7 @@ class ConfigManager:
         self.refresh_list()
 
         # If directory is empty, add default template
-        if not self._available:
+        if not self.available:
             if not self.default_template.exists():
                 msg = f"Critical: Default template not found at {self.default_template}"
                 raise FileNotFoundError(msg)
@@ -43,7 +43,7 @@ class ConfigManager:
 
     def refresh_list(self) -> None:
         """Refresh the internal list of JSON files."""
-        self._available = sorted(
+        self.available = sorted(
             [f for f in self.directory.iterdir() if f.suffix == ".json"],
             key=lambda f: f.name,
         )
@@ -56,7 +56,7 @@ class ConfigManager:
         try:
             active = self.active_config.read_text(encoding="utf-8").strip()
             active_path = Path(active)
-            for path in self._available:
+            for path in self.available:
                 if path.name == active_path.name:
                     return path
         except OSError:
@@ -69,7 +69,7 @@ class ConfigManager:
         active = self.get_active_config()
         print(f"\nAvailable Configurations in '{self.directory}':")
         print("-" * 50)
-        for idx, path in enumerate(self._available):
+        for idx, path in enumerate(self.available):
             marker = "*" if active and path.name == active.name else " "
             print(f"{marker}[{idx}] {path.name}")
         print("-" * 50)
@@ -77,7 +77,7 @@ class ConfigManager:
 
     def get_config(self, identifier: str | None) -> Path:
         """Select a config based on index (int) or filename (str)."""
-        if not self._available:
+        if not self.available:
             msg = "No configuration files found."
             raise FileNotFoundError(msg)
 
@@ -88,20 +88,20 @@ class ConfigManager:
                 return active
 
             # Fallback to first available
-            print(f"No last active config found. Using first available: {self._available[0].name}")
-            return self._available[0]
+            print(f"No last active config found. Using first available: {self.available[0].name}")
+            return self.available[0]
 
         # Select by index
         if identifier.isdigit():
             idx = int(identifier)
-            if 0 <= idx < len(self._available):
-                return self._available[idx]
-            msg = f"Index {idx} out of range (0-{len(self._available) - 1})"
+            if 0 <= idx < len(self.available):
+                return self.available[idx]
+            msg = f"Index {idx} out of range (0-{len(self.available) - 1})"
             raise ValueError(msg)
 
         # Select by name, stem or path
         identifier_path = Path(identifier).resolve()
-        for path in self._available:
+        for path in self.available:
             if path == identifier_path:
                 return path
             if identifier in (path.name, path.stem):
@@ -121,7 +121,6 @@ class ConfigManager:
         selected = self.get_config(identifier)
         with self.active_config.open("w") as f:
             f.write(str(selected.resolve()))
-        print(f"Set active configuration to {selected.name}")
 
     def add_config(self, source_path: Path | str, dest_name: str | None = None) -> None:
         """Import a new configuration file."""
@@ -151,12 +150,6 @@ class ConfigManager:
         shutil.copy(src, dest)
         self.refresh_list()
         print(f"Successfully added: {dest.name}")
-
-    def remove_config(self, identifier: str) -> None:
-        """Remove a configuration file."""
-        target = self.get_config(identifier)
-        target.unlink()
-        print(f"Successfully removed: {target.name}")
 
 
 @dataclass(slots=True)
