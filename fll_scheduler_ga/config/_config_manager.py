@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 import logging
 import shutil
 from dataclasses import dataclass, field
@@ -150,61 +149,3 @@ class ConfigManager:
         shutil.copy(src, dest)
         self.refresh_list()
         print(f"Successfully added: {dest.name}")
-
-
-@dataclass(slots=True)
-class ConfigArgsNamespace:
-    """Dataclass for holding parsed command line arguments."""
-
-    config: str | None = None
-    set: str | None = None
-    list: bool = False
-    add: list[str] | None = None
-    remove: str | None = None
-
-
-def parse_config_args() -> ConfigArgsNamespace:
-    """Parse command line arguments."""
-    parser = argparse.ArgumentParser(
-        description="FLL Scheduler Genetic Algorithm Application",
-        formatter_class=argparse.RawTextHelpFormatter,
-    )
-
-    # Management Group
-    group = parser.add_argument_group("Configuration Management")
-    group.add_argument(
-        "-c",
-        "--config",
-        type=str,
-        help="Select configuration to use by Index (0, 1...) or Name ('my_config.json').\n"
-        "Defaults to the first file found if omitted.",
-    )
-    group.add_argument(
-        "-s",
-        "--set",
-        type=str,
-        help="Set the active configuration file by Index or Name and exit.",
-    )
-    group.add_argument(
-        "-l",
-        "--list",
-        action="store_true",
-        help="List all available configuration files and exit.",
-    )
-    group.add_argument(
-        "-a",
-        "--add",
-        nargs="+",
-        metavar=("PATH", "NAME"),
-        help="Import a configuration file. Optional second argument sets the new name.",
-    )
-    group.add_argument(
-        "-r",
-        "--remove",
-        type=str,
-        metavar="ID",
-        help="Remove a configuration file (by Index or Name) and exit.",
-    )
-
-    c = ConfigArgsNamespace()
-    return parser.parse_args(namespace=c)
