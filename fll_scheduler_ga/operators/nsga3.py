@@ -120,7 +120,7 @@ class NSGA3:
         """Post-initialization checks."""
         self.sorting = NonDominatedSorting()
 
-    def select(self, fits: np.ndarray, n_pop: int) -> tuple[np.ndarray, ...]:
+    def select(self, fits: np.ndarray, n_pop: int) -> tuple[tuple[np.ndarray], np.ndarray, np.ndarray]:
         """Select the next generation using NSGA-III principles."""
         fronts = self.sorting.get_fronts(fits, n_pop)
         last_idx = len(fronts) - 1
@@ -152,11 +152,12 @@ class NSGA3:
         )
         last_front_indices = last_front_indices[niches]
         fronts.append(last_front_indices)
+        fronts = tuple(fronts)
         flat = np.concatenate(fronts)
         ranks = self.ranks_from_fronts(fronts, fits.shape[0])
         return fronts, flat, ranks[flat]
 
-    def ranks_from_fronts(self, fronts: list[np.ndarray], n_individuals: int) -> np.ndarray:
+    def ranks_from_fronts(self, fronts: tuple[np.ndarray], n_individuals: int) -> np.ndarray:
         """Assign ranks to individuals based on their fronts."""
         ranks = np.full(n_individuals, fill_value=-1, dtype=int)
         for rank, front in enumerate(fronts):
@@ -216,7 +217,6 @@ class NSGA3:
         coeffs[coeffs < 0.0] = 0.0
 
         proj = coeffs[:, :, None] * self.refs.points[None, :, :]
-
         residuals = norm[:, None, :] - proj
         dists: np.ndarray = np.linalg.norm(residuals, axis=2)
         min_dists = dists.min(axis=1)
@@ -224,6 +224,7 @@ class NSGA3:
         # To break ties uniformly and vectorized:
         ties = dists == min_dists[:, None]
         rand_matrix = self.rng.random(dists.shape)
+
         # Mask tied positions with random values
         rand_matrix[~ties] = -1.0
         chosen_refs = rand_matrix.argmax(axis=1)  # Index of chosen ref per individual

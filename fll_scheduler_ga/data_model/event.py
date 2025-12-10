@@ -7,7 +7,6 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 
 import numpy as np
-from line_profiler import profile
 from pydantic import BaseModel, Field
 
 from ..config.schemas import TournamentConfig, TournamentRound
@@ -38,7 +37,6 @@ class EventProperties:
     teams_per_round: np.ndarray
     paired_idx: np.ndarray
 
-    @profile
     @classmethod
     def build(cls, num_events: int, event_map: dict[int, "Event"]) -> "EventProperties":
         """Build EventProperties from an event mapping."""

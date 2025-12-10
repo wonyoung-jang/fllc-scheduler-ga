@@ -237,8 +237,8 @@ class ScheduleSummaryGenerator:
     def export(self, schedule: Schedule, path: Path) -> None:
         """Generate a text summary report for a single schedule."""
         try:
-            txt_data = self.get_text_summary(schedule)
             with path.open("w", encoding="utf-8") as f:
+                txt_data = self.get_text_summary(schedule)
                 f.writelines(txt_data)
         except OSError:
             logger.exception("Failed to write summary report to file %s", path)

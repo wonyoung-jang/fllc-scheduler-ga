@@ -164,17 +164,19 @@ class Island:
 
         created_cycle = 0
         while created_cycle < self.genetic_model.parameters.offspring_size:
+            crossovered = False
             parents_indices = self.context.selection.select(len(pop), k=2)
             parents = (pop[i] for i in parents_indices)
             c_roll = self.genetic_model.parameters.crossover_chance > self.rng.random()
             if c_roll and self.context.crossovers:
                 offspring = self.crossover_schedule(parents)
+                crossovered = True
             else:
                 offspring = (p.clone() for p in parents)
 
             for child in offspring:
                 m_roll = self.genetic_model.parameters.mutation_chance > self.rng.random()
-                if m_roll and self.context.mutations:
+                if (m_roll or not crossovered) and self.context.mutations:
                     self.mutate_schedule(child)
 
                 if self.add_to_population(child):

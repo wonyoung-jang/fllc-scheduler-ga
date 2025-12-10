@@ -7,7 +7,6 @@ from logging import getLogger
 from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
-from line_profiler import profile
 
 from ..config.constants import EPSILON, FitnessObjective
 
@@ -112,7 +111,9 @@ class FitnessEvaluator:
         coeff_s = stddev_s / mean_s
         vari_s = 1.0 / (1.0 + coeff_s)
 
-        ptp = np.ptp(team_fitnesses, axis=1)
+        max_for_ptp = team_fitnesses.max(axis=1)
+        min_for_ptp = team_fitnesses.min(axis=1)
+        ptp = max_for_ptp - min_for_ptp
         range_s = 1.0 / (1.0 + ptp)
 
         mw, vw, rw = self.config.weights
@@ -122,7 +123,6 @@ class FitnessEvaluator:
 
         return schedule_fitnesses, team_fitnesses
 
-    @profile
     def get_team_events(self, pop_array: np.ndarray) -> np.ndarray:
         """Invert the (event -> team) mapping to a (team -> events) mapping for the entire population."""
         n_pop, _ = pop_array.shape
