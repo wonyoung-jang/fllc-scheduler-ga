@@ -5,12 +5,12 @@ from __future__ import annotations
 import hashlib
 import itertools
 import pickle
-import sys
+from abc import ABC, abstractmethod
 from collections import Counter
 from dataclasses import dataclass
 from logging import getLogger
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -19,7 +19,7 @@ from ..io.seed_fitness_benchmark import BenchmarkLoad, BenchmarkSave, BenchmarkS
 
 if TYPE_CHECKING:
     from ..config.schemas import FitnessModel, TournamentConfig
-    from ..data_model.event import EventFactory, EventProperties
+    from ..data_model.event import EventFactory
 
 logger = getLogger(__name__)
 BENCHMARKS_CACHE = Path(".benchmarks_cache/").resolve()
@@ -31,31 +31,31 @@ class FitnessBenchmark:
     """Benchmark for evaluating fitness scores."""
 
     config: TournamentConfig
-    event_factory: EventFactory
-    event_properties: EventProperties
     model: FitnessModel
+    config_hasher: StableConfigHash
+    opponent_benchmarker: FitnessBenchmarkOpponent
+    breaktime_benchmarker: FitnessBenchmarkBreaktime
 
     seed_file: Path = None
     opponents: np.ndarray = None
+    best_timeslot_score: float = 0.0
     flush_benchmarks: bool = False
-    best_timeslot_score: float = None
 
     def run(self) -> None:
         """Run the fitness benchmarking process."""
         self.init_cache_file()
-        loaded = False
-        if not self.flush_benchmarks and self.seed_file.exists():
-            loaded = self.load_benchmarks()
+        loaded = self.load_benchmarks() if not self.flush_benchmarks and self.seed_file.exists() else False
 
         if not loaded:
-            self.run_benchmarks()
+            self.opponents = self.opponent_benchmarker.benchmark()
+            self.best_timeslot_score = self.breaktime_benchmarker.benchmark()
             self.save_benchmarks()
 
     def init_cache_file(self) -> None:
         """Initialize the cache file path based on the configuration hash."""
         cache_dir = BENCHMARKS_CACHE
         cache_dir.mkdir(parents=True, exist_ok=True)
-        config_hash = self._get_config_hash()
+        config_hash = self.config_hasher.generate_hash()
         self.seed_file = cache_dir / f"benchmark_cache_{config_hash}.pkl"
 
     def load_benchmarks(self) -> bool:
@@ -82,25 +82,26 @@ class FitnessBenchmark:
         else:
             return True
 
-    def run_benchmarks(self) -> None:
-        """Run all fitness benchmark calculations."""
-        self.run_benchmark_opponent()
-        self.run_benchmark_break()
-
     def save_benchmarks(self) -> None:
         """Save the current benchmarks to cache."""
-        seed_benchmark_data = BenchmarkSeedData(
-            version=FITNESS_MODEL_VERSION,
-            opponents=self.opponents,
-            best_timeslot_score=self.best_timeslot_score,
-        )
-        saver = BenchmarkSave(
+        BenchmarkSave(
             path=self.seed_file,
-            data=seed_benchmark_data,
-        )
-        saver.save()
+            data=BenchmarkSeedData(
+                version=FITNESS_MODEL_VERSION,
+                opponents=self.opponents,
+                best_timeslot_score=self.best_timeslot_score,
+            ),
+        ).save()
 
-    def _get_config_hash(self) -> int:
+
+@dataclass(slots=True)
+class StableConfigHash:
+    """Generate a stable hash for a given tournament configuration."""
+
+    config: TournamentConfig
+    model: FitnessModel
+
+    def generate_hash(self) -> int:
         """Generate a stable hash for the parts of the config that define the benchmark."""
         # Canonical representation of rounds
         round_tuples = tuple(
@@ -141,7 +142,24 @@ class FitnessBenchmark:
         # Using hashlib over built-in hash for stability
         return int(hashlib.sha256(str(config_representation).encode()).hexdigest(), 16)
 
-    def run_benchmark_opponent(self) -> None:
+
+@dataclass(slots=True)
+class FitnessBenchmarkObjective(ABC):
+    """Abstract base class for fitness benchmark objective."""
+
+    config: TournamentConfig
+    event_factory: EventFactory
+
+    @abstractmethod
+    def benchmark(self) -> Any:
+        """Run the specific benchmark. To be implemented by subclasses."""
+
+
+@dataclass(slots=True)
+class FitnessBenchmarkOpponent(FitnessBenchmarkObjective):
+    """Benchmark for opponent variety fitness."""
+
+    def benchmark(self) -> np.ndarray | None:
         """Run the opponent variety fitness benchmarking."""
         logger.info("Running opponent variety benchmarks...")
         logger.debug("Finding events per round type:")
@@ -179,18 +197,27 @@ class FitnessBenchmark:
         raw_scores = tuple(cache_scorer.values())
         logger.debug("Raw location/opponent scores: %s", raw_scores)
         opponents = [abs((s - maximum_score) / diff) if s != 0 else 0 for s in raw_scores]
-        self.opponents = np.array(opponents, dtype=float)
+        opponents_arr = np.array(opponents, dtype=float)
 
         logger.debug("Opponent variety scores:")
-        for k, v in enumerate(self.opponents):
+        for k, v in enumerate(opponents_arr):
             logger.debug("  %d opponent(s): %.6f", k, v)
 
-        if not self.opponents.any():
+        if not opponents_arr.any():
             logger.warning("No valid schedules could be generated.")
-            return
+            return None
 
-    def run_benchmark_break(self) -> None:
-        """Run the time slot fitness benchmarking."""
+        return opponents_arr
+
+
+@dataclass(slots=True)
+class FitnessBenchmarkBreaktime(FitnessBenchmarkObjective):
+    """Benchmark for break time consistency fitness."""
+
+    model: FitnessModel
+
+    def benchmark(self) -> float | None:
+        """Run the break time consistency fitness benchmarking."""
         logger.info("Running break time consistency benchmarks...")
         all_ts = self.config.all_timeslots
         all_starts = np.array([int(ts.start.timestamp()) for ts in all_ts], dtype=int)
@@ -210,7 +237,7 @@ class FitnessBenchmark:
         flattened_indices = [list(itertools.chain.from_iterable(p)) for p in raw_product]
         if not flattened_indices:
             logger.warning("No possible schedules could be generated.")
-            return
+            return None
 
         # Convert to 2D matrix (n_combinations, n_events)
         indices_matrix = np.array(flattened_indices, dtype=int)
@@ -220,26 +247,21 @@ class FitnessBenchmark:
         logger.debug("total_combinations: %d", total_combinations)
         logger.debug("calculating breaktime scores vectorized...")
 
-        valid_scores, valid_indices = self.score_breaktime(
-            indices_matrix, all_starts, all_stops_active, all_stops_cycle
-        )
+        valid_scores, _ = self.score_breaktime(indices_matrix, all_starts, all_stops_active, all_stops_cycle)
         num_valid = valid_scores.shape[0]
         logger.debug("num_valid: %d", num_valid)
         if num_valid == 0:
             logger.warning("No valid schedules could be generated.")
-            return
+            return None
 
-        self.best_timeslot_score = valid_scores.max()
-        if self.best_timeslot_score == 0:
-            self.best_timeslot_score = 1  # Avoid division by zero
+        best_timeslot_score = valid_scores.max()
+        if best_timeslot_score == 0:
+            best_timeslot_score = 1  # Avoid division by zero
 
-        logger.debug("Best timeslot score: %f", self.best_timeslot_score)
+        logger.debug("Best timeslot score: %f", best_timeslot_score)
 
         # Normalize
-        normalized_scores = valid_scores / self.best_timeslot_score
-
-        # Caching
-        self.cache_breaktime_score(valid_indices, normalized_scores)
+        normalized_scores = valid_scores / best_timeslot_score
 
         # Reporting
         unique_scores = Counter(normalized_scores)
@@ -251,6 +273,8 @@ class FitnessBenchmark:
 
         avg_score = sum(score for score, _ in most_common) / len(most_common)
         logger.debug("Average score of most common: %f", avg_score)
+
+        return best_timeslot_score
 
     def generate_intra_round_breaktime_combinations(
         self, timeslots_by_round: dict[str, list[int]]
@@ -271,13 +295,6 @@ class FitnessBenchmark:
             logger.debug("      combinations: %s", combos)
 
         return round_slot_combos
-
-    def cache_breaktime_score(self, indices: np.ndarray, scores: np.ndarray) -> None:
-        """Cache breaktime scores using numpy arrays for efficient lookup."""
-        # Caching frozenset implementation
-        cache_data = {frozenset(row): score for row, score in zip(indices, scores, strict=True)}
-        size_frozenset_cache = sys.getsizeof(cache_data)
-        logger.debug("Size of frozenset cache: %d bytes", size_frozenset_cache)
 
     def score_breaktime(
         self, indices: np.ndarray, starts: np.ndarray, stops_active: np.ndarray, stops_cycle: np.ndarray

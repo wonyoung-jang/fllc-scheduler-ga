@@ -11,7 +11,7 @@ import numpy as np
 
 from ..data_model.event import EventFactory, EventProperties
 from ..data_model.schedule import Schedule, ScheduleContext
-from ..fitness.benchmark import FitnessBenchmark
+from ..fitness.benchmark import FitnessBenchmark, FitnessBenchmarkBreaktime, FitnessBenchmarkOpponent, StableConfigHash
 from ..fitness.fitness import FitnessEvaluator, HardConstraintChecker
 from ..io.csv_importer import CsvImporter
 from ..io.ga_exporter import ScheduleSummaryGenerator
@@ -81,11 +81,25 @@ class GaContext:
             rng=rng,
             checker=checker,
         )
-        benchmark = FitnessBenchmark(
+        opponent_benchmarker = FitnessBenchmarkOpponent(
             config=tournament_config,
             event_factory=event_factory,
-            event_properties=event_properties,
+        )
+        breaktime_benchmarker = FitnessBenchmarkBreaktime(
+            config=tournament_config,
+            event_factory=event_factory,
             model=app_config.fitness,
+        )
+        config_hasher = StableConfigHash(
+            config=tournament_config,
+            model=app_config.fitness,
+        )
+        benchmark = FitnessBenchmark(
+            config=tournament_config,
+            model=app_config.fitness,
+            config_hasher=config_hasher,
+            opponent_benchmarker=opponent_benchmarker,
+            breaktime_benchmarker=breaktime_benchmarker,
             flush_benchmarks=app_config.runtime.flush_benchmarks,
         )
         benchmark.run()
