@@ -1,9 +1,16 @@
 """Time data module for FLL Scheduler GA."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import ClassVar
 
 from pydantic import BaseModel
+
+
+def parse_time_str(dt_str: str | None, fmt: str) -> datetime | None:
+    """Parse a time string into a datetime object."""
+    if not dt_str:
+        return None
+    return datetime.strptime(dt_str.strip(), fmt).replace(tzinfo=UTC)
 
 
 class TimeSlot(BaseModel):
@@ -11,9 +18,9 @@ class TimeSlot(BaseModel):
 
     model_config = {"arbitrary_types_allowed": True, "frozen": True}
     idx: int
-    start: datetime
-    stop_active: datetime
-    stop_cycle: datetime
+    start: datetime | None
+    stop_active: datetime | None
+    stop_cycle: datetime | None
     time_fmt: ClassVar[str]
 
     def __str__(self) -> str:

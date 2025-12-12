@@ -394,15 +394,13 @@ class TournamentConfig(BaseModel):
     time_fmt: str
     rounds: tuple[TournamentRound, ...]
     roundreqs: dict[str, int]
-    round_str_to_idx: dict[str, int]
     round_idx_to_tpr: dict[int, int]
     total_slots_possible: int
     total_slots_required: int
     unique_opponents_possible: bool
-    weights: tuple[float, ...]
+    max_events_per_team: int
     all_locations: tuple[Location, ...]
     all_timeslots: tuple[TimeSlot, ...]
-    max_events_per_team: int
     is_interleaved: bool
 
     def __str__(self) -> str:
@@ -413,15 +411,13 @@ class TournamentConfig(BaseModel):
             f"\n    time_fmt                  : {self.time_fmt}"
             f"\n    rounds                    : {[r.roundtype for r in self.rounds]}"
             f"\n    round_requirements        : {self.roundreqs}"
-            f"\n    round_str_to_idx          : {self.round_str_to_idx}"
             f"\n    round_idx_to_tpr          : {self.round_idx_to_tpr}"
             f"\n    total_slots_possible      : {self.total_slots_possible}"
             f"\n    total_slots_required      : {self.total_slots_required}"
             f"\n    unique_opponents_possible : {self.unique_opponents_possible}"
-            f"\n    weights                   : {self.weights}"
+            f"\n    max_events_per_team       : {self.max_events_per_team}"
             f"\n    all_locations             : {[str(loc) for loc in self.all_locations]}"
             f"\n    all_timeslots             : {[str(ts) for ts in self.all_timeslots]}"
-            f"\n    max_events_per_team       : {self.max_events_per_team}"
             f"\n    is_interleaved            : {self.is_interleaved}"
         )
 
@@ -435,7 +431,6 @@ class TournamentConfig(BaseModel):
             and self.time_fmt == other.time_fmt
             and self.rounds == other.rounds
             and self.roundreqs == other.roundreqs
-            and self.round_str_to_idx == other.round_str_to_idx
             and self.round_idx_to_tpr == other.round_idx_to_tpr
             and self.total_slots_possible == other.total_slots_possible
             and self.total_slots_required == other.total_slots_required

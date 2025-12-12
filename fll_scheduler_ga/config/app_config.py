@@ -6,15 +6,16 @@ import itertools
 import json
 import logging
 from collections import Counter
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from math import ceil
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
+from line_profiler import profile
 from pydantic import BaseModel, ConfigDict
 
 from ..data_model.location import Location
-from ..data_model.timeslot import TimeSlot
+from ..data_model.timeslot import TimeSlot, parse_time_str
 from .constants import CONFIG_FILE_DEFAULT
 from .schemas import (
     AppConfigModel,
@@ -85,6 +86,7 @@ class AppConfig(BaseModel):
             rng=np.random.default_rng(model.genetic.parameters.rng_seed),
         )
 
+    @profile
     @classmethod
     def load_tournament_config(cls, model: AppConfigModel) -> TournamentConfig:
         """Load and return the tournament configuration from the validated model."""
@@ -120,61 +122,60 @@ class AppConfig(BaseModel):
             raise ValueError(msg)
 
         roundreqs = {r.roundtype: r.rounds_per_team for r in rounds}
-        round_str_to_idx = {r.roundtype: r.roundtype_idx for r in rounds}
         round_idx_to_tpr = {r.roundtype_idx: r.teams_per_round for r in rounds}
         total_slots_possible = sum(r.slots_total for r in rounds)
         total_slots_required = sum(r.slots_required for r in rounds)
         unique_opponents_possible = 1 <= max(r.rounds_per_team for r in rounds) <= len(teams) - 1
-
-        weights = model.fitness.get_fitness_tuple()
-
-        all_locations = itertools.chain.from_iterable(r.locations for r in rounds)
-        all_locations = sorted(all_locations, key=lambda loc: loc.idx)
-
-        all_timeslots = itertools.chain.from_iterable(r.timeslots for r in rounds)
-        all_timeslots = sorted(all_timeslots, key=lambda ts: ts.idx)
-
         max_events_per_team = sum(r.rounds_per_team for r in rounds)
-        starts_of_rounds = [r.start_time for r in rounds]
-        ends_of_rounds = [r.stop_time for r in rounds]
-        round_timeslots = []
-        for start, stop_cycle in zip(starts_of_rounds, ends_of_rounds, strict=True):
-            round_ts = TimeSlot(
-                idx=0,
-                start=start,
-                stop_active=stop_cycle,
-                stop_cycle=stop_cycle,
-            )
-            round_timeslots.append(round_ts)
 
-        is_interleaved = any(
-            round_timeslots[i].overlaps(round_timeslots[j])
-            for i in range(len(round_timeslots))
-            for j in range(i + 1, len(round_timeslots))
-        )
+        all_locations = cls.get_all_attributes_of_rounds(rounds, "locations", "idx")
+        all_timeslots = cls.get_all_attributes_of_rounds(rounds, "timeslots", "idx")
+        is_interleaved = cls.check_interleaved(rounds)
 
         return TournamentConfig(
             num_teams=len(teams),
             time_fmt=time_fmt,
             rounds=rounds,
             roundreqs=roundreqs,
-            round_str_to_idx=round_str_to_idx,
             round_idx_to_tpr=round_idx_to_tpr,
             total_slots_possible=total_slots_possible,
             total_slots_required=total_slots_required,
             unique_opponents_possible=unique_opponents_possible,
-            weights=weights,
-            all_locations=tuple(all_locations),
-            all_timeslots=tuple(all_timeslots),
             max_events_per_team=max_events_per_team,
+            all_locations=all_locations,
+            all_timeslots=all_timeslots,
             is_interleaved=is_interleaved,
         )
 
     @classmethod
-    def _parse_time(cls, raw: str | None, fmt: str) -> datetime | None:
-        if not raw:
-            return None
-        return datetime.strptime(raw.strip(), fmt).replace(tzinfo=UTC)
+    def get_all_attributes_of_rounds(
+        cls, rounds: tuple[TournamentRound, ...], round_attr: str, sort_attr: str
+    ) -> tuple[Any, ...]:
+        """Get all attributes of the TournamentRound objects."""
+        all_of = itertools.chain.from_iterable(getattr(r, round_attr) for r in rounds)
+        all_of = sorted(all_of, key=lambda x: getattr(x, sort_attr))
+        return tuple(all_of)
+
+    @classmethod
+    def check_interleaved(cls, rounds: tuple[TournamentRound, ...]) -> bool:
+        """Check if any rounds are interleaved in time."""
+        timeslots = []
+        starts_of_rounds = (r.start_time for r in rounds)
+        ends_of_rounds = (r.stop_time for r in rounds)
+        for start, stop_cycle in zip(starts_of_rounds, ends_of_rounds, strict=True):
+            timeslots.append(
+                TimeSlot(
+                    idx=0,
+                    start=start,
+                    stop_active=stop_cycle,
+                    stop_cycle=stop_cycle,
+                )
+            )
+        timeslots = tuple(timeslots)
+
+        return any(
+            timeslots[i].overlaps(timeslots[j]) for i in range(len(timeslots)) for j in range(i + 1, len(timeslots))
+        )
 
     @classmethod
     def parse_rounds_config(
@@ -184,9 +185,9 @@ class AppConfig(BaseModel):
         rounds: list[TournamentRound] = []
         timeslot_idx_iter = itertools.count()
         for roundtype_idx, rnd in enumerate(round_models):
-            start_dt = cls._parse_time(rnd.start_time, time_fmt)
-            stop_dt = cls._parse_time(rnd.stop_time, time_fmt)
-            times_dt = [cls._parse_time(t, time_fmt) for t in rnd.times] if rnd.times else []
+            start_dt = parse_time_str(rnd.start_time, time_fmt)
+            stop_dt = parse_time_str(rnd.stop_time, time_fmt)
+            times_dt = [parse_time_str(t, time_fmt) for t in rnd.times] if rnd.times else []
 
             locations_in_sec = [loc for loc in locations if loc.locationtype == rnd.location]
             locations_in_sec.sort(key=lambda loc: loc.idx)
@@ -272,15 +273,14 @@ class AppConfig(BaseModel):
         return None
 
     @classmethod
-    def infer_time_format(cls, time_str: str) -> str | None:
+    def infer_time_format(cls, dt_str: str) -> str | None:
         """Infer the time format from a sample time string."""
         for fmt in TIME_FORMAT_MAP.values():
             try:
-                datetime.strptime(time_str.strip(), fmt).replace(tzinfo=UTC)
+                parse_time_str(dt_str, fmt)
             except ValueError:
                 continue
-            else:
-                return fmt
+            return fmt
         return None
 
     @classmethod
@@ -345,8 +345,6 @@ class AppConfig(BaseModel):
         logger.debug("AppConfig created successfully.\n%s", self)
         for r in self.tournament.rounds:
             logger.debug("Initialized tournament round: %s", r)
-        if sum(self.tournament.weights) == 0:
-            logger.debug("All fitness weights are zero; using equal weights.")
         logger.debug("Initialized tournament configuration: %s", self.tournament)
         logger.debug("Initialized operator configuration: %s", self.genetic.operator)
         logger.debug("Initialized genetic algorithm parameters: %s", self.genetic.parameters)

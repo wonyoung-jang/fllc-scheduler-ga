@@ -4,36 +4,24 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import typer
 from rich.console import Console
-from rich.panel import Panel
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn, TextColumn, TimeRemainingColumn
 from rich.table import Table
 
-from fll_scheduler_ga.config._config_manager import ConfigManager
 from fll_scheduler_ga.config.app_config import AppConfig
+from fll_scheduler_ga.config.config_manager import ConfigManager
 from fll_scheduler_ga.engine import init_logging
 from fll_scheduler_ga.genetic.ga import GA
 from fll_scheduler_ga.genetic.ga_context import GaContext
+from fll_scheduler_ga.io import ga_exporter
 from fll_scheduler_ga.io.observers import RichObserver
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 app = typer.Typer(help="Genetic Algorithm Scheduler", no_args_is_help=True)
 console = Console()
 manager = ConfigManager()
-
-
-def _get_active_config() -> Path:
-    """Retrieve active config or raise Exit."""
-    path = manager.get_active_config()
-    if not path:
-        console.print("[red]No active configuration selected. Use 'load' first.[/red]")
-        raise typer.Exit(code=1)
-    return path
 
 
 def _run_ga_engine(config_path: Path, progress: Progress | None = None, task_id: int | None = None) -> GA:
@@ -48,6 +36,15 @@ def _run_ga_engine(config_path: Path, progress: Progress | None = None, task_id:
         ga.observers = tuple(existing)
 
     ga.run()
+    exports = app_config.exports
+    output_dir = Path(exports.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    ga_exporter.generate_summary(
+        ga=ga,
+        output_dir=output_dir,
+        export_model=exports,
+    )
+
     return ga
 
 
@@ -98,28 +95,6 @@ def add_config(src: str, name: str | None = None) -> None:
 
 
 @app.command()
-def show() -> None:
-    """Show details of the currently active configuration."""
-    path = _get_active_config()
-    try:
-        app_config = AppConfig.build(path)
-        grid = Table.grid(expand=True)
-        grid.add_column()
-        grid.add_column(justify="right")
-
-        p = app_config.genetic.parameters
-        t = app_config.tournament
-
-        grid.add_row(f"[bold]Generations:[/bold] {p.generations}", f"[bold]Pop Size:[/bold] {p.population_size}")
-        grid.add_row(f"[bold]Islands:[/bold] {p.num_islands}", f"[bold]Mutation:[/bold] {p.mutation_chance}")
-        grid.add_row(f"[bold]Teams:[/bold] {t.num_teams}", f"[bold]Rounds:[/bold] {len(t.rounds)}")
-
-        console.print(Panel(grid, title=f"Config: {path.name}", border_style="blue"))
-    except (OSError, ValueError, RuntimeError):
-        console.print_exception()
-
-
-@app.command()
 def run() -> None:
     """Run a single instance of the Genetic Algorithm."""
     active_config_path = manager.get_active_config()
@@ -160,7 +135,7 @@ def run() -> None:
 @app.command()
 def batch(count: int = typer.Argument(..., min=1, help="Number of times to run the GA")) -> None:
     """Run the GA multiple times to gather statistics."""
-    path = _get_active_config()
+    path = manager.get_active_config()
     results = []
 
     with Progress(

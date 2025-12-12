@@ -7,6 +7,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import matplotlib as mpl
+
+mpl.use("Agg")
+
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np

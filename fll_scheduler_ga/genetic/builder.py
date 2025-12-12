@@ -12,7 +12,7 @@ from ..data_model.schedule import Schedule
 
 if TYPE_CHECKING:
     from ..config.schemas import TournamentConfig
-    from ..data_model.event import EventFactory, EventProperties
+    from ..data_model.event import EventProperties
 
 logger = getLogger(__name__)
 
@@ -21,15 +21,10 @@ logger = getLogger(__name__)
 class ScheduleBuilder:
     """Builder for building a valid random schedule."""
 
-    event_factory: EventFactory
     event_properties: EventProperties
     config: TournamentConfig
     rng: np.random.Generator
-    roundtype_events: dict[int, list[int]] = None
-
-    def __post_init__(self) -> None:
-        """Post-initialization to set up the random number generator."""
-        self.roundtype_events = self.event_factory.as_roundtypes()
+    roundtype_events: dict[int, list[int]]
 
     def build(self) -> Schedule:
         """Construct and return the final schedule."""
@@ -45,27 +40,32 @@ class ScheduleBuilder:
     def build_singles(self, schedule: Schedule, events: np.ndarray, roundtype: int) -> None:
         """Book all judging events for a specific round type."""
         for event in events:
-            available = (
-                t
-                for t in self.rng.permutation(schedule.all_rounds_needed(roundtype))
-                if not schedule.conflicts(t, event)
-            )
+            all_teams_needing_round = schedule.all_rounds_needed(roundtype)
+            shuffled_teams = self.rng.permutation(all_teams_needing_round)
+            available = (t for t in shuffled_teams if not schedule.conflicts(t, event))
+
             team = next(available, None)
-            if team:
+            if team is not None:
                 schedule.assign(team, event)
 
     def build_matches(self, schedule: Schedule, events: np.ndarray, roundtype: int) -> None:
         """Book all events for a specific round type."""
-        side1s = events[np.nonzero(self.event_properties.loc_side[events] == 1)[0]]
+        loc_sides = self.event_properties.loc_side[events]
+        loc_sides_where_1 = loc_sides == 1
+        loc_sides_where_1_idx = np.nonzero(loc_sides_where_1)[0]
+
+        side1s = events[loc_sides_where_1_idx]
         side2s = self.event_properties.paired_idx[side1s]
+
         for e1, e2 in zip(side1s, side2s, strict=True):
-            available = (
-                t
-                for t in self.rng.permutation(schedule.all_rounds_needed(roundtype))
-                if not schedule.conflicts(t, e1) and not schedule.conflicts(t, e2)
-            )
+            all_teams_needing_round = schedule.all_rounds_needed(roundtype)
+            shuffled_teams = self.rng.permutation(all_teams_needing_round)
+            available = (t for t in shuffled_teams if not schedule.conflicts(t, e1) and not schedule.conflicts(t, e2))
+
             t1 = next(available, None)
-            t2 = next(available, None)
-            if t1 and t2:
+            if t1 is not None:
                 schedule.assign(t1, e1)
+
+            t2 = next(available, None)
+            if t2 is not None:
                 schedule.assign(t2, e2)

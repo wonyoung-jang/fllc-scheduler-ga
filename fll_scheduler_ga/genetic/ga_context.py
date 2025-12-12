@@ -113,10 +113,10 @@ class GaContext:
         mutations = build_mutations(rng, operators, event_factory, event_properties)
 
         builder = ScheduleBuilder(
-            event_factory=event_factory,
             event_properties=event_properties,
             config=tournament_config,
             rng=rng,
+            roundtype_events=event_factory.as_roundtypes(),
         )
 
         ga_context_instance = cls(

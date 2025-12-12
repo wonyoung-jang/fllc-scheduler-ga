@@ -232,6 +232,7 @@ class EventFactory:
 
         for e in self.build():
             e.conflicts = sorted(set(e.conflicts))
+            logger.debug("%s has %d conflicts: %s", e, len(e.conflicts), e.conflicts)
 
     def build_conflict_matrix(self) -> np.ndarray:
         """Build a conflict matrix for all events."""

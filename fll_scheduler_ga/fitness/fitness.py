@@ -53,7 +53,8 @@ class FitnessEvaluator:
     rt_array: ClassVar[np.ndarray] = None
     loc_weight_rounds_inter: ClassVar[float] = 0.9
     loc_weight_rounds_intra: ClassVar[float] = 0.1
-    obj_weights: ClassVar[tuple[float, ...]] = ()
+    agg_weights: ClassVar[tuple[float, ...]] = ()
+    obj_weights: ClassVar[np.ndarray]
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the configuration."""
@@ -65,6 +66,7 @@ class FitnessEvaluator:
             rt_array[rt] = i
         FitnessEvaluator.match_roundtypes = match_rts
         FitnessEvaluator.rt_array = rt_array
+        FitnessEvaluator.agg_weights = self.model.get_fitness_tuple()
         FitnessEvaluator.obj_weights = np.array(self.model.get_obj_weights(), dtype=float)
 
     def evaluate_population(self, pop_array: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -116,7 +118,7 @@ class FitnessEvaluator:
         ptp = max_for_ptp - min_for_ptp
         range_s = 1.0 / (1.0 + ptp)
 
-        mw, vw, rw = self.config.weights
+        mw, vw, rw = self.agg_weights
         schedule_fitnesses = (mean_s * mw) + (vari_s * vw) + (range_s * rw)
 
         schedule_fitnesses = schedule_fitnesses * self.obj_weights

@@ -1,4 +1,3 @@
-# fll_scheduler_ga/score_from_csv.py
 """Evaluate an existing, grid-based CSV schedule against the GA's fitness metrics."""
 
 from __future__ import annotations
@@ -49,7 +48,7 @@ class CsvImporter:
             loc_name = self.event_properties.loc_name[e]
             teams_per_round = self.event_properties.teams_per_round[e]
             loc_side = self.event_properties.loc_side[e]
-            key = (rt, (ts.start, ts.stop_active), (loc_type, loc_name, teams_per_round, loc_side))
+            key = (rt, (ts.start, ts.stop_cycle), (loc_type, loc_name, teams_per_round, loc_side))
             self.rtl_map[key] = e
 
         self.import_schedule()
@@ -156,19 +155,11 @@ class CsvImporter:
         TimeSlot.time_fmt = time_fmt
         timeslot_t = (start, stop)
 
-        team_counter = 1
-        team_denormal_dict = {}
-
         for i, team_id_str in enumerate(row[1:]):
             if not (team_id_str := team_id_str.strip()):
                 continue
 
             team_id = int(team_id_str)
-            team_id_norm = team_denormal_dict.get(team_id)
-            if team_id_norm is None:
-                team_id_norm = team_counter
-                team_denormal_dict[team_id] = team_id_norm
-                team_counter += 1
 
             loc_name_full = header_locations[i]
             loc_name_split = loc_name_full.split(" ")
@@ -189,13 +180,12 @@ class CsvImporter:
             event = self.rtl_map.get(rtl_event_key)
             created_event_key = (curr_rt, time_str, loc_name_full)
             created_events[created_event_key] = event
-
-            team = self.schedule.ctx.teams_list[team_id_norm - 1]
+            team = self.schedule.ctx.teams_list[team_id - 1]
             if team == -1:
-                logger.error("Team ID %d (%d) from CSV not found.", team_id_norm, team_id_norm - 1)
+                logger.error("Team ID %d (%d) from CSV not found.", team_id, team_id - 1)
                 logger.error("%s", self.schedule.ctx.teams_list)
-                logger.error("%s", self.schedule.ctx.teams_list[team_id_norm - 1])
+                logger.error("%s", self.schedule.ctx.teams_list[team_id - 1])
                 continue
 
-            if event != -1:
+            if event is not None:
                 self.schedule.assign(team, event)

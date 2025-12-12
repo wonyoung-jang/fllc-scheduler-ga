@@ -149,7 +149,8 @@ class FitnessBenchmark:
         max_matches_possible = 0
         max_matches_required = 0
         non_matches_required = 0
-        round_idx_to_rt = {v: k for k, v in self.config.round_str_to_idx.items()}
+        round_str_to_idx = {r.roundtype: r.roundtype_idx for r in self.config.rounds}
+        round_idx_to_rt = {v: k for k, v in round_str_to_idx.items()}
         for rt, events in self.event_factory.as_roundtypes().items():
             rti_to_rt = round_idx_to_rt[rt]
             roundreq = self.config.roundreqs[rti_to_rt]

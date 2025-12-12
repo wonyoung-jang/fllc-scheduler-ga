@@ -83,16 +83,32 @@ class RichObserver(GaObserver):
 
     def on_start(self, num_generations: int) -> None:
         """Initialize progress task."""
-        self.progress.update(self.task_id, total=num_generations)
-
-    def on_generation_end(self, generation: int, num_generations: int, best_fitness: np.ndarray, pop_size: int) -> None:
-        """Update progress task at generation end."""
-        fit_val = sum(best_fitness) if best_fitness.any() else 0.0
         self.progress.update(
-            self.task_id,
-            completed=generation,
-            description=f"[cyan]Gen {generation}[/cyan] | Fit: [green]{fit_val:.4f}[/green]",
+            task_id=self.task_id,
+            total=num_generations,
+            description="[cyan]Starting...[/cyan]",
         )
 
-    def on_finish(self, pop: list, front: list) -> None:
+    def on_generation_end(
+        self,
+        generation: int,
+        num_generations: int,
+        best_fitness: np.ndarray,
+        pop_size: int,
+    ) -> None:
+        """Update progress task at generation end."""
+        if best_fitness.any():
+            sum_best_fit = best_fitness.sum()
+            fit_str = ", ".join([f"{s:.3f}" for s in best_fitness])
+            fit_str += f" | Σ={sum_best_fit:.3f} ({sum_best_fit / best_fitness.shape[0]:.2%})"
+        else:
+            fit_str = "N/A"
+        self.progress.update(
+            self.task_id,
+            total=num_generations,
+            completed=generation,
+            description=f"[cyan]Pop: {pop_size}[/cyan] | [green]Fitness: {fit_str}[/green]",
+        )
+
+    def on_finish(self, pop: list[Schedule], front: list[Schedule]) -> None:
         """Finalize progress task."""

@@ -4,14 +4,25 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from fll_scheduler_ga.data_model.timeslot import TimeSlot
+from fll_scheduler_ga.data_model.timeslot import TimeSlot, parse_time_str
 
 FMT_24H = "%H:%M"
 FMT_12H = "%I:%M %p"
 
 
-def _parse(dt_str: str, fmt: str) -> datetime:
-    return datetime.strptime(dt_str, fmt).replace(tzinfo=UTC)
+@pytest.mark.parametrize(
+    ("dt_str", "fmt", "expected"),
+    [
+        ("09:00 AM", FMT_12H, datetime(1900, 1, 1, 9, 0, tzinfo=UTC)),
+        ("09:00", FMT_24H, datetime(1900, 1, 1, 9, 0, tzinfo=UTC)),
+        (None, FMT_24H, None),
+    ],
+    ids=["12h", "24h", "none"],
+)
+def test_parse_time_str(dt_str: str | None, fmt: str, expected: datetime | None) -> None:
+    """Parametrized tests for parse_time_str function."""
+    result = parse_time_str(dt_str, fmt)
+    assert result == expected
 
 
 @pytest.mark.parametrize(
@@ -24,9 +35,9 @@ def _parse(dt_str: str, fmt: str) -> datetime:
 )
 def test_timeslot_str(start_str: str, stop_active_str: str, stop_cycle_str: str, fmt: str, expected: str) -> None:
     """Parametrized tests for string representation of TimeSlot."""
-    start = _parse(start_str, fmt)
-    stop_active = _parse(stop_active_str, fmt)
-    stop_cycle = _parse(stop_cycle_str, fmt)
+    start = parse_time_str(start_str, fmt)
+    stop_active = parse_time_str(stop_active_str, fmt)
+    stop_cycle = parse_time_str(stop_cycle_str, fmt)
     TimeSlot.time_fmt = fmt
     timeslot = TimeSlot(idx=0, start=start, stop_active=stop_active, stop_cycle=stop_cycle)
     assert str(timeslot) == expected
