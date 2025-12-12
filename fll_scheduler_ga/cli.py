@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from pathlib import Path
+from typing import Annotated
 
 import typer
 from rich.console import Console
@@ -19,7 +20,11 @@ from fll_scheduler_ga.genetic.ga_context import GaContext
 from fll_scheduler_ga.io import ga_exporter
 from fll_scheduler_ga.io.observers import RichObserver
 
-app = typer.Typer(help="Genetic Algorithm Scheduler", no_args_is_help=True)
+app = typer.Typer(
+    help="Genetic Algorithm Scheduler",
+    no_args_is_help=True,
+    context_settings={"help_option_names": ["-h", "--help"]},
+)
 console = Console()
 manager = ConfigManager()
 
@@ -82,7 +87,10 @@ def set_active_config(identifier: str) -> None:
 
 
 @app.command(name="add")
-def add_config(src: str, name: str | None = None) -> None:
+def add_config(
+    src: Annotated[str, typer.Option("--src", "-s")],
+    name: Annotated[str, typer.Option("--name", "-n")] = "",
+) -> None:
     """Add a new configuration file.
 
     Arguments:

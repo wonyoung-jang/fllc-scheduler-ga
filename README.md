@@ -8,16 +8,18 @@
 - [Getting Started](#getting-started)
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
-- [Usage](#usage)
+- [Configuration](#configuration)
   - [Create a Configuration File](#1-create-a-configuration-file)
   - [Run the Scheduler](#2-run-the-scheduler)
   - [Review the Output](#3-review-the-output)
-- [Setup Configuration with CLI](#setup-configuration-with-cli)
-  - [How to use a different configuration](#how-to-use-a-different-configuration)
-  - [How to list the current configs](#how-to-list-the-current-configs)
-  - [How to set a new active config](#how-to-set-a-new-active-config)
-  - [How to add a config](#how-to-add-a-config)
-  - [How to remove a config](#how-to-remove-a-config)
+- [Usage with the CLI (Typer)](#usage-with-the-cli-typer)
+  - [Running the program](#running-the-program)
+    - [Running a single run](#running-a-single-run)
+    - [Running a batch of serial runs](#running-a-batch-of-serial-runs)
+  - [Setup Configuration](#setup-configuration)
+    - [How to list the current configs](#how-to-list-the-current-configs)
+    - [How to set a new active config](#how-to-set-a-new-active-config)
+    - [How to add a config](#how-to-add-a-config)
 
 FLL-C Scheduler NSGA-III uses a multi-objective optimization non-dominated sorting genetic algorithm (NSGA-III) to generate tournament schedules for FIRST LEGO League Challenge.
 
@@ -54,13 +56,16 @@ See the [requirements.txt](/requirements.txt) for a list of the necessary packag
     pip install -r requirements.txt
     ```
 
-## Usage
+## Configuration
 
 Using the scheduler is a two-step process: creating a configuration file and running the main script.
 
 ### 1. Create a Configuration File
 
+**Example config found here: [/fll_scheduler_ga/config.json](/fll_scheduler_ga/config.json)**
+
 Create a file named `config.json` to define your tournament's structure. The configuration is split into sections for different parts of the application.
+
 
 #### Genetic Parameters:
 
@@ -134,6 +139,13 @@ Create a file named `config.json` to define your tournament's structure. The con
 -   `weight_mean`: Average fitness of all teams.
 -   `weight_variation`: How much team fitnesses can vary.
 -   `weight_range`: How far apart the best and worst team fitnesses are.
+-   `obj_weight_breaktime`: The proportion that schedules should be weighted on breaktime. 
+-   `obj_weight_locations`: The proportion that schedules should be weighted on locations.
+-   `obj_weight_opponents`: The proportion that schedules should be weighted on opponents.
+-   `zeros_penalty`: The fitness penalty for any back to back rounds.
+-   `minbreak_penalty`: The fitness penalty for any stop_cycle_time-start_times under `minbreak_target`.
+-   `minbreak_target`: The minimum number of minutes between a rounds cycle stop time and the next start time that should be allowed without penalty.
+-   `min_fitness_weight`: The overall weight that a schedule's minimum team fitness affects it's normal aggregation score.
 
 #### Time:
 
@@ -154,130 +166,8 @@ Create a file named `config.json` to define your tournament's structure. The con
 -   `times`: List of comma separated start times for the tournament.
 -   `start_time`: Time of the very first slot for this round type.
 -   `stop_time`: Time of the latest stop time for the last slot.
--   `duration_minutes`: Duration of a single round in minutes.
-
-**Example `config.json`:**
-
-```json
-{
-  "genetic": {
-    "parameters": {
-      "generations": 5000,
-      "population_size": 32,
-      "offspring_size": 4,
-      "crossover_chance": 0.7,
-      "mutation_chance": 0.4,
-      "num_islands": 8,
-      "migration_interval": 100,
-      "migration_size": 3,
-      "rng_seed": null
-    },
-    "operator": {
-      "crossover": {
-        "types": ["KPoint", "Scattered", "Uniform", "RoundTypeCrossover", "TimeSlotCrossover", "LocationCrossover"],
-        "k_vals": [1, 2, 3]
-      },
-      "mutation": {
-        "types": [
-          "SwapMatch_CrossTimeLocation",
-          "SwapMatch_SameLocation",
-          "SwapMatch_SameTime",
-          "SwapTeam_CrossTimeLocation",
-          "SwapTeam_SameLocation",
-          "SwapTeam_SameTime",
-          "SwapTableSide",
-          "Inversion",
-          "Scramble"
-        ]
-      }
-    },
-    "stagnation": {
-      "enable": false,
-      "proportion": 0.8,
-      "threshold": 50
-    }
-  }
-  "runtime": {
-    "add_import_to_population": true,
-    "flush": false,
-    "flush_benchmarks": false,
-    "import_file": "",
-    "seed_file": "fll_scheduler_ga.pkl"
-  },
-  "imports": {
-    "seed_pop_sort": "random",
-    "seed_island_strategy": "distributed"
-  },
-  "exports": {
-    "output_dir": "fllc_schedule_outputs",
-    "summary_reports": true,
-    "schedules_csv": true,
-    "schedules_html": true,
-    "schedules_team_csv": true,
-    "pareto_summary": true,
-    "plot_fitness": true,
-    "plot_parallel": true,
-    "plot_scatter": true,
-    "front_only": true,
-    "no_plotting": false,
-    "cmap_name": "viridis"
-  },
-  "logging": {
-    "log_file": "fll_scheduler_ga.log",
-    "loglevel_file": "DEBUG",
-    "loglevel_console": "INFO"
-  },
-  "teams": {
-    "teams": 42
-  },
-  "fitness": {
-    "weight_mean": 100,
-    "weight_variation": 10,
-    "weight_range": 0
-  },
-  "time": {
-    "format": 24
-  },
-  "locations": [
-    {
-      "name": "Room",
-      "count": 7,
-      "sides": 1
-    },
-    {
-      "name": "Table",
-      "count": 4,
-      "sides": 2
-    }
-  ],
-  "rounds": [
-    {
-      "roundtype": "Judging",
-      "location": "Room",
-      "rounds_per_team": 1,
-      "teams_per_round": 1,
-      "start_time": "08:00",
-      "stop_time": "12:30"
-    },
-    {
-      "roundtype": "Practice",
-      "location": "Table",
-      "rounds_per_team": 2,
-      "teams_per_round": 2,
-      "times": ["09:00", "09:15", "09:30", "09:45", "10:00", "10:15", "10:30", "10:45", "11:00", "11:15", "11:30", "11:45"],
-      "duration_minutes": 15
-    },
-    {
-      "roundtype": "Table",
-      "location": "Table",
-      "rounds_per_team": 3,
-      "teams_per_round": 2,
-      "start_time": "13:30",
-      "duration_minutes": 11
-    }
-  ]
-}
-```
+-   `duration_active`: Duration of team's active time in a single round in minutes.
+-   `duration_cycle`: Duration of a single round as presented on the schedule in minutes. This should be greater than `duration_active` to allow a buffer for setup/setdown/movement between rounds.
 
 ### 2. Run the Scheduler
 
@@ -295,50 +185,89 @@ After the run is complete, the following files will be created in the directory 
 
 -   `.csv` and `.html` files showing human readable schedules.
 -   `fitness_vs_generation.png`: A line graph showing how the average fitness of the best solutions improved over each generation.
--   `pareto_front.png`: A parallel coordinates plot showing the trade-offs between the different objectives for all optimal solutions found.
+-   `pareto_parallel.png`: A parallel coordinates plot showing the trade-offs between the different objectives for all optimal solutions found.
 -   `pareto_scatter_(2d or 3d).png`: (For 2 or 3 objectives) A scatter plot visualizing the Pareto front.
 
 
-## Setup Configuration with CLI
+## Usage with the CLI (Typer)
 
-Configurations will be kept in a `/.configs` directory created at the root of this project. The current active configuration's path will be stored in a `/.configs/_active_config.txt` file. The default configuration will be the `/fll_scheduler_ga/config.json` of this repo. 
+### Running the program
 
-### How to use a different configuration
-
-Use `--config` or `-c`, plus the path to the config.json.
+#### Running a single run
 
 ```bash
-uv run fll_scheduler_ga --config "path_to_other_config"
+uv run fll_scheduler_ga run
 ```
 
-### How to list the current configs
-
-Use `--list` or `-l`. 
+#### Running a batch of serial runs
 
 ```bash
-uv run fll_scheduler_ga --list
+uv run fll_scheduler_ga batch 3
 ```
 
-### How to set a new active config
+### Setup Configuration
 
-Use `--set` or `s`, plus either the index, name, or path of the config within the `.configs` directory.
+Configurations are kept in a `/.configs` directory created at the root of this project. The current active configuration's path is stored in a `/.configs/_active_config.txt` file. The default configuration is the `/fll_scheduler_ga/config.json` of this repo. 
+
+#### How to list the current configs
+
+Use `list`. 
 
 ```bash
-uv run fll_scheduler_ga --set "config_4"
+uv run fll_scheduler_ga list
+       Available Configurations       
+┏━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┓
+┃ Index ┃ Filename        ┃  Status  ┃
+┡━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━━━━━┩
+│     0 │ 2023config.json │          │
+│     1 │ 2024config.json │          │
+│     2 │ 2025config.json │          │
+│     3 │ config.json     │ * Active │
+│     4 │ default.json    │          │
+│     5 │ tester.json     │          │
+│     6 │ testname.json   │          │
+└───────┴─────────────────┴──────────┘
 ```
 
-### How to add a config
+#### How to set a new active config
 
-Use `--add` or `a`, plus the path of the config.json, and optionally the desired name of the config.
+Use `set`, plus either the index, name, or path of the config within the `.configs` directory.
 
 ```bash
-uv run fll_scheduler_ga --add "path_to_config" "config_2"
+uv run fll_scheduler_ga set 0
+       Available Configurations       
+┏━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┓
+┃ Index ┃ Filename        ┃  Status  ┃
+┡━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━━━━━┩
+│     0 │ 2023config.json │ * Active │
+│     1 │ 2024config.json │          │
+│     2 │ 2025config.json │          │
+│     3 │ config.json     │          │
+│     4 │ default.json    │          │
+│     5 │ tester.json     │          │
+│     6 │ testname.json   │          │
+└───────┴─────────────────┴──────────┘
+Successfully set: 2023config.json
 ```
 
-### How to remove a config
+#### How to add a config
 
-Use `--remove` or `r`, plus the index, name, or path of the config within the `.configs` directory.
+Use `add`, then `--src` or `-s` plus the path of the config.json, and optionally use `--name` or `-n` and the desired name of the config.
 
 ```bash
-uv run fll_scheduler_ga --remove 0
+uv run fll_scheduler_ga add --src path_to_config/config.json --name testing_3
+Successfully added: testing_3.json
+       Available Configurations       
+┏━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┓
+┃ Index ┃ Filename        ┃  Status  ┃
+┡━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━━━━━┩
+│     0 │ 2023config.json │ * Active │
+│     1 │ 2024config.json │          │
+│     2 │ 2025config.json │          │
+│     3 │ config.json     │          │
+│     4 │ default.json    │          │
+│     5 │ tester.json     │          │
+│     6 │ testing_3.json  │          │
+│     7 │ testname.json   │          │
+└───────┴─────────────────┴──────────┘
 ```

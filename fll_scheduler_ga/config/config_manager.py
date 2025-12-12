@@ -121,7 +121,7 @@ class ConfigManager:
         with self.active_config.open("w") as f:
             f.write(str(selected.resolve()))
 
-    def add_config(self, source_path: Path | str, dest_name: str | None = None) -> None:
+    def add_config(self, source_path: Path | str, dest_name: str = "") -> None:
         """Import a new configuration file."""
         src = Path(source_path) if isinstance(source_path, str) else source_path
 
