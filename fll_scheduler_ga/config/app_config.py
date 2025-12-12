@@ -11,7 +11,6 @@ from math import ceil
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from line_profiler import profile
 from pydantic import BaseModel, ConfigDict
 
 from ..data_model.location import Location
@@ -86,7 +85,6 @@ class AppConfig(BaseModel):
             rng=np.random.default_rng(model.genetic.parameters.rng_seed),
         )
 
-    @profile
     @classmethod
     def load_tournament_config(cls, model: AppConfigModel) -> TournamentConfig:
         """Load and return the tournament configuration from the validated model."""
