@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import pickle
-from dataclasses import dataclass
+from abc import ABC, abstractmethod
+from collections import defaultdict
+from dataclasses import dataclass, field
 from logging import getLogger
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from pathlib import Path
 
     from ..config.schemas import TournamentConfig
@@ -23,7 +26,7 @@ class GASeedData:
 
     version: int = DATA_MODEL_VERSION
     config: TournamentConfig | None = None
-    population: list[Schedule] | None = None
+    population: list[Schedule] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -82,3 +85,39 @@ class GASave:
                 pickle.dump(seed_ga_data, f)
         except (OSError, pickle.PicklingError, EOFError):
             logger.exception("Error saving population to seed file: %s", path)
+
+
+@dataclass(slots=True)
+class SeedingStrategy(ABC):
+    """Abstract base class for GA seeding strategies."""
+
+    @abstractmethod
+    def get_indices(self, seed_indices: Iterator[int], n_islands: int, n_pop: int) -> dict[int, list[int]]:
+        """Get the seed indices for each island."""
+
+
+@dataclass(slots=True)
+class DistributedSeedingStrategy(SeedingStrategy):
+    """Distributed seeding strategy for GA islands."""
+
+    def get_indices(self, seed_indices: Iterator[int], n_islands: int, n_pop: int) -> dict[int, list[int]]:
+        """Get the seed indices for each island."""
+        island_to_seed: dict[int, list[int]] = defaultdict(list)
+        for idx in seed_indices:
+            island_to_seed[idx % n_islands].append(idx)
+        return island_to_seed
+
+
+@dataclass(slots=True)
+class ConcentratedSeedingStrategy(SeedingStrategy):
+    """Concentrated seeding strategy for GA islands."""
+
+    def get_indices(self, seed_indices: Iterator[int], n_islands: int, n_pop: int) -> dict[int, list[int]]:
+        """Get the seed indices for each island."""
+        island_to_seed: dict[int, list[int]] = defaultdict(list)
+        for i in range(n_islands):
+            while len(island_to_seed[i]) < n_pop:
+                if (idx := next(seed_indices, None)) is None:
+                    break
+                island_to_seed[i].append(idx)
+        return island_to_seed

@@ -8,9 +8,12 @@ wheels/
 
 # Testing files
 .coverage
+.tox/
+.*_cache/
 
 # Virtual environments
 .venv
+.vscode/
 
 # Other
 *.log

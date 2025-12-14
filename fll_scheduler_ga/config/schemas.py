@@ -203,7 +203,9 @@ class TeamsModel(BaseModel):
 
     def __len__(self) -> int:
         """Return the number of teams."""
-        return len(self.teams)
+        if isinstance(self.teams, list):
+            return len(self.teams)
+        return self.teams
 
     @model_validator(mode="after")
     def validate(self) -> "TeamsModel":

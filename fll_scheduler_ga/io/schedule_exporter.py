@@ -41,7 +41,7 @@ class ScheduleExporter(ABC):
     team_identities: dict[int, str]
     event_properties: EventProperties
 
-    def export(self, schedule: Schedule, path: Path) -> None:
+    async def export(self, schedule: Schedule, path: Path) -> None:
         """Export the schedule to a given filename."""
         if not schedule:
             logger.warning("Cannot export an empty schedule.")
@@ -50,7 +50,7 @@ class ScheduleExporter(ABC):
         schedule_by_type = self._group_by_type(schedule)
 
         try:
-            self.write_to_file(schedule_by_type, path)
+            await self.write_to_file(schedule_by_type, path)
             logger.debug("Schedule successfully exported to %s", path)
         except OSError:
             logger.exception("Failed to export schedule to %s", path)
@@ -91,7 +91,7 @@ class ScheduleExporter(ABC):
         return timeslots, locations, grid_lookup
 
     @abstractmethod
-    def write_to_file(self, schedule_by_type: dict[str, dict[int, int]], filename: Path) -> None:
+    async def write_to_file(self, schedule_by_type: dict[str, dict[int, int]], filename: Path) -> None:
         """Write the schedule to a file."""
 
     @abstractmethod
@@ -121,7 +121,7 @@ class CsvScheduleExporter(ScheduleExporter):
                 yield row
             yield []
 
-    def write_to_file(self, schedule_by_type: dict[str, dict[int, int]], filename: Path) -> None:
+    async def write_to_file(self, schedule_by_type: dict[str, dict[int, int]], filename: Path) -> None:
         """Write the schedule to a file."""
         with filename.open("w", newline="", encoding="utf-8") as csvfile:
             csv.writer(csvfile).writerows(self.render_grid(schedule_by_type))
@@ -197,7 +197,7 @@ class HtmlScheduleExporter(ScheduleExporter):
                 yield "</tr>"
             yield "</tbody></table>"
 
-    def write_to_file(self, schedule_by_type: dict[str, dict[int, int]], filename: Path) -> None:
+    async def write_to_file(self, schedule_by_type: dict[str, dict[int, int]], filename: Path) -> None:
         """Write the schedule to a file."""
         with filename.open("w", encoding="utf-8") as f:
             f.write("".join(self.render_grid(schedule_by_type)))

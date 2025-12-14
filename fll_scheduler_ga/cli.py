@@ -16,7 +16,7 @@ from fll_scheduler_ga.config.app_config import AppConfig
 from fll_scheduler_ga.config.config_manager import ConfigManager
 from fll_scheduler_ga.engine import init_logging
 from fll_scheduler_ga.genetic.ga import GA
-from fll_scheduler_ga.genetic.ga_context import GaContext
+from fll_scheduler_ga.genetic.ga_context import StandardGaContextFactory
 from fll_scheduler_ga.io import ga_exporter
 from fll_scheduler_ga.io.observers import RichObserver
 
@@ -32,7 +32,8 @@ manager = ConfigManager()
 def _run_ga_engine(config_path: Path, progress: Progress | None = None, task_id: int | None = None) -> GA:
     """Core logic to build and run the GA."""
     app_config = AppConfig.build(config_path)
-    context = GaContext.build(app_config)
+    context_factory = StandardGaContextFactory()
+    context = context_factory.build(app_config)
     ga = GA.build(context)
 
     if progress and task_id is not None:

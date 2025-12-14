@@ -2,21 +2,29 @@
 
 from __future__ import annotations
 
-from collections import Counter, defaultdict
+from collections import Counter
 from dataclasses import dataclass, field
 from logging import getLogger
 from pathlib import Path
 from time import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from ..config.constants import SeedIslandStrategy, SeedPopSort
 from ..io.observers import LoggingObserver
-from ..io.seed_ga import GALoad, GASave, GASeedData
+from ..io.seed_ga import (
+    ConcentratedSeedingStrategy,
+    DistributedSeedingStrategy,
+    GALoad,
+    GASave,
+    GASeedData,
+    SeedingStrategy,
+)
 from .ga_generation import GaGeneration
 from .island import Island
-from .stagnation import FitnessHistory, OperatorStats
+from .population import SchedulePopulation
+from .stagnation import FitnessHistory, OperatorStats, StagnationHandler
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -38,7 +46,7 @@ class GA:
     context: GaContext
     genetic_model: GeneticModel
     rng: np.random.Generator
-    observers: tuple[GaObserver]
+    observers: tuple[GaObserver, ...]
     seed_file: Path
     save_front_only: bool
 
@@ -62,7 +70,13 @@ class GA:
 
         self._init_fitness_history()
         self._init_operator_stats()
-
+        stagnation = StagnationHandler(
+            rng=self.rng,
+            generation=self.generation,
+            fitness_history=self.fitness_history,
+            model=self.genetic_model.stagnation,
+            cooldown_counter=50,  # Hardcoded
+        )
         self.islands.extend(
             Island(
                 identity=i,
@@ -73,6 +87,8 @@ class GA:
                 operator_stats=self.operator_stats,
                 fitness_history=self.fitness_history.copy(),
                 builder=self.context.builder,
+                stagnation=stagnation,
+                population=SchedulePopulation(),
             )
             for i in range(self.genetic_model.parameters.num_islands)
         )
@@ -164,7 +180,15 @@ class GA:
 
     def seed_population(self, seed_data: GASeedData) -> None:
         """Seed the population for each island."""
+        seed_strategy_map = {
+            SeedIslandStrategy.DISTRIBUTED: DistributedSeedingStrategy,
+            SeedIslandStrategy.CONCENTRATED: ConcentratedSeedingStrategy,
+        }
+        seed_strategy = seed_strategy_map.get(
+            self.context.app_config.imports.seed_island_strategy, DistributedSeedingStrategy
+        )
         seeder = GASeeder(
+            strategy=seed_strategy(),
             imports=self.context.app_config.imports,
             ga_params=self.genetic_model.parameters,
             seed_pop=seed_data.population,
@@ -238,6 +262,7 @@ class GA:
 class GASeeder:
     """Seeding strategies for GA instances."""
 
+    strategy: SeedingStrategy
     imports: ImportModel
     ga_params: GaParameters
     seed_pop: list[Schedule] | None
@@ -258,16 +283,10 @@ class GASeeder:
 
     def get_island_seeds(self) -> dict[int, list[int]]:
         """Get seed indices for each island."""
-        params = {
-            "seed_indices": self._iter_seeds(),
-            "n_islands": self.ga_params.num_islands,
-            "n_pop": self.ga_params.population_size,
-        }
-        seed_fn = {
-            SeedIslandStrategy.DISTRIBUTED: self._seed_distributed,
-            SeedIslandStrategy.CONCENTRATED: self._seed_concentrated,
-        }.get(self.imports.seed_island_strategy, self._seed_distributed)
-        return seed_fn(**params)
+        seed_indices = self._iter_seeds()
+        n_islands = self.ga_params.num_islands
+        n_pop = self.ga_params.population_size
+        return self.strategy.get_indices(seed_indices, n_islands, n_pop)
 
     def _iter_seeds(self) -> Iterator[int]:
         """Yield indices for seeding strategies."""
@@ -276,23 +295,6 @@ class GASeeder:
             SeedPopSort.BEST: np.arange,
         }.get(self.imports.seed_pop_sort, self.rng.permutation)
         yield from iter_fn(len(self.seed_pop))
-
-    def _seed_distributed(self, **params: dict[str, Any]) -> dict[int, list[int]]:
-        """Get seed indices for distributed seeding strategy."""
-        island_to_seed_idx: dict[int, list[int]] = defaultdict(list)
-        for idx in params["seed_indices"]:
-            island_to_seed_idx[idx % params["n_islands"]].append(idx)
-        return island_to_seed_idx
-
-    def _seed_concentrated(self, **params: dict[str, Any]) -> dict[int, list[int]]:
-        """Get seed indices for concentrated seeding strategy."""
-        island_to_seed_idx: dict[int, list[int]] = defaultdict(list)
-        for i in range(params["n_islands"]):
-            while len(island_to_seed_idx[i]) < params["n_pop"]:
-                if (idx := next(params["seed_indices"], None)) is None:
-                    break
-                island_to_seed_idx[i].append(idx)
-        return island_to_seed_idx
 
 
 @dataclass(slots=True)

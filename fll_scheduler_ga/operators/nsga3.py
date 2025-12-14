@@ -113,12 +113,7 @@ class NSGA3:
 
     rng: np.random.Generator
     refs: ReferenceDirections
-
-    sorting: NonDominatedSorting = None
-
-    def __post_init__(self) -> None:
-        """Post-initialization checks."""
-        self.sorting = NonDominatedSorting()
+    sorting: NonDominatedSorting
 
     def select(self, fits: np.ndarray, n_pop: int) -> tuple[tuple[np.ndarray], np.ndarray, np.ndarray]:
         """Select the next generation using NSGA-III principles."""

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from logging import getLogger
 from pathlib import Path
@@ -18,7 +19,7 @@ from ..io.ga_exporter import ScheduleSummaryGenerator
 from ..io.seed_ga import GALoad, GASave, GASeedData
 from ..operators.crossover import build_crossovers
 from ..operators.mutation import build_mutations
-from ..operators.nsga3 import NSGA3, ReferenceDirections
+from ..operators.nsga3 import NSGA3, NonDominatedSorting, ReferenceDirections
 from ..operators.repairer import Repairer
 from ..operators.selection import RandomSelect
 from .builder import ScheduleBuilder
@@ -34,23 +35,19 @@ logger = getLogger(__name__)
 
 
 @dataclass(slots=True)
-class GaContext:
-    """Hold static context for the genetic algorithm."""
+class GaContextFactory(ABC):
+    """Interface for GA context factory."""
 
-    app_config: AppConfig
-    event_factory: EventFactory
-    event_properties: EventProperties
-    evaluator: FitnessEvaluator
-    checker: HardConstraintChecker
-    builder: ScheduleBuilder
-    repairer: Repairer
-    nsga3: NSGA3
-    selection: Selection
-    crossovers: tuple[Crossover, ...]
-    mutations: tuple[Mutation, ...]
+    @abstractmethod
+    def build(self, app_config: AppConfig) -> GaContext:
+        """Build and return a GA context."""
 
-    @classmethod
-    def build(cls, app_config: AppConfig) -> GaContext:
+
+@dataclass(slots=True)
+class StandardGaContextFactory(GaContextFactory):
+    """Standard implementation of GA context factory."""
+
+    def build(self, app_config: AppConfig) -> GaContext:
         """Build and return a GA context."""
         rng = app_config.rng
         tournament_config = app_config.tournament
@@ -119,6 +116,7 @@ class GaContext:
         nsga3 = NSGA3(
             rng=rng,
             refs=ref_directions,
+            sorting=NonDominatedSorting(),
         )
 
         selection = RandomSelect(rng)
@@ -133,7 +131,7 @@ class GaContext:
             roundtype_events=event_factory.as_roundtypes(),
         )
 
-        ga_context_instance = cls(
+        ga_context_instance = GaContext(
             app_config=app_config,
             event_factory=event_factory,
             event_properties=event_properties,
@@ -153,6 +151,23 @@ class GaContext:
         ).run()
 
         return ga_context_instance
+
+
+@dataclass(slots=True)
+class GaContext:
+    """Hold static context for the genetic algorithm."""
+
+    app_config: AppConfig
+    event_factory: EventFactory
+    event_properties: EventProperties
+    evaluator: FitnessEvaluator
+    checker: HardConstraintChecker
+    builder: ScheduleBuilder
+    repairer: Repairer
+    nsga3: NSGA3
+    selection: Selection
+    crossovers: tuple[Crossover, ...]
+    mutations: tuple[Mutation, ...]
 
 
 @dataclass(slots=True)

@@ -266,7 +266,6 @@ class FitnessEvaluator:
 
         # Inter-Round Consistency
         rt_loc_counts = np.zeros((n_pop, n_teams, n_match_rt, max_loc_idx + 1), dtype=int)
-        # np.add.at(rt_loc_counts, (pop_indices, team_indices, mapped_rt_indices, loc_vals), 1)
         rt_loc_counts[pop_indices, team_indices, mapped_rt_indices, loc_vals] = 1
 
         # A team participated in a round type if its location counts for that RT are > 0.

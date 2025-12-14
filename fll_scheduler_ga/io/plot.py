@@ -68,7 +68,7 @@ class Plot:
         fig, ax = plt.subplots(figsize=(12, 7))
         columns = [f.value for f in self.objectives]
 
-        x = np.arange(len(history))
+        x = np.arange(history.shape[0])
         for i, col in enumerate(columns):
             y = history[:, i]
             ax.plot(x, y, linewidth=2.5, alpha=0.9, label=col)

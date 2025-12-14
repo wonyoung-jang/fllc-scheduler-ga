@@ -8,9 +8,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from .population import SchedulePopulation
-from .stagnation import StagnationHandler
-
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
@@ -19,7 +16,8 @@ if TYPE_CHECKING:
     from .builder import ScheduleBuilder
     from .ga_context import GaContext
     from .ga_generation import GaGeneration
-    from .stagnation import FitnessHistory, OperatorStats
+    from .population import SchedulePopulation
+    from .stagnation import FitnessHistory, OperatorStats, StagnationHandler
 
 logger = getLogger(__name__)
 
@@ -36,17 +34,11 @@ class Island:
     operator_stats: OperatorStats
     fitness_history: FitnessHistory
     builder: ScheduleBuilder
+    stagnation: StagnationHandler
+    population: SchedulePopulation
 
     selected: list[Schedule] = field(default_factory=list, repr=False)
-    population: SchedulePopulation = None
-
-    stagnation: StagnationHandler = None
     curr_schedule_fits: np.ndarray = None
-
-    def __post_init__(self) -> None:
-        """Post-initialization."""
-        self.population = SchedulePopulation()
-        self._init_stagnation()
 
     def __len__(self) -> int:
         """Return the number of individuals in the island's population."""
@@ -79,16 +71,6 @@ class Island:
                 idx_to_pop,
             )
         self.handle_underpopulation()
-
-    def _init_stagnation(self) -> None:
-        """Initialize stagnation handler."""
-        self.stagnation = StagnationHandler(
-            rng=self.rng,
-            generation=self.generation,
-            fitness_history=self.fitness_history,
-            model=self.genetic_model.stagnation,
-            cooldown_counter=50,  # Hardcoded
-        )
 
     def add_to_population(self, schedule: Schedule) -> bool:
         """Add a schedule to a specific island's population if it's not a duplicate."""

@@ -47,10 +47,10 @@ class ConfigManager:
             key=lambda f: f.name,
         )
 
-    def get_active_config(self) -> Path | None:
+    def get_active_config(self) -> Path:
         """Retrieve the last used configuration if it still exists."""
         if not self.active_config.exists():
-            return None
+            return Path()
 
         try:
             active = self.active_config.read_text(encoding="utf-8").strip()
@@ -59,9 +59,9 @@ class ConfigManager:
                 if path.name == active_path.name:
                     return path
         except OSError:
-            return None
+            return Path()
 
-        return None
+        return Path()
 
     def list_configs(self) -> None:
         """Print available configurations with indices."""

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import csv
 import shutil
 from collections import defaultdict
@@ -42,12 +43,71 @@ def generate_summary(ga: GA, output_dir: Path, export_model: ExportModel) -> Non
 
     time_fmt = ga.context.app_config.tournament.time_fmt
     event_properties = ga.context.event_properties
-    export_manager = ExportManager(schedules, subdirs, time_fmt, event_properties, ga, export_model)
-    export_manager.export_all()
+
+    exporters = get_exporters(export_model, subdirs, time_fmt, event_properties, ga)
+    export_manager = ExportManager(schedules=schedules, exporters=exporters)
+    asyncio.run(export_manager.export_all())
 
     if export_model.pareto_summary:
         pareto_summary_gen = ParetoSummaryGenerator()
         pareto_summary_gen.export(total_pop, output_dir / "pareto_summary.csv")
+
+
+def get_exporters(
+    export_model: ExportModel,
+    subdirs: dict[str, Path],
+    time_fmt: str,
+    event_properties: EventProperties,
+    ga: GA,
+) -> tuple:
+    """Get the list of exporters based on the export model."""
+    exporters = []
+    if export_model.schedules_csv:
+        exporters.append(
+            (
+                CsvScheduleExporter(
+                    time_fmt=time_fmt,
+                    team_identities=export_model.team_identities,
+                    event_properties=event_properties,
+                ),
+                subdirs["csv"],
+                "csv",
+            )
+        )
+    if export_model.schedules_html:
+        exporters.append(
+            (
+                HtmlScheduleExporter(
+                    time_fmt=time_fmt,
+                    team_identities=export_model.team_identities,
+                    event_properties=event_properties,
+                ),
+                subdirs["html"],
+                "html",
+            )
+        )
+    if export_model.summary_reports:
+        exporters.append(
+            (
+                ScheduleSummaryGenerator(
+                    team_identities=export_model.team_identities,
+                ),
+                subdirs["txt"],
+                "txt",
+            )
+        )
+    if export_model.schedules_team_csv:
+        exporters.append(
+            (
+                TeamScheduleGenerator(
+                    ga=ga,
+                    team_identities=export_model.team_identities,
+                ),
+                subdirs["team"],
+                "csv",
+            ),
+        )
+    return tuple(exporters)
 
 
 @dataclass(slots=True)
@@ -55,69 +115,17 @@ class ExportManager:
     """Manager for exporting schedules in different formats."""
 
     schedules: list[Schedule]
-    subdirs: dict[str, Path]
-    time_fmt: str
-    event_properties: EventProperties
-    ga: GA
-    export_model: ExportModel
+    exporters: tuple
 
-    def get_exporters(self) -> list:
-        """Get the list of exporters based on the export model."""
-        exporters = []
-        if self.export_model.schedules_csv:
-            exporters.append(
-                (
-                    CsvScheduleExporter(
-                        time_fmt=self.time_fmt,
-                        team_identities=self.export_model.team_identities,
-                        event_properties=self.event_properties,
-                    ),
-                    self.subdirs["csv"],
-                    "csv",
-                )
-            )
-        if self.export_model.schedules_html:
-            exporters.append(
-                (
-                    HtmlScheduleExporter(
-                        time_fmt=self.time_fmt,
-                        team_identities=self.export_model.team_identities,
-                        event_properties=self.event_properties,
-                    ),
-                    self.subdirs["html"],
-                    "html",
-                )
-            )
-        if self.export_model.summary_reports:
-            exporters.append(
-                (
-                    ScheduleSummaryGenerator(
-                        team_identities=self.export_model.team_identities,
-                    ),
-                    self.subdirs["txt"],
-                    "txt",
-                )
-            )
-        if self.export_model.schedules_team_csv:
-            exporters.append(
-                (
-                    TeamScheduleGenerator(
-                        ga=self.ga,
-                        team_identities=self.export_model.team_identities,
-                    ),
-                    self.subdirs["team"],
-                    "csv",
-                ),
-            )
-        return exporters
-
-    def export_all(self) -> None:
-        """Export all schedules to the different formats."""
-        exporters = self.get_exporters()
-        for exporter, subdir, ext in exporters:
+    async def export_all(self) -> None:
+        """Export all schedules to the different formats asynchronously."""
+        tasks = []
+        for exporter, subdir, ext in self.exporters:
             for i, sched in enumerate(self.schedules, start=1):
                 name = f"front{sched.rank}_sched{i}"
-                exporter.export(sched, subdir / f"{name}.{ext}")
+                tasks.append(exporter.export(sched, subdir / f"{name}.{ext}"))
+
+        await asyncio.gather(*tasks)
 
 
 @dataclass(slots=True)
@@ -152,7 +160,7 @@ class ScheduleSummaryGenerator:
 
     team_identities: dict[int, str]
 
-    def get_text_summary(self, schedule: Schedule) -> list[str]:  # noqa: PLR0915
+    def get_text_summary(self, schedule: Schedule) -> tuple[str, ...]:  # noqa: PLR0915
         """Get a text summary of the schedule."""
         txt = []
         objectives = tuple(FitnessObjective)
@@ -232,9 +240,9 @@ class ScheduleSummaryGenerator:
             events_str = ", ".join(str(e) for e in events) + "\n"
             txt.append(events_str)
 
-        return txt
+        return tuple(txt)
 
-    def export(self, schedule: Schedule, path: Path) -> None:
+    async def export(self, schedule: Schedule, path: Path) -> None:
         """Generate a text summary report for a single schedule."""
         try:
             with path.open("w", encoding="utf-8") as f:
@@ -251,10 +259,10 @@ class TeamScheduleGenerator:
     ga: GA
     team_identities: dict[int, str]
 
-    def get_team_schedule(self, schedule: Schedule) -> list[list[str]]:
+    def get_team_schedule(self, schedule: Schedule) -> tuple[tuple[str, ...], ...]:
         """Get the schedule for each team."""
         config = self.ga.context.app_config.tournament
-        rows: list[list[str]] = []
+        rows = []
         headers: list[str] = ["Team"]
 
         for roundtype, rounds_per_team in config.roundreqs.items():
@@ -264,7 +272,7 @@ class TeamScheduleGenerator:
                 for i in range(1, rounds_per_team + 1):
                     headers.extend([f"{roundtype.capitalize()} {i}", ""])
 
-        rows.append(headers)
+        rows.append(tuple(headers))
 
         normalized_teams = normalize_teams(schedule.schedule, self.team_identities)
         team_events: dict[int, set[int]] = defaultdict(set)
@@ -280,15 +288,16 @@ class TeamScheduleGenerator:
             for event_id in sorted(events):
                 r.append(str(ep.timeslot[event_id]))
                 r.append(str(ep.location[event_id]))
-            rows.append(r)
+            rows.append(tuple(r))
         return rows
 
-    def export(self, schedule: Schedule, path: Path) -> None:
+    async def export(self, schedule: Schedule, path: Path) -> None:
         """Generate a CSV file with team schedules, sorted by team IDs."""
         try:
             with path.open("w", newline="", encoding="utf-8") as f:
                 rows = self.get_team_schedule(schedule)
-                csv.writer(f).writerows(rows)
+                writer = csv.writer(f)
+                writer.writerows(rows)
         except OSError:
             logger.exception("Failed to write team schedules to file %s", path)
 
@@ -297,28 +306,28 @@ class TeamScheduleGenerator:
 class ParetoSummaryGenerator:
     """Exporter for generating Pareto front summaries."""
 
-    def get_pareto_summary(self, pop: list[Schedule]) -> list[list[str]]:
+    def get_pareto_summary(self, pop: list[Schedule]) -> tuple[tuple[str, ...], ...]:
         """Get a summary of the Pareto front."""
-        summary: list[list[str]] = []
+        summary = []
         header = ["Schedule", "ID", "Hash", "Length", "Rank"]
         header.extend(name.value for name in FitnessObjective)
         header.extend(["Sum", "Origin", "Mutations", "Clones"])
-        summary.append(header)
+        summary.append(tuple(header))
 
         for i, s in enumerate(pop, start=1):
             row = [str(i), str(id(s)), str(hash(s)), str(len(s)), str(s.rank)]
             row.extend(f"{score:.4f}" for score in s.fitness)
             row.append(f"{s.fitness.sum():.4f}")
             row.extend([s.origin, str(s.mutations), str(s.clones)])
-            summary.append(row)
-        return summary
+            summary.append(tuple(row))
+        return tuple(summary)
 
     def export(self, pop: list[Schedule], path: Path) -> None:
         """Generate a summary of the Pareto front."""
         try:
             with path.open("w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
                 summary = self.get_pareto_summary(pop)
+                writer = csv.writer(f)
                 writer.writerows(summary)
         except OSError:
             logger.exception("Failed to write Pareto summary to file %s", path)
