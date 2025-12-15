@@ -54,8 +54,8 @@ class GA:
     generations_array: np.ndarray
     migrate_generations: np.ndarray
 
-    total_population: list[Schedule] = field(default_factory=list, repr=False)
-    islands: list[Island] = field(default_factory=list, repr=False)
+    total_population: list[Schedule] = field(default_factory=list)
+    islands: list[Island] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""

@@ -21,7 +21,7 @@ class ConfigManager:
     directory: Path = CONFIG_DIR
     default_template: Path = CONFIG_FILE_DEFAULT
     active_config: Path = CONFIG_FILE_ACTIVE
-    available: list[Path] = field(default_factory=list, init=False)
+    available: list[Path] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         """Ensure directory structure exists and is populated."""

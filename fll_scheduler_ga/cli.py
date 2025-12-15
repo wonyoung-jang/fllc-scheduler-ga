@@ -22,7 +22,7 @@ from rich.progress import (
 )
 from rich.table import Table
 
-from fll_scheduler_ga.io.plot import Plot
+from fll_scheduler_ga.io.plot import MatplotlibVisualizer
 
 from .config.app_config import AppConfig
 from .config.config_manager import ConfigManager
@@ -125,7 +125,7 @@ def _run_ga_engine(config_path: Path, progress: Progress | None = None, task_id:
     output_dir = Path(exports.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    plot = Plot(
+    plot = MatplotlibVisualizer(
         ga=ga,
         save_dir=output_dir,
         objectives=tuple(FitnessObjective),

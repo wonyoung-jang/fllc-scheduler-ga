@@ -288,6 +288,3 @@ class EventFactory:
                     continue
                 self._cached_matches[e.roundtype_idx].append((e.idx, e.paired))
         return self._cached_matches
-
-
-Event.model_rebuild()

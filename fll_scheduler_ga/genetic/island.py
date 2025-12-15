@@ -37,8 +37,8 @@ class Island:
     population: SchedulePopulation
 
     stagnation: StagnationHandler = field(init=False)
-    selected: list[Schedule] = field(default_factory=list, repr=False)
     curr_schedule_fits: np.ndarray = field(init=False)
+    selected: list[Schedule] = field(default_factory=list)
 
     def __len__(self) -> int:
         """Return the number of individuals in the island's population."""

@@ -81,7 +81,7 @@ class Crossover(ABC):
     def __post_init__(self) -> None:
         """Post-initialization to validate the crossover operator."""
         self.events = np.array(self.event_factory.build_singles_or_side1_indices(), dtype=int)
-        self.n_evts = len(self.events)
+        self.n_evts = self.events.shape[0]
 
     @abstractmethod
     def cross(self, parents: Iterator[Schedule]) -> Iterator[Schedule]:

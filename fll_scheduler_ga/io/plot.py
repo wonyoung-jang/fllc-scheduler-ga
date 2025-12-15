@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -31,14 +32,23 @@ plt.style.use("seaborn-v0_8-whitegrid")
 
 
 @dataclass(slots=True)
-class Plot:
-    """A class for creating and managing plots related to the GA run."""
+class Visualizer(ABC):
+    """Abstract base class for visualizers."""
 
     ga: GA
     save_dir: str | Path | None
     objectives: tuple[FitnessObjective, ...]
     ref_points: np.ndarray
     export_model: ExportModel
+
+    @abstractmethod
+    def plot(self) -> None:
+        """Create all plots."""
+
+
+@dataclass(slots=True)
+class MatplotlibVisualizer(Visualizer):
+    """A class for creating and managing plots related to the GA run."""
 
     def plot(self) -> None:
         """Create all plots."""

@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from ..data_model.event import EventProperties
     from ..data_model.schedule import Schedule
     from ..genetic.ga import GA
-    from .plot import Plot
+    from .plot import Visualizer
 
 logger = getLogger(__name__)
 
@@ -29,7 +29,7 @@ def generate_summary(
     ga: GA,
     output_dir: Path,
     export_model: ExportModel,
-    plot: Plot,
+    plot: Visualizer,
 ) -> None:
     """Run the fll-scheduler-ga application and generate summary reports."""
     subdirs = OutputDirManager(output_dir).subdirs

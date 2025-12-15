@@ -129,7 +129,8 @@ class SwapMutation(Mutation):
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
-        self.swap_candidates = self.init_swap_candidates()
+        self.swap_candidates.extend(self.init_swap_candidates())
+        logger.debug("Initialized %d swap candidates for %s", len(self.swap_candidates), str(self))
 
     @abstractmethod
     def get_swap_candidates(self, schedule: Schedule) -> tuple[Match | None, ...] | tuple[int, ...] | None:
@@ -146,13 +147,12 @@ class SwapMutation(Mutation):
         msg = "get_swap_candidates method must be implemented by subclasses."
         raise NotImplementedError(msg)
 
-    def init_swap_candidates(self) -> list[tuple[tuple[int, ...], ...]]:
+    def init_swap_candidates(self) -> Iterator[tuple[tuple[int, ...], ...]]:
         """Precompute any necessary data before mutation."""
         _ts_idx = self.event_properties.timeslot_idx
         _loc_idx = self.event_properties.loc_idx
         _as_matches = self.event_factory.as_matches()
 
-        swap_candidates = []
         for match_list in _as_matches.values():
             for match1, match2 in itertools.combinations(match_list, 2):
                 e1a, e1b = match1
@@ -170,9 +170,7 @@ class SwapMutation(Mutation):
 
                 match1_idx = (e1a, e1b)
                 match2_idx = (e2a, e2b)
-                swap_candidates.append((match1_idx, match2_idx))
-        logger.debug("Initialized %d swap candidates", len(swap_candidates))
-        return swap_candidates
+                yield (match1_idx, match2_idx)
 
     def _validate_swap(
         self,

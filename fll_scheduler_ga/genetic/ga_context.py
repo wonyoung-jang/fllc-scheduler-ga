@@ -196,15 +196,15 @@ class RuntimeStartup:
     def run(self) -> None:
         """Run the import schedule handler."""
         seed_file = Path(self.config.runtime.seed_file).resolve()
-        self._flush(seed_file)
+        if self.config.runtime.flush and seed_file.exists():
+            self._flush(seed_file)
         if imported_schedule := self._import():
             self._add(seed_file, imported_schedule)
 
     def _flush(self, seed_file: Path) -> None:
         """Flush the seed file if specified in runtime settings."""
-        if self.config.runtime.flush and seed_file.exists():
-            seed_file.unlink(missing_ok=True)
-            logger.debug("Flushed seed file at: %s", seed_file)
+        seed_file.unlink(missing_ok=True)
+        logger.debug("Flushed seed file at: %s", seed_file)
         seed_file.touch(exist_ok=True)
 
     def _import(self) -> Schedule | None:
