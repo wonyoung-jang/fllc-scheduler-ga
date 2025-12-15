@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from logging import getLogger
@@ -12,7 +13,14 @@ import numpy as np
 
 from ..data_model.event import EventFactory, EventProperties
 from ..data_model.schedule import Schedule, ScheduleContext
-from ..fitness.benchmark import FitnessBenchmark, FitnessBenchmarkBreaktime, FitnessBenchmarkOpponent, StableConfigHash
+from ..fitness.benchmark import (
+    BENCHMARKS_CACHE,
+    FitnessBenchmark,
+    FitnessBenchmarkBreaktime,
+    FitnessBenchmarkOpponent,
+    StableConfigHash,
+)
+from ..fitness.benchmark_repository import PickleBenchmarkRepository
 from ..fitness.fitness import FitnessEvaluator, HardConstraintChecker
 from ..io.csv_importer import CsvImporter
 from ..io.ga_exporter import ScheduleSummaryGenerator
@@ -87,18 +95,26 @@ class StandardGaContextFactory(GaContextFactory):
             event_factory=event_factory,
             model=app_config.fitness,
         )
+
         config_hasher = StableConfigHash(
             config=tournament_config,
             model=app_config.fitness,
         )
+        config_hash = config_hasher.generate_hash()
+        benchmark_cache_dir = BENCHMARKS_CACHE
+        benchmark_cache_dir.mkdir(parents=True, exist_ok=True)
+        seed_file = benchmark_cache_dir / f"benchmark_cache_{config_hash}.pkl"
+
+        repository = PickleBenchmarkRepository(path=seed_file)
         benchmark = FitnessBenchmark(
             config=tournament_config,
             model=app_config.fitness,
-            config_hasher=config_hasher,
+            repository=repository,
             opponent_benchmarker=opponent_benchmarker,
             breaktime_benchmarker=breaktime_benchmarker,
             flush_benchmarks=app_config.runtime.flush_benchmarks,
         )
+
         benchmark.run()
         evaluator = FitnessEvaluator(
             config=tournament_config,
@@ -209,6 +225,9 @@ class RuntimeStartup:
 
         csv_importer.run()
         imported_schedule = csv_importer.schedule
+        if not self.context.checker.check(imported_schedule):
+            self.context.repairer.repair(imported_schedule)
+
         pop = np.array([imported_schedule.schedule], dtype=int)
 
         if fits := self.context.evaluator.evaluate_population(pop):
@@ -219,7 +238,7 @@ class RuntimeStartup:
             parent_dir.mkdir(parents=True, exist_ok=True)
             report_path = parent_dir / "report.txt"
             summary_gen = ScheduleSummaryGenerator(self.config.exports.team_identities)
-            summary_gen.export(imported_schedule, report_path)
+            asyncio.run(summary_gen.export(imported_schedule, report_path))
 
         return imported_schedule
 

@@ -1,4 +1,4 @@
-FLL Scheduler GA Summary Report (ID: 1394711154576 | Hash: 4123345217562912858)
+FLL Scheduler GA Summary Report (ID: 3675027190064 | Hash: 4123345217562912858)
 
 Attributes:
 --------------------
@@ -11,12 +11,12 @@ Length: 318
 
 Fitness:
 --------------------------
-BreakTime           : 0.1086305145738832
+BreakTime           : 0.12975203934014623
 LocationConsistency : 0.0
 OpponentVariety     : 0.0
 -----------------------------------
-Total               : 0.1086305145738832
-Percentage          : 3.62%
+Total               : 0.12975203934014623
+Percentage          : 4.33%
 
 Per-Objective Statistics (Team Distribution):
 -----------------------------------------------------------------

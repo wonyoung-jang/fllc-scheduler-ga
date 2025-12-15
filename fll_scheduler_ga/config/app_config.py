@@ -74,6 +74,7 @@ class AppConfig(BaseModel):
     def build_from_model(cls, model: AppConfigModel) -> AppConfig:
         """Create and return the application configuration from a Pydantic model."""
         model.exports.team_identities = model.teams.get_team_ids()
+        rng_seed = model.genetic.parameters.get_rng_seed()
         return AppConfig(
             runtime=model.runtime,
             imports=model.imports,
@@ -82,7 +83,7 @@ class AppConfig(BaseModel):
             genetic=model.genetic,
             fitness=model.fitness,
             tournament=cls.load_tournament_config(model),
-            rng=np.random.default_rng(model.genetic.parameters.rng_seed),
+            rng=np.random.default_rng(rng_seed),
         )
 
     @classmethod
@@ -185,10 +186,11 @@ class AppConfig(BaseModel):
         for roundtype_idx, rnd in enumerate(round_models):
             start_dt = parse_time_str(rnd.start_time, time_fmt)
             stop_dt = parse_time_str(rnd.stop_time, time_fmt)
-            times_dt = [parse_time_str(t, time_fmt) for t in rnd.times] if rnd.times else []
+            times_dt = tuple(parse_time_str(t, time_fmt) for t in rnd.times) if rnd.times else ()
 
             locations_in_sec = [loc for loc in locations if loc.locationtype == rnd.location]
             locations_in_sec.sort(key=lambda loc: loc.idx)
+            locations_in_sec = tuple(locations_in_sec)
 
             n_timeslots = cls.calc_num_timeslots(len(times_dt), len(locations_in_sec), num_teams, rnd.rounds_per_team)
 
@@ -199,7 +201,7 @@ class AppConfig(BaseModel):
             dur_tdelta_cycle = timedelta(minutes=dur_valid_cycle)
             dur_tdelta_active = timedelta(minutes=dur_valid_active)
 
-            timeslots = [
+            timeslots = tuple(
                 TimeSlot(
                     idx=next(timeslot_idx_iter),
                     start=start,
@@ -209,12 +211,12 @@ class AppConfig(BaseModel):
                 for start, stop_active, stop_cycle in cls.init_timeslots(
                     times_dt, dur_tdelta_cycle, dur_tdelta_active, n_timeslots, start_dt
                 )
-            ]
+            )
 
             final_start_time = timeslots[0].start
             final_stop_time = timeslots[-1].stop_cycle
 
-            times_dt = times_dt if times_dt else [ts.start for ts in timeslots]
+            times_dt = times_dt if times_dt else tuple(ts.start for ts in timeslots)
 
             slots_total = len(timeslots) * len(locations_in_sec)
             slots_required = num_teams * rnd.rounds_per_team
@@ -222,7 +224,7 @@ class AppConfig(BaseModel):
 
             unfilled_allowed = slots_empty > 0
 
-            tournament_round = TournamentRound(
+            tournament_round: TournamentRound = TournamentRound(
                 roundtype=rnd.roundtype,
                 roundtype_idx=roundtype_idx,
                 rounds_per_team=rnd.rounds_per_team,
@@ -249,10 +251,10 @@ class AppConfig(BaseModel):
         cls,
         start_dt: datetime | None,
         stop_dt: datetime | None,
-        times_dt: list[datetime],
+        times_dt: tuple[datetime, ...],
         dur: int,
         n_timeslots: int,
-    ) -> int | None:
+    ) -> int | float | None:
         """Validate the times configuration for a round.
 
         Valid conditions:
@@ -298,7 +300,7 @@ class AppConfig(BaseModel):
     @classmethod
     def init_timeslots(
         cls,
-        start_times: list[datetime],
+        start_times: tuple[datetime, ...],
         dur_tdelta_cycle: timedelta,
         dur_tdelta_active: timedelta,
         n_timeslots: int,
@@ -306,7 +308,7 @@ class AppConfig(BaseModel):
     ) -> Iterator[tuple[datetime, ...]]:
         """Initialize the timeslots for the round."""
         if start_times and dur_tdelta_active and dur_tdelta_cycle:
-            stop_cycle_times = start_times[1:]
+            stop_cycle_times = list(start_times[1:])
             stop_cycle_times.append(stop_cycle_times[-1] + dur_tdelta_cycle)
             stop_active_times = (start + dur_tdelta_active for start in start_times)
             time_groups = zip(start_times, stop_active_times, stop_cycle_times, strict=True)

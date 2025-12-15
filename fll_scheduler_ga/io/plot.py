@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import matplotlib as mpl
 
@@ -36,7 +36,7 @@ class Plot:
 
     ga: GA
     save_dir: str | Path | None
-    objectives: tuple[FitnessObjective]
+    objectives: tuple[FitnessObjective, ...]
     ref_points: np.ndarray
     export_model: ExportModel
 
@@ -85,7 +85,7 @@ class Plot:
     def plot_parallel(self) -> None:
         """Create the parallel coordinates plot."""
         data = np.array([p.fitness for p in self.ga.total_population])
-        ranks = np.array([p.rank for p in self.ga.total_population])
+        ranks = np.array([p.rank for p in self.ga.total_population], dtype=int)
         fig, ax = plt.subplots(figsize=(12, 7))
 
         x = range(len(self.objectives))
@@ -109,43 +109,39 @@ class Plot:
 
         cmap_name = self.export_model.cmap_name
         data = np.array([p.fitness for p in self.ga.total_population])
-        ranks = np.array([p.rank for p in self.ga.total_population])
+        ranks = np.array([p.rank for p in self.ga.total_population], dtype=int)
 
-        if n_objectives == 2:
-            fig, ax = plt.subplots(figsize=(10, 8))
-            x_obj, y_obj = self.objectives
-            ax.scatter(data[:, 0], data[:, 1], c=ranks, cmap=cmap_name, s=60, alpha=0.8)
-            ax.set(
-                title=f"{n_objectives}D scatter plot of schedules",
-                xlabel=x_obj,
-                ylabel=y_obj,
-            )
-            self._attach_colorbar(ax, ranks, label="Rank")
-            self.finalize(fig, f"pareto_scatter_{n_objectives}d.png")
-        elif n_objectives == 3:
-            fig, ax = plt.subplots(figsize=(10, 8), subplot_kw={"projection": "3d"})
-            x_obj, y_obj, z_obj = self.objectives
-            ax.view_init(azim=45, elev=40)
-            ax.scatter(data[:, 0], data[:, 1], data[:, 2], c=ranks, cmap=cmap_name, s=60)
-            ax.set(
-                title=f"{n_objectives}D scatter plot of schedules",
-                xlabel=x_obj,
-                ylabel=y_obj,
-                zlabel=z_obj,
-                box_aspect=[1, 1, 1],
-            )
-            self._attach_colorbar(ax, ranks, label="Rank")
-            self.finalize(fig, f"pareto_scatter_{n_objectives}d.png")
-            ax.scatter(
-                self.ref_points[:, 0],
-                self.ref_points[:, 1],
-                self.ref_points[:, 2],
-                c="red",
-                s=30,
-                label="Reference Points",
-            )
-            ax.legend()
-            self.finalize(fig, f"pareto_scatter_{n_objectives}d_ref.png")
+        fig = plt.figure(figsize=(10, 8))
+        ax = fig.add_subplot(projection="3d")
+        x_obj, y_obj, z_obj = self.objectives
+        ax.view_init(azim=45, elev=40)
+        ax.scatter(
+            data[:, 0],
+            data[:, 1],
+            data[:, 2],
+            s=60,
+            c=ranks,
+            cmap=cmap_name,
+        )
+        ax.set(
+            title=f"{n_objectives}D scatter plot of schedules",
+            xlabel=x_obj,
+            ylabel=y_obj,
+            zlabel=z_obj,
+            box_aspect=[1, 1, 1],
+        )
+        self._attach_colorbar(ax, ranks, label="Rank")
+        self.finalize(fig, f"pareto_scatter_{n_objectives}d.png")
+        ax.scatter(
+            self.ref_points[:, 0],
+            self.ref_points[:, 1],
+            self.ref_points[:, 2],
+            s=30,
+            c="red",
+            label="Reference Points",
+        )
+        ax.legend()
+        self.finalize(fig, f"pareto_scatter_{n_objectives}d_ref.png")
 
     def finalize(self, fig: Figure, filename: str) -> None:
         """Finalize the plot by saving or showing it."""
@@ -163,7 +159,12 @@ class Plot:
             logger.exception("Error saving plot to %s", path)
             plt.close(fig)
 
-    def _attach_colorbar(self, ax: Axes, values: list[int], label: str | None = None) -> None:
+    def _attach_colorbar(
+        self,
+        ax: Axes,
+        values: np.ndarray[tuple[int, ...], np.dtype[Any]],
+        label: str | None = None,
+    ) -> None:
         """Attach a colorbar to the given axes."""
         unique_values = sorted(set(values))
 

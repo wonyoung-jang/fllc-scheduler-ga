@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import numpy as np
-    from rich.progress import Progress
+    from rich.progress import Progress, TaskID
 
     from ..data_model.schedule import Schedule
 
@@ -79,7 +79,7 @@ class RichObserver(GaObserver):
     """Connects GA progress to a Rich Progress Task."""
 
     progress: Progress
-    task_id: int
+    task_id: TaskID
 
     def on_start(self, num_generations: int) -> None:
         """Initialize progress task."""

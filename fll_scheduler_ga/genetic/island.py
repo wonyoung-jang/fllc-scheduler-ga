@@ -34,11 +34,11 @@ class Island:
     operator_stats: OperatorStats
     fitness_history: FitnessHistory
     builder: ScheduleBuilder
-    stagnation: StagnationHandler
     population: SchedulePopulation
 
+    stagnation: StagnationHandler = field(init=False)
     selected: list[Schedule] = field(default_factory=list, repr=False)
-    curr_schedule_fits: np.ndarray = None
+    curr_schedule_fits: np.ndarray = field(init=False)
 
     def __len__(self) -> int:
         """Return the number of individuals in the island's population."""
@@ -63,7 +63,7 @@ class Island:
                 idx_to_pop = non_max_indices[i]
 
             self.selected.pop(idx_to_pop)
-            self.population.schedules = np.delete(self.population.schedules, idx_to_pop, axis=0)
+            self.population.schedules = np.delete(arr=self.population.schedules, obj=idx_to_pop, axis=0)
             logger.debug(
                 "Stagnation. Island: %d. Generation: %d. Schedule Removed: %d.",
                 self.identity,
@@ -199,7 +199,7 @@ class Island:
         """Randomly yield migrants from population."""
         migrants = []
         for _ in range(self.genetic_model.parameters.migration_size):
-            i = self.rng.integers(0, len(self.selected))
+            i = self.rng.integers(low=0, high=len(self.selected))
             migrants.append(self.selected.pop(i))
             self.population.schedules = np.delete(self.population.schedules, i, axis=0)
         return migrants
@@ -207,5 +207,5 @@ class Island:
     def receive_migrants(self, migrants: list[Schedule]) -> None:
         """Receive migrants from another island and add them to the current island's population."""
         for migrant in migrants:
-            if self.add_to_population(migrant):
+            if self.add_to_population(schedule=migrant):
                 self.population.add_schedule(migrant.schedule)

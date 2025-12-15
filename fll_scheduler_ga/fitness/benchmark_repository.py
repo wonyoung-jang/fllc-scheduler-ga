@@ -1,10 +1,11 @@
-"""Seed data I/O for fitness benchmarks."""
+"""Repository interface and implementations for benchmark data."""
 
 from __future__ import annotations
 
+import logging
 import pickle
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from logging import getLogger
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -13,7 +14,7 @@ if TYPE_CHECKING:
     import numpy as np
 
 
-logger = getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -26,37 +27,45 @@ class BenchmarkSeedData:
 
 
 @dataclass(slots=True)
-class BenchmarkLoad:
-    """Loader for fitness benchmark data from cache files."""
+class BenchmarkRepository(ABC):
+    """Abstract interface for storing and retrieving benchmark data."""
+
+    @abstractmethod
+    def load(self) -> BenchmarkSeedData | None:
+        """Load benchmark data."""
+
+    @abstractmethod
+    def save(self, data: BenchmarkSeedData) -> None:
+        """Save benchmark data."""
+
+
+@dataclass(slots=True)
+class PickleBenchmarkRepository(BenchmarkRepository):
+    """Concrete implementation using Pickle and local file system."""
 
     path: Path
 
     def load(self) -> BenchmarkSeedData | None:
         """Load benchmark data from a pickle file."""
+        logger.debug("Loading fitness benchmarks from cache: %s", self.path)
+        if not self.path.exists():
+            return None
+
         try:
             with self.path.open("rb") as f:
                 seed_data = pickle.load(f)
-        except (OSError, pickle.UnpicklingError, EOFError, AttributeError):
-            logger.exception("Failed to load fitness benchmarks from cache.")
+        except (OSError, EOFError, AttributeError, ModuleNotFoundError, pickle.UnpicklingError):
+            logger.debug("Failed to load fitness benchmarks from cache: %s", self.path)
             return None
 
         return seed_data
 
-
-@dataclass(slots=True)
-class BenchmarkSave:
-    """Saver for fitness benchmark data to cache files."""
-
-    path: Path
-    data: BenchmarkSeedData
-
-    def save(self) -> None:
+    def save(self, data: BenchmarkSeedData) -> None:
         """Save benchmark data to a pickle file."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
-
         try:
             with self.path.open("wb") as f:
-                pickle.dump(self.data, f)
+                pickle.dump(data, f)
             logger.info("Fitness benchmarks saved to cache: %s", self.path)
         except (OSError, pickle.PicklingError, EOFError):
             logger.exception("Failed to save fitness benchmarks to cache.")

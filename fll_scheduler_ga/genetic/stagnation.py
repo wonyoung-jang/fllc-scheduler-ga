@@ -63,8 +63,8 @@ class StagnationHandler:
     generation: GaGeneration
     fitness_history: FitnessHistory
     model: StagnationModel
-    cooldown_counter: int = 50
-    _last_stagnant_gen: int = -1
+
+    _last_stagnant_gen: int = 0
 
     def is_stagnant(self) -> bool:
         """Check if the GA has stagnated based on fitness history."""
@@ -78,7 +78,7 @@ class StagnationHandler:
         # Get recent history
         recents = self.fitness_history.history[curr - self.model.threshold : curr]
 
-        # Is any of the recent fitnesses exactly the same as the first one in this range?
+        # Checks if any of the recent fitnesses exactly the same as the first in this range
         equal_mask = recents[0] == recents[1:]
 
         # Count how many are equal in all objectives
@@ -87,7 +87,7 @@ class StagnationHandler:
 
         # Determine stagnation
         if equal_count > self.model.threshold * self.model.proportion:
-            if curr - self._last_stagnant_gen < self.cooldown_counter:
+            if curr - self._last_stagnant_gen < self.model.cooldown:
                 return False
             self._last_stagnant_gen = curr
             return True

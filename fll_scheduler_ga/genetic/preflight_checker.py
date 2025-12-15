@@ -22,17 +22,9 @@ class PreFlightChecker:
     event_factory: EventFactory
 
     @classmethod
-    def build(cls, event_properties: EventProperties, event_factory: EventFactory) -> PreFlightChecker:
-        """Build and return a PreFlightChecker."""
-        return cls(
-            event_properties=event_properties,
-            event_factory=event_factory,
-        )
-
-    @classmethod
     def build_then_run(cls, event_properties: EventProperties, event_factory: EventFactory) -> None:
         """Build a PreFlightChecker and run all checks."""
-        checker = cls.build(event_properties, event_factory)
+        checker = cls(event_properties=event_properties, event_factory=event_factory)
         checker.run_checks()
 
     def run_checks(self) -> None:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from logging import getLogger
 from typing import TYPE_CHECKING, Any
 
@@ -27,9 +27,8 @@ class Repairer:
     event_properties: EventProperties
     rng: np.random.Generator
     checker: HardConstraintChecker
-    repair_map: dict[int, Any] = None
-
-    _rt_to_tpr: np.ndarray = None
+    repair_map: dict[int, Any] = field(init=False)
+    _rt_to_tpr: np.ndarray = field(init=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
@@ -38,7 +37,7 @@ class Repairer:
             2: self.repair_matches,
         }
         max_rt = max(self.config.round_idx_to_tpr.keys())
-        self._rt_to_tpr = np.zeros(max_rt + 1, dtype=np.int32)
+        self._rt_to_tpr = np.zeros(max_rt + 1, dtype=int)
         for rt, tpr in self.config.round_idx_to_tpr.items():
             self._rt_to_tpr[rt] = tpr
 
@@ -48,7 +47,7 @@ class Repairer:
         Fills in missing events for teams by assigning them to available (unbooked) event slots.
 
         """
-        if len(schedule) == self.config.total_slots_required:
+        if schedule.get_size() == self.config.total_slots_required:
             return True
 
         teams, events = self.get_rt_tpr_maps(schedule)
@@ -59,7 +58,7 @@ class Repairer:
     ) -> bool:
         """Recursively repair the schedule by attempting to assign events to teams."""
         repair_map = self.repair_map
-        while len(schedule) < self.config.total_slots_required:
+        while schedule.get_size() < self.config.total_slots_required:
             filled = True
             for key, teams_for_rt in teams.items():
                 _, tpr = key
@@ -107,7 +106,7 @@ class Repairer:
                     teams[ek].append(t2)
                     schedule.unassign(t2, e2)
 
-        return len(schedule) == self.config.total_slots_required
+        return schedule.get_size() == self.config.total_slots_required
 
     def get_rt_tpr_maps(
         self, schedule: Schedule

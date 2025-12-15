@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterable, Iterator
     from pathlib import Path
 
     from ..data_model.event import EventProperties
@@ -95,7 +95,7 @@ class ScheduleExporter(ABC):
         """Write the schedule to a file."""
 
     @abstractmethod
-    def render_grid(self, schedule_by_type: dict[str, dict[int, int]]) -> Iterator[str | Iterator[str]]:
+    def render_grid(self, schedule_by_type: dict[str, dict[int, int]]) -> Iterable[str | Iterable[str]]:
         """Render a schedule grid for a specific round type."""
 
 

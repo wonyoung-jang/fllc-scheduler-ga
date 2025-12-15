@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -14,13 +14,8 @@ logger = logging.getLogger(__name__)
 class SchedulePopulation:
     """Population of schedules in the genetic algorithm."""
 
-    schedules: np.ndarray | None = None
-    ranks: np.ndarray | None = None
-
-    def __post_init__(self) -> None:
-        """Post-initialization to set up the schedules array."""
-        if self.ranks is None:
-            self.ranks = np.empty((0,), dtype=int)
+    ranks: np.ndarray
+    schedules: np.ndarray = field(default_factory=lambda: np.array([]))
 
     def __len__(self) -> int:
         """Return the number of schedules in the population."""
@@ -28,7 +23,7 @@ class SchedulePopulation:
 
     def add_schedule(self, schedule: np.ndarray) -> None:
         """Add a new schedule to the population."""
-        if self.schedules is None:
+        if self.schedules.size == 0:
             self.schedules = np.array([schedule], dtype=int)
         else:
             self.schedules = np.stack((*self.schedules, schedule), axis=0)

@@ -6,10 +6,10 @@ from typing import ClassVar
 from pydantic import BaseModel
 
 
-def parse_time_str(dt_str: str | None, fmt: str) -> datetime | None:
+def parse_time_str(dt_str: str, fmt: str) -> datetime:
     """Parse a time string into a datetime object."""
     if not dt_str:
-        return None
+        return datetime.min.replace(tzinfo=UTC)
     return datetime.strptime(dt_str.strip(), fmt).replace(tzinfo=UTC)
 
 
@@ -18,9 +18,9 @@ class TimeSlot(BaseModel):
 
     model_config = {"arbitrary_types_allowed": True, "frozen": True}
     idx: int
-    start: datetime | None
-    stop_active: datetime | None
-    stop_cycle: datetime | None
+    start: datetime
+    stop_active: datetime
+    stop_cycle: datetime
     time_fmt: ClassVar[str]
 
     def __str__(self) -> str:

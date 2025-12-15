@@ -6,12 +6,11 @@ import asyncio
 import csv
 import shutil
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from logging import getLogger
 from typing import TYPE_CHECKING
 
 from ..config.constants import FitnessObjective
-from .plot import Plot
 from .schedule_exporter import CsvScheduleExporter, HtmlScheduleExporter, normalize_teams
 
 if TYPE_CHECKING:
@@ -21,22 +20,22 @@ if TYPE_CHECKING:
     from ..data_model.event import EventProperties
     from ..data_model.schedule import Schedule
     from ..genetic.ga import GA
+    from .plot import Plot
 
 logger = getLogger(__name__)
 
 
-def generate_summary(ga: GA, output_dir: Path, export_model: ExportModel) -> None:
+def generate_summary(
+    ga: GA,
+    output_dir: Path,
+    export_model: ExportModel,
+    plot: Plot,
+) -> None:
     """Run the fll-scheduler-ga application and generate summary reports."""
     subdirs = OutputDirManager(output_dir).subdirs
     total_pop = ga.total_population
     if not export_model.no_plotting and total_pop:
-        Plot(
-            ga=ga,
-            save_dir=output_dir,
-            objectives=tuple(FitnessObjective),
-            ref_points=ga.context.nsga3.refs.points,
-            export_model=export_model,
-        ).plot()
+        plot.plot()
 
     schedules = ga.pareto_front() if export_model.front_only else total_pop
     schedules.sort(key=lambda s: (s.rank, -sum(s.fitness)))
@@ -133,7 +132,7 @@ class OutputDirManager:
     """Manage creation/clearing of output directories."""
 
     output_dir: Path
-    subdirs: dict[str, Path] = None
+    subdirs: dict[str, Path] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Set up the output directories for the different export formats."""
@@ -144,12 +143,14 @@ class OutputDirManager:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         logger.debug("Output directory: %s", self.output_dir)
 
-        self.subdirs = {
-            "csv": self.output_dir / "schedules_csv",
-            "html": self.output_dir / "schedules_html",
-            "txt": self.output_dir / "summary_reports",
-            "team": self.output_dir / "schedules_team_csv",
-        }
+        self.subdirs.update(
+            {
+                "csv": self.output_dir / "schedules_csv",
+                "html": self.output_dir / "schedules_html",
+                "txt": self.output_dir / "summary_reports",
+                "team": self.output_dir / "schedules_team_csv",
+            }
+        )
         for sd in self.subdirs.values():
             sd.mkdir(parents=True, exist_ok=True)
 
@@ -175,14 +176,14 @@ class ScheduleSummaryGenerator:
             for slot in schedule.__slots__
             if slot not in ("schedule", "fitness", "team_fitnesses", "team_events", "team_rounds")
         )
-        txt.append(f"Length: {len(schedule)}\n")
+        txt.append(f"Length: {schedule.get_size()}\n")
 
         txt.append("\nFitness:\n")
         txt.append("--------------------------\n")
         for name, score in zip(objectives, schedule.fitness, strict=True):
             txt.append(f"{name:<{max_len_obj}}: {score}\n")
         txt.append(f"{'-' * (max_len_obj + 15)}\n")
-        txt.append(f"{'Total':<{max_len_obj}}: {sum(schedule.fitness)}\n")
+        txt.append(f"{'Total':<{max_len_obj}}: {schedule.fitness.sum()}\n")
         txt.append(f"{'Percentage':<{max_len_obj}}: {sum(schedule.fitness) / len(schedule.fitness):.2%}\n")
 
         team_fits = schedule.team_fitnesses
@@ -276,7 +277,7 @@ class TeamScheduleGenerator:
 
         normalized_teams = normalize_teams(schedule.schedule, self.team_identities)
         team_events: dict[int, set[int]] = defaultdict(set)
-        for event_id, t in enumerate(schedule):
+        for event_id, t in enumerate(schedule.schedule):
             if t == -1:
                 continue
             team_id = normalized_teams[t]
@@ -289,7 +290,7 @@ class TeamScheduleGenerator:
                 r.append(str(ep.timeslot[event_id]))
                 r.append(str(ep.location[event_id]))
             rows.append(tuple(r))
-        return rows
+        return tuple(rows)
 
     async def export(self, schedule: Schedule, path: Path) -> None:
         """Generate a CSV file with team schedules, sorted by team IDs."""
@@ -315,7 +316,7 @@ class ParetoSummaryGenerator:
         summary.append(tuple(header))
 
         for i, s in enumerate(pop, start=1):
-            row = [str(i), str(id(s)), str(hash(s)), str(len(s)), str(s.rank)]
+            row = [str(i), str(id(s)), str(hash(s)), str(s.get_size()), str(s.rank)]
             row.extend(f"{score:.4f}" for score in s.fitness)
             row.append(f"{s.fitness.sum():.4f}")
             row.extend([s.origin, str(s.mutations), str(s.clones)])

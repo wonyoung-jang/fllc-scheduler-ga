@@ -30,7 +30,7 @@ class HardConstraintChecker:
         if not schedule:
             return False
 
-        if len(schedule) != self.config.total_slots_required:
+        if schedule.get_size() != self.config.total_slots_required:
             return False
 
         return not schedule.any_rounds_needed()
@@ -45,12 +45,11 @@ class FitnessEvaluator:
     benchmark: FitnessBenchmark
     model: FitnessModel
 
-    _epsilon: ClassVar[float] = EPSILON
     max_int: ClassVar[int] = np.iinfo(np.int64).max
     n_teams: ClassVar[int] = 0
     n_objectives: ClassVar[int] = len(tuple(FitnessObjective))
-    match_roundtypes: ClassVar[np.ndarray] = None
-    rt_array: ClassVar[np.ndarray] = None
+    match_roundtypes: ClassVar[np.ndarray]
+    rt_array: ClassVar[np.ndarray]
     loc_weight_rounds_inter: ClassVar[float] = 0.9
     loc_weight_rounds_intra: ClassVar[float] = 0.1
     agg_weights: ClassVar[tuple[float, ...]] = ()
@@ -107,7 +106,7 @@ class FitnessEvaluator:
         mean_s = team_fitnesses.mean(axis=1)
         min_fitness_weight = self.model.min_fitness_weight
         mean_s = (mean_s * (1.0 - min_fitness_weight)) + (min_s * min_fitness_weight)
-        mean_s[mean_s == 0] = self._epsilon
+        mean_s[mean_s == 0] = EPSILON
 
         stddev_s = team_fitnesses.std(axis=1)
         coeff_s = stddev_s / mean_s
@@ -188,10 +187,10 @@ class FitnessEvaluator:
         stop_cycle_curr = stops_cycle_sorted[:, :, :-1]
 
         # Calculate break durations in minutes
-        breaks_active_seconds = start_next - stop_active_curr
+        breaks_active_seconds = np.subtract(start_next, stop_active_curr)
         breaks_active_minutes = breaks_active_seconds / 60
 
-        breaks_cycle_seconds = start_next - stop_cycle_curr
+        breaks_cycle_seconds = np.subtract(start_next, stop_cycle_curr)
         breaks_cycle_minutes = breaks_cycle_seconds / 60
 
         # Identify overlaps
@@ -203,7 +202,7 @@ class FitnessEvaluator:
 
         mean_break = breaks_cycle_minutes.sum(axis=2) / count
         mean_break_zero_mask = mean_break == 0
-        mean_break[mean_break_zero_mask] = self._epsilon
+        mean_break[mean_break_zero_mask] = EPSILON
 
         # Calculate standard deviation
         diff_sq: np.ndarray = np.square(breaks_cycle_minutes - mean_break[:, :, np.newaxis])
@@ -296,7 +295,7 @@ class FitnessEvaluator:
 
         # Intra-Round Consistency
         unique_locs_per_rt: np.ndarray = (rt_loc_counts > 0).sum(axis=3, dtype=float)
-        unique_locs_per_rt[unique_locs_per_rt == 0] = cls._epsilon
+        unique_locs_per_rt[unique_locs_per_rt == 0] = EPSILON
 
         scores_per_rt = 1.0 / unique_locs_per_rt
         scores_per_rt[~participated_in_rt] = 1.0

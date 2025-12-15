@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
@@ -30,39 +30,43 @@ class ScheduleContext:
 class Schedule:
     """Represents a schedule (individual) with its associated fitness score."""
 
-    schedule: np.ndarray = None
-    fitness: np.ndarray = None
-    team_fitnesses: np.ndarray = None
+    schedule: np.ndarray = field(default_factory=lambda: np.array([]))
+    fitness: np.ndarray = field(default_factory=lambda: np.array([]))
+    team_fitnesses: np.ndarray = field(default_factory=lambda: np.array([]))
     rank: int = -1
 
     origin: str = "Builder"
     mutations: int = 0
     clones: int = 0
 
-    _hash: int = None
+    _hash: int | None = None
 
-    team_events: dict[int, set[int]] = None
-    team_rounds: np.ndarray = None
+    team_events: dict[int, set[int]] = field(default_factory=dict)
+    team_rounds: np.ndarray = field(default_factory=lambda: np.array([]))
 
     # Class variables
     ctx: ClassVar[ScheduleContext]
 
     def __post_init__(self) -> None:
         """Post-initialization to set up fitness array."""
-        if self.schedule is None:
+        if self.schedule.size == 0:
             self.schedule = np.full(Schedule.ctx.n_total_events, -1, dtype=int)
 
-        if self.team_events is None:
+        if not self.team_events:
             self.team_events = defaultdict(set)
 
-        if self.team_rounds is None:
+        if self.team_rounds.size == 0:
             self.team_rounds = Schedule.ctx.teams_roundreqs_arr.copy()
 
-    def __len__(self) -> int:
+    def __len__(self) -> int | np.signedinteger:
         """Return the number of scheduled events."""
         return np.count_nonzero(self.schedule >= 0)
 
-    def __getitem__(self, event: int) -> int | None:
+    def get_size(self) -> int | np.signedinteger:
+        """Return the number of scheduled events."""
+        return np.count_nonzero(self.schedule >= 0)
+
+    def __getitem__(self, event: int) -> int:
         """Get the team assigned to a specific event."""
         return self.schedule[event]
 

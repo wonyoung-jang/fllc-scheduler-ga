@@ -2,17 +2,14 @@
 
 from __future__ import annotations
 
-from collections import Counter
 from dataclasses import dataclass, field
 from logging import getLogger
-from pathlib import Path
 from time import time
 from typing import TYPE_CHECKING
 
 import numpy as np
 
 from ..config.constants import SeedIslandStrategy, SeedPopSort
-from ..io.observers import LoggingObserver
 from ..io.seed_ga import (
     ConcentratedSeedingStrategy,
     DistributedSeedingStrategy,
@@ -21,13 +18,14 @@ from ..io.seed_ga import (
     GASeedData,
     SeedingStrategy,
 )
-from .ga_generation import GaGeneration
 from .island import Island
 from .population import SchedulePopulation
 from .stagnation import FitnessHistory, OperatorStats, StagnationHandler
 
 if TYPE_CHECKING:
+    from collections import Counter
     from collections.abc import Iterator
+    from pathlib import Path
 
     from ..config.schemas import GaParameters, GeneticModel, ImportModel
     from ..data_model.schedule import Schedule
@@ -35,6 +33,7 @@ if TYPE_CHECKING:
     from ..operators.crossover import Crossover
     from ..operators.mutation import Mutation
     from .ga_context import GaContext
+    from .ga_generation import GaGeneration
 
 logger = getLogger(__name__)
 
@@ -49,36 +48,28 @@ class GA:
     observers: tuple[GaObserver, ...]
     seed_file: Path
     save_front_only: bool
+    generation: GaGeneration
+    operator_stats: OperatorStats
+    fitness_history: FitnessHistory
+    generations_array: np.ndarray
+    migrate_generations: np.ndarray
 
-    generation: GaGeneration = None
     total_population: list[Schedule] = field(default_factory=list, repr=False)
     islands: list[Island] = field(default_factory=list, repr=False)
 
-    fitness_history: FitnessHistory = None
-    operator_stats: OperatorStats = None
-    generations_array: np.ndarray = None
-    migrate_generations: np.ndarray = None
-
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
-        self.generation = GaGeneration(curr=0)
+        self.initialize_islands()
 
-        self.generations_array = np.arange(1, self.genetic_model.parameters.generations + 1)
-        self.migrate_generations = np.zeros(self.genetic_model.parameters.generations + 1, dtype=int)
-        if self.genetic_model.parameters.num_islands > 1 and self.genetic_model.parameters.migration_size > 0:
-            self.migrate_generations[:: self.genetic_model.parameters.migration_interval] = 1
+    def __len__(self) -> int:
+        """Return the number of individuals in the population."""
+        return sum(len(i) for i in self.islands)
 
-        self._init_fitness_history()
-        self._init_operator_stats()
-        stagnation = StagnationHandler(
-            rng=self.rng,
-            generation=self.generation,
-            fitness_history=self.fitness_history,
-            model=self.genetic_model.stagnation,
-            cooldown_counter=50,  # Hardcoded
-        )
-        self.islands.extend(
-            Island(
+    def initialize_islands(self) -> None:
+        """Initialize all islands in the GA."""
+        n_islands = self.genetic_model.parameters.num_islands
+        for i in range(n_islands):
+            island = Island(
                 identity=i,
                 generation=self.generation,
                 context=self.context,
@@ -87,49 +78,17 @@ class GA:
                 operator_stats=self.operator_stats,
                 fitness_history=self.fitness_history.copy(),
                 builder=self.context.builder,
-                stagnation=stagnation,
-                population=SchedulePopulation(),
+                population=SchedulePopulation(
+                    ranks=np.empty((0,), dtype=int),
+                ),
             )
-            for i in range(self.genetic_model.parameters.num_islands)
-        )
-
-    @classmethod
-    def build(cls, context: GaContext) -> GA:
-        """Build and return a GA instance with the provided configuration."""
-        _app_config = context.app_config
-        return cls(
-            context=context,
-            genetic_model=_app_config.genetic,
-            rng=_app_config.rng,
-            observers=(LoggingObserver(),),
-            seed_file=Path(_app_config.runtime.seed_file),
-            save_front_only=_app_config.exports.front_only,
-        )
-
-    def __len__(self) -> int:
-        """Return the number of individuals in the population."""
-        return sum(len(i) for i in self.islands)
-
-    def _init_fitness_history(self) -> None:
-        """Initialize the fitness history for the GA."""
-        n_gen = self.genetic_model.parameters.generations
-        n_obj = self.context.evaluator.n_objectives
-        self.fitness_history = FitnessHistory(
-            generation=self.generation,
-            current=np.zeros((1, n_obj), dtype=float),
-            history=np.full((n_gen, n_obj), fill_value=-1, dtype=float),
-        )
-
-    def _init_operator_stats(self) -> None:
-        """Initialize the operator statistics for the GA."""
-        trackers = ("success", "total")
-        crossover_counters = {str(c): 0 for c in self.context.crossovers}
-        mutation_counters = {str(m): 0 for m in self.context.mutations}
-        self.operator_stats = OperatorStats(
-            offspring=Counter(),
-            crossover={tr: Counter(crossover_counters) for tr in trackers},
-            mutation={tr: Counter(mutation_counters) for tr in trackers},
-        )
+            island.stagnation = StagnationHandler(
+                rng=self.rng,
+                generation=self.generation,
+                fitness_history=island.fitness_history,
+                model=self.genetic_model.stagnation,
+            )
+            self.islands.append(island)
 
     def run(self) -> None:
         """Run the genetic algorithm and return the best schedule found."""
@@ -147,7 +106,7 @@ class GA:
             self.initialize_population()
             if not any(i.selected for i in self.islands):
                 logger.critical("No valid schedule meeting all hard constraints was found.")
-                return False
+                return
             self.run_epochs()
         except Exception:
             logger.exception("An error occurred during the genetic algorithm run.")
@@ -294,7 +253,8 @@ class GASeeder:
             SeedPopSort.RANDOM: self.rng.permutation,
             SeedPopSort.BEST: np.arange,
         }.get(self.imports.seed_pop_sort, self.rng.permutation)
-        yield from iter_fn(len(self.seed_pop))
+        if isinstance(self.seed_pop, list):
+            yield from iter_fn(len(self.seed_pop))
 
 
 @dataclass(slots=True)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import combinations
 from logging import getLogger
 from math import comb
@@ -21,9 +21,9 @@ class ReferenceDirections:
     n_obj: int
     n_pop: int
 
-    n_refs: int = 0
-    points: np.ndarray = None
-    norm_sq: np.ndarray = None
+    n_refs: int = field(init=False)
+    points: np.ndarray = field(init=False)
+    norm_sq: np.ndarray = field(init=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to generate reference points."""
@@ -115,7 +115,7 @@ class NSGA3:
     refs: ReferenceDirections
     sorting: NonDominatedSorting
 
-    def select(self, fits: np.ndarray, n_pop: int) -> tuple[tuple[np.ndarray], np.ndarray, np.ndarray]:
+    def select(self, fits: np.ndarray, n_pop: int) -> tuple[tuple[np.ndarray, ...], np.ndarray, np.ndarray]:
         """Select the next generation using NSGA-III principles."""
         fronts = self.sorting.get_fronts(fits, n_pop)
         last_idx = len(fronts) - 1
@@ -125,6 +125,7 @@ class NSGA3:
 
         if len(fronts) == 1:
             fronts[0] = self.rng.permutation(selected_indices)[:n_pop]
+            fronts = tuple(fronts)
             flat = np.concatenate(fronts)
             ranks = self.ranks_from_fronts(fronts, fits.shape[0])
             return fronts, flat, ranks[flat]
@@ -152,7 +153,7 @@ class NSGA3:
         ranks = self.ranks_from_fronts(fronts, fits.shape[0])
         return fronts, flat, ranks[flat]
 
-    def ranks_from_fronts(self, fronts: tuple[np.ndarray], n_individuals: int) -> np.ndarray:
+    def ranks_from_fronts(self, fronts: tuple[np.ndarray, ...], n_individuals: int) -> np.ndarray:
         """Assign ranks to individuals based on their fronts."""
         ranks = np.full(n_individuals, fill_value=-1, dtype=int)
         for rank, front in enumerate(fronts):

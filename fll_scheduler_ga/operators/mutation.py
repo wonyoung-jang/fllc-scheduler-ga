@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import itertools
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from logging import getLogger
 from typing import TYPE_CHECKING
 
@@ -122,23 +122,24 @@ class Mutation(ABC):
 class SwapMutation(Mutation):
     """Abstract base class for mutation operators in the FLL Scheduler GA."""
 
-    same_timeslot: bool = False
-    same_location: bool = False
-    swap_candidates: list[tuple[tuple[int, ...], ...]] = None
+    same_timeslot: bool
+    same_location: bool
+
+    swap_candidates: list[tuple[tuple[int, ...], ...]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
         self.swap_candidates = self.init_swap_candidates()
 
     @abstractmethod
-    def get_swap_candidates(self, schedule: Schedule) -> tuple[Match | None]:
+    def get_swap_candidates(self, schedule: Schedule) -> tuple[Match | None, ...] | tuple[int, ...] | None:
         """Get candidates for swapping teams in the schedule schedule.
 
         Args:
             schedule (Schedule): The schedule to analyze.
 
         Returns:
-            tuple[Match | None]: A tuple containing two matches to swap,
+            tuple[Match | None, ...]: A tuple containing two matches to swap,
             or None if no valid candidates are found.
 
         """
@@ -205,7 +206,7 @@ class SwapTeamMutation(SwapMutation):
             return False
 
         match1_data, match2_data = self.get_swap_candidates(schedule)
-        if match1_data is None:
+        if match1_data is None or match2_data is None:
             return False
 
         e1a, _, t1a, _ = match1_data
@@ -214,7 +215,7 @@ class SwapTeamMutation(SwapMutation):
         schedule.swap_assignment(t2a, e2a, e1a)
         return True
 
-    def get_swap_candidates(self, schedule: Schedule) -> tuple[Match | None]:
+    def get_swap_candidates(self, schedule: Schedule) -> tuple[Match | None, ...]:
         """Get two matches to swap in the schedule schedule."""
         for idx in self.rng.permutation(len(self.swap_candidates)):
             idx: int
@@ -254,7 +255,7 @@ class SwapMatchMutation(SwapMutation):
             return False
 
         match1_data, match2_data = self.get_swap_candidates(schedule)
-        if match1_data is None:
+        if match1_data is None or match2_data is None:
             return False
 
         e1a, e1b, t1a, t1b = match1_data
@@ -278,7 +279,7 @@ class SwapMatchMutation(SwapMutation):
 
         return True
 
-    def get_swap_candidates(self, schedule: Schedule) -> tuple[Match | None]:
+    def get_swap_candidates(self, schedule: Schedule) -> tuple[Match | None, ...]:
         """Get two matches to swap in the schedule schedule."""
         for idx in self.rng.permutation(len(self.swap_candidates)):
             idx: int
@@ -338,9 +339,9 @@ class SwapTableSideMutation(SwapMutation):
 class TimeSlotSequenceMutation(Mutation):
     """Abstract base class for mutations that permute assignments within a single timeslot."""
 
-    timeslot_candidates: dict[tuple[int, int], list[tuple[int, ...]]] = None
-    timeslot_keys: tuple[tuple[int, int]] = None
-    key_to_tpr: dict[tuple[int, int], int] = None
+    timeslot_candidates: dict[tuple[int, int], list[tuple[int, ...]]] = field(init=False)
+    timeslot_keys: tuple[tuple[int, int], ...] = field(init=False)
+    key_to_tpr: dict[tuple[int, int], int] = field(init=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
@@ -348,10 +349,12 @@ class TimeSlotSequenceMutation(Mutation):
         self.timeslot_keys = tuple(self.timeslot_candidates.keys())
 
     @abstractmethod
-    def permute(self, items: list) -> list:
+    def permute_singles(self, items: list[int]) -> Iterator[int]:
         """Permute the list of items. To be implemented by subclasses."""
-        msg = "Subclasses must implement this method."
-        raise NotImplementedError(msg)
+
+    @abstractmethod
+    def permute_matches(self, items: list[tuple[int, ...]]) -> Iterator[tuple[int, ...]]:
+        """Permute the list of items. To be implemented by subclasses."""
 
     def init_candidates(
         self,
@@ -389,7 +392,7 @@ class TimeSlotSequenceMutation(Mutation):
     def mutate_singles(self, schedule: Schedule, candidates: list[tuple[int, ...]]) -> bool:
         """Permute team assignments for single-team events."""
         old_ids = [schedule[e] for e, _ in candidates]
-        new_ids = self.permute(old_ids)
+        new_ids = self.permute_singles(old_ids)
         for (event, _), old_team, new_team in zip(candidates, old_ids, new_ids, strict=True):
             if old_team == new_team:
                 continue
@@ -408,7 +411,7 @@ class TimeSlotSequenceMutation(Mutation):
             matches.append((e1, e2))
             old_ids.append((t1, t2))
 
-        new_ids = self.permute(old_ids)
+        new_ids = self.permute_matches(old_ids)
         for (e1, e2), old_id_pair, new_id_pair in zip(matches, old_ids, new_ids, strict=True):
             if old_id_pair == new_id_pair:
                 continue
@@ -432,13 +435,17 @@ class InversionMutation(TimeSlotSequenceMutation):
         """Return string representation."""
         return MutationOp.INVERSION
 
-    def permute(self, items: list[int | tuple[int, ...]]) -> Iterator[int | tuple[int, ...]]:
+    def permute_singles(self, items: list[int]) -> Iterator[int]:
         """Invert a random sub-sequence of the items."""
         if len(items) <= 1:
             return iter(items)
-        if isinstance(items[0], tuple):
-            return reversed([tuple(reversed(pair)) for pair in items])
         return reversed(items[:])
+
+    def permute_matches(self, items: list[tuple[int, ...]]) -> Iterator[tuple[int, ...]]:
+        """Invert a random sub-sequence of the items."""
+        if len(items) <= 1:
+            return iter(items)
+        return reversed([tuple(reversed(pair)) for pair in items])
 
 
 @dataclass(slots=True)
@@ -449,10 +456,14 @@ class ScrambleMutation(TimeSlotSequenceMutation):
         """Return string representation."""
         return MutationOp.SCRAMBLE
 
-    def permute(self, items: list[int | tuple[int, ...]]) -> Iterator[int | tuple[int, ...]]:
+    def permute_singles(self, items: list[int]) -> Iterator[int]:
         """Scramble a random sub-sequence of the items."""
         if len(items) <= 1:
             return iter(items)
-        if isinstance(items[0], tuple):
-            return (tuple(self.rng.permutation(pair)) for pair in items)
-        return (_ for _ in self.rng.permutation(items))
+        return iter(self.rng.permutation(items))
+
+    def permute_matches(self, items: list[tuple[int, ...]]) -> Iterator[tuple[int, ...]]:
+        """Scramble a random sub-sequence of the items."""
+        if len(items) <= 1:
+            return iter(items)
+        return (tuple(self.rng.permutation(pair)) for pair in items)

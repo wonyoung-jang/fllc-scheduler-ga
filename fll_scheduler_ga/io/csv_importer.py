@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import csv
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from logging import getLogger
 from typing import TYPE_CHECKING, TextIO
@@ -33,9 +33,9 @@ class CsvImporter:
     event_factory: EventFactory
     event_properties: EventProperties
 
-    schedule: Schedule = None
-    round_configs: dict[str, TournamentRound] = None
-    rtl_map: dict[tuple[str, tuple[datetime, ...], tuple[str, int, int, int]], int] = None
+    schedule: Schedule = field(default_factory=Schedule)
+    round_configs: dict[str, TournamentRound] = field(default_factory=dict)
+    rtl_map: dict[tuple[str, tuple[datetime, ...], tuple[str, int, int, int]], int] = field(default_factory=dict)
 
     def run(self) -> None:
         """Run the CSV importer to build the schedule."""
@@ -92,7 +92,6 @@ class CsvImporter:
         """
         current_round_type: str = ""
         header_locations: list[str] = []
-        created_events = {}
         reader = csv.reader(csv_file)
         for row in reader:
             if not row or not any(row):
@@ -102,7 +101,7 @@ class CsvImporter:
             if first_cell in self.round_configs:
                 current_round_type = first_cell
                 header_locations = []
-                logger.info("Parsing section: %s", current_round_type)
+                logger.debug("Parsing section: %s", current_round_type)
                 continue
 
             if not current_round_type:
@@ -117,7 +116,6 @@ class CsvImporter:
                     row,
                     current_round_type,
                     header_locations,
-                    created_events,
                 )
 
         if self.schedule.any_rounds_needed():
@@ -129,7 +127,6 @@ class CsvImporter:
         row: list[str],
         curr_rt: str,
         header_locations: list[str],
-        created_events: dict[tuple[str, str, str], int],
     ) -> None:
         """Parse a single data row from the CSV and update the schedule.
 
@@ -137,8 +134,6 @@ class CsvImporter:
             row: list[str] - A row from the CSV file.
             curr_rt: str - The current round type being processed.
             header_locations: list[str] - The list of location headers from the CSV.
-            created_events: dict[tuple[str, str, str], int]
-                - A dictionary to store created events for linking opponents.
 
         """
         time_fmt = self.config.time_fmt
@@ -176,10 +171,8 @@ class CsvImporter:
                 location_t = (loctype, locname, rc.teams_per_round, int(side))
 
             rtl_event_key = (curr_rt, timeslot_t, location_t)
-
             event = self.rtl_map.get(rtl_event_key)
-            created_event_key = (curr_rt, time_str, loc_name_full)
-            created_events[created_event_key] = event
+
             team = self.schedule.ctx.teams_list[team_id - 1]
             if team == -1:
                 logger.error("Team ID %d (%d) from CSV not found.", team_id, team_id - 1)

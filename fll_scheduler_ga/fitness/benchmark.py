@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import itertools
-import pickle
 from abc import ABC, abstractmethod
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from logging import getLogger
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -15,15 +14,16 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from ..config.constants import EPSILON
-from ..io.seed_fitness_benchmark import BenchmarkLoad, BenchmarkSave, BenchmarkSeedData
+from .benchmark_repository import BenchmarkSeedData
 
 if TYPE_CHECKING:
     from ..config.schemas import FitnessModel, TournamentConfig
     from ..data_model.event import EventFactory
+    from .benchmark_repository import BenchmarkRepository
 
 logger = getLogger(__name__)
 BENCHMARKS_CACHE = Path(".benchmarks_cache/").resolve()
-FITNESS_MODEL_VERSION = 2
+FITNESS_MODEL_VERSION = 3
 
 
 @dataclass(slots=True)
@@ -32,66 +32,48 @@ class FitnessBenchmark:
 
     config: TournamentConfig
     model: FitnessModel
-    config_hasher: StableConfigHash
+    repository: BenchmarkRepository
     opponent_benchmarker: FitnessBenchmarkOpponent
     breaktime_benchmarker: FitnessBenchmarkBreaktime
+    flush_benchmarks: bool
 
-    seed_file: Path = None
-    opponents: np.ndarray = None
-    best_timeslot_score: float = 0.0
-    flush_benchmarks: bool = False
+    opponents: np.ndarray = field(init=False)
+    best_timeslot_score: float = field(init=False)
 
     def run(self) -> None:
         """Run the fitness benchmarking process."""
-        self.init_cache_file()
-        loaded = self.load_benchmarks() if not self.flush_benchmarks and self.seed_file.exists() else False
+        loaded_data = None
+        if not self.flush_benchmarks:
+            loaded_data = self.repository.load()
 
-        if not loaded:
+        if loaded_data and self._validate_data(loaded_data):
+            self.opponents = loaded_data.opponents
+            self.best_timeslot_score = loaded_data.best_timeslot_score
+        else:
+            logger.info("Calculating new benchmarks...")
             self.opponents = self.opponent_benchmarker.benchmark()
             self.best_timeslot_score = self.breaktime_benchmarker.benchmark()
             self.save_benchmarks()
 
-    def init_cache_file(self) -> None:
-        """Initialize the cache file path based on the configuration hash."""
-        cache_dir = BENCHMARKS_CACHE
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        config_hash = self.config_hasher.generate_hash()
-        self.seed_file = cache_dir / f"benchmark_cache_{config_hash}.pkl"
-
-    def load_benchmarks(self) -> bool:
-        """Load benchmarks from cache or run calculations if cache is invalid/missing."""
-        try:
-            logger.debug("Loading fitness benchmarks from cache: %s", self.seed_file)
-            seed_benchmark_data = BenchmarkLoad(self.seed_file).load()
-            if seed_benchmark_data is None:
-                logger.warning("No benchmark data found in cache. Recalculating benchmarks.")
-                return False
-            if seed_benchmark_data.version != FITNESS_MODEL_VERSION:
-                logger.warning(
-                    "Benchmark data version mismatch: Expected (%d), found (%d). Recalculating benchmarks...",
-                    FITNESS_MODEL_VERSION,
-                    seed_benchmark_data.version,
-                )
-                return False
-            self.opponents = seed_benchmark_data.opponents
-            self.best_timeslot_score = seed_benchmark_data.best_timeslot_score
-        except (OSError, pickle.UnpicklingError, EOFError):
-            logger.warning("Could not load cache file. Recalculating benchmarks.")
-            self.seed_file.unlink(missing_ok=True)
+    def _validate_data(self, data: BenchmarkSeedData) -> bool:
+        """Validate loaded benchmark data."""
+        if data.version != FITNESS_MODEL_VERSION:
+            logger.warning(
+                "Benchmark version mismatch: Expected %d, found %d. Recalculating benchmarks.",
+                FITNESS_MODEL_VERSION,
+                data.version,
+            )
             return False
-        else:
-            return True
+        return True
 
     def save_benchmarks(self) -> None:
-        """Save the current benchmarks to cache."""
-        BenchmarkSave(
-            path=self.seed_file,
-            data=BenchmarkSeedData(
-                version=FITNESS_MODEL_VERSION,
-                opponents=self.opponents,
-                best_timeslot_score=self.best_timeslot_score,
-            ),
-        ).save()
+        """Save the current benchmarks via repository."""
+        data = BenchmarkSeedData(
+            version=FITNESS_MODEL_VERSION,
+            opponents=self.opponents,
+            best_timeslot_score=self.best_timeslot_score,
+        )
+        self.repository.save(data)
 
 
 @dataclass(slots=True)
@@ -159,7 +141,7 @@ class FitnessBenchmarkObjective(ABC):
 class FitnessBenchmarkOpponent(FitnessBenchmarkObjective):
     """Benchmark for opponent variety fitness."""
 
-    def benchmark(self) -> np.ndarray | None:
+    def benchmark(self) -> np.ndarray:
         """Run the opponent variety fitness benchmarking."""
         logger.info("Running opponent variety benchmarks...")
         logger.debug("Finding events per round type:")
@@ -180,7 +162,11 @@ class FitnessBenchmarkOpponent(FitnessBenchmarkObjective):
                 non_matches_required += roundreq
 
         num_matches_considered = max_matches_required + non_matches_required + 1
-        cache_scorer = dict.fromkeys(range(num_matches_considered), 0.0)
+
+        cache_scorer = {}
+        for k in range(num_matches_considered):
+            cache_scorer[k] = 0.0
+
         for n_rounds in range(1, max_matches_required + 1):
             ratio = n_rounds / max_matches_possible
             cache_scorer[n_rounds] = 1 / (1 + ratio)
@@ -205,7 +191,7 @@ class FitnessBenchmarkOpponent(FitnessBenchmarkObjective):
 
         if not opponents_arr.any():
             logger.warning("No valid schedules could be generated.")
-            return None
+            return np.array([])
 
         return opponents_arr
 
@@ -216,7 +202,7 @@ class FitnessBenchmarkBreaktime(FitnessBenchmarkObjective):
 
     model: FitnessModel
 
-    def benchmark(self) -> float | None:
+    def benchmark(self) -> float:
         """Run the break time consistency fitness benchmarking."""
         logger.info("Running break time consistency benchmarks...")
         all_ts = self.config.all_timeslots
@@ -237,7 +223,7 @@ class FitnessBenchmarkBreaktime(FitnessBenchmarkObjective):
         flattened_indices = [list(itertools.chain.from_iterable(p)) for p in raw_product]
         if not flattened_indices:
             logger.warning("No possible schedules could be generated.")
-            return None
+            return 0
 
         # Convert to 2D matrix (n_combinations, n_events)
         indices_matrix = np.array(flattened_indices, dtype=int)
@@ -252,7 +238,7 @@ class FitnessBenchmarkBreaktime(FitnessBenchmarkObjective):
         logger.debug("num_valid: %d", num_valid)
         if num_valid == 0:
             logger.warning("No valid schedules could be generated.")
-            return None
+            return 0
 
         best_timeslot_score = valid_scores.max()
         if best_timeslot_score == 0:

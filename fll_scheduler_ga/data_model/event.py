@@ -78,7 +78,9 @@ class EventProperties:
             event_properties[i]["teams_per_round"] = e.location.teams_per_round
             event_properties[i]["paired_idx"] = e.paired
 
-        event_prop_labels = ", ".join(event_properties.dtype.names)
+        names = event_properties.dtype.names
+        names = names if isinstance(names, tuple) else ("",)
+        event_prop_labels = ", ".join(names)
         logger.debug("\nEvent properties array:\n%s\n%s", event_prop_labels, event_properties)
         return cls(
             all_props=event_properties,
@@ -128,15 +130,15 @@ class EventFactory:
 
     config: TournamentConfig
     _list: list[Event] = field(default_factory=list, repr=False)
-    _list_indices: np.ndarray = None
-    _list_singles_or_side1: list[Event] = None
-    _list_singles_or_side1_indices: list[int] = None
-    _conflict_matrix: np.ndarray = None
-    _cached_mapping: dict[int, Event] = None
-    _cached_roundtypes: dict[int, list[int]] = None
-    _cached_timeslots: dict[tuple[int, int], list[int]] = None
-    _cached_locations: dict[tuple[str, Location], list[Event]] = None
-    _cached_matches: dict[int, list[tuple[int, int]]] = None
+    _list_indices: np.ndarray = field(default_factory=lambda: np.array([]))
+    _list_singles_or_side1: list[Event] = field(default_factory=list)
+    _list_singles_or_side1_indices: list[int] = field(default_factory=list)
+    _conflict_matrix: np.ndarray = field(default_factory=lambda: np.array([]))
+    _cached_mapping: dict[int, Event] = field(default_factory=dict)
+    _cached_roundtypes: dict[int, list[int]] = field(default_factory=dict)
+    _cached_timeslots: dict[tuple[int, int], list[int]] = field(default_factory=dict)
+    _cached_locations: dict[tuple[str, Location], list[Event]] = field(default_factory=dict)
+    _cached_matches: dict[int, list[tuple[int, int]]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
@@ -160,7 +162,7 @@ class EventFactory:
 
     def build_indices(self) -> np.ndarray:
         """Create and return a list of all event indices."""
-        if self._list_indices is None:
+        if self._list_indices.size == 0:
             self._list_indices = np.array([e.idx for e in self.build()], dtype=int)
         return self._list_indices
 
@@ -203,6 +205,13 @@ class EventFactory:
                     )
                     yield event
             elif r.teams_per_round == 2:
+                event1 = Event(  # Null Event
+                    idx=0,
+                    roundtype="n",
+                    roundtype_idx=0,
+                    timeslot=ts,
+                    location=Location(idx=0, locationtype="n", name=1, side=-1, teams_per_round=1),
+                )
                 for loc in r.locations:
                     if loc.side == 1:
                         event1 = Event(
@@ -236,7 +245,7 @@ class EventFactory:
 
     def build_conflict_matrix(self) -> np.ndarray:
         """Build a conflict matrix for all events."""
-        if self._conflict_matrix is None:
+        if self._conflict_matrix.size == 0:
             n = len(self._list)
             self._conflict_matrix = np.full((n, n), fill_value=False, dtype=bool)
             for e1, e2 in itertools.combinations(self.build(), 2):
@@ -250,13 +259,13 @@ class EventFactory:
 
     def as_mapping(self) -> dict[int, Event]:
         """Get a mapping of event identities to Event objects."""
-        if self._cached_mapping is None:
+        if not self._cached_mapping:
             self._cached_mapping = {e.idx: e for e in self.build()}
         return self._cached_mapping
 
     def as_roundtypes(self) -> dict[int, list[int]]:
         """Get a mapping of RoundTypes to their Event indices."""
-        if self._cached_roundtypes is None:
+        if not self._cached_roundtypes:
             self._cached_roundtypes = defaultdict(list)
             for e in self.build():
                 self._cached_roundtypes[e.roundtype_idx].append(e.idx)
@@ -264,7 +273,7 @@ class EventFactory:
 
     def as_timeslots(self) -> dict[tuple[int, int], list[int]]:
         """Get a mapping of TimeSlots to their Events."""
-        if self._cached_timeslots is None:
+        if not self._cached_timeslots:
             self._cached_timeslots = defaultdict(list)
             for e in self.build():
                 self._cached_timeslots[(e.roundtype_idx, e.timeslot.idx)].append(e.idx)
@@ -272,7 +281,7 @@ class EventFactory:
 
     def as_matches(self) -> dict[int, list[tuple[int, int]]]:
         """Get a mapping of RoundTypes to their matched Event indices."""
-        if self._cached_matches is None:
+        if not self._cached_matches:
             self._cached_matches = defaultdict(list)
             for e in self.build_singles_or_side1():
                 if e.paired == -1:

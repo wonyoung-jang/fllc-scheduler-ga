@@ -91,6 +91,18 @@ class GaParameters(BaseModel):
 
         return self
 
+    def get_rng_seed(self) -> int:
+        """Return the RNG seed as an integer."""
+        if self.rng_seed is None:
+            sv = np.random.default_rng().integers(*RANDOM_SEED_RANGE)
+            if not isinstance(sv, int):
+                self.rng_seed = abs(hash(sv)) % (RANDOM_SEED_RANGE[1] + 1)
+            else:
+                self.rng_seed = sv
+            logger.debug("RNG seed not set, defaulting to %s.", self.rng_seed)
+
+        return int(self.rng_seed)
+
 
 class CrossoverModel(BaseModel):
     """Configuration for crossover operators."""
@@ -127,6 +139,7 @@ class StagnationModel(BaseModel):
     enable: bool = False
     proportion: float = 0.8
     threshold: int = 20
+    cooldown: int = 50
 
 
 class GeneticModel(BaseModel):
@@ -218,15 +231,16 @@ class TeamsModel(BaseModel):
 
     def get_team_ids(self) -> dict[int, str]:
         """Return a mapping of team indices to team identities."""
-        return dict(enumerate(self.teams, start=1))
+        teams_list = self.teams if isinstance(self.teams, list) else [str(i) for i in range(1, self.teams + 1)]
+        return dict(enumerate(teams_list, start=1))
 
 
 class FitnessModel(BaseModel):
     """Configuration for fitness weights."""
 
-    weight_mean: int
-    weight_variation: int
-    weight_range: int
+    weight_mean: float | int
+    weight_variation: float | int
+    weight_range: float | int
     obj_weight_breaktime: int = 1
     obj_weight_opponents: int = 1
     obj_weight_locations: int = 1
@@ -340,14 +354,14 @@ class TournamentRound(BaseModel):
     roundtype_idx: int
     rounds_per_team: int
     teams_per_round: int
-    times: list[datetime]
+    times: tuple[datetime, ...]
     start_time: datetime
     stop_time: datetime
     duration_minutes: timedelta
     location_type: str
-    locations: list[Location]
+    locations: tuple[Location, ...]
     num_timeslots: int
-    timeslots: list[TimeSlot]
+    timeslots: tuple[TimeSlot, ...]
     slots_total: int
     slots_required: int
     slots_empty: int
@@ -444,5 +458,20 @@ class TournamentConfig(BaseModel):
         )
 
     def __hash__(self) -> int:
-        """Generate a hash for the TournamentConfig."""
-        return super().__hash__()
+        """Return hash of TournamentConfig."""
+        return hash(
+            (
+                self.num_teams,
+                self.time_fmt,
+                self.rounds,
+                tuple(sorted(self.roundreqs.items())),
+                tuple(sorted(self.round_idx_to_tpr.items())),
+                self.total_slots_possible,
+                self.total_slots_required,
+                self.unique_opponents_possible,
+                self.max_events_per_team,
+                self.all_locations,
+                self.all_timeslots,
+                self.is_interleaved,
+            )
+        )

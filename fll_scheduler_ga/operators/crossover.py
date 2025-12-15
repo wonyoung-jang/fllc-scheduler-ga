@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from logging import getLogger
 from typing import TYPE_CHECKING
 
@@ -14,7 +14,7 @@ from ..config.constants import CrossoverOp
 from ..data_model.schedule import Schedule
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterable, Iterator
 
     from ..config.schemas import OperatorConfig
     from ..data_model.event import EventFactory, EventProperties
@@ -31,16 +31,16 @@ def build_crossovers(
     """Build and return a tuple of crossover operators based on the configuration."""
     if not (crossover_types := operators.crossover.types):
         logger.warning("No crossover types enabled in the configuration. Crossover will not occur.")
-        return []
+        return ()
 
     crossovers = []
     crossover_factory = {
         CrossoverOp.K_POINT: lambda p, k: KPoint(**p, k=k),
-        CrossoverOp.SCATTERED: lambda p: Scattered(**p),
-        CrossoverOp.UNIFORM: lambda p: Uniform(**p),
-        CrossoverOp.ROUND_TYPE_CROSSOVER: lambda p: RoundTypeCrossover(**p),
-        CrossoverOp.TIMESLOT_CROSSOVER: lambda p: TimeSlotCrossover(**p),
-        CrossoverOp.LOCATION_CROSSOVER: lambda p: LocationCrossover(**p),
+        CrossoverOp.SCATTERED: Scattered,
+        CrossoverOp.UNIFORM: Uniform,
+        CrossoverOp.ROUND_TYPE_CROSSOVER: RoundTypeCrossover,
+        CrossoverOp.TIMESLOT_CROSSOVER: TimeSlotCrossover,
+        CrossoverOp.LOCATION_CROSSOVER: LocationCrossover,
     }
     params = {
         "event_factory": event_factory,
@@ -62,7 +62,7 @@ def build_crossovers(
 
                     crossovers.append(crossover_factory[crossover_name](params, k))
         else:
-            crossovers.append(crossover_factory[crossover_name](params))
+            crossovers.append(crossover_factory[crossover_name](**params))
 
     return tuple(crossovers)
 
@@ -75,8 +75,8 @@ class Crossover(ABC):
     event_properties: EventProperties
     rng: np.random.Generator
 
-    events: np.ndarray = None
-    n_evts: int = None
+    events: np.ndarray = field(init=False)
+    n_evts: int = field(init=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the crossover operator."""
@@ -149,11 +149,11 @@ class EventCrossover(Crossover):
         return f"{self.__class__.__name__}"
 
     @abstractmethod
-    def get_genes(self) -> tuple[np.ndarray, np.ndarray]:
+    def get_genes(self) -> Iterable[np.ndarray]:
         """Get the genes for the crossover.
 
         Returns:
-            tuple[np.ndarray, np.ndarray]: Genes for each parent.
+            Iterable[np.ndarray]: Genes for each parent.
 
         """
 
@@ -178,7 +178,7 @@ class KPoint(EventCrossover):
             logger.warning("Invalid k value for KPoint crossover: %d. Setting k to 1.", self.k)
             self.k = 1
 
-    def get_genes(self) -> tuple[np.ndarray, np.ndarray]:
+    def get_genes(self) -> Iterable[np.ndarray]:
         """Get the genes for KPoint crossover."""
         n = self.n_evts
 
@@ -203,7 +203,7 @@ class Scattered(EventCrossover):
     Shuffled indices split parent 50/50.
     """
 
-    def get_genes(self) -> tuple[np.ndarray, np.ndarray]:
+    def get_genes(self) -> Iterable[np.ndarray]:
         """Get the genes for Scattered crossover."""
         # Shuffle all indices and split in half.
         permuted_indices = self.rng.permutation(self.events)
@@ -219,7 +219,7 @@ class Uniform(EventCrossover):
     Uniform may result in more imbalanced splits.
     """
 
-    def get_genes(self) -> tuple[np.ndarray, np.ndarray]:
+    def get_genes(self) -> Iterable[np.ndarray]:
         """Get the genes for Uniform crossover."""
         # Create a mask for selecting genes from each parent.
         mask = self.rng.random(self.n_evts) < 0.5
@@ -233,7 +233,7 @@ class StructureCrossover(EventCrossover):
     Each gene is chosen based on a specific structure of the event.
     """
 
-    array: np.ndarray = None
+    array: np.ndarray = field(init=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
@@ -244,7 +244,7 @@ class StructureCrossover(EventCrossover):
     def initialize_attributes(self) -> None:
         """Initialize attributes specific to the structure crossover."""
 
-    def get_genes(self) -> tuple[np.ndarray, np.ndarray]:
+    def get_genes(self) -> Iterable[np.ndarray]:
         """Get the genes for Structure-based crossover."""
         self.rng.shuffle(self.events)
         p1, p2 = np.array_split(self.events, indices_or_sections=2, axis=0)

@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class GaGeneration:
     """Class for tracking GA generation information."""
 
-    curr: int = 0
+    curr: int
 
     def increment(self) -> None:
         """Increment the generation counter."""
