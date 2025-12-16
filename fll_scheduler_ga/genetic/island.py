@@ -40,6 +40,27 @@ class Island:
     curr_schedule_fits: np.ndarray = field(init=False)
     selected: list[Schedule] = field(default_factory=list)
 
+    _n_crossovers: int = field(init=False)
+    _n_mutations: int = field(init=False)
+    _n_pop: int = field(init=False)
+    _n_offspring: int = field(init=False)
+    _n_migration: int = field(init=False)
+    _chance_crossover: float = field(init=False)
+    _chance_mutation: float = field(init=False)
+
+    def __post_init__(self) -> None:
+        """Post-initialization to set up stagnation handler and mutation count."""
+        ctx = self.context
+        self._n_mutations = len(ctx.mutations)
+        self._n_crossovers = len(ctx.crossovers)
+
+        params = self.genetic_model.parameters
+        self._n_pop = params.population_size
+        self._n_offspring = params.offspring_size
+        self._n_migration = params.migration_size
+        self._chance_crossover = params.crossover_chance
+        self._chance_mutation = params.mutation_chance
+
     def __len__(self) -> int:
         """Return the number of individuals in the island's population."""
         return len(self.population)
@@ -74,10 +95,10 @@ class Island:
 
     def add_to_population(self, schedule: Schedule) -> bool:
         """Add a schedule to a specific island's population if it's not a duplicate."""
-        self.operator_stats.offspring["total"] += 1
-        if self.context.checker.check(schedule) and schedule not in self.selected:
+        self.operator_stats.count_offspring("total")
+        if self.context.check(schedule) and schedule not in self.selected:
             self.selected.append(schedule)
-            self.operator_stats.offspring["success"] += 1
+            self.operator_stats.count_offspring("success")
             return True
         return False
 
@@ -89,14 +110,14 @@ class Island:
         created = 0
         while created < needed:
             s = self.builder.build()
-            if self.context.repairer.repair(s) and self.add_to_population(s):
-                self.population.add_schedule(s.schedule)
+            if self.context.repair(s) and self.add_to_population(s):
+                self.population.add(s.schedule)
                 created += 1
 
     @property
     def n_needed(self) -> int:
         """Return the number of individuals needed to fill the population."""
-        return self.genetic_model.parameters.population_size - len(self)
+        return self._n_pop - len(self)
 
     def initialize(self) -> None:
         """Initialize the population for each island."""
@@ -117,26 +138,26 @@ class Island:
 
     def mutate_schedule(self, schedule: Schedule) -> bool:
         """Mutate a child schedule."""
-        m_idx = self.rng.integers(0, len(self.context.mutations))
+        m_idx = self.rng.integers(0, self._n_mutations)
         m = self.context.mutations[m_idx]
         m_str = str(m)
-        self.operator_stats.mutation["total"][m_str] += 1
+        self.operator_stats.count_mutation("total", m_str)
         if m.mutate(schedule):
-            self.operator_stats.mutation["success"][m_str] += 1
+            self.operator_stats.count_mutation("success", m_str)
             schedule.mutations += 1
             return True
         return False
 
     def crossover_schedule(self, parents: Iterator[Schedule]) -> Iterator[Schedule]:
         """Perform crossover between two parent schedules."""
-        c_idx = self.rng.integers(0, len(self.context.crossovers))
+        c_idx = self.rng.integers(0, self._n_crossovers)
         c = self.context.crossovers[c_idx]
         c_str = str(c)
         for child in c.cross(parents):
-            self.operator_stats.crossover["total"][c_str] += 1
-            if self.context.checker.check(child):
-                self.operator_stats.crossover["success"][c_str] += 1
-            if self.context.repairer.repair(child):
+            self.operator_stats.count_crossover("total", c_str)
+            if self.context.check(child):
+                self.operator_stats.count_crossover("success", c_str)
+            if self.context.repair(child):
                 yield child
 
     def evolve(self) -> None:
@@ -145,43 +166,42 @@ class Island:
             return
 
         created_cycle = 0
-        while created_cycle < self.genetic_model.parameters.offspring_size:
-            crossovered = False
-            parents_indices = self.context.selection.select(len(pop), k=2)
+        while created_cycle < self._n_offspring:
+            parents_indices = self.context.select_parents(n=len(pop), k=2)
             parents = (pop[i] for i in parents_indices)
-            c_roll = self.genetic_model.parameters.crossover_chance > self.rng.random()
-            if c_roll and self.context.crossovers:
+            c_roll = self._chance_crossover > self.rng.random()
+            if c_roll and self._n_crossovers > 0:
                 offspring = self.crossover_schedule(parents)
-                crossovered = True
             else:
                 offspring = (p.clone() for p in parents)
 
             for child in offspring:
-                m_roll = self.genetic_model.parameters.mutation_chance > self.rng.random()
-                if (m_roll or not crossovered) and self.context.mutations:
-                    self.mutate_schedule(child)
+                if self._n_mutations > 0:
+                    m_roll = True if not c_roll else self._chance_mutation > self.rng.random()
+                    if m_roll:
+                        self.mutate_schedule(child)
 
                 if self.add_to_population(child):
-                    self.population.add_schedule(child.schedule)
+                    self.population.add(child.schedule)
+
                 created_cycle += 1
-                if created_cycle >= self.genetic_model.parameters.offspring_size:
+                if created_cycle >= self._n_offspring:
                     break
 
         if not self.selected:
             msg = f"Island {self.identity}: No individuals in population after evolution."
             raise RuntimeError(msg)
 
-    def evaluate_pop(self) -> tuple[np.ndarray, np.ndarray]:
+    def evaluate_pop(self) -> tuple[np.ndarray, ...]:
         """Evaluate the entire population."""
-        pop_array = self.population.schedules
-        return self.context.evaluator.evaluate_population(pop_array)
+        return self.context.evaluate(self.population.schedules)
 
     def select_next_generation(self) -> None:
         """Select the next generation using NSGA-III principles."""
-        n_pop = self.genetic_model.parameters.population_size
+        n_pop = self._n_pop
         schedule_fits, _ = self.evaluate_pop()
         if schedule_fits.shape[0] != n_pop:
-            _, flat, _ = self.context.nsga3.select(schedule_fits, n_pop)
+            _, flat, _ = self.context.select_nsga3(schedule_fits, n_pop)
         else:
             flat = np.arange(n_pop)
 
@@ -195,17 +215,15 @@ class Island:
         self.population.schedules = self.population.schedules[flat]
         self.curr_schedule_fits = schedule_fits[flat]
 
-    def give_migrants(self) -> list[Schedule]:
+    def give_migrants(self) -> Iterator[Schedule]:
         """Randomly yield migrants from population."""
-        migrants = []
-        for _ in range(self.genetic_model.parameters.migration_size):
+        for _ in range(self._n_migration):
             i = self.rng.integers(low=0, high=len(self.selected))
-            migrants.append(self.selected.pop(i))
             self.population.schedules = np.delete(self.population.schedules, i, axis=0)
-        return migrants
+            yield self.selected.pop(i)
 
-    def receive_migrants(self, migrants: list[Schedule]) -> None:
+    def receive_migrants(self, migrants: Iterator[Schedule]) -> None:
         """Receive migrants from another island and add them to the current island's population."""
         for migrant in migrants:
             if self.add_to_population(schedule=migrant):
-                self.population.add_schedule(migrant.schedule)
+                self.population.add(migrant.schedule)

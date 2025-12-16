@@ -35,6 +35,7 @@ from .preflight_checker import PreFlightChecker
 
 if TYPE_CHECKING:
     from ..config.app_config import AppConfig
+    from ..config.schemas import ImportModel, TournamentConfig
     from ..operators.crossover import Crossover
     from ..operators.mutation import Mutation
     from ..operators.selection import Selection
@@ -184,6 +185,38 @@ class GaContext:
     selection: Selection
     crossovers: tuple[Crossover, ...]
     mutations: tuple[Mutation, ...]
+
+    def check(self, schedule: Schedule) -> bool:
+        """Check a schedule using the hard constraint checker."""
+        return self.checker.check(schedule)
+
+    def repair(self, schedule: Schedule) -> bool:
+        """Repair a schedule using the repairer."""
+        return self.repairer.repair(schedule)
+
+    def evaluate(self, pop_array: np.ndarray) -> tuple[np.ndarray, ...]:
+        """Evaluate a schedule using the fitness evaluator."""
+        return self.evaluator.evaluate_population(pop_array)
+
+    def select_parents(self, n: int, k: int = 2) -> np.ndarray:
+        """Select parents using the selection operator."""
+        return self.selection.select(n, k)
+
+    def select_nsga3(self, fits: np.ndarray, n_select: int) -> tuple[tuple[np.ndarray, ...], np.ndarray, np.ndarray]:
+        """Select individuals using NSGA-III."""
+        return self.nsga3.select(fits, n_select)
+
+    def get_tournament_config(self) -> TournamentConfig:
+        """Get the tournament configuration from the app config."""
+        return self.app_config.tournament
+
+    def get_imports_model(self) -> ImportModel:
+        """Get the imports model from the app config."""
+        return self.app_config.imports
+
+    def get_seed_island_strategy(self) -> str:
+        """Get the seed island strategy from the app config."""
+        return self.app_config.imports.seed_island_strategy
 
 
 @dataclass(slots=True)

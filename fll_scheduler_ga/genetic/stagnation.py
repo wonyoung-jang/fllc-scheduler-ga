@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import numpy as np
 
 if TYPE_CHECKING:
-    from collections import Counter
-
     from ..config.schemas import StagnationModel
     from .ga_generation import GaGeneration
 
@@ -53,6 +52,43 @@ class OperatorStats:
     offspring: Counter
     crossover: dict[str, Counter]
     mutation: dict[str, Counter]
+
+    def count_offspring(self, op_status: str) -> None:
+        """Record the use of an offspring operator (adding to population)."""
+        self.offspring[op_status] += 1
+
+    def count_crossover(self, op_status: str, op_name: str) -> None:
+        """Record the use of a crossover operator."""
+        self.crossover[op_status][op_name] += 1
+
+    def count_mutation(self, op_status: str, op_name: str) -> None:
+        """Record the use of a mutation operator."""
+        self.mutation[op_status][op_name] += 1
+
+    def get_offspring_stats(self) -> tuple[int, int, str]:
+        """Get the offspring statistics."""
+        s_sum = self.offspring.get("success", 0)
+        t_sum = self.offspring.get("total", 0)
+        rate = f"{s_sum / t_sum if t_sum > 0 else 0.0:.2%}"
+        return s_sum, t_sum, rate
+
+    def get_crossover_stats(self) -> tuple[int, int, str]:
+        """Get the crossover statistics for a specific operator."""
+        s = self.crossover.get("success", Counter())
+        t = self.crossover.get("total", Counter())
+        s_sum = sum(s.values())
+        t_sum = sum(t.values())
+        rate = f"{s_sum / t_sum if t_sum > 0 else 0.0:.2%}"
+        return s_sum, t_sum, rate
+
+    def get_mutation_stats(self) -> tuple[int, int, str]:
+        """Get the mutation statistics for a specific operator."""
+        s = self.mutation.get("success", Counter())
+        t = self.mutation.get("total", Counter())
+        s_sum = sum(s.values())
+        t_sum = sum(t.values())
+        rate = f"{s_sum / t_sum if t_sum > 0 else 0.0:.2%}"
+        return s_sum, t_sum, rate
 
 
 @dataclass(slots=True)

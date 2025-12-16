@@ -21,7 +21,7 @@ class SchedulePopulation:
         """Return the number of schedules in the population."""
         return self.schedules.shape[0] if self.schedules is not None else 0
 
-    def add_schedule(self, schedule: np.ndarray) -> None:
+    def add(self, schedule: np.ndarray) -> None:
         """Add a new schedule to the population."""
         if self.schedules.size == 0:
             self.schedules = np.array([schedule], dtype=int)

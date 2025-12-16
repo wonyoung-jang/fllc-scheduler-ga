@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from dataclasses import dataclass, field
-from logging import getLogger
-from time import time
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -35,7 +35,7 @@ if TYPE_CHECKING:
     from .ga_context import GaContext
     from .ga_generation import GaGeneration
 
-logger = getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -57,8 +57,15 @@ class GA:
     total_population: list[Schedule] = field(default_factory=list)
     islands: list[Island] = field(default_factory=list)
 
+    _n_islands: int = field(init=False)
+    _n_generations: int = field(init=False)
+
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
+        params = self.genetic_model.parameters
+        self._n_islands = params.num_islands
+        self._n_generations = params.generations
+
         self.initialize_islands()
 
     def __len__(self) -> int:
@@ -67,7 +74,7 @@ class GA:
 
     def initialize_islands(self) -> None:
         """Initialize all islands in the GA."""
-        n_islands = self.genetic_model.parameters.num_islands
+        n_islands = self._n_islands
         for i in range(n_islands):
             island = Island(
                 identity=i,
@@ -93,10 +100,10 @@ class GA:
     def run(self) -> None:
         """Run the genetic algorithm and return the best schedule found."""
         seed_file = self.seed_file
-        config = self.context.app_config.tournament
+        config = self.context.get_tournament_config()
         try:
-            start_time = time()
-            self._notify_on_start(self.genetic_model.parameters.generations)
+            start_time = time.time()
+            self._notify_on_start(self._n_generations)
             seed_data = GALoad(
                 seed_file=seed_file,
                 config=config,
@@ -143,12 +150,10 @@ class GA:
             SeedIslandStrategy.DISTRIBUTED: DistributedSeedingStrategy,
             SeedIslandStrategy.CONCENTRATED: ConcentratedSeedingStrategy,
         }
-        seed_strategy = seed_strategy_map.get(
-            self.context.app_config.imports.seed_island_strategy, DistributedSeedingStrategy
-        )
+        seed_strategy = seed_strategy_map.get(self.context.get_seed_island_strategy(), DistributedSeedingStrategy)
         seeder = GASeeder(
             strategy=seed_strategy(),
-            imports=self.context.app_config.imports,
+            imports=self.context.get_imports_model(),
             ga_params=self.genetic_model.parameters,
             seed_pop=seed_data.population,
             rng=self.rng,
@@ -161,11 +166,11 @@ class GA:
             island = self.islands[i]
             for idx in seed_indices:
                 if island.add_to_population(seed_data.population[idx]):
-                    island.population.add_schedule(seed_data.population[idx].schedule)
+                    island.population.add(seed_data.population[idx].schedule)
 
     def initialize_population(self) -> None:
         """Initialize the population for each island."""
-        logger.debug("Initializing %d islands...", self.genetic_model.parameters.num_islands)
+        logger.debug("Initializing %d islands...", self._n_islands)
         for island in self.islands:
             island.initialize()
 
@@ -186,7 +191,7 @@ class GA:
 
             self._notify_on_generation_end(
                 generation=gen,
-                num_generations=self.genetic_model.parameters.generations,
+                num_generations=self._n_generations,
                 best_fitness=self.fitness_history.get_last_gen_fitness(),
                 pop_size=len(self),
             )
@@ -194,10 +199,10 @@ class GA:
     def migrate(self) -> None:
         """Migrate the best individuals between islands using a ring topology."""
         n = len(self.islands)
-        for i, receiving_island in enumerate(self.islands):
-            giving_island = self.islands[(i + 1) % n]
-            migrants = giving_island.give_migrants()
-            receiving_island.receive_migrants(migrants)
+        for i, dest in enumerate(self.islands):
+            src = self.islands[(i + 1) % n]
+            migrants = src.give_migrants()
+            dest.receive_migrants(migrants)
 
     def _notify_on_start(self, num_generations: int) -> None:
         """Notify observers when the genetic algorithm run starts."""
@@ -271,10 +276,10 @@ class GAFinalizer:
         self._deduplicate_population()
         self._log_operators(name="crossover", ratios=ga.operator_stats.crossover, ops=ctx.crossovers)
         self._log_operators(name="mutation", ratios=ga.operator_stats.mutation, ops=ctx.mutations)
-        self._log_aggregate_stats()
+        self._log_aggregate_stats(ga.operator_stats)
         for island in ga.islands:
             logger.debug("Island %d Fitness: %.2f", island.identity, sum(island.fitness_history.get_last_gen_fitness()))
-        logger.debug("Total time taken: %.2f seconds", time() - start_time)
+        logger.debug("Total time taken: %.2f seconds", time.time() - start_time)
 
     def _deduplicate_population(self) -> None:
         """Remove duplicate individuals from the population."""
@@ -283,8 +288,8 @@ class GAFinalizer:
 
         unique_pop = [ind for island in ga.islands for ind in island.selected]
         pop_array = np.asarray([s.schedule for island in ga.islands for s in island.selected])
-        schedule_fitness, team_fitnesses = ctx.evaluator.evaluate_population(pop_array)
-        _, flat, ranks = ctx.nsga3.select(schedule_fitness, len(unique_pop))
+        schedule_fitness, team_fitnesses = ctx.evaluate(pop_array)
+        _, flat, ranks = ctx.select_nsga3(schedule_fitness, len(unique_pop))
 
         selected = {}
         for rank, idx in zip(ranks, flat, strict=True):
@@ -312,19 +317,13 @@ class GAFinalizer:
             log += f"\n  {op:<{max_len}}: {success}/{total} ({rate:.2%})"
         logger.debug(log)
 
-    def _log_aggregate_stats(self) -> None:
+    def _log_aggregate_stats(self, operator_stats: OperatorStats) -> None:
         """Log aggregate statistics across all islands."""
         ga = self.ga
         final_log = f"{'=' * 20}\nFinal statistics"
-        crs_suc = sum(ga.operator_stats.crossover.get("success", {}).values())
-        crs_tot = sum(ga.operator_stats.crossover.get("total", {}).values())
-        crs_rte = f"{crs_suc / crs_tot if crs_tot > 0 else 0.0:.2%}"
-        mut_suc = sum(ga.operator_stats.mutation.get("success", {}).values())
-        mut_tot = sum(ga.operator_stats.mutation.get("total", {}).values())
-        mut_rte = f"{mut_suc / mut_tot if mut_tot > 0 else 0.0:.2%}"
-        off_suc = ga.operator_stats.offspring.get("success", 0)
-        off_tot = ga.operator_stats.offspring.get("total", 0)
-        off_rte = f"{off_suc / off_tot if off_tot > 0 else 0.0:.2%}"
+        crs_suc, crs_tot, crs_rte = operator_stats.get_crossover_stats()
+        mut_suc, mut_tot, mut_rte = operator_stats.get_mutation_stats()
+        off_suc, off_tot, off_rte = operator_stats.get_offspring_stats()
         unique_inds = len(ga.total_population)
         total_inds = len(ga)
         unique_rte = f"{unique_inds / total_inds if total_inds > 0 else 0.0:.2%}"
