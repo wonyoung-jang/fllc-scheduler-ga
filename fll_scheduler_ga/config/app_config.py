@@ -74,7 +74,7 @@ class AppConfig(BaseModel):
     def build_from_model(cls, model: AppConfigModel) -> AppConfig:
         """Create and return the application configuration from a Pydantic model."""
         model.exports.team_identities = model.teams.get_team_ids()
-        rng_seed = model.genetic.parameters.get_rng_seed()
+        rng_seed = model.genetic.get_rng_seed()
         return AppConfig(
             runtime=model.runtime,
             imports=model.imports,

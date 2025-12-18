@@ -252,6 +252,7 @@ class FitnessBenchmarkBreaktime(FitnessBenchmarkObjective):
         # Reporting
         unique_scores = Counter(normalized_scores)
         logger.debug("Unique scores found: %d", len(unique_scores))
+        logger.debug("Number of best scores: %d", unique_scores.get(1.0, 0))
 
         most_common = unique_scores.most_common(50)
         for score, count in most_common:

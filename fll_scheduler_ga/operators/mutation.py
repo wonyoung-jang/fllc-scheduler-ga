@@ -126,22 +126,23 @@ class SwapMutation(Mutation):
     same_location: bool
 
     swap_candidates: list[tuple[tuple[int, ...], ...]] = field(default_factory=list)
+    n_swap_candidates: int = field(init=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
         self.swap_candidates.extend(self.init_swap_candidates())
-        logger.debug("Initialized %d swap candidates for %s", len(self.swap_candidates), str(self))
+        self.n_swap_candidates = len(self.swap_candidates)
+        logger.debug("Initialized %d swap candidates for %s", self.n_swap_candidates, str(self))
 
     @abstractmethod
-    def get_swap_candidates(self, schedule: Schedule) -> tuple[Match | None, ...] | tuple[int, ...] | None:
+    def get_swap_candidates(self, schedule: Schedule) -> tuple[Match, ...] | tuple[None, ...]:
         """Get candidates for swapping teams in the schedule schedule.
 
         Args:
             schedule (Schedule): The schedule to analyze.
 
         Returns:
-            tuple[Match | None, ...]: A tuple containing two matches to swap,
-            or None if no valid candidates are found.
+            tuple[Match, ...] | tuple[None, ...]: The matches selected for swapping, or None if no valid swap found.
 
         """
         msg = "get_swap_candidates method must be implemented by subclasses."
@@ -200,7 +201,7 @@ class SwapTeamMutation(SwapMutation):
 
     def mutate(self, schedule: Schedule) -> bool:
         """Swap one team from two different matches."""
-        if not self.swap_candidates:
+        if self.n_swap_candidates <= 0:
             return False
 
         match1_data, match2_data = self.get_swap_candidates(schedule)
@@ -213,9 +214,10 @@ class SwapTeamMutation(SwapMutation):
         schedule.swap_assignment(t2a, e2a, e1a)
         return True
 
-    def get_swap_candidates(self, schedule: Schedule) -> tuple[Match | None, ...]:
+    def get_swap_candidates(self, schedule: Schedule) -> tuple[Match, ...] | tuple[None, ...]:
         """Get two matches to swap in the schedule schedule."""
-        for idx in self.rng.permutation(len(self.swap_candidates)):
+        shuffled_idx = self.rng.permutation(self.n_swap_candidates)
+        for idx in shuffled_idx:
             idx: int
             match1_data, match2_data = self.swap_candidates[idx]
             e1a, e1b = match1_data
@@ -249,7 +251,7 @@ class SwapMatchMutation(SwapMutation):
 
     def mutate(self, schedule: Schedule) -> bool:
         """Swap two entire matches."""
-        if not self.swap_candidates:
+        if self.n_swap_candidates <= 0:
             return False
 
         match1_data, match2_data = self.get_swap_candidates(schedule)
@@ -277,9 +279,10 @@ class SwapMatchMutation(SwapMutation):
 
         return True
 
-    def get_swap_candidates(self, schedule: Schedule) -> tuple[Match | None, ...]:
+    def get_swap_candidates(self, schedule: Schedule) -> tuple[Match, ...] | tuple[None, ...]:
         """Get two matches to swap in the schedule schedule."""
-        for idx in self.rng.permutation(len(self.swap_candidates)):
+        shuffled_idx = self.rng.permutation(self.n_swap_candidates)
+        for idx in shuffled_idx:
             idx: int
             match1_data, match2_data = self.swap_candidates[idx]
             e1a, e1b = match1_data
@@ -298,6 +301,7 @@ class SwapMatchMutation(SwapMutation):
                 continue
 
             return (e1a, e1b, t1a, t1b), (e2a, e2b, t2a, t2b)
+
         return None, None
 
 
@@ -310,27 +314,27 @@ class SwapTableSideMutation(SwapMutation):
 
     def mutate(self, schedule: Schedule) -> bool:
         """Swap the sides of two tables in a match."""
-        if not self.swap_candidates:
+        if self.n_swap_candidates <= 0:
             return False
 
-        match_data = self.get_swap_candidates(schedule)
-        if match_data is None:
+        match1_data, match2_data = self.get_swap_candidates(schedule)
+        if match1_data is None or match2_data is None:
             return False
 
-        e1a, e1b, t1a, t1b = match_data
+        e1a, e1b, t1a, t1b = match1_data
         schedule.swap_assignment(t1a, e1a, e1b)
         schedule.swap_assignment(t1b, e1b, e1a)
         return True
 
-    def get_swap_candidates(self, schedule: Schedule) -> tuple[int, ...] | None:
-        """Get two matches to swap in the schedule schedule."""
-        for idx in self.rng.permutation(len(self.swap_candidates)):
-            idx: int
-            match_data, _ = self.swap_candidates[idx]
-            e1, e2 = match_data
-            t1, t2 = schedule[e1], schedule[e2]
-            return e1, e2, t1, t2
-        return None
+    def get_swap_candidates(self, schedule: Schedule) -> tuple[Match, ...] | tuple[None, ...]:
+        """Get one match to swap sides in the schedule schedule."""
+        idx = self.rng.integers(0, self.n_swap_candidates)
+        match1_data, match2_data = self.swap_candidates[idx]
+        e1a, e1b = match1_data
+        e2a, e2b = match2_data
+        t1a, t1b = schedule[e1a], schedule[e1b]
+        t2a, t2b = schedule[e2a], schedule[e2b]
+        return (e1a, e1b, t1a, t1b), (e2a, e2b, t2a, t2b)
 
 
 @dataclass(slots=True)

@@ -149,6 +149,10 @@ class GeneticModel(BaseModel):
     operator: OperatorConfig
     stagnation: StagnationModel
 
+    def get_rng_seed(self) -> int:
+        """Return the RNG seed as an integer."""
+        return self.parameters.get_rng_seed()
+
 
 class RuntimeModel(BaseModel):
     """Configuration for command-line arguments and runtime flags."""

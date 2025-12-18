@@ -80,7 +80,7 @@ class Crossover(ABC):
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the crossover operator."""
-        self.events = np.array(self.event_factory.build_singles_or_side1_indices(), dtype=int)
+        self.events = self.event_factory.build_singles_or_side1_indices()
         self.n_evts = self.events.shape[0]
 
     @abstractmethod
@@ -233,23 +233,45 @@ class StructureCrossover(EventCrossover):
     Each gene is chosen based on a specific structure of the event.
     """
 
-    array: np.ndarray = field(init=False)
+    lookup: np.ndarray = field(init=False)
+    structure: np.ndarray = field(init=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
         super(StructureCrossover, self).__post_init__()
-        self.initialize_attributes()
+        self._initialize_attributes()
 
     @abstractmethod
-    def initialize_attributes(self) -> None:
+    def _get_group_keys(self) -> np.ndarray:
+        """Get all group keys for the events."""
+
+    def _initialize_attributes(self) -> None:
         """Initialize attributes specific to the structure crossover."""
+        eventmap = defaultdict(list)
+
+        keys = self._get_group_keys()
+        for key, e in zip(keys, self.events, strict=True):
+            eventmap[key].append(e)
+
+        sorted_keys = sorted(eventmap.keys())
+        unique_ids = np.array(sorted_keys)
+        n_ids = unique_ids.shape[0]
+        max_len = max(len(evts) for evts in eventmap.values())
+
+        self.lookup = np.full((n_ids, max_len), -1, dtype=int)
+
+        for i, uid in enumerate(unique_ids):
+            evts = eventmap[uid]
+            self.lookup[i, : len(evts)] = evts
+
+        self.structure = np.arange(n_ids)
 
     def get_genes(self) -> Iterable[np.ndarray]:
         """Get the genes for Structure-based crossover."""
-        self.rng.shuffle(self.events)
-        p1, p2 = np.array_split(self.events, indices_or_sections=2, axis=0)
-        p1_indices = self.array[p1]
-        p2_indices = self.array[p2]
+        self.rng.shuffle(self.structure)
+        p1, p2 = np.array_split(self.structure, indices_or_sections=2, axis=0)
+        p1_indices = self.lookup[p1]
+        p2_indices = self.lookup[p2]
         return p1_indices[p1_indices >= 0], p2_indices[p2_indices >= 0]
 
 
@@ -260,21 +282,9 @@ class RoundTypeCrossover(StructureCrossover):
     Each gene is chosen based on the round type of the event.
     """
 
-    def initialize_attributes(self) -> None:
-        """Post-initialization to set up the initial state."""
-        eventmap = defaultdict(list)
-        for e in self.events:
-            rt = self.event_properties.roundtype_idx[e]
-            eventmap[rt].append(e)
-
-        roundtypes = tuple(eventmap.keys())
-        n_roundtypes = len(roundtypes)
-        self.array = np.full((n_roundtypes, max(len(evts) for evts in eventmap.values())), -1, dtype=int)
-        for j, rt in enumerate(roundtypes):
-            evts = eventmap[rt]
-            self.array[j, : len(evts)] = evts
-
-        self.events = np.arange(n_roundtypes)
+    def _get_group_keys(self) -> np.ndarray:
+        """Get all group keys for the events."""
+        return self.event_properties.roundtype_idx[self.events]
 
 
 @dataclass(slots=True)
@@ -284,20 +294,9 @@ class TimeSlotCrossover(StructureCrossover):
     Each gene is chosen based on the time slot of the event.
     """
 
-    def initialize_attributes(self) -> None:
-        """Post-initialization to set up the initial state."""
-        eventmap = defaultdict(list)
-        for e in self.events:
-            ts_idx = self.event_properties.timeslot_idx[e]
-            eventmap[ts_idx].append(e)
-
-        timeslot_ids = np.array(sorted(eventmap.keys()))
-        self.array = np.full((len(timeslot_ids), max(len(evts) for evts in eventmap.values())), -1, dtype=int)
-        for j, ts_id in enumerate(timeslot_ids):
-            evts = eventmap[ts_id]
-            self.array[j, : len(evts)] = evts
-
-        self.events = np.arange(len(timeslot_ids))
+    def _get_group_keys(self) -> np.ndarray:
+        """Get all group keys for the events."""
+        return self.event_properties.timeslot_idx[self.events]
 
 
 @dataclass(slots=True)
@@ -307,17 +306,6 @@ class LocationCrossover(StructureCrossover):
     Each gene is chosen based on the location of the event.
     """
 
-    def initialize_attributes(self) -> None:
-        """Post-initialization to set up the initial state."""
-        eventmap = defaultdict(list)
-        for e in self.events:
-            loc_idx = self.event_properties.loc_idx[e]
-            eventmap[loc_idx].append(e)
-
-        location_ids = np.array(sorted(eventmap.keys()))
-        self.array = np.full((len(location_ids), max(len(evts) for evts in eventmap.values())), -1, dtype=int)
-        for j, loc_idx in enumerate(location_ids):
-            evts = eventmap[loc_idx]
-            self.array[j, : len(evts)] = evts
-
-        self.events = np.arange(len(location_ids))
+    def _get_group_keys(self) -> np.ndarray:
+        """Get all group keys for the events."""
+        return self.event_properties.loc_idx[self.events]

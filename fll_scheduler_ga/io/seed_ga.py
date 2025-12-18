@@ -41,7 +41,7 @@ class GALoad:
         try:
             logger.debug("Loading seed population from: %s", self.seed_file)
             with self.seed_file.open("rb") as f:
-                seed_ga_data: GASeedData = pickle.load(f)
+                data: GASeedData = pickle.load(f)
         except (OSError, pickle.PicklingError):
             logger.exception("Could not load or parse seed file. Starting with a fresh population.")
             return None
@@ -50,22 +50,22 @@ class GALoad:
             return None
 
         pop = []
-        if seed_ga_data.version != DATA_MODEL_VERSION:
+        if data.version != DATA_MODEL_VERSION:
             logger.warning(
                 "Seed population data version mismatch: Expected (%d), found (%d). Dismissing old seed file...",
                 DATA_MODEL_VERSION,
-                seed_ga_data.version,
+                data.version,
             )
-        elif seed_ga_data.config != self.config:
+        elif data.config != self.config:
             logger.warning("Seed population does not match current config. Using current...")
-            seed_ga_data.config = self.config
-        elif not seed_ga_data.population:
+            data.config = self.config
+        elif not data.population:
             logger.warning("Seed population is missing. Using current...")
         else:
-            pop = seed_ga_data.population
+            pop = data.population
 
-        seed_ga_data.population = pop
-        return seed_ga_data
+        data.population = pop
+        return data
 
 
 @dataclass(slots=True)

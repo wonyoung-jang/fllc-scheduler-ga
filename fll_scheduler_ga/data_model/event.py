@@ -132,7 +132,7 @@ class EventFactory:
     _list: list[Event] = field(default_factory=list, repr=False)
     _list_indices: np.ndarray = field(default_factory=lambda: np.array([]))
     _list_singles_or_side1: list[Event] = field(default_factory=list)
-    _list_singles_or_side1_indices: list[int] = field(default_factory=list)
+    _list_singles_or_side1_indices: np.ndarray = field(default_factory=lambda: np.array([]))
     _conflict_matrix: np.ndarray = field(default_factory=lambda: np.array([]))
     _cached_mapping: dict[int, Event] = field(default_factory=dict)
     _cached_roundtypes: dict[int, list[int]] = field(default_factory=dict)
@@ -174,12 +174,12 @@ class EventFactory:
             ]
         return self._list_singles_or_side1
 
-    def build_singles_or_side1_indices(self) -> list[int]:
+    def build_singles_or_side1_indices(self) -> np.ndarray:
         """Create and return all single-team Events or side 1 of paired Events."""
-        if not self._list_singles_or_side1_indices:
-            self._list_singles_or_side1_indices = [
-                e.idx for e in self.build() if e.paired == -1 or (e.paired != -1 and e.location.side == 1)
-            ]
+        if self._list_singles_or_side1_indices.size == 0:
+            self._list_singles_or_side1_indices = np.array(
+                [e.idx for e in self.build() if e.paired == -1 or (e.paired != -1 and e.location.side == 1)], dtype=int
+            )
         return self._list_singles_or_side1_indices
 
     def create_events(self, r: TournamentRound, event_idx_iter: Iterator[int]) -> Iterator[Event]:

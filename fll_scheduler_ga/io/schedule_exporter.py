@@ -1,8 +1,9 @@
-"""Base class for exporting schedules."""
+"""Module for exporting schedules in various formats."""
 
 from __future__ import annotations
 
 import csv
+import html
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from logging import getLogger
@@ -11,7 +12,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator
+    from collections.abc import Iterator
     from pathlib import Path
 
     from ..data_model.event import EventProperties
@@ -90,12 +91,34 @@ class ScheduleExporter(ABC):
         )
         return timeslots, locations, grid_lookup
 
+    def get_table_data(self, schedule_dict: dict[int, int]) -> list[list[str]]:
+        """Generate a 2D matrix of strings representing the grid for a single round type."""
+        if not schedule_dict:
+            return []
+
+        timeslots, locations, grid_lookup = self._build_grid_data(schedule_dict)
+
+        # Header Row
+        header = ["Time"] + [str(loc) for loc in locations]
+        matrix = [header]
+
+        # Data Rows
+        for ts in timeslots:
+            ts_str = ts.start.strftime(self.time_fmt) if ts.start else "N/A"
+            row = [ts_str]
+            for loc in locations:
+                team = grid_lookup.get((ts, loc))
+                row.append(str(team) if team is not None else "")
+            matrix.append(row)
+
+        return matrix
+
     @abstractmethod
     async def write_to_file(self, schedule_by_type: dict[str, dict[int, int]], filename: Path) -> None:
         """Write the schedule to a file."""
 
     @abstractmethod
-    def render_grid(self, schedule_by_type: dict[str, dict[int, int]]) -> Iterable[str | Iterable[str]]:
+    def render_grid(self, schedule_dict: dict[int, int]) -> Iterator[str | list[str]]:
         """Render a schedule grid for a specific round type."""
 
 
@@ -103,37 +126,74 @@ class ScheduleExporter(ABC):
 class CsvScheduleExporter(ScheduleExporter):
     """Exporter for schedules in CSV format."""
 
-    def render_grid(self, schedule_by_type: dict[str, dict[int, int]]) -> Iterator[list[str]]:
-        """Write a single schedule grid to a CSV writer."""
-        for title, schedule in schedule_by_type.items():
-            yield [title]
-            if not schedule:
-                yield ["No events scheduled for this round type.", []]
-                continue
-
-            timeslots, locations, grid_lookup = self._build_grid_data(schedule)
-            yield ["Time"] + [str(loc) for loc in locations]
-            for ts in timeslots:
-                row = [ts.start.strftime(self.time_fmt)]
-                for loc in locations:
-                    team = grid_lookup.get((ts, loc))
-                    row.append(team)
-                yield row
+    def render_grid(self, schedule_dict: dict[int, int]) -> Iterator[list[str]]:
+        """Write a single schedule grid as CSV rows."""
+        if not schedule_dict:
+            yield ["No events scheduled for this round type."]
             yield []
+            return
+
+        data = self.get_table_data(schedule_dict)
+        yield from data
+        yield []
 
     async def write_to_file(self, schedule_by_type: dict[str, dict[int, int]], filename: Path) -> None:
         """Write the schedule to a file."""
         with filename.open("w", newline="", encoding="utf-8") as csvfile:
-            csv.writer(csvfile).writerows(self.render_grid(schedule_by_type))
+            writer = csv.writer(csvfile)
+            for title, schedule_dict in schedule_by_type.items():
+                writer.writerow([title])
+                writer.writerows(self.render_grid(schedule_dict))
 
 
 @dataclass(slots=True)
 class HtmlScheduleExporter(ScheduleExporter):
     """Exporter for schedules in HTML format."""
 
-    def render_grid(self, schedule_by_type: dict[str, dict[int, int]]) -> Iterator[str]:
+    def render_grid(self, schedule_dict: dict[int, int]) -> Iterator[str]:
         """Render a single schedule grid as an HTML table."""
-        yield """
+        if not schedule_dict:
+            yield "<p>No events scheduled.</p>"
+            return
+
+        data = self.get_table_data(schedule_dict)
+
+        # Table Start
+        yield "<table>"
+
+        # Thead
+        yield "<thead><tr>"
+        for cell in data[0]:
+            yield f"<th>{html.escape(cell)}</th>"
+        yield "</tr></thead>"
+
+        # Tbody
+        yield "<tbody>"
+        for row in data[1:]:
+            yield "<tr>"
+            for cell in row:
+                # First column is time, others are locations/teams
+                tag = "td"
+                yield f"<{tag}>{html.escape(cell)}</{tag}>"
+            yield "</tr>"
+        yield "</tbody>"
+
+        # Table End
+        yield "</table>"
+
+    async def write_to_file(self, schedule_by_type: dict[str, dict[int, int]], filename: Path) -> None:
+        """Write the schedule to a file."""
+        with filename.open("w", encoding="utf-8") as f:
+            f.write(self._get_html_start())
+
+            for title, schedule_dict in schedule_by_type.items():
+                f.write(f"<h2>{html.escape(title)}</h2>")
+                f.write("".join(self.render_grid(schedule_dict)))
+
+            f.write(self._get_html_end())
+
+    def _get_html_start(self) -> str:
+        return """
             <!DOCTYPE html>
             <html lang="en">
             <head>
@@ -148,6 +208,7 @@ class HtmlScheduleExporter(ScheduleExporter):
                         border-collapse: collapse;
                         margin-bottom: 2em;
                         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                        width: 100%;
                     }
                     th, td {
                         border: 1px solid #ccc;
@@ -174,30 +235,10 @@ class HtmlScheduleExporter(ScheduleExporter):
                 <div class="container">
                 <h1>Tournament Schedule</h1>
         """
-        for title, schedule in schedule_by_type.items():
-            yield f"<h2>{title}</h2>"
-            if not schedule:
-                yield "<p>No events scheduled.</p>"
-                continue
 
-            timeslots, locations, grid_lookup = self._build_grid_data(schedule)
-            yield "<table><thead><tr><th>Time</th>"
-            for loc in locations:
-                yield f"<th>{loc!s}</th>"
-            yield "</tr></thead><tbody>"
-
-            for ts in timeslots:
-                yield f"<tr><td>{ts.start.strftime(self.time_fmt)}</td>"
-                for loc in locations:
-                    team = grid_lookup.get((ts, loc))
-                    if team is None:
-                        yield "<td></td>"
-                    else:
-                        yield f"<td>{team}</td>"
-                yield "</tr>"
-            yield "</tbody></table>"
-
-    async def write_to_file(self, schedule_by_type: dict[str, dict[int, int]], filename: Path) -> None:
-        """Write the schedule to a file."""
-        with filename.open("w", encoding="utf-8") as f:
-            f.write("".join(self.render_grid(schedule_by_type)))
+    def _get_html_end(self) -> str:
+        return """
+                </div>
+            </body>
+            </html>
+        """
