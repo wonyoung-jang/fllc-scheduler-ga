@@ -24,6 +24,7 @@ from ..fitness.benchmark_repository import PickleBenchmarkRepository
 from ..fitness.fitness import FitnessEvaluator, HardConstraintChecker
 from ..io.csv_importer import CsvImporter
 from ..io.ga_exporter import ScheduleSummaryGenerator
+from ..io.schedule_exporter import CsvScheduleExporter
 from ..io.seed_ga import GALoad, GASave, GASeedData
 from ..operators.crossover import build_crossovers
 from ..operators.mutation import build_mutations
@@ -271,7 +272,13 @@ class RuntimeStartup:
             parent_dir.mkdir(parents=True, exist_ok=True)
             report_path = parent_dir / "report.txt"
             summary_gen = ScheduleSummaryGenerator(self.config.exports.team_identities)
+            csv_schedule_exporter = CsvScheduleExporter(
+                time_fmt=self.context.app_config.tournament.time_fmt,
+                team_identities=self.config.exports.team_identities,
+                event_properties=self.context.event_properties,
+            )
             asyncio.run(summary_gen.export(imported_schedule, report_path))
+            asyncio.run(csv_schedule_exporter.export(imported_schedule, parent_dir / "schedule.csv"))
 
         return imported_schedule
 

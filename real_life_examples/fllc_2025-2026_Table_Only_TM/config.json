@@ -1,0 +1,123 @@
+{
+  "genetic": {
+    "parameters": {
+      "generations": 500,
+      "population_size": 16,
+      "offspring_size": 2,
+      "crossover_chance": 0.5,
+      "mutation_chance": 0.05,
+      "num_islands": 8,
+      "migration_interval": 200,
+      "migration_size": 0,
+      "rng_seed": null
+    },
+    "operator": {
+      "crossover": {
+        "types": ["KPoint", "Scattered", "Uniform", "RoundTypeCrossover", "TimeSlotCrossover", "LocationCrossover"],
+        "k_vals": [1, 2, 3]
+      },
+      "mutation": {
+        "types": [
+          "SwapMatch_CrossTimeLocation",
+          "SwapMatch_SameLocation",
+          "SwapMatch_SameTime",
+          "SwapTeam_CrossTimeLocation",
+          "SwapTeam_SameLocation",
+          "SwapTeam_SameTime",
+          "SwapTableSide",
+          "Inversion",
+          "Scramble"
+        ]
+      }
+    },
+    "stagnation": {
+      "enable": false,
+      "proportion": 0.8,
+      "threshold": 400
+    }
+  },
+  "runtime": {
+    "add_import_to_population": true,
+    "flush": false,
+    "flush_benchmarks": false,
+    "import_file": "",
+    "seed_file": "fll_scheduler_ga.pkl"
+  },
+  "imports": {
+    "seed_pop_sort": "random",
+    "seed_island_strategy": "concentrated"
+  },
+  "exports": {
+    "output_dir": "fllc_schedule_outputs",
+    "summary_reports": true,
+    "schedules_csv": true,
+    "schedules_html": true,
+    "schedules_team_csv": true,
+    "pareto_summary": true,
+    "plot_fitness": true,
+    "plot_parallel": true,
+    "plot_scatter": true,
+    "front_only": true,
+    "no_plotting": false,
+    "cmap_name": "viridis"
+  },
+  "logging": {
+    "log_file": "fll_scheduler_ga.log",
+    "loglevel_file": "DEBUG",
+    "loglevel_console": "INFO"
+  },
+  "teams": {
+    "teams": 53
+  },
+  "fitness": {
+    "weight_mean": 1,
+    "weight_variation": 0,
+    "weight_range": 0,
+    "obj_weight_breaktime": 1,
+    "obj_weight_locations": 0,
+    "obj_weight_opponents": 0,
+    "zeros_penalty": 0.0001,
+    "minbreak_penalty": 0.1,
+    "minbreak_target": 30,
+    "min_fitness_weight": 0.8
+  },
+  "locations": [
+    {
+      "name": "Table",
+      "count": 4,
+      "sides": 2
+    }
+  ],
+  "rounds": [
+    {
+      "roundtype": "Table",
+      "location": "Table",
+      "rounds_per_team": 3,
+      "teams_per_round": 2,
+      "times": [
+        "14:00",
+        "14:07",
+        "14:15",
+        "14:22",
+        "14:30",
+        "14:37",
+        "14:45",
+        "14:52",
+        "15:00",
+        "15:07",
+        "15:15",
+        "15:22",
+        "15:30",
+        "15:37",
+        "15:45",
+        "15:52",
+        "16:00",
+        "16:07",
+        "16:15",
+        "16:22"
+      ],
+      "duration_cycle": 8,
+      "duration_active": 2
+    }
+  ]
+}

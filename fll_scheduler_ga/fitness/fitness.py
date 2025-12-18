@@ -235,15 +235,14 @@ class FitnessEvaluator:
 
         return final_scores / self.benchmark.best_timeslot_score
 
-    @classmethod
-    def score_loc_consistency(cls, loc_ids: np.ndarray, roundtype_ids: np.ndarray) -> np.ndarray:
+    def score_loc_consistency(self, loc_ids: np.ndarray, roundtype_ids: np.ndarray) -> np.ndarray:
         """Calculate location consistency score, prioritizing inter-round over intra-round consistency."""
         n_pop, n_teams, _ = loc_ids.shape
-        match_roundtypes = cls.match_roundtypes
+        match_roundtypes = self.match_roundtypes
         n_match_rt = len(match_roundtypes)
 
-        # Consistency score is only meaningful with 2+ match round types
-        if n_match_rt < 2:
+        # Consistency score is only meaningful with 1+ match round types
+        if n_match_rt < 1:
             return np.ones((n_pop, n_teams), dtype=float)
 
         # Create a (pop, team, rt, loc) boolean mask
@@ -252,7 +251,6 @@ class FitnessEvaluator:
         if max_loc_idx < 0:
             return np.ones((n_pop, n_teams), dtype=float)
 
-        # match_rt_mask = np.isin(roundtype_ids, match_roundtypes) & (loc_ids >= 0)
         max_rt_id = max(roundtype_ids.max(), match_roundtypes.max())
         is_match_rt_lookup = np.zeros(max_rt_id + 1, dtype=bool)
         is_match_rt_lookup[match_roundtypes] = True
@@ -261,7 +259,7 @@ class FitnessEvaluator:
         pop_indices, team_indices, _ = match_rt_mask.nonzero()
         loc_vals = loc_ids[match_rt_mask]
         rt_values = roundtype_ids[match_rt_mask]
-        mapped_rt_indices = cls.rt_array[rt_values]
+        mapped_rt_indices = self.rt_array[rt_values]
 
         # Inter-Round Consistency
         rt_loc_counts = np.zeros((n_pop, n_teams, n_match_rt, max_loc_idx + 1), dtype=int)
@@ -309,8 +307,8 @@ class FitnessEvaluator:
 
         # Final Combination
         total_matches_per_team = match_rt_mask.sum(axis=2)
-        final_scores = (inter_round_scores * cls.loc_weight_rounds_inter) + (
-            intra_round_scores * cls.loc_weight_rounds_intra
+        final_scores = (inter_round_scores * self.loc_weight_rounds_inter) + (
+            intra_round_scores * self.loc_weight_rounds_intra
         )
         final_scores[total_matches_per_team <= 1] = 1.0
 
@@ -336,6 +334,11 @@ class FitnessEvaluator:
         valid_mask = opponents[:, :, :-1] >= 0
         diffs = np.diff(opponents, axis=2)
         changes = diffs != 0
-        unique_counts = (changes & valid_mask).sum(axis=2)
+
+        # Check if all opponents are valid
+        if valid_opp.all():
+            unique_counts = (changes & valid_mask).sum(axis=2) + 1
+        else:
+            unique_counts = (changes & valid_mask).sum(axis=2)
 
         return self.benchmark.opponents[unique_counts]
