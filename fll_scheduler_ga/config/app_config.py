@@ -178,7 +178,11 @@ class AppConfig(BaseModel):
 
     @classmethod
     def parse_rounds_config(
-        cls, round_models: list[RoundModel], num_teams: int, time_fmt: str, locations: list[Location]
+        cls,
+        round_models: list[RoundModel],
+        num_teams: int,
+        time_fmt: str,
+        locations: tuple[Location, ...],
     ) -> tuple[TournamentRound, ...]:
         """Parse and return TournamentRound objects from the configuration."""
         rounds: list[TournamentRound] = []
@@ -266,7 +270,8 @@ class AppConfig(BaseModel):
             return dur
 
         if start_dt and stop_dt:
-            total_available = (stop_dt - start_dt).total_seconds()
+            diff = stop_dt - start_dt
+            total_available = diff.total_seconds()
             minimum_duration = total_available // n_timeslots
             return max(1, minimum_duration // 60)
 
@@ -323,7 +328,7 @@ class AppConfig(BaseModel):
             current = stop_cycle
 
     @classmethod
-    def parse_location_config(cls, location_models: list[LocationModel]) -> list[Location]:
+    def parse_location_config(cls, location_models: list[LocationModel]) -> tuple[Location, ...]:
         """Parse and return a list of Location objects from the configuration."""
         locations = []
         location_idx_iter = itertools.count()
@@ -338,7 +343,7 @@ class AppConfig(BaseModel):
                         teams_per_round=loctype.sides,
                     )
                     locations.append(location)
-        return locations
+        return tuple(locations)
 
     def log_creation_info(self) -> None:
         """Log information about the application configuration creation."""
@@ -348,4 +353,4 @@ class AppConfig(BaseModel):
         logger.debug("Initialized tournament configuration: %s", self.tournament)
         logger.debug("Initialized operator configuration: %s", self.genetic.operator)
         logger.debug("Initialized genetic algorithm parameters: %s", self.genetic.parameters)
-        logger.debug("Initialized random number generator: %s.", self.rng.bit_generator.state["state"])
+        logger.debug("Initialized random number generator: %s.", self.rng.bit_generator)
