@@ -169,9 +169,9 @@ class EventFactory:
     def build_singles_or_side1(self) -> list[Event]:
         """Create and return all single-team Events or side 1 of paired Events."""
         if not self._list_singles_or_side1:
-            self._list_singles_or_side1 = [
+            self._list_singles_or_side1.extend(
                 e for e in self.build() if e.paired == -1 or (e.paired != -1 and e.location.side == 1)
-            ]
+            )
         return self._list_singles_or_side1
 
     def build_singles_or_side1_indices(self) -> np.ndarray:
@@ -260,7 +260,7 @@ class EventFactory:
     def as_mapping(self) -> dict[int, Event]:
         """Get a mapping of event identities to Event objects."""
         if not self._cached_mapping:
-            self._cached_mapping = {e.idx: e for e in self.build()}
+            self._cached_mapping.update((e.idx, e) for e in self.build())
         return self._cached_mapping
 
     def as_roundtypes(self) -> dict[int, list[int]]:

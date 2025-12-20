@@ -62,6 +62,10 @@ class Schedule:
         """Return the number of scheduled events."""
         return np.count_nonzero(self.schedule >= 0)
 
+    def __bool__(self) -> bool:
+        """Return True if there are any scheduled events."""
+        return self.schedule.size > 0
+
     def get_size(self) -> int | np.signedinteger:
         """Return the number of scheduled events."""
         return np.count_nonzero(self.schedule >= 0)

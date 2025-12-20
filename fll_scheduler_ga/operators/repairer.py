@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from ..config.schemas import TournamentConfig
     from ..data_model.event import EventFactory, EventProperties
     from ..data_model.schedule import Schedule
-    from ..fitness.fitness import HardConstraintChecker
+    from ..fitness.hard_constraint_checker import HardConstraintChecker
 
 logger = getLogger(__name__)
 

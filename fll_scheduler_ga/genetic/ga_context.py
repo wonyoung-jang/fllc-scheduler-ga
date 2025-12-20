@@ -21,7 +21,9 @@ from ..fitness.benchmark import (
     StableConfigHash,
 )
 from ..fitness.benchmark_repository import PickleBenchmarkRepository
-from ..fitness.fitness import FitnessEvaluator, HardConstraintChecker
+from ..fitness.fitness_population import FitnessEvaluator
+from ..fitness.fitness_schedule import FitnessEvaluatorSingle
+from ..fitness.hard_constraint_checker import HardConstraintChecker
 from ..io.csv_importer import CsvImporter
 from ..io.ga_exporter import ScheduleSummaryGenerator
 from ..io.schedule_exporter import CsvScheduleExporter
@@ -80,7 +82,7 @@ class StandardGaContextFactory(GaContextFactory):
         )
         Schedule.ctx = schedule_context
 
-        checker = HardConstraintChecker(tournament_config)
+        checker = HardConstraintChecker(total_slots_required=tournament_config.total_slots_required)
         repairer = Repairer(
             config=tournament_config,
             event_factory=event_factory,
@@ -197,7 +199,7 @@ class GaContext:
 
     def evaluate(self, pop_array: np.ndarray) -> tuple[np.ndarray, ...]:
         """Evaluate a schedule using the fitness evaluator."""
-        return self.evaluator.evaluate_population(pop_array)
+        return self.evaluator.evaluate(pop_array)
 
     def select_parents(self, n: int, k: int = 2) -> np.ndarray:
         """Select parents using the selection operator."""
@@ -262,12 +264,19 @@ class RuntimeStartup:
         if not self.context.checker.check(imported_schedule):
             self.context.repairer.repair(imported_schedule)
 
-        pop = np.array([imported_schedule.schedule], dtype=int)
+        np.array([imported_schedule.schedule], dtype=int)
 
-        if fits := self.context.evaluator.evaluate_population(pop):
+        evaluator_new = FitnessEvaluatorSingle(
+            config=self.config.tournament,
+            event_properties=self.context.event_properties,
+            benchmark=self.context.evaluator.benchmark,
+            model=self.config.fitness,
+        )
+
+        if fits := evaluator_new.evaluate(imported_schedule.schedule):
             sched_fits, team_fits = fits
-            imported_schedule.fitness = sched_fits[0]
-            imported_schedule.team_fitnesses = team_fits[0]
+            imported_schedule.fitness = sched_fits
+            imported_schedule.team_fitnesses = team_fits
             parent_dir = import_path.parent
             parent_dir.mkdir(parents=True, exist_ok=True)
             report_path = parent_dir / "report.txt"
@@ -279,6 +288,22 @@ class RuntimeStartup:
             )
             asyncio.run(summary_gen.export(imported_schedule, report_path))
             asyncio.run(csv_schedule_exporter.export(imported_schedule, parent_dir / "schedule.csv"))
+
+        # if fits := self.context.evaluate(pop):
+        #     sched_fits, team_fits = fits
+        #     imported_schedule.fitness = sched_fits[0]
+        #     imported_schedule.team_fitnesses = team_fits[0]
+        #     parent_dir = import_path.parent
+        #     parent_dir.mkdir(parents=True, exist_ok=True)
+        #     report_path = parent_dir / "report.txt"
+        #     summary_gen = ScheduleSummaryGenerator(self.config.exports.team_identities)
+        #     csv_schedule_exporter = CsvScheduleExporter(
+        #         time_fmt=self.context.app_config.tournament.time_fmt,
+        #         team_identities=self.config.exports.team_identities,
+        #         event_properties=self.context.event_properties,
+        #     )
+        #     asyncio.run(summary_gen.export(imported_schedule, report_path))
+        #     asyncio.run(csv_schedule_exporter.export(imported_schedule, parent_dir / "schedule.csv"))
 
         return imported_schedule
 
