@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
     from ..config.schemas import GeneticModel
     from ..data_model.schedule import Schedule
-    from .builder import ScheduleBuilder
+    from .builder import ScheduleBuilderRandom
     from .ga_context import GaContext
     from .ga_generation import GaGeneration
     from .population import SchedulePopulation
@@ -33,7 +33,7 @@ class Island:
     genetic_model: GeneticModel
     operator_stats: OperatorStats
     fitness_history: FitnessHistory
-    builder: ScheduleBuilder
+    builder: ScheduleBuilderRandom
     population: SchedulePopulation
 
     stagnation: StagnationHandler = field(init=False)
@@ -74,7 +74,7 @@ class Island:
         if self.stagnation.is_stagnant():
             # Get the index of the schedule with the best fitness
             sum_fits = self.curr_schedule_fits.sum(axis=1)
-            max_idx = int(np.argmax(sum_fits))
+            max_idx = sum_fits.argmax()
             # 10% chance to remove the best schedule to encourage diversity
             if self.rng.random() < 0.1:
                 idx_to_pop = max_idx

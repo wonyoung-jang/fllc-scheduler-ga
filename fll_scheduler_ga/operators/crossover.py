@@ -173,7 +173,7 @@ class KPoint(EventCrossover):
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
-        super(KPoint, self).__post_init__()
+        super().__post_init__()
         if not 1 <= self.k < self.n_evts:
             logger.warning("Invalid k value for KPoint crossover: %d. Setting k to 1.", self.k)
             self.k = 1
@@ -238,7 +238,7 @@ class StructureCrossover(EventCrossover):
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
-        super(StructureCrossover, self).__post_init__()
+        super().__post_init__()
         self._initialize_attributes()
 
     @abstractmethod

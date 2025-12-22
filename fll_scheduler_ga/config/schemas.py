@@ -2,6 +2,7 @@
 
 import logging
 from datetime import datetime, timedelta
+from typing import Any
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -252,6 +253,8 @@ class FitnessModel(BaseModel):
     minbreak_penalty: float = 0.1
     minbreak_target: int = 30
     min_fitness_weight: float = 0.5
+    loc_weight_rounds_inter: float = 0.9
+    loc_weight_rounds_intra: float = 0.1
 
     @model_validator(mode="after")
     def validate(self) -> "FitnessModel":
@@ -405,6 +408,27 @@ class TournamentRound(BaseModel):
             raise ValueError(msg)
         return v
 
+    def get_canonical_tuple(self) -> tuple[Any, ...]:
+        """Return a canonical tuple representation of the configuration."""
+        return (
+            self.roundtype,
+            self.roundtype_idx,
+            self.rounds_per_team,
+            self.teams_per_round,
+            frozenset(self.times),
+            self.start_time,
+            self.stop_time,
+            self.duration_minutes,
+            self.location_type,
+            frozenset(self.locations),
+            self.num_timeslots,
+            frozenset(self.timeslots),
+            self.slots_total,
+            self.slots_required,
+            self.slots_empty,
+            self.unfilled_allowed,
+        )
+
 
 class TournamentConfig(BaseModel):
     """Configuration for the tournament."""
@@ -479,3 +503,11 @@ class TournamentConfig(BaseModel):
                 self.is_interleaved,
             )
         )
+
+    def get_canonical_round_tuples(self) -> tuple[tuple[Any, ...], ...]:
+        """Return canonical tuple representations of all rounds."""
+        return tuple(r.get_canonical_tuple() for r in self.rounds)
+
+    def get_canonical_roundreqs_tuple(self) -> tuple[tuple[str, int], ...]:
+        """Return canonical tuple representation of round requirements."""
+        return tuple(sorted(self.roundreqs.items()))

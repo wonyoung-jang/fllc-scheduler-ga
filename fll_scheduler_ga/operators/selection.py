@@ -55,7 +55,7 @@ class RandomSelect(Selection):
             while i1 == i2:
                 i2 = self.rng.integers(0, n)
 
-            return np.array([i1, i2], dtype=np.int16)
+            return np.array([i1, i2], dtype=int)
 
         choices = np.arange(n)
         self.rng.shuffle(choices)

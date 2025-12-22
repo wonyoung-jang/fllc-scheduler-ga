@@ -53,10 +53,10 @@ class FitnessEvaluatorSingle(FitnessBase):
     def get_team_events(self, arr: np.ndarray) -> np.ndarray:
         """Invert the (event -> team) mapping to a (team -> events) mapping."""
         # Preallocate the team-events array
-        team_events = np.full((self.n_teams, self.config.max_events_per_team), -1, dtype=int)
+        team_events = np.full((self.n_teams, self.n_max_events), -1, dtype=int)
 
         # Get indices of scheduled events
-        event_indices = np.nonzero(arr >= 0)[0]
+        event_indices = (arr >= 0).nonzero()[0]
 
         # Handle the case with no scheduled events
         if event_indices.size == 0:
@@ -67,7 +67,7 @@ class FitnessEvaluatorSingle(FitnessBase):
         team_indices = arr[event_indices]
 
         # Sort by team index to group events by team
-        order = np.argsort(team_indices)
+        order = team_indices.argsort()
         sorted_team_indices = team_indices[order]
         sorted_event_indices = event_indices[order]
 
@@ -76,14 +76,14 @@ class FitnessEvaluatorSingle(FitnessBase):
 
         # Compute group starts for each team
         group_starts = np.zeros_like(counts, dtype=int)
-        group_starts[1:] = np.cumsum(counts[:-1])
+        group_starts[1:] = counts[:-1].cumsum()
 
         # Compute within-group indices
         repeated_starts = group_starts.repeat(counts)
         within_group_indices = np.arange(sorted_event_indices.size, dtype=int) - repeated_starts
 
         # Filter to only valid slots within max_events_per_team
-        valid_mask = within_group_indices < self.config.max_events_per_team
+        valid_mask = within_group_indices < self.n_max_events
         team_idx_final = sorted_team_indices[valid_mask]
         slot_idx_final = within_group_indices[valid_mask]
         event_idx_final = sorted_event_indices[valid_mask]
@@ -94,7 +94,7 @@ class FitnessEvaluatorSingle(FitnessBase):
     def score_break_time(self, starts: np.ndarray, stops_active: np.ndarray, stops_cycle: np.ndarray) -> np.ndarray:
         """Vectorized break time scoring."""
         # Sort events by start time
-        order = np.argsort(starts, axis=1)
+        order = starts.argsort(axis=1)
         starts_sorted = np.take_along_axis(starts, order, axis=1)
         stops_active_sorted = np.take_along_axis(stops_active, order, axis=1)
         stops_cycle_sorted = np.take_along_axis(stops_cycle, order, axis=1)
@@ -132,26 +132,26 @@ class FitnessEvaluatorSingle(FitnessBase):
         ratio = 1 / (1 + coeff)
 
         # Apply minimum break penalty
-        minbreak_count = (breaks_active_minutes < self.model.minbreak_target).sum(axis=1)
-        where_breaks_lt_target = (breaks_active_minutes < self.model.minbreak_target) & (breaks_active_minutes > 0)
+        minbreak_count = (breaks_active_minutes < self.minbreak_target).sum(axis=1)
+        where_breaks_lt_target = (breaks_active_minutes < self.minbreak_target) & (breaks_active_minutes > 0)
         max_diff_breaktimes = np.zeros_like(minbreak_count)
         if where_breaks_lt_target.any():
-            diffs = self.model.minbreak_target - breaks_active_minutes
+            diffs = self.minbreak_target - breaks_active_minutes
             diffs[~where_breaks_lt_target] = 0.0
-            max_diff_breaktimes = diffs.max(axis=1) / self.model.minbreak_target
+            max_diff_breaktimes = diffs.max(axis=1) / self.minbreak_target
         minbreak_exp = minbreak_count + max_diff_breaktimes
-        minbreak_penalty = self.model.minbreak_penalty**minbreak_exp
+        minbreak_penalty = self.minbreak_penalty**minbreak_exp
 
         # Apply penalties for zero breaks
         zeros_count = (breaks_cycle_minutes == 0).sum(axis=1)
-        zeros_penalty = self.model.zeros_penalty**zeros_count
+        zeros_penalty = self.zeros_penalty**zeros_count
 
         # Apply penalties
         final_scores = ratio * zeros_penalty * minbreak_penalty
         final_scores[mean_break_zero_mask] = 0.0
         final_scores[overlap_mask] = 0.0
 
-        return final_scores / self.benchmark.best_timeslot_score
+        return final_scores / self.benchmark_best_timeslot_score
 
     def score_loc_consistency(self, loc_ids: np.ndarray, roundtype_ids: np.ndarray) -> np.ndarray:
         """Calculate location consistency score, prioritizing inter-round over intra-round consistency."""
@@ -259,4 +259,4 @@ class FitnessEvaluatorSingle(FitnessBase):
         unique_counts = (changes & valid_mask).sum(axis=1)
         unique_counts = unique_counts + 1 if self.n_single_rt == 0 else unique_counts
 
-        return self.benchmark.opponents[unique_counts]
+        return self.benchmark_oppoenents[unique_counts]

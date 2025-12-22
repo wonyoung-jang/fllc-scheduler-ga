@@ -156,7 +156,11 @@ class Schedule:
 
     def all_rounds_needed(self, roundtype: int) -> np.ndarray:
         """Return all teams that still need roundtype."""
-        return np.nonzero(self.team_rounds[:, roundtype] > 0)[0]
+        return (self.team_rounds[:, roundtype] > 0).nonzero()[0]
+
+    def get_rounds_needed_arr(self, roundtype: int) -> np.ndarray:
+        """Return an array of counts of how many rounds of roundtype each team still needs."""
+        return self.team_rounds[:, roundtype]
 
     def any_rounds_needed(self) -> bool:
         """Check if any team still needs rounds."""
@@ -191,8 +195,8 @@ class Schedule:
 
     def scheduled_events(self) -> np.ndarray:
         """Return the indices of scheduled events."""
-        return np.nonzero(self.schedule >= 0)[0]
+        return (self.schedule >= 0).nonzero()[0]
 
     def unscheduled_events(self) -> np.ndarray:
         """Return the indices of unscheduled events."""
-        return np.nonzero(self.schedule == -1)[0]
+        return (self.schedule == -1).nonzero()[0]

@@ -85,36 +85,10 @@ class StableConfigHash:
 
     def generate_hash(self) -> int:
         """Generate a stable hash for the parts of the config that define the benchmark."""
-        # Canonical representation of rounds
-        round_tuples = tuple(
-            (
-                r.roundtype,
-                r.roundtype_idx,
-                r.rounds_per_team,
-                r.teams_per_round,
-                frozenset(r.times),
-                r.start_time,
-                r.stop_time,
-                r.duration_minutes,
-                r.location_type,
-                frozenset(r.locations),
-                r.num_timeslots,
-                frozenset(r.timeslots),
-                r.slots_total,
-                r.slots_required,
-                r.slots_empty,
-                r.unfilled_allowed,
-            )
-            for r in self.config.rounds
-        )
-
-        # Canonical representation of requirements
-        req_tuple = tuple(sorted(self.config.roundreqs.items()))
-
-        # Include the penalty in the hash
+        # Create a tuple representation of relevant config parts
         config_representation = (
-            round_tuples,
-            req_tuple,
+            self.config.get_canonical_round_tuples(),
+            self.config.get_canonical_roundreqs_tuple(),
             self.model.minbreak_target,
             self.model.minbreak_penalty,
             self.model.zeros_penalty,
@@ -291,7 +265,7 @@ class FitnessBenchmarkBreaktime(FitnessBenchmarkObjective):
         stops = stops_active[indices]
         stops_cycle = stops_cycle[indices]
 
-        order = np.argsort(starts, axis=1)
+        order = starts.argsort(axis=1)
         starts_sorted = np.take_along_axis(starts, order, axis=1)
         stops_active_sorted = np.take_along_axis(stops, order, axis=1)
         stops_cycle_sorted = np.take_along_axis(stops_cycle, order, axis=1)

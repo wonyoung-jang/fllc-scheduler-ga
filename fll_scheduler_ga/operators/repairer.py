@@ -117,15 +117,15 @@ class Repairer:
 
         # Find (team_id, roundtype_id) where rounds are needed (>0)
         # team_rounds is shape (n_teams, n_round_types)
-        t_idxs, rt_idxs = np.nonzero(schedule.team_rounds > 0)
+        t_idxs, rt_idxs = (schedule.team_rounds > 0).nonzero()
 
         if t_idxs.size > 0:
             # Get the counts (how many rounds needed)
             counts = schedule.team_rounds[t_idxs, rt_idxs]
 
             # If a team needs 2 rounds, we need 2 entries
-            t_repeated = np.repeat(t_idxs, counts)
-            rt_repeated = np.repeat(rt_idxs, counts)
+            t_repeated = t_idxs.repeat(repeats=counts)
+            rt_repeated = rt_idxs.repeat(repeats=counts)
 
             # Map roundtype to teams_per_round
             tpr_repeated = self._rt_to_tpr[rt_repeated]

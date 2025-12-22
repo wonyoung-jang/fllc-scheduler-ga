@@ -79,7 +79,9 @@
     "zeros_penalty": 0.0001,
     "minbreak_penalty": 0.1,
     "minbreak_target": 30,
-    "min_fitness_weight": 0.3
+    "min_fitness_weight": 0.3,
+    "loc_weight_rounds_inter": 0.9,
+    "loc_weight_rounds_intra": 0.1
   },
   "locations": [
     {

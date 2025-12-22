@@ -5,6 +5,7 @@ import logging
 from collections import defaultdict
 from collections.abc import Iterator
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 
 import numpy as np
 from pydantic import BaseModel, Field
@@ -124,6 +125,21 @@ class Event(BaseModel):
         other.paired = self.idx
 
 
+class NullEvent(Event):
+    """A null event used as a placeholder."""
+
+    def __init__(self) -> None:
+        """Initialize a NullEvent."""
+        default_datetime = datetime.min.replace(tzinfo=UTC)
+        super().__init__(
+            idx=0,
+            roundtype="n",
+            roundtype_idx=0,
+            timeslot=TimeSlot(idx=0, start=default_datetime, stop_active=default_datetime, stop_cycle=default_datetime),
+            location=Location(idx=0, locationtype="n", name=1, side=-1, teams_per_round=1),
+        )
+
+
 @dataclass(slots=True)
 class EventFactory:
     """Factory class to create Events based on TournamentRound configurations."""
@@ -205,13 +221,7 @@ class EventFactory:
                     )
                     yield event
             elif r.teams_per_round == 2:
-                event1 = Event(  # Null Event
-                    idx=0,
-                    roundtype="n",
-                    roundtype_idx=0,
-                    timeslot=ts,
-                    location=Location(idx=0, locationtype="n", name=1, side=-1, teams_per_round=1),
-                )
+                event1 = NullEvent()
                 for loc in r.locations:
                     if loc.side == 1:
                         event1 = Event(

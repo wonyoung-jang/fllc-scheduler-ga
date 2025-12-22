@@ -23,7 +23,12 @@ from ..fitness.benchmark import (
 from ..fitness.benchmark_repository import PickleBenchmarkRepository
 from ..fitness.fitness_population import FitnessEvaluator
 from ..fitness.fitness_schedule import FitnessEvaluatorSingle
-from ..fitness.hard_constraint_checker import HardConstraintChecker
+from ..fitness.hard_constraint_checker import (
+    HardConstraintChecker,
+    HardConstraintNoRoundsNeeded,
+    HardConstraintSize,
+    HardConstraintTruthiness,
+)
 from ..io.csv_importer import CsvImporter
 from ..io.ga_exporter import ScheduleSummaryGenerator
 from ..io.schedule_exporter import CsvScheduleExporter
@@ -33,7 +38,7 @@ from ..operators.mutation import build_mutations
 from ..operators.nsga3 import NSGA3, NonDominatedSorting, ReferenceDirections
 from ..operators.repairer import Repairer
 from ..operators.selection import RandomSelect
-from .builder import ScheduleBuilder
+from .builder import ScheduleBuilderRandom
 from .preflight_checker import PreFlightChecker
 
 if TYPE_CHECKING:
@@ -82,7 +87,12 @@ class StandardGaContextFactory(GaContextFactory):
         )
         Schedule.ctx = schedule_context
 
-        checker = HardConstraintChecker(total_slots_required=tournament_config.total_slots_required)
+        constraints = (
+            HardConstraintTruthiness(),
+            HardConstraintSize(total_slots_required=tournament_config.total_slots_required),
+            HardConstraintNoRoundsNeeded(),
+        )
+        checker = HardConstraintChecker(constraints=constraints)
         repairer = Repairer(
             config=tournament_config,
             event_factory=event_factory,
@@ -144,10 +154,10 @@ class StandardGaContextFactory(GaContextFactory):
         crossovers = build_crossovers(rng, operators, event_factory, event_properties)
         mutations = build_mutations(rng, operators, event_factory, event_properties)
 
-        builder = ScheduleBuilder(
+        builder = ScheduleBuilderRandom(
             event_properties=event_properties,
-            config=tournament_config,
             rng=rng,
+            round_idx_to_tpr=tournament_config.round_idx_to_tpr,
             roundtype_events=event_factory.as_roundtypes(),
         )
 
@@ -182,7 +192,7 @@ class GaContext:
     event_properties: EventProperties
     evaluator: FitnessEvaluator
     checker: HardConstraintChecker
-    builder: ScheduleBuilder
+    builder: ScheduleBuilderRandom
     repairer: Repairer
     nsga3: NSGA3
     selection: Selection

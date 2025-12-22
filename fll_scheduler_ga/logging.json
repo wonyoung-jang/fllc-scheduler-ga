@@ -1,0 +1,36 @@
+{
+    "version": 1,
+    "disable_existing_loggers": false,
+    "formatters": {
+        "file": {
+            "format": "[%(asctime)s] %(levelname)s[%(module)s] %(message)s"
+        },
+        "console": {
+            "format": "%(levelname)s[%(module)s] %(message)s"
+        }
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "console",
+            "level": "INFO",
+            "stream": "ext://sys.stdout"
+        },
+        "file": {
+            "class": "logging.FileHandler",
+            "formatter": "file",
+            "level": "DEBUG",
+            "filename": "fll_scheduler_ga.log",
+            "mode": "w",
+            "encoding": "utf-8",
+            "delay": true
+        }
+    },
+    "root": {
+        "level": "DEBUG",
+        "handlers": [
+            "console",
+            "file"
+        ]
+    }
+}

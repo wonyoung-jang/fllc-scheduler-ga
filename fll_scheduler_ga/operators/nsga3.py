@@ -56,7 +56,7 @@ class ReferenceDirections:
 
     def init_norm_sq(self) -> None:
         """Initialize the squared norms of the reference points."""
-        self.norm_sq = np.sum(self.points**2, axis=1)
+        self.norm_sq = (self.points**2).sum(axis=1)
         self.norm_sq[self.norm_sq == 0.0] = EPSILON
         logger.debug("Computed squared norms of reference points:\n%s", self.norm_sq)
 
@@ -73,8 +73,8 @@ class NonDominatedSorting:
             return []
 
         # Pairwise comparisons using broadcasting
-        all_ge = np.all(fits[:, None, :] >= fits[None, :, :], axis=2)
-        any_gt = np.any(fits[:, None, :] > fits[None, :, :], axis=2)
+        all_ge = (fits[:, None, :] >= fits[None, :, :]).all(axis=2)
+        any_gt = (fits[:, None, :] > fits[None, :, :]).any(axis=2)
         # dom[i,j] = True if i dominates j (>= on all and > on at least one)
         dom = np.logical_and(all_ge, any_gt)
         # Number of individuals that dominate j = sum over i dom[i,j]
@@ -84,7 +84,7 @@ class NonDominatedSorting:
         fronts: list[np.ndarray] = []
 
         # Initial front: those not dominated by anybody
-        current_front = np.nonzero(dom_count == 0)[0]
+        current_front: np.ndarray = (dom_count == 0).nonzero()[0]
         assigned[current_front] = True
         fronts.append(current_front)
         n_ranked = current_front.size
@@ -96,7 +96,7 @@ class NonDominatedSorting:
             dom_count = dom_count - decrement
 
             # Next front: those now not dominated by anybody
-            next_front = np.nonzero((dom_count == 0) & (~assigned))[0]
+            next_front: np.ndarray = ((dom_count == 0) & (~assigned)).nonzero()[0]
             if next_front.size == 0:
                 break
 
@@ -182,14 +182,14 @@ class NSGA3:
 
             # Number of individuals to select from this niche
             n_select = n_remaining - n_selected
-            niche_indices = available_refs[np.nonzero(ref_counts == min_count)[0]]
+            niche_indices = available_refs[(ref_counts == min_count).nonzero()[0]]
             niche_indices = niche_indices[self.rng.permutation(niche_indices.size)[:n_select]]
 
             for niche_idx in niche_indices:
                 # Indices of individuals in this niche still available
-                next_i = np.nonzero((niche_refs == niche_idx) & mask)[0]
+                next_i = ((niche_refs == niche_idx) & mask).nonzero()[0]
                 self.rng.shuffle(next_i)
-                index = next_i[np.argmin(niche_dists[next_i])] if counts[niche_idx] == 0 else next_i[0]
+                index = next_i[niche_dists[next_i].argmin()] if counts[niche_idx] == 0 else next_i[0]
                 mask[index] = False
                 counts[niche_idx] += 1
                 n_selected += 1
@@ -197,7 +197,7 @@ class NSGA3:
                     break
 
         # Return the masked indices
-        return np.nonzero(~mask)[0]
+        return (~mask).nonzero()[0]
 
     def norm_and_associate(self, fits: np.ndarray) -> tuple[np.ndarray, ...]:
         """Normalize objectives then associate individuals with nearest reference points."""

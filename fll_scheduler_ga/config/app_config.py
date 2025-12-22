@@ -258,7 +258,7 @@ class AppConfig(BaseModel):
         times_dt: tuple[datetime, ...],
         dur: int,
         n_timeslots: int,
-    ) -> int | float | None:
+    ) -> int | float:
         """Validate the times configuration for a round.
 
         Valid conditions:
@@ -275,7 +275,7 @@ class AppConfig(BaseModel):
             minimum_duration = total_available // n_timeslots
             return max(1, minimum_duration // 60)
 
-        return None
+        return 0
 
     @classmethod
     def infer_time_format(cls, dt_str: str) -> str | None:

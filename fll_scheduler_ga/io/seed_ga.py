@@ -43,7 +43,7 @@ class GALoad:
             with self.seed_file.open("rb") as f:
                 data: GASeedData = pickle.load(f)
         except (OSError, pickle.PicklingError):
-            logger.exception("Could not load or parse seed file. Starting with a fresh population.")
+            logger.warning("Could not load or parse seed file. Starting with a fresh population.")
             return None
         except EOFError:
             logger.debug("Pickle file is empty")
