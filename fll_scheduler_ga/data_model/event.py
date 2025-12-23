@@ -150,6 +150,7 @@ class EventFactory:
     _list_singles_or_side1: list[Event] = field(default_factory=list)
     _list_singles_or_side1_indices: np.ndarray = field(default_factory=lambda: np.array([]))
     _conflict_matrix: np.ndarray = field(default_factory=lambda: np.array([]))
+    _cached_conflict_map: dict[int, set[int]] = field(default_factory=dict)
     _cached_mapping: dict[int, Event] = field(default_factory=dict)
     _cached_roundtypes: dict[int, list[int]] = field(default_factory=dict)
     _cached_timeslots: dict[tuple[int, int], list[int]] = field(default_factory=dict)
@@ -272,6 +273,12 @@ class EventFactory:
         if not self._cached_mapping:
             self._cached_mapping.update((e.idx, e) for e in self.build())
         return self._cached_mapping
+
+    def as_conflict_map(self) -> dict[int, set[int]]:
+        """Get a mapping of event identities to their conflicting event indices."""
+        if not self._cached_conflict_map:
+            self._cached_conflict_map = {e.idx: set(e.conflicts) for e in self.build()}
+        return self._cached_conflict_map
 
     def as_roundtypes(self) -> dict[int, list[int]]:
         """Get a mapping of RoundTypes to their Event indices."""

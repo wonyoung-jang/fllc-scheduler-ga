@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, ClassVar
 import numpy as np
 
 if TYPE_CHECKING:
-    from .event import Event, EventProperties
+    from .event import EventProperties
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class ScheduleContext:
     """Holds class-level context for Schedule instances."""
 
-    event_map: dict[int, Event]
+    conflict_map: dict[int, set[int]]
     event_props: EventProperties
     teams_list: np.ndarray
     teams_roundreqs_arr: np.ndarray
@@ -77,11 +77,6 @@ class Schedule:
     def __setitem__(self, event: int, team: int) -> None:
         """Assign a team to a specific event."""
         self.schedule[event] = team
-        self.reset_hash()
-
-    def __delitem__(self, event: int) -> None:
-        """Remove a specific event from the schedule."""
-        self.schedule[event] = -1
         self.reset_hash()
 
     def __contains__(self, event: int) -> bool:
@@ -158,10 +153,6 @@ class Schedule:
         """Return all teams that still need roundtype."""
         return (self.team_rounds[:, roundtype] > 0).nonzero()[0]
 
-    def get_rounds_needed_arr(self, roundtype: int) -> np.ndarray:
-        """Return an array of counts of how many rounds of roundtype each team still needs."""
-        return self.team_rounds[:, roundtype]
-
     def any_rounds_needed(self) -> bool:
         """Check if any team still needs rounds."""
         return self.team_rounds.sum() > 0
@@ -190,8 +181,7 @@ class Schedule:
         if new_event in events_to_check:
             return True
 
-        new_conflicts = Schedule.ctx.event_map[new_event].conflicts
-        return not events_to_check.isdisjoint(new_conflicts)
+        return not events_to_check.isdisjoint(Schedule.ctx.conflict_map[new_event])
 
     def scheduled_events(self) -> np.ndarray:
         """Return the indices of scheduled events."""

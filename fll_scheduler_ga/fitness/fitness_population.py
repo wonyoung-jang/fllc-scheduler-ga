@@ -7,7 +7,6 @@ from logging import getLogger
 
 import numpy as np
 
-from ..config.constants import EPSILON
 from .fitness_base import FitnessBase
 
 logger = getLogger(__name__)
@@ -116,11 +115,8 @@ class FitnessEvaluator(FitnessBase):
         stop_cycle_curr = stops_cycle_sorted[:, :, :-1]
 
         # Calculate break durations in minutes
-        breaks_active_seconds = np.subtract(start_next, stop_active_curr)
-        breaks_active_minutes = breaks_active_seconds / 60
-
-        breaks_cycle_seconds = np.subtract(start_next, stop_cycle_curr)
-        breaks_cycle_minutes = breaks_cycle_seconds / 60
+        breaks_active_minutes = np.subtract(start_next, stop_active_curr) / 60
+        breaks_cycle_minutes = np.subtract(start_next, stop_cycle_curr) / 60
 
         # Identify overlaps
         overlap_mask = (breaks_cycle_minutes < 0).any(axis=2)
@@ -131,7 +127,7 @@ class FitnessEvaluator(FitnessBase):
 
         mean_break = breaks_cycle_minutes.sum(axis=2) / count
         mean_break_zero_mask = mean_break == 0
-        mean_break[mean_break_zero_mask] = EPSILON
+        mean_break[mean_break_zero_mask] = self.epsilon
 
         # Calculate standard deviation
         diff_sq: np.ndarray = np.square(breaks_cycle_minutes - mean_break[:, :, np.newaxis])
@@ -159,15 +155,13 @@ class FitnessEvaluator(FitnessBase):
 
         # Apply penalties
         final_scores = ratio * zeros_penalty * minbreak_penalty
-        final_scores[mean_break_zero_mask] = 0.0
-        final_scores[overlap_mask] = 0.0
+        final_scores[mean_break_zero_mask | overlap_mask] = 0.0
 
         return final_scores / self.benchmark_best_timeslot_score
 
     def score_loc_consistency(self, loc_ids: np.ndarray, roundtype_ids: np.ndarray) -> np.ndarray:
         """Calculate location consistency score, prioritizing inter-round over intra-round consistency."""
         n_pop, n_teams, _ = loc_ids.shape
-        match_roundtypes = self.match_roundtypes
         shape = (n_pop, n_teams)
 
         # Consistency score is only meaningful with 1+ match round types
@@ -180,9 +174,9 @@ class FitnessEvaluator(FitnessBase):
         if max_loc_idx < 0:
             return np.ones(shape, dtype=float)
 
-        max_rt_id = max(roundtype_ids.max(), match_roundtypes.max())
+        max_rt_id = max(roundtype_ids.max(), self.match_roundtypes.max())
         is_match_rt_lookup = np.zeros(max_rt_id + 1, dtype=bool)
-        is_match_rt_lookup[match_roundtypes] = True
+        is_match_rt_lookup[self.match_roundtypes] = True
         match_rt_mask = is_match_rt_lookup[roundtype_ids] & (loc_ids >= 0)
 
         pop_indices, team_indices, _ = match_rt_mask.nonzero()
@@ -225,7 +219,7 @@ class FitnessEvaluator(FitnessBase):
 
         # Intra-Round Consistency
         unique_locs_per_rt: np.ndarray = (rt_loc_counts > 0).sum(axis=3, dtype=float)
-        unique_locs_per_rt[unique_locs_per_rt == 0] = EPSILON
+        unique_locs_per_rt[unique_locs_per_rt == 0] = self.epsilon
 
         scores_per_rt = 1.0 / unique_locs_per_rt
         scores_per_rt[~participated_in_rt] = 1.0
@@ -256,8 +250,7 @@ class FitnessEvaluator(FitnessBase):
 
         # Invalidate opponent IDs for invalid events
         paired_evt_ids[invalid_opp] = 0
-        schedule_indices = np.arange(n_pop, dtype=int)
-        schedule_indices = schedule_indices[:, None, None]
+        schedule_indices = np.arange(n_pop, dtype=int)[:, None, None]
 
         # Get opponents for each schedule
         opponents = arr[schedule_indices, paired_evt_ids]
@@ -265,8 +258,7 @@ class FitnessEvaluator(FitnessBase):
         opponents.sort(axis=2)
 
         # Changes between consecutive opponents
-        prev_opponents = opponents[:, :, :-1]
-        valid_mask = prev_opponents >= 0
+        valid_mask = opponents[:, :, :-1] >= 0
         diffs = np.diff(opponents, axis=2)
         changes = diffs != 0
 

@@ -7,7 +7,9 @@ from pathlib import Path
 
 ASCII_OFFSET = 64
 EPSILON = 1e-12
-CONFIG_FILE_DEFAULT = Path("fll_scheduler_ga/config.json").resolve()
+MAIN_PACKAGE_DIR = Path("fll_scheduler_ga").resolve()
+CONFIG_FILE_DEFAULT = MAIN_PACKAGE_DIR / "config.json"
+LOGGING_CONFIG_PATH = MAIN_PACKAGE_DIR / "logging.json"
 
 
 class SelectionOp(StrEnum):

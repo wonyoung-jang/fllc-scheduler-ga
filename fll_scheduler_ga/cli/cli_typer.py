@@ -1,16 +1,11 @@
-"""Main cli api for the fll-scheduler-ga package."""
+"""Typer based CLI scheduler implementation."""
 
 from __future__ import annotations
 
-import json
 import logging
-import logging.config
 import time
-from collections import Counter
-from pathlib import Path
 from typing import Annotated
 
-import numpy as np
 import typer
 from rich.console import Console
 from rich.progress import (
@@ -18,7 +13,6 @@ from rich.progress import (
     MofNCompleteColumn,
     Progress,
     SpinnerColumn,
-    TaskID,
     TextColumn,
     TimeRemainingColumn,
 )
@@ -26,122 +20,18 @@ from rich.table import Table
 
 from ..config.app_config import AppConfig
 from ..config.config_manager import ConfigManager
-from ..config.constants import FitnessObjective
-from ..genetic.ga import GA
-from ..genetic.ga_context import StandardGaContextFactory
-from ..genetic.ga_generation import GaGeneration
-from ..genetic.stagnation import FitnessHistory, OperatorStats
-from ..io import ga_exporter
-from ..io.observers import LoggingObserver, RichObserver
-from ..io.plot import MatplotlibVisualizer
+from .loggers import initialize_logging
+from .runners import run_ga_engine
 
 app = typer.Typer(
-    help="Genetic Algorithm Scheduler",
+    name="Tournament Scheduler",
+    help="Tournament Scheduler",
     no_args_is_help=True,
     context_settings={"help_option_names": ["-h", "--help"]},
 )
 console = Console()
 manager = ConfigManager()
 logger = logging.getLogger(__name__)
-
-
-def init_logging(app_config: AppConfig) -> None:
-    """Initialize logging for the application."""
-    logging.config.dictConfig(json.loads(Path("fll_scheduler_ga/logging.json").read_text()))
-    # logging_model = app_config.logging
-    # file = logging.FileHandler(
-    #     filename=Path(logging_model.log_file),
-    #     mode="w",
-    #     encoding="utf-8",
-    #     delay=True,
-    # )
-    # file.setLevel(logging_model.loglevel_file)
-    # file.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s[%(module)s] %(message)s"))
-
-    # console = logging.StreamHandler()
-    # console.setLevel(logging_model.loglevel_console)
-    # console.setFormatter(logging.Formatter("%(levelname)s[%(module)s] %(message)s"))
-
-    # root = logging.getLogger()
-    # root.setLevel(logging.DEBUG)
-    # root.addHandler(file)
-    # root.addHandler(console)
-
-    logger.debug("Start: Tournament Scheduler.")
-    app_config.log_creation_info()
-
-
-def _run_ga_engine(config_path: Path, progress: Progress | None = None, task_id: TaskID | None = None) -> GA:
-    """Core logic to build and run the GA."""
-    app_config = AppConfig.build(config_path)
-    context_factory = StandardGaContextFactory()
-    context = context_factory.build(app_config)
-
-    trackers = ("success", "total")
-    crossover_counters = {str(c): 0 for c in context.crossovers}
-    mutation_counters = {str(m): 0 for m in context.mutations}
-    operator_stats = OperatorStats(
-        offspring=Counter(),
-        crossover={tr: Counter(crossover_counters) for tr in trackers},
-        mutation={tr: Counter(mutation_counters) for tr in trackers},
-    )
-
-    n_gen = app_config.genetic.parameters.generations
-    n_obj = context.evaluator.n_objectives
-    generation = GaGeneration(curr=0)
-    fitness_history = FitnessHistory(
-        generation=generation,
-        current=np.zeros((1, n_obj), dtype=float),
-        history=np.full((n_gen, n_obj), fill_value=-1, dtype=float),
-    )
-
-    generations_array = np.arange(1, n_gen + 1)
-    migrate_generations = np.zeros(n_gen + 1, dtype=int)
-    n_islands = app_config.genetic.parameters.num_islands
-    migration_size = app_config.genetic.parameters.migration_size
-    migration_interval = app_config.genetic.parameters.migration_interval
-    if n_islands > 1 and migration_size > 0:
-        migrate_generations[::migration_interval] = 1
-
-    ga = GA(
-        context=context,
-        genetic_model=app_config.genetic,
-        rng=app_config.rng,
-        observers=(LoggingObserver(),),
-        seed_file=Path(app_config.runtime.seed_file),
-        save_front_only=app_config.exports.front_only,
-        generation=generation,
-        operator_stats=operator_stats,
-        fitness_history=fitness_history,
-        generations_array=generations_array,
-        migrate_generations=migrate_generations,
-    )
-
-    if progress and task_id is not None:
-        existing = list(ga.observers)
-        existing.append(RichObserver(progress, task_id))
-        ga.observers = tuple(existing)
-
-    ga.run()
-    exports = app_config.exports
-    output_dir = Path(exports.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    plot = MatplotlibVisualizer(
-        ga=ga,
-        save_dir=output_dir,
-        objectives=tuple(FitnessObjective),
-        ref_points=ga.context.nsga3.refs.points,
-        export_model=exports,
-    )
-    ga_exporter.generate_summary(
-        ga=ga,
-        output_dir=output_dir,
-        export_model=exports,
-        plot=plot,
-    )
-
-    return ga
 
 
 @app.command(name="list")
@@ -200,9 +90,11 @@ def run() -> None:
     console.print(f"[cyan]Initializing GA with {active_config_path.name}...[/cyan]")
 
     app_config = AppConfig.build(active_config_path)
-    init_logging(app_config)
+    initialize_logging()
+    logger.debug("Start: Tournament Scheduler.")
+    app_config.log_creation_info()
 
-    start_time = time.time()
+    start_time = time.perf_counter()
 
     with Progress(
         SpinnerColumn(),
@@ -215,9 +107,9 @@ def run() -> None:
         task = progress.add_task("Initializing...", total=None)
 
         try:
-            ga = _run_ga_engine(active_config_path, progress=progress, task_id=task)
+            ga = run_ga_engine(active_config_path, progress=progress, task_id=task)
 
-            duration = time.time() - start_time
+            duration = time.perf_counter() - start_time
             best_fitness = sum(ga.fitness_history.get_last_gen_fitness())
             pareto_size = len(ga.pareto_front())
 
@@ -233,7 +125,12 @@ def run() -> None:
 
 @app.command()
 def batch(count: int = typer.Argument(..., min=1, help="Number of times to run the GA")) -> None:
-    """Run the GA multiple times to gather statistics."""
+    """Run the GA multiple times to gather statistics.
+
+    Arguments:
+        count: Number of times to run the GA (must be >= 1).
+
+    """
     path = manager.get_active_config()
     results = []
 
@@ -248,16 +145,16 @@ def batch(count: int = typer.Argument(..., min=1, help="Number of times to run t
         batch_task = progress.add_task("[bold]Batch Progress[/bold]", total=count)
 
         for i in range(count):
-            start_t = time.time()
+            start_t = time.perf_counter()
             # Silence standard logs during batch
             logging.getLogger().setLevel(logging.CRITICAL)
 
             run_task = progress.add_task(f"Run {i + 1}/{count}", total=None)
 
             try:
-                ga = _run_ga_engine(path, progress=progress, task_id=run_task)
+                ga = run_ga_engine(path, progress=progress, task_id=run_task)
 
-                duration = time.time() - start_t
+                duration = time.perf_counter() - start_t
                 best_fitness = sum(ga.fitness_history.get_last_gen_fitness())
                 pareto_size = len(ga.pareto_front())
 

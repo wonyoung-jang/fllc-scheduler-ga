@@ -7,7 +7,6 @@ from logging import getLogger
 
 import numpy as np
 
-from ..config.constants import EPSILON
 from .fitness_base import FitnessBase
 
 logger = getLogger(__name__)
@@ -120,7 +119,7 @@ class FitnessEvaluatorSingle(FitnessBase):
 
         mean_break = breaks_cycle_minutes.sum(axis=1) / count
         mean_break_zero_mask = mean_break == 0
-        mean_break[mean_break_zero_mask] = EPSILON
+        mean_break[mean_break_zero_mask] = self.epsilon
 
         # Calculate standard deviation
         diff_sq: np.ndarray = np.square(breaks_cycle_minutes - mean_break[:, np.newaxis])
@@ -214,7 +213,7 @@ class FitnessEvaluatorSingle(FitnessBase):
 
         # Intra-Round Consistency
         unique_locs_per_rt: np.ndarray = (rt_loc_counts > 0).sum(axis=2, dtype=float)
-        unique_locs_per_rt[unique_locs_per_rt == 0] = EPSILON
+        unique_locs_per_rt[unique_locs_per_rt == 0] = self.epsilon
 
         scores_per_rt = 1.0 / unique_locs_per_rt
         scores_per_rt[~participated_in_rt] = 1.0

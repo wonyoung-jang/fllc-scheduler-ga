@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Generator, Iterator
 
     from ..config.schemas import GeneticModel
     from ..data_model.schedule import Schedule
@@ -168,7 +168,7 @@ class Island:
         created_cycle = 0
         while created_cycle < self._n_offspring:
             parents_indices = self.context.select_parents(n=len(pop), k=2)
-            parents = (pop[i] for i in parents_indices)
+            parents: Generator[Schedule] = (pop[i] for i in parents_indices)
             c_roll = self._chance_crossover > self.rng.random()
             if c_roll and self._n_crossovers > 0:
                 offspring = self.crossover_schedule(parents)

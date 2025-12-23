@@ -79,7 +79,7 @@ class StandardGaContextFactory(GaContextFactory):
 
         roundreqs_array = np.tile(tuple(tournament_config.roundreqs.values()), (tournament_config.num_teams, 1))
         schedule_context = ScheduleContext(
-            event_map=event_factory.as_mapping(),
+            conflict_map=event_factory.as_conflict_map(),
             event_props=event_properties,
             teams_list=np.arange(tournament_config.num_teams, dtype=int),
             teams_roundreqs_arr=roundreqs_array,

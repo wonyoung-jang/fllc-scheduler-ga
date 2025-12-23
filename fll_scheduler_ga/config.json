@@ -61,11 +61,6 @@
     "no_plotting": false,
     "cmap_name": "viridis"
   },
-  "logging": {
-    "log_file": "fll_scheduler_ga.log",
-    "loglevel_file": "DEBUG",
-    "loglevel_console": "INFO"
-  },
   "teams": {
     "teams": 53
   },

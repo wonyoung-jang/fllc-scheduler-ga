@@ -165,14 +165,6 @@ class RuntimeModel(BaseModel):
     seed_file: str
 
 
-class LoggingModel(BaseModel):
-    """Configuration for logging."""
-
-    log_file: str
-    loglevel_file: str
-    loglevel_console: str
-
-
 class ImportModel(BaseModel):
     """Configuration for import options."""
 
@@ -346,7 +338,6 @@ class AppConfigModel(BaseModel):
     runtime: RuntimeModel
     imports: ImportModel
     exports: ExportModel
-    logging: LoggingModel
     teams: TeamsModel
     fitness: FitnessModel
     locations: list[LocationModel]

@@ -266,16 +266,10 @@ class SwapMatchMutation(SwapMutation):
         if not none_in_m1:
             schedule.swap_assignment(t1a, e1a, e2a)
             schedule.swap_assignment(t1b, e1b, e2b)
-            if not none_in_m2:
-                del schedule[e1a]
-                del schedule[e1b]
 
         if not none_in_m2:
             schedule.swap_assignment(t2a, e2a, e1a)
             schedule.swap_assignment(t2b, e2b, e1b)
-            if not none_in_m1:
-                del schedule[e2a]
-                del schedule[e2b]
 
         return True
 

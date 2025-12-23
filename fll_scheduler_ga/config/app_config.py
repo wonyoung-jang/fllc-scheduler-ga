@@ -23,7 +23,6 @@ from .schemas import (
     GeneticModel,
     ImportModel,
     LocationModel,
-    LoggingModel,
     RoundModel,
     RuntimeModel,
     TournamentConfig,
@@ -48,7 +47,6 @@ class AppConfig(BaseModel):
     runtime: RuntimeModel
     imports: ImportModel
     exports: ExportModel
-    logging: LoggingModel
     genetic: GeneticModel
     fitness: FitnessModel
     tournament: TournamentConfig
@@ -79,7 +77,6 @@ class AppConfig(BaseModel):
             runtime=model.runtime,
             imports=model.imports,
             exports=model.exports,
-            logging=model.logging,
             genetic=model.genetic,
             fitness=model.fitness,
             tournament=cls.load_tournament_config(model),
