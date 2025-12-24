@@ -104,11 +104,8 @@ class FitnessEvaluatorSingle(FitnessBase):
         stop_cycle_curr = stops_cycle_sorted[:, :-1]
 
         # Calculate break durations in minutes
-        breaks_active_seconds = np.subtract(start_next, stop_active_curr)
-        breaks_active_minutes = breaks_active_seconds / 60
-
-        breaks_cycle_seconds = np.subtract(start_next, stop_cycle_curr)
-        breaks_cycle_minutes = breaks_cycle_seconds / 60
+        breaks_active_minutes = np.subtract(start_next, stop_active_curr) / 60
+        breaks_cycle_minutes = np.subtract(start_next, stop_cycle_curr) / 60
 
         # Identify overlaps
         overlap_mask = (breaks_cycle_minutes < 0).any(axis=1)
@@ -155,7 +152,6 @@ class FitnessEvaluatorSingle(FitnessBase):
     def score_loc_consistency(self, loc_ids: np.ndarray, roundtype_ids: np.ndarray) -> np.ndarray:
         """Calculate location consistency score, prioritizing inter-round over intra-round consistency."""
         n_teams, _ = loc_ids.shape
-        match_roundtypes = self.match_roundtypes
         shape = n_teams
 
         # Consistency score is only meaningful with 1+ match round types
@@ -168,9 +164,9 @@ class FitnessEvaluatorSingle(FitnessBase):
         if max_loc_idx < 0:
             return np.ones(shape, dtype=float)
 
-        max_rt_id = max(roundtype_ids.max(), match_roundtypes.max())
+        max_rt_id = max(roundtype_ids.max(), self.match_roundtypes.max())
         is_match_rt_lookup = np.zeros(max_rt_id + 1, dtype=bool)
-        is_match_rt_lookup[match_roundtypes] = True
+        is_match_rt_lookup[self.match_roundtypes] = True
         match_rt_mask = is_match_rt_lookup[roundtype_ids] & (loc_ids >= 0)
 
         team_indices, _ = match_rt_mask.nonzero()
@@ -258,4 +254,4 @@ class FitnessEvaluatorSingle(FitnessBase):
         unique_counts = (changes & valid_mask).sum(axis=1)
         unique_counts = unique_counts + 1 if self.n_single_rt == 0 else unique_counts
 
-        return self.benchmark_oppoenents[unique_counts]
+        return self.benchmark_opponents[unique_counts]

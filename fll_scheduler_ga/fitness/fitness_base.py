@@ -48,7 +48,7 @@ class FitnessBase(ABC):
     _paired_idx: np.ndarray = field(default_factory=lambda: np.array([]))
     _roundtype_idx: np.ndarray = field(default_factory=lambda: np.array([]))
     # FitnessBenchmark
-    benchmark_oppoenents: np.ndarray = field(default_factory=lambda: np.array([]))
+    benchmark_opponents: np.ndarray = field(default_factory=lambda: np.array([]))
     benchmark_best_timeslot_score: float = 0.0
     # FitnessModel
     loc_weight_rounds_inter: float = 0.0
@@ -83,7 +83,7 @@ class FitnessBase(ABC):
         self._paired_idx = _ep.paired_idx
         self._roundtype_idx = _ep.roundtype_idx
         # Initialize from FitnessBenchmark
-        self.benchmark_oppoenents = self.benchmark.opponents
+        self.benchmark_opponents = self.benchmark.opponents
         self.benchmark_best_timeslot_score = self.benchmark.best_timeslot_score
         # Initialize from FitnessModel
         self.loc_weight_rounds_inter = self.model.loc_weight_rounds_inter

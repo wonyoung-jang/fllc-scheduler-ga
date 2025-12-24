@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from logging import getLogger
 
 import numpy as np
+from line_profiler import profile
 
 from .fitness_base import FitnessBase
 
@@ -27,9 +28,6 @@ class FitnessEvaluator(FitnessBase):
             np.ndarray: All team scores for the population. Shape (pop_size, num_teams, num_objectives).
 
         """
-        # Dims for reference
-        n_pop, _ = arr.shape
-
         # Get team-events mapping for the entire population
         team_events = self.get_team_events(arr)
 
@@ -39,7 +37,7 @@ class FitnessEvaluator(FitnessBase):
         )
 
         # Preallocate arrays
-        team_fits_shape = (n_pop, self.n_teams, self.n_objectives)
+        team_fits_shape = (arr.shape[0], self.n_teams, self.n_objectives)
         team_fitnesses = np.zeros(team_fits_shape, dtype=float)
 
         # Calculate scores for each objective
@@ -54,9 +52,8 @@ class FitnessEvaluator(FitnessBase):
 
     def get_team_events(self, arr: np.ndarray) -> np.ndarray:
         """Invert the (event -> team) mapping to a (team -> events) mapping for the entire population."""
-        n_pop, _ = arr.shape
-
         # Preallocate the team-events array
+        n_pop = arr.shape[0]
         team_events = np.full((n_pop, self.n_teams, self.n_max_events), -1, dtype=int)
 
         # Get indices of scheduled events
@@ -159,6 +156,7 @@ class FitnessEvaluator(FitnessBase):
 
         return final_scores / self.benchmark_best_timeslot_score
 
+    @profile
     def score_loc_consistency(self, loc_ids: np.ndarray, roundtype_ids: np.ndarray) -> np.ndarray:
         """Calculate location consistency score, prioritizing inter-round over intra-round consistency."""
         n_pop, n_teams, _ = loc_ids.shape
@@ -266,4 +264,4 @@ class FitnessEvaluator(FitnessBase):
         unique_counts = (changes & valid_mask).sum(axis=2)
         unique_counts = unique_counts + 1 if self.n_single_rt == 0 else unique_counts
 
-        return self.benchmark_oppoenents[unique_counts]
+        return self.benchmark_opponents[unique_counts]
