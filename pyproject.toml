@@ -115,6 +115,4 @@ dev = [
     "pytest>=8.0.0",
     "pytest-cov>=7.0.0",
 ]
-docs = [
-    "zensical>=0.0.14",
-]
+docs = []
