@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 def run_ga_engine(config_path: Path, progress: Progress | None = None, task_id: TaskID | None = None) -> GA:
     """Core logic to build and run the GA."""
     app_config = AppConfig.build(config_path)
+    app_config.log_creation_info()
     context_factory = StandardGaContextFactory()
     context = context_factory.build(app_config)
 

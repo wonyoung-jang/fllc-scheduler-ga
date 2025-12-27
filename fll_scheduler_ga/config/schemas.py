@@ -1,14 +1,10 @@
 """Pydantic models for application configuration."""
 
 import logging
-from datetime import datetime, timedelta
-from typing import Any
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, model_validator
 
-from ..data_model.location import Location
-from ..data_model.timeslot import TimeSlot
 from .constants import CrossoverOp, MutationOp, SeedIslandStrategy, SeedPopSort
 
 logger = logging.getLogger(__name__)
@@ -18,15 +14,15 @@ RANDOM_SEED_RANGE = (1, 2**32 - 1)
 class GaParameters(BaseModel):
     """Genetic Algorithm parameters."""
 
-    population_size: int
-    generations: int
-    offspring_size: int
-    crossover_chance: float
-    mutation_chance: float
-    num_islands: int
-    migration_interval: int
-    migration_size: int
-    rng_seed: int | str | None
+    population_size: int = Field(default=2, ge=2)
+    generations: int = Field(default=128, ge=1)
+    offspring_size: int = Field(default=1, ge=1)
+    crossover_chance: float = Field(default=0.7, ge=0.0, le=1.0)
+    mutation_chance: float = Field(default=0.4, ge=0.0, le=1.0)
+    num_islands: int = Field(default=1, ge=1)
+    migration_interval: int = Field(default=10, ge=1)
+    migration_size: int = Field(default=1, ge=0)
+    rng_seed: int | str | None = None
 
     def __str__(self) -> str:
         """Representation of GA parameters."""
@@ -43,66 +39,17 @@ class GaParameters(BaseModel):
             f"\n\t  rng_seed           : {self.rng_seed}"
         )
 
-    @model_validator(mode="after")
-    def validate(self) -> "GaParameters":
-        """Validate that migration settings are only used with multiple islands."""
-        if self.generations < 1:
-            self.generations = 128
-            logger.warning("Generations must be at least 1, defaulting to %d.", self.generations)
-
-        if self.population_size < 2:
-            self.population_size = 2
-            logger.warning("Population size must be at least 2, defaulting to %d.", self.population_size)
-
-        if self.offspring_size < 1:
-            self.offspring_size = 1
-            logger.warning("Offspring size must be at least 1, defaulting to %d.", self.offspring_size)
-
-        if not (0.0 < self.crossover_chance <= 1.0):
-            self.crossover_chance = 0.7
-            logger.warning("Crossover chance must be between 0.0 and 1.0, defaulting to %f.", self.crossover_chance)
-
-        if not (0.0 <= self.mutation_chance <= 1.0):
-            self.mutation_chance = 0.4
-            logger.warning("Mutation chance must be between 0.0 and 1.0, defaulting to %f.", self.mutation_chance)
-
-        if self.num_islands < 1:
-            self.num_islands = 1
-            logger.warning("Number of islands must be at least 1, defaulting to %d.", self.num_islands)
-
-        if self.migration_interval < 1:
-            self.migration_interval = self.generations // 10 or 1
-            logger.warning("Migration interval must be at least 1, defaulting to %d.", self.migration_interval)
-
-        if self.migration_size < 0:
-            self.migration_size = 0
-            logger.warning("Migration size cannot be negative, defaulting to %d.", self.migration_size)
-
-        if self.num_islands > 1 and self.migration_size >= self.population_size:
-            self.migration_size = max(1, self.population_size // 5)
-            logger.warning("Migration size is >= population size, defaulting to max(1, 20%%): %i", self.migration_size)
-
-        if self.rng_seed is None:
-            sv = np.random.default_rng().integers(*RANDOM_SEED_RANGE)
-            if not isinstance(sv, int):
-                self.rng_seed = abs(hash(sv)) % (RANDOM_SEED_RANGE[1] + 1)
-            else:
-                self.rng_seed = sv
-            logger.debug("RNG seed not set, defaulting to %s.", self.rng_seed)
-
-        return self
-
     def get_rng_seed(self) -> int:
         """Return the RNG seed as an integer."""
-        if self.rng_seed is None:
-            sv = np.random.default_rng().integers(*RANDOM_SEED_RANGE)
-            if not isinstance(sv, int):
-                self.rng_seed = abs(hash(sv)) % (RANDOM_SEED_RANGE[1] + 1)
-            else:
-                self.rng_seed = sv
-            logger.debug("RNG seed not set, defaulting to %s.", self.rng_seed)
+        if isinstance(self.rng_seed, int):
+            return self.rng_seed
 
-        return int(self.rng_seed)
+        self.rng_seed = int(
+            np.random.default_rng().integers(*RANDOM_SEED_RANGE)
+            if self.rng_seed is None
+            else abs(hash(self.rng_seed)) % (RANDOM_SEED_RANGE[1] + 1)
+        )
+        return self.rng_seed
 
 
 class CrossoverModel(BaseModel):
@@ -158,18 +105,18 @@ class GeneticModel(BaseModel):
 class RuntimeModel(BaseModel):
     """Configuration for command-line arguments and runtime flags."""
 
-    add_import_to_population: bool
-    flush: bool
-    flush_benchmarks: bool
-    import_file: str
-    seed_file: str
+    add_import_to_population: bool = True
+    flush: bool = False
+    flush_benchmarks: bool = False
+    import_file: str = ""
+    seed_file: str = "fll_scheduler_ga.pkl"
 
 
 class ImportModel(BaseModel):
     """Configuration for import options."""
 
-    seed_pop_sort: str = "random"
-    seed_island_strategy: str = "distributed"
+    seed_pop_sort: str = SeedPopSort.RANDOM
+    seed_island_strategy: str = SeedIslandStrategy.DISTRIBUTED
 
     @model_validator(mode="after")
     def validate(self) -> "ImportModel":
@@ -191,25 +138,25 @@ class ImportModel(BaseModel):
 class ExportModel(BaseModel):
     """Configuration for export options."""
 
-    output_dir: str
-    summary_reports: bool
-    schedules_csv: bool
-    schedules_html: bool
-    schedules_team_csv: bool
-    pareto_summary: bool
-    plot_fitness: bool
-    plot_parallel: bool
-    plot_scatter: bool
-    front_only: bool
-    no_plotting: bool
-    cmap_name: str
+    output_dir: str = "fllc_schedule_outputs"
+    summary_reports: bool = True
+    schedules_csv: bool = True
+    schedules_html: bool = True
+    schedules_team_csv: bool = True
+    pareto_summary: bool = True
+    plot_fitness: bool = True
+    plot_parallel: bool = True
+    plot_scatter: bool = True
+    front_only: bool = True
+    no_plotting: bool = False
+    cmap_name: str = "viridis"
     team_identities: dict[int, str] = Field(default_factory=dict)
 
 
 class TeamsModel(BaseModel):
     """Configuration for teams."""
 
-    teams: list[int | str] | int
+    teams: list[int | str] | int = 1
 
     def __len__(self) -> int:
         """Return the number of teams."""
@@ -235,12 +182,12 @@ class TeamsModel(BaseModel):
 class FitnessModel(BaseModel):
     """Configuration for fitness weights."""
 
-    weight_mean: float | int
-    weight_variation: float | int
-    weight_range: float | int
-    obj_weight_breaktime: int = 1
-    obj_weight_opponents: int = 1
-    obj_weight_locations: int = 1
+    weight_mean: float | int = 1.0
+    weight_variation: float | int = 1.0
+    weight_range: float | int = 1.0
+    obj_weight_breaktime: float | int = 1.0
+    obj_weight_opponents: float | int = 1.0
+    obj_weight_locations: float | int = 1.0
     zeros_penalty: float = 0.0001
     minbreak_penalty: float = 0.1
     minbreak_target: int = 30
@@ -295,23 +242,23 @@ class FitnessModel(BaseModel):
 class LocationModel(BaseModel):
     """Input model for a location type."""
 
-    name: str
-    count: int
-    sides: int
+    name: str = ""
+    count: int = 1
+    sides: int = 1
 
 
 class RoundModel(BaseModel):
     """Input model for a tournament round."""
 
-    roundtype: str
-    location: str
+    roundtype: str = ""
+    location: str = ""
     rounds_per_team: int = Field(default=1, ge=1)
     teams_per_round: int = Field(default=1, ge=1)
     start_time: str = ""
     stop_time: str = ""
     times: list[str] = Field(default_factory=list)
     duration_cycle: int = 0
-    duration_active: int
+    duration_active: int = 0
 
     @model_validator(mode="after")
     def validate(self) -> "RoundModel":
@@ -340,165 +287,5 @@ class AppConfigModel(BaseModel):
     exports: ExportModel
     teams: TeamsModel
     fitness: FitnessModel
-    locations: list[LocationModel]
-    rounds: list[RoundModel]
-
-
-class TournamentRound(BaseModel):
-    """Representation of a round in the FLL tournament."""
-
-    model_config: ConfigDict = ConfigDict(arbitrary_types_allowed=True, frozen=True)
-    roundtype: str
-    roundtype_idx: int
-    rounds_per_team: int
-    teams_per_round: int
-    times: tuple[datetime, ...]
-    start_time: datetime
-    stop_time: datetime
-    duration_minutes: timedelta
-    location_type: str
-    locations: tuple[Location, ...]
-    num_timeslots: int
-    timeslots: tuple[TimeSlot, ...]
-    slots_total: int
-    slots_required: int
-    slots_empty: int
-    unfilled_allowed: bool
-
-    def __str__(self) -> str:
-        """Represent the TournamentRound."""
-        return (
-            f"\n\tRound:"
-            f"\n\t  roundtype        : {self.roundtype}"
-            f"\n\t  roundtype_idx    : {self.roundtype_idx}"
-            f"\n\t  teams_per_round  : {self.teams_per_round}"
-            f"\n\t  rounds_per_team  : {self.rounds_per_team}"
-            f"\n\t  times            : {[str(time) for time in self.times]}"
-            f"\n\t  start_time       : {self.start_time}"
-            f"\n\t  stop_time        : {self.stop_time}"
-            f"\n\t  duration_minutes : {self.duration_minutes}"
-            f"\n\t  location         : {self.location_type}"
-            f"\n\t  locations        : {[str(location) for location in self.locations]}"
-            f"\n\t  num_timeslots    : {self.num_timeslots}"
-            f"\n\t  timeslots        : {[str(timeslot) for timeslot in self.timeslots]}"
-            f"\n\t  slots_total      : {self.slots_total}"
-            f"\n\t  slots_required   : {self.slots_required}"
-            f"\n\t  slots_empty      : {self.slots_empty}"
-            f"\n\t  unfilled_allowed : {self.unfilled_allowed}"
-        )
-
-    @field_validator("slots_empty", mode="after")
-    @classmethod
-    def validate_slots_empty(cls, v: int) -> int:
-        """Validate that slots_empty is not negative."""
-        if v < 0:
-            msg = (
-                "Insufficient capacity for TournamentRound (required > available).\n"
-                "Suggestion: increase number of locations or timeslots."
-            )
-            raise ValueError(msg)
-        return v
-
-    def get_canonical_tuple(self) -> tuple[Any, ...]:
-        """Return a canonical tuple representation of the configuration."""
-        return (
-            self.roundtype,
-            self.roundtype_idx,
-            self.rounds_per_team,
-            self.teams_per_round,
-            frozenset(self.times),
-            self.start_time,
-            self.stop_time,
-            self.duration_minutes,
-            self.location_type,
-            frozenset(self.locations),
-            self.num_timeslots,
-            frozenset(self.timeslots),
-            self.slots_total,
-            self.slots_required,
-            self.slots_empty,
-            self.unfilled_allowed,
-        )
-
-
-class TournamentConfig(BaseModel):
-    """Configuration for the tournament."""
-
-    model_config: ConfigDict = ConfigDict(arbitrary_types_allowed=True, frozen=True)
-    num_teams: int
-    time_fmt: str
-    rounds: tuple[TournamentRound, ...]
-    roundreqs: dict[str, int]
-    round_idx_to_tpr: dict[int, int]
-    total_slots_possible: int
-    total_slots_required: int
-    unique_opponents_possible: bool
-    max_events_per_team: int
-    all_locations: tuple[Location, ...]
-    all_timeslots: tuple[TimeSlot, ...]
-    is_interleaved: bool
-
-    def __str__(self) -> str:
-        """Represent the TournamentConfig."""
-        return (
-            f"\n  TournamentConfig:"
-            f"\n    num_teams                 : {self.num_teams}"
-            f"\n    time_fmt                  : {self.time_fmt}"
-            f"\n    rounds                    : {[r.roundtype for r in self.rounds]}"
-            f"\n    round_requirements        : {self.roundreqs}"
-            f"\n    round_idx_to_tpr          : {self.round_idx_to_tpr}"
-            f"\n    total_slots_possible      : {self.total_slots_possible}"
-            f"\n    total_slots_required      : {self.total_slots_required}"
-            f"\n    unique_opponents_possible : {self.unique_opponents_possible}"
-            f"\n    max_events_per_team       : {self.max_events_per_team}"
-            f"\n    all_locations             : {[str(loc) for loc in self.all_locations]}"
-            f"\n    all_timeslots             : {[str(ts) for ts in self.all_timeslots]}"
-            f"\n    is_interleaved            : {self.is_interleaved}"
-        )
-
-    def __eq__(self, other: object) -> bool:
-        """Check equality between two TournamentConfig instances."""
-        if not isinstance(other, TournamentConfig):
-            return NotImplemented
-
-        return (
-            self.num_teams == other.num_teams
-            and self.time_fmt == other.time_fmt
-            and self.rounds == other.rounds
-            and self.roundreqs == other.roundreqs
-            and self.round_idx_to_tpr == other.round_idx_to_tpr
-            and self.total_slots_possible == other.total_slots_possible
-            and self.total_slots_required == other.total_slots_required
-            and self.unique_opponents_possible == other.unique_opponents_possible
-            and self.all_locations == other.all_locations
-            and self.all_timeslots == other.all_timeslots
-            and self.max_events_per_team == other.max_events_per_team
-            and self.is_interleaved == other.is_interleaved
-        )
-
-    def __hash__(self) -> int:
-        """Return hash of TournamentConfig."""
-        return hash(
-            (
-                self.num_teams,
-                self.time_fmt,
-                self.rounds,
-                tuple(sorted(self.roundreqs.items())),
-                tuple(sorted(self.round_idx_to_tpr.items())),
-                self.total_slots_possible,
-                self.total_slots_required,
-                self.unique_opponents_possible,
-                self.max_events_per_team,
-                self.all_locations,
-                self.all_timeslots,
-                self.is_interleaved,
-            )
-        )
-
-    def get_canonical_round_tuples(self) -> tuple[tuple[Any, ...], ...]:
-        """Return canonical tuple representations of all rounds."""
-        return tuple(r.get_canonical_tuple() for r in self.rounds)
-
-    def get_canonical_roundreqs_tuple(self) -> tuple[tuple[str, int], ...]:
-        """Return canonical tuple representation of round requirements."""
-        return tuple(sorted(self.roundreqs.items()))
+    locations: tuple[LocationModel, ...] = ()
+    rounds: tuple[RoundModel, ...] = ()

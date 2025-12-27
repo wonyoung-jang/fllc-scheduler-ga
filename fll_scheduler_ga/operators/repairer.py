@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 if TYPE_CHECKING:
-    from ..config.schemas import TournamentConfig
+    from ..config.app_schemas import TournamentConfig
     from ..data_model.event import EventFactory, EventProperties
     from ..data_model.schedule import Schedule
     from ..fitness.hard_constraint_checker import HardConstraintChecker
@@ -124,8 +124,8 @@ class Repairer:
             counts = schedule.team_rounds[t_idxs, rt_idxs]
 
             # If a team needs 2 rounds, we need 2 entries
-            t_repeated = t_idxs.repeat(repeats=counts)
-            rt_repeated = rt_idxs.repeat(repeats=counts)
+            t_repeated = t_idxs.repeat(repeats=counts)  # ty:ignore[no-matching-overload]
+            rt_repeated = rt_idxs.repeat(repeats=counts)  # ty:ignore[no-matching-overload]
 
             # Map roundtype to teams_per_round
             tpr_repeated = self._rt_to_tpr[rt_repeated]

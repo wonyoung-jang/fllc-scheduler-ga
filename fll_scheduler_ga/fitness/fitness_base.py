@@ -12,7 +12,8 @@ import numpy as np
 from ..config.constants import EPSILON, FitnessObjective
 
 if TYPE_CHECKING:
-    from ..config.schemas import FitnessModel, TournamentConfig
+    from ..config.app_schemas import TournamentConfig
+    from ..config.schemas import FitnessModel
     from ..data_model.event import EventProperties
     from .benchmark import FitnessBenchmark
 

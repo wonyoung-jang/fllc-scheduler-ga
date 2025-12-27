@@ -15,8 +15,9 @@ FMT_12H = "%I:%M %p"
     [
         ("09:00 AM", FMT_12H, datetime(1900, 1, 1, 9, 0, tzinfo=UTC)),
         ("09:00", FMT_24H, datetime(1900, 1, 1, 9, 0, tzinfo=UTC)),
+        ("", FMT_12H, datetime.min.replace(tzinfo=UTC)),
     ],
-    ids=["12h", "24h"],
+    ids=["12h", "24h", "empty"],
 )
 def test_parse_time_str(dt_str: str, fmt: str, expected: datetime) -> None:
     """Parametrized tests for parse_time_str function."""

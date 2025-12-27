@@ -25,3 +25,6 @@ wheels/
 *outputs/
 ..playground/
 .configs/
+
+profile.*
+scalene-*

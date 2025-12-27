@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
 
-    from ..config.schemas import TournamentConfig
+    from ..config.app_schemas import TournamentConfig
     from ..data_model.schedule import Schedule
 
 logger = getLogger(__name__)

@@ -43,7 +43,8 @@ from .preflight_checker import PreFlightChecker
 
 if TYPE_CHECKING:
     from ..config.app_config import AppConfig
-    from ..config.schemas import ImportModel, TournamentConfig
+    from ..config.app_schemas import TournamentConfig
+    from ..config.schemas import ImportModel
     from ..operators.crossover import Crossover
     from ..operators.mutation import Mutation
     from ..operators.selection import Selection
@@ -68,9 +69,10 @@ class StandardGaContextFactory(GaContextFactory):
         """Build and return a GA context."""
         rng = app_config.rng
         tournament_config = app_config.tournament
+        n_total_events = tournament_config.get_n_total_events()
         event_factory = EventFactory(tournament_config)
         event_properties = EventProperties.build(
-            num_events=tournament_config.total_slots_possible,
+            n_total_events=n_total_events,
             event_map=event_factory.as_mapping(),
         )
 
@@ -78,14 +80,13 @@ class StandardGaContextFactory(GaContextFactory):
         PreFlightChecker.build_then_run(event_properties, event_factory)
 
         roundreqs_array = np.tile(tuple(tournament_config.roundreqs.values()), (tournament_config.num_teams, 1))
-        schedule_context = ScheduleContext(
+        Schedule.ctx = ScheduleContext(
             conflict_map=event_factory.as_conflict_map(),
             event_props=event_properties,
             teams_list=np.arange(tournament_config.num_teams, dtype=int),
             teams_roundreqs_arr=roundreqs_array,
-            n_total_events=tournament_config.total_slots_possible,
+            n_total_events=n_total_events,
         )
-        Schedule.ctx = schedule_context
 
         constraints = (
             HardConstraintTruthiness(),
@@ -274,8 +275,6 @@ class RuntimeStartup:
         if not self.context.checker.check(imported_schedule):
             self.context.repairer.repair(imported_schedule)
 
-        np.array([imported_schedule.schedule], dtype=int)
-
         evaluator_new = FitnessEvaluatorSingle(
             config=self.config.tournament,
             event_properties=self.context.event_properties,
@@ -298,22 +297,6 @@ class RuntimeStartup:
             )
             asyncio.run(summary_gen.export(imported_schedule, report_path))
             asyncio.run(csv_schedule_exporter.export(imported_schedule, parent_dir / "schedule.csv"))
-
-        # if fits := self.context.evaluate(pop):
-        #     sched_fits, team_fits = fits
-        #     imported_schedule.fitness = sched_fits[0]
-        #     imported_schedule.team_fitnesses = team_fits[0]
-        #     parent_dir = import_path.parent
-        #     parent_dir.mkdir(parents=True, exist_ok=True)
-        #     report_path = parent_dir / "report.txt"
-        #     summary_gen = ScheduleSummaryGenerator(self.config.exports.team_identities)
-        #     csv_schedule_exporter = CsvScheduleExporter(
-        #         time_fmt=self.context.app_config.tournament.time_fmt,
-        #         team_identities=self.config.exports.team_identities,
-        #         event_properties=self.context.event_properties,
-        #     )
-        #     asyncio.run(summary_gen.export(imported_schedule, report_path))
-        #     asyncio.run(csv_schedule_exporter.export(imported_schedule, parent_dir / "schedule.csv"))
 
         return imported_schedule
 

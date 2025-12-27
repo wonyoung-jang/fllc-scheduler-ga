@@ -1,18 +1,20 @@
 """Event data model for FLL scheduling."""
 
+from __future__ import annotations
+
 import itertools
 import logging
 from collections import defaultdict
-from collections.abc import Iterator
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 import numpy as np
-from pydantic import BaseModel, Field
 
-from ..config.schemas import TournamentConfig, TournamentRound
 from .location import Location
 from .timeslot import TimeSlot
+
+if TYPE_CHECKING:
+    from ..config.app_schemas import TournamentConfig
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +41,7 @@ class EventProperties:
     paired_idx: np.ndarray
 
     @classmethod
-    def build(cls, num_events: int, event_map: dict[int, "Event"]) -> "EventProperties":
+    def build(cls, n_total_events: int, event_map: dict[int, Event]) -> EventProperties:
         """Build EventProperties from an event mapping."""
         event_prop_dtype = np.dtype(
             [
@@ -60,8 +62,8 @@ class EventProperties:
                 ("paired_idx", int),
             ]
         )
-        event_properties = np.zeros(num_events, dtype=event_prop_dtype)
-        for i in range(num_events):
+        event_properties = np.zeros(n_total_events, dtype=event_prop_dtype)
+        for i in range(n_total_events):
             e = event_map[i]
             event_properties[i]["roundtype"] = e.roundtype
             event_properties[i]["roundtype_idx"] = e.roundtype_idx
@@ -103,40 +105,36 @@ class EventProperties:
         )
 
 
-class Event(BaseModel):
+@dataclass(slots=True)
+class Event:
     """Data model for an event in a schedule."""
 
-    model_config = {"arbitrary_types_allowed": True}
-    idx: int = Field(ge=0)
-    roundtype: str = Field(min_length=1)
-    roundtype_idx: int = Field(ge=0)
+    idx: int
+    roundtype: str
+    roundtype_idx: int
     timeslot: TimeSlot
     location: Location
-    paired: int = Field(default=-1, ge=-1)
-    conflicts: list[int] = Field(default_factory=list)
+    paired: int = 0
+    conflicts: list[int] = field(default_factory=list)
 
     def __str__(self) -> str:
         """Get string representation of Event."""
         return f"{self.idx}, {self.roundtype}, {self.location}, {self.timeslot}"
 
-    def pair(self, other: "Event") -> None:
+    def pair(self, other: Event) -> None:
         """Pair this event with another event."""
         self.paired = other.idx
         other.paired = self.idx
 
-
-class NullEvent(Event):
-    """A null event used as a placeholder."""
-
-    def __init__(self) -> None:
-        """Initialize a NullEvent."""
-        default_datetime = datetime.min.replace(tzinfo=UTC)
-        super().__init__(
+    @classmethod
+    def build_null(cls) -> Event:
+        """Build and return a Null Event."""
+        return cls(
             idx=0,
             roundtype="n",
             roundtype_idx=0,
-            timeslot=TimeSlot(idx=0, start=default_datetime, stop_active=default_datetime, stop_cycle=default_datetime),
-            location=Location(idx=0, locationtype="n", name=1, side=-1, teams_per_round=1),
+            timeslot=TimeSlot.build_null(),
+            location=Location.build_null(),
         )
 
 
@@ -145,9 +143,9 @@ class EventFactory:
     """Factory class to create Events based on TournamentRound configurations."""
 
     config: TournamentConfig
-    _list: list[Event] = field(default_factory=list, repr=False)
+    _list: tuple[Event, ...] = ()
     _list_indices: np.ndarray = field(default_factory=lambda: np.array([]))
-    _list_singles_or_side1: list[Event] = field(default_factory=list)
+    _list_singles_or_side1: tuple[Event, ...] = ()
     _list_singles_or_side1_indices: np.ndarray = field(default_factory=lambda: np.array([]))
     _conflict_matrix: np.ndarray = field(default_factory=lambda: np.array([]))
     _cached_conflict_map: dict[int, set[int]] = field(default_factory=dict)
@@ -170,11 +168,13 @@ class EventFactory:
         self.as_matches()
         self.as_roundtypes()
 
-    def build(self) -> list[Event]:
+    def build(self) -> tuple[Event, ...]:
         """Create and return all Events for the tournament."""
         if not self._list:
             event_idx_iter = itertools.count()
-            self._list.extend(e for r in self.config.rounds for e in self.create_events(r, event_idx_iter))
+            _list = []
+            _list.extend(e for r in self.config.rounds for e in r.create_events(event_idx_iter))
+            self._list = tuple(_list)
         return self._list
 
     def build_indices(self) -> np.ndarray:
@@ -183,65 +183,21 @@ class EventFactory:
             self._list_indices = np.array([e.idx for e in self.build()], dtype=int)
         return self._list_indices
 
-    def build_singles_or_side1(self) -> list[Event]:
+    def build_singles_or_side1(self) -> tuple[Event, ...]:
         """Create and return all single-team Events or side 1 of paired Events."""
         if not self._list_singles_or_side1:
-            self._list_singles_or_side1.extend(
+            _list_singles_or_side1 = []
+            _list_singles_or_side1.extend(
                 e for e in self.build() if e.paired == -1 or (e.paired != -1 and e.location.side == 1)
             )
+            self._list_singles_or_side1 = tuple(_list_singles_or_side1)
         return self._list_singles_or_side1
 
     def build_singles_or_side1_indices(self) -> np.ndarray:
         """Create and return all single-team Events or side 1 of paired Events."""
         if self._list_singles_or_side1_indices.size == 0:
-            self._list_singles_or_side1_indices = np.array(
-                [e.idx for e in self.build() if e.paired == -1 or (e.paired != -1 and e.location.side == 1)], dtype=int
-            )
+            self._list_singles_or_side1_indices = np.array([e.idx for e in self.build_singles_or_side1()], dtype=int)
         return self._list_singles_or_side1_indices
-
-    def create_events(self, r: TournamentRound, event_idx_iter: Iterator[int]) -> Iterator[Event]:
-        """Generate all possible Events for a given TournamentRound configuration.
-
-        Args:
-            r (TournamentRound): The configuration of the round.
-            event_idx_iter (Iterator[int]): An iterator to generate unique event IDs.
-
-        Yields:
-            Event: An event for the round with a time slot and a location.
-
-        """
-        for ts in r.timeslots:
-            if r.teams_per_round == 1:
-                for loc in r.locations:
-                    event = Event(
-                        idx=next(event_idx_iter),
-                        roundtype=r.roundtype,
-                        roundtype_idx=r.roundtype_idx,
-                        timeslot=ts,
-                        location=loc,
-                    )
-                    yield event
-            elif r.teams_per_round == 2:
-                event1 = NullEvent()
-                for loc in r.locations:
-                    if loc.side == 1:
-                        event1 = Event(
-                            idx=next(event_idx_iter),
-                            roundtype=r.roundtype,
-                            roundtype_idx=r.roundtype_idx,
-                            timeslot=ts,
-                            location=loc,
-                        )
-                    elif loc.side == 2:
-                        event2 = Event(
-                            idx=next(event_idx_iter),
-                            roundtype=r.roundtype,
-                            roundtype_idx=r.roundtype_idx,
-                            timeslot=ts,
-                            location=loc,
-                        )
-                        event1.pair(event2)
-                        yield from (event1, event2)
 
     def build_conflicts(self) -> None:
         """Build a mapping of event identities to their conflicting events."""
@@ -265,7 +221,6 @@ class EventFactory:
                     self._conflict_matrix[e2.idx, e1.idx] = True
             for i in range(n):
                 self._conflict_matrix[i, i] = True  # An event conflicts with itself
-            logger.debug("Conflict matrix:\n%s", self._conflict_matrix)
         return self._conflict_matrix
 
     def as_mapping(self) -> dict[int, Event]:

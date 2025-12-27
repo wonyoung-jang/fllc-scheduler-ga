@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from logging import getLogger
 
 import numpy as np
-from line_profiler import profile
 
 from .fitness_base import FitnessBase
 
@@ -156,7 +155,6 @@ class FitnessEvaluator(FitnessBase):
 
         return final_scores / self.benchmark_best_timeslot_score
 
-    @profile
     def score_loc_consistency(self, loc_ids: np.ndarray, roundtype_ids: np.ndarray) -> np.ndarray:
         """Calculate location consistency score, prioritizing inter-round over intra-round consistency."""
         n_pop, n_teams, _ = loc_ids.shape

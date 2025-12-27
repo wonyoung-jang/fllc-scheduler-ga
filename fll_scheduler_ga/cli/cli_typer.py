@@ -18,7 +18,6 @@ from rich.progress import (
 )
 from rich.table import Table
 
-from ..config.app_config import AppConfig
 from ..config.config_manager import ConfigManager
 from .loggers import initialize_logging
 from .runners import run_ga_engine
@@ -89,10 +88,8 @@ def run() -> None:
     active_config_path = manager.get_active_config()
     console.print(f"[cyan]Initializing GA with {active_config_path.name}...[/cyan]")
 
-    app_config = AppConfig.build(active_config_path)
     initialize_logging()
     logger.debug("Start: Tournament Scheduler.")
-    app_config.log_creation_info()
 
     start_time = time.perf_counter()
 

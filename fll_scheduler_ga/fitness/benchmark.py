@@ -17,7 +17,8 @@ from ..config.constants import EPSILON
 from .benchmark_repository import BenchmarkSeedData
 
 if TYPE_CHECKING:
-    from ..config.schemas import FitnessModel, TournamentConfig
+    from ..config.app_schemas import TournamentConfig
+    from ..config.schemas import FitnessModel
     from ..data_model.event import EventFactory
     from .benchmark_repository import BenchmarkRepository
 

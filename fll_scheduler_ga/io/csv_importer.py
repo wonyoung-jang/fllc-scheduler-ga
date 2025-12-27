@@ -16,7 +16,7 @@ from ..data_model.timeslot import TimeSlot
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from ..config.schemas import TournamentConfig, TournamentRound
+    from ..config.app_schemas import TournamentConfig, TournamentRound
     from ..data_model.event import EventFactory, EventProperties
 
 logger = getLogger(__name__)

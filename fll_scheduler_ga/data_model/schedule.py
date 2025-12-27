@@ -90,7 +90,7 @@ class Schedule:
     def __hash__(self) -> int:
         """Hash is based on the frozenset of (event_id, team_id) pairs."""
         if self._hash is None:
-            self._hash = hash(id(self))
+            self._hash = hash(frozenset(frozenset(events) for events in self.team_events.values()))
         return self._hash
 
     def clone(self) -> Schedule:
