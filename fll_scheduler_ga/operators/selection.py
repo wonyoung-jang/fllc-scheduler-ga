@@ -9,7 +9,7 @@ of being selected.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -20,7 +20,7 @@ from ..config.constants import SelectionOp
 class Selection(ABC):
     """Abstract base class for selection operators in genetic algorithms."""
 
-    rng: np.random.Generator
+    rng: np.random.Generator = field(default_factory=np.random.default_rng)
 
     @abstractmethod
     def select(self, n: int, k: int) -> np.ndarray:
@@ -55,7 +55,7 @@ class RandomSelect(Selection):
             while i1 == i2:
                 i2 = self.rng.integers(0, n)
 
-            return np.array([i1, i2], dtype=int)
+            return np.array((i1, i2), dtype=int)
 
         choices = np.arange(n)
         self.rng.shuffle(choices)

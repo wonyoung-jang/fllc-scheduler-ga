@@ -35,7 +35,6 @@ def build_mutations(
         logger.warning("No mutation types enabled in the configuration. Mutation will not occur.")
         return ()
 
-    mutations = []
     mutation_factory = {
         # SwapMatchMutation variants
         MutationOp.SWAP_MATCH_CROSS_TIME_LOCATION: lambda p: SwapMatchMutation(
@@ -85,14 +84,15 @@ def build_mutations(
         "event_properties": event_properties,
     }
 
-    for mutation_name in mutation_types:
-        if mutation_name not in mutation_factory:
-            msg = f"Unknown mutation type in config: '{mutation_name}'"
-            raise ValueError(msg)
+    def _generate_mutations() -> Iterator[Mutation]:
+        for mutation_name in mutation_types:
+            if mutation_name not in mutation_factory:
+                msg = f"Unknown mutation type in config: '{mutation_name}'"
+                raise ValueError(msg)
 
-        mutations.append(mutation_factory[mutation_name](params))
+            yield mutation_factory[mutation_name](params)
 
-    return tuple(mutations)
+    return tuple(_generate_mutations())
 
 
 @dataclass(slots=True)
@@ -153,38 +153,21 @@ class SwapMutation(Mutation):
         _ts_idx = self.event_properties.timeslot_idx
         _loc_idx = self.event_properties.loc_idx
         _as_matches = self.event_factory.as_matches()
+        _same_ts = self.same_timeslot
+        _same_loc = self.same_location
+        _is_same_ts_and_loc = _same_ts and _same_loc
 
         for match_list in _as_matches.values():
             for match1, match2 in itertools.combinations(match_list, 2):
-                e1a, e1b = match1
-                e2a, e2b = match2
-                is_same_timeslot = _ts_idx[e1a] == _ts_idx[e2a]
-                is_same_location = _loc_idx[e1a] == _loc_idx[e2a]
-
-                if not (self.same_timeslot and self.same_location) and not self._validate_swap(
-                    is_same_timeslot=is_same_timeslot,
-                    is_same_location=is_same_location,
-                    same_timeslot=self.same_timeslot,
-                    same_location=self.same_location,
-                ):
+                e1a, _ = match1
+                e2a, _ = match2
+                _ts_cond = (_ts_idx[e1a] == _ts_idx[e2a]) == _same_ts
+                _loc_cond = (_loc_idx[e1a] == _loc_idx[e2a]) == _same_loc
+                _is_swap_valid = _ts_cond and _loc_cond
+                if not (_is_same_ts_and_loc or _is_swap_valid):
                     continue
 
-                match1_idx = (e1a, e1b)
-                match2_idx = (e2a, e2b)
-                yield (match1_idx, match2_idx)
-
-    def _validate_swap(
-        self,
-        *,
-        is_same_timeslot: bool,
-        is_same_location: bool,
-        same_timeslot: bool,
-        same_location: bool,
-    ) -> bool:
-        """Check if the swap between two events is valid based on timeslot and location."""
-        timeslot_condition = is_same_timeslot == same_timeslot
-        location_condition = is_same_location == same_location
-        return timeslot_condition and location_condition
+                yield (match1, match2)
 
 
 @dataclass(slots=True)
@@ -222,8 +205,8 @@ class SwapTeamMutation(SwapMutation):
             match1_data, match2_data = self.swap_candidates[idx]
             e1a, e1b = match1_data
             e2a, e2b = match2_data
-            t1a, t1b = schedule[e1a], schedule[e1b]
-            t2a, t2b = schedule[e2a], schedule[e2b]
+            t1a, t1b = schedule.schedule[e1a], schedule.schedule[e1b]
+            t2a, t2b = schedule.schedule[e2a], schedule.schedule[e2b]
             match_team_ids = {t1a, t1b, t2a, t2b}
             if (
                 len(match_team_ids) < 4
@@ -282,13 +265,13 @@ class SwapMatchMutation(SwapMutation):
             e1a, e1b = match1_data
             e2a, e2b = match2_data
 
-            t1a, t1b = schedule[e1a], schedule[e1b]
+            t1a, t1b = schedule.schedule[e1a], schedule.schedule[e1b]
             if -1 not in (t1a, t1b) and (
                 schedule.conflicts(t1a, e2a, ignore=e1a) or schedule.conflicts(t1b, e2b, ignore=e1b)
             ):
                 continue
 
-            t2a, t2b = schedule[e2a], schedule[e2b]
+            t2a, t2b = schedule.schedule[e2a], schedule.schedule[e2b]
             if -1 not in (t2a, t2b) and (
                 schedule.conflicts(t2a, e1a, ignore=e2a) or schedule.conflicts(t2b, e1b, ignore=e2b)
             ):
@@ -326,8 +309,8 @@ class SwapTableSideMutation(SwapMutation):
         match1_data, match2_data = self.swap_candidates[idx]
         e1a, e1b = match1_data
         e2a, e2b = match2_data
-        t1a, t1b = schedule[e1a], schedule[e1b]
-        t2a, t2b = schedule[e2a], schedule[e2b]
+        t1a, t1b = schedule.schedule[e1a], schedule.schedule[e1b]
+        t2a, t2b = schedule.schedule[e2a], schedule.schedule[e2b]
         return (e1a, e1b, t1a, t1b), (e2a, e2b, t2a, t2b)
 
 
@@ -387,7 +370,7 @@ class TimeSlotSequenceMutation(Mutation):
 
     def mutate_singles(self, schedule: Schedule, candidates: list[tuple[int, ...]]) -> bool:
         """Permute team assignments for single-team events."""
-        old_ids = [schedule[e] for e, _ in candidates]
+        old_ids = [schedule.schedule[e] for e, _ in candidates]
         new_ids = self.permute_singles(old_ids)
         for (event, _), old_team, new_team in zip(candidates, old_ids, new_ids, strict=True):
             if old_team == new_team:
@@ -403,7 +386,7 @@ class TimeSlotSequenceMutation(Mutation):
         matches: list[tuple[int, ...]] = []
         old_ids: list[tuple[int, ...]] = []
         for e1, e2 in candidates:
-            t1, t2 = schedule[e1], schedule[e2]
+            t1, t2 = schedule.schedule[e1], schedule.schedule[e2]
             matches.append((e1, e2))
             old_ids.append((t1, t2))
 

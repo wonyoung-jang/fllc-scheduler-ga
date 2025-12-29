@@ -11,11 +11,11 @@ from ..config.constants import ASCII_OFFSET
 class Location:
     """Data model for a location in the FLL Scheduler GA."""
 
-    idx: int
-    locationtype: str
-    name: int
-    side: int
-    teams_per_round: int
+    idx: int = 0
+    locationtype: str = "Null"
+    name: int = 1
+    side: int = -1
+    teams_per_round: int = 1
 
     def __str__(self) -> str:
         """Represent the Location as a string."""
@@ -28,8 +28,3 @@ class Location:
     def __hash__(self) -> int:
         """Hash the Room based on its identity."""
         return hash((self.name, self.side))
-
-    @classmethod
-    def build_null(cls) -> Location:
-        """Build and return a Null Location."""
-        return cls(idx=0, locationtype="n", name=1, side=-1, teams_per_round=1)

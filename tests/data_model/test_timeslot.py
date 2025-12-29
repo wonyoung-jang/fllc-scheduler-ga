@@ -4,10 +4,15 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from fll_scheduler_ga.data_model.timeslot import TimeSlot, parse_time_str
+from fll_scheduler_ga.data_model.timeslot import (
+    TIME_FORMAT_MAP,
+    TimeSlot,
+    calc_num_timeslots,
+    parse_time_str,
+)
 
-FMT_24H = "%H:%M"
-FMT_12H = "%I:%M %p"
+FMT_24H = TIME_FORMAT_MAP[24]
+FMT_12H = TIME_FORMAT_MAP[12]
 
 
 @pytest.mark.parametrize(
@@ -105,3 +110,32 @@ def test_overlaps_timeslot(timeslot: TimeSlot, start_offset_min: int, stop_offse
         stop_cycle=timeslot.stop_cycle + timedelta(minutes=stop_offset_min),
     )
     assert other.overlaps(timeslot) is expected
+
+
+@pytest.mark.parametrize(
+    ("n_times", "n_locs", "n_teams", "rounds_per_team", "expected"),
+    [
+        (5, 0, 10, 2, 5),  # enough times
+        (0, 4, 10, 2, 5),  # enough locations
+        (0, 0, 10, 2, None),  # cannot calculate
+    ],
+    ids=[
+        "enough_times",
+        "enough_locations",
+        "cannot_calculate",
+    ],
+)
+def test_calc_num_timeslots(
+    n_times: int,
+    n_locs: int,
+    n_teams: int,
+    rounds_per_team: int,
+    expected: int | None,
+) -> None:
+    """Parametrized tests for calc_num_timeslots function."""
+    if expected is not None:
+        result = calc_num_timeslots(n_times, n_locs, n_teams, rounds_per_team)
+        assert result == expected
+    else:
+        with pytest.raises(ValueError, match=r"Cannot calculate number of timeslots without times or locations."):
+            calc_num_timeslots(n_times, n_locs, n_teams, rounds_per_team)

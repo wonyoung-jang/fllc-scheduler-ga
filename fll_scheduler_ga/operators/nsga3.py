@@ -2,46 +2,30 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from itertools import combinations
 from logging import getLogger
 from math import comb
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from ..config.constants import EPSILON
 
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
 logger = getLogger(__name__)
 
 
-@dataclass(slots=True)
-class ReferenceDirections:
-    """Structured reference points for NSGA-III."""
+def calc_ref_points(n_obj: int, n_pop: int) -> np.ndarray:
+    """Generate a set of structured reference points."""
+    m = n_obj
+    p = 1
+    while comb(m + p - 1, m - 1) < n_pop:
+        p += 1
 
-    n_obj: int
-    n_pop: int
-
-    n_refs: int = field(init=False)
-    points: np.ndarray = field(init=False)
-    norm_sq: np.ndarray = field(init=False)
-
-    def __post_init__(self) -> None:
-        """Post-initialization to generate reference points."""
-        self.init_ref_points()
-        self.init_norm_sq()
-
-    def __len__(self) -> int:
-        """Return the number of reference points."""
-        return self.n_refs
-
-    def init_ref_points(self) -> None:
-        """Generate a set of structured reference points."""
-        m = self.n_obj
-        p = 1
-        while comb(m + p - 1, m - 1) < self.n_pop:
-            p += 1
-
-        coordinates = []
+    def _generate_coordinates() -> Iterator[np.ndarray]:
         for dividers in combinations(range(m + p - 1), m - 1):
             coords = np.zeros(m, dtype=float)
             prev = -1
@@ -49,16 +33,29 @@ class ReferenceDirections:
                 coords[i] = divider - prev - 1
                 prev = divider
             coords[-1] = m + p - 1 - dividers[-1] - 1
-            coordinates.append(coords / p)
-        self.points = np.array(coordinates, dtype=float)
-        self.n_refs = self.points.shape[0]
-        logger.debug("Generated %d reference points:\n%s", self.n_refs, self.points)
+            yield (coords / p)
 
-    def init_norm_sq(self) -> None:
-        """Initialize the squared norms of the reference points."""
-        self.norm_sq = (self.points**2).sum(axis=1)
-        self.norm_sq[self.norm_sq == 0.0] = EPSILON
-        logger.debug("Computed squared norms of reference points:\n%s", self.norm_sq)
+    coordinates = tuple(_generate_coordinates())
+    points = np.array(coordinates, dtype=float)
+    logger.debug("Generated %d reference points:\n%s", points.shape[0], points)
+    return points
+
+
+def calc_norm_sq_of_refs(points: np.ndarray) -> np.ndarray:
+    """Calculate the squared norms of the reference points."""
+    norm_sq = (points**2).sum(axis=1)
+    norm_sq[norm_sq == 0.0] = EPSILON
+    logger.debug("Computed squared norms of reference points:\n%s", norm_sq)
+    return norm_sq
+
+
+@dataclass(slots=True)
+class ReferenceDirections:
+    """Structured reference points for NSGA-III."""
+
+    n_refs: int
+    points: np.ndarray
+    norm_sq: np.ndarray
 
 
 @dataclass(slots=True)

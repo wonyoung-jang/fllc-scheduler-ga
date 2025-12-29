@@ -97,11 +97,11 @@ class Repairer:
                     e1, e2 = event_paired, event
 
             events[ek].append(e1)
-            t1 = schedule[e1]
+            t1 = schedule.schedule[e1]
             teams[ek].append(t1)
             schedule.unassign(t1, e1)
             if e2 is not None:
-                t2 = schedule[e2]
+                t2 = schedule.schedule[e2]
                 if t2 != -1:
                     teams[ek].append(t2)
                     schedule.unassign(t2, e2)

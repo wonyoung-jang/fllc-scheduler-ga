@@ -21,10 +21,11 @@ TIME_FORMAT_MAP = {
 class TimeSlot:
     """Data model for a time slot in the FLL Scheduler GA."""
 
-    idx: int
-    start: datetime
-    stop_active: datetime
-    stop_cycle: datetime
+    idx: int = 0
+    start: datetime = DEFAULT_DT
+    stop_active: datetime = DEFAULT_DT
+    stop_cycle: datetime = DEFAULT_DT
+
     time_fmt: ClassVar[str]
 
     def __str__(self) -> str:
@@ -39,11 +40,6 @@ class TimeSlot:
     def overlaps(self, other: TimeSlot) -> bool:
         """Check if this time slot overlaps with another."""
         return self.start < other.stop_cycle and other.start < self.stop_cycle
-
-    @classmethod
-    def build_null(cls) -> TimeSlot:
-        """Build and return a Null TimeSlot."""
-        return cls(idx=0, start=DEFAULT_DT, stop_active=DEFAULT_DT, stop_cycle=DEFAULT_DT)
 
 
 def parse_time_str(dt_str: str, fmt: str) -> datetime:
@@ -90,10 +86,13 @@ def validate_duration(
     2. times + duration
     3. start + stop (need to calculate num_timeslots)
     """
-    if (start_dt or times_dt) and dur:
+    if (start_dt != DEFAULT_DT or times_dt) and dur:
         return timedelta(minutes=dur)
 
     if start_dt and stop_dt:
+        if n_timeslots <= 0:
+            msg = "n_timeslots must be greater than zero to validate duration."
+            raise ValueError(msg)
         diff = stop_dt - start_dt
         total_available = diff.total_seconds()
         minimum_duration = total_available // n_timeslots

@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from fll_scheduler_ga.operators.nsga3 import calc_norm_sq_of_refs, calc_ref_points
+
 from ..data_model.event import EventFactory, EventProperties
 from ..data_model.schedule import Schedule, ScheduleContext
 from ..fitness.benchmark import (
@@ -140,9 +142,14 @@ class StandardGaContextFactory(GaContextFactory):
 
         ga_params = app_config.genetic.parameters
         n_objectives = evaluator.n_objectives
+
+        points = calc_ref_points(n_objectives, ga_params.population_size)
+        n_refs = points.shape[0]
+        norm_sq = calc_norm_sq_of_refs(points)
         ref_directions = ReferenceDirections(
-            n_obj=n_objectives,
-            n_pop=ga_params.population_size,
+            n_refs=n_refs,
+            points=points,
+            norm_sq=norm_sq,
         )
         nsga3 = NSGA3(
             rng=rng,

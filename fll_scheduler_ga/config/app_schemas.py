@@ -113,7 +113,7 @@ class TournamentRound:
                     )
                     yield event
             elif self.teams_per_round == 2:
-                event1 = Event.build_null()
+                event1 = Event()
                 for loc in self.locations:
                     if loc.side == 1:
                         event1 = Event(

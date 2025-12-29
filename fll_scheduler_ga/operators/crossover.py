@@ -33,7 +33,6 @@ def build_crossovers(
         logger.warning("No crossover types enabled in the configuration. Crossover will not occur.")
         return ()
 
-    crossovers = []
     crossover_factory = {
         CrossoverOp.K_POINT: lambda p, k: KPoint(**p, k=k),
         CrossoverOp.SCATTERED: Scattered,
@@ -48,23 +47,24 @@ def build_crossovers(
         "rng": rng,
     }
 
-    for crossover_name in crossover_types:
-        if crossover_name not in crossover_factory:
-            msg = f"Unknown crossover type in config: {crossover_name}"
-            raise ValueError(msg)
+    def _generate_crossovers() -> Iterator[Crossover]:
+        for crossover_name in crossover_types:
+            if crossover_name not in crossover_factory:
+                msg = f"Unknown crossover type in config: {crossover_name}"
+                raise ValueError(msg)
 
-        if crossover_name == CrossoverOp.K_POINT:
-            if crossover_ks := operators.crossover.k_vals:
-                for k in crossover_ks:
-                    if k <= 0:
-                        msg = f"Invalid crossover k value: {k}. Must be greater than 0."
-                        raise ValueError(msg)
+            if crossover_name == CrossoverOp.K_POINT:
+                if crossover_ks := operators.crossover.k_vals:
+                    for k in crossover_ks:
+                        if k <= 0:
+                            msg = f"Invalid crossover k value: {k}. Must be greater than 0."
+                            raise ValueError(msg)
 
-                    crossovers.append(crossover_factory[crossover_name](params, k))
-        else:
-            crossovers.append(crossover_factory[crossover_name](**params))
+                        yield crossover_factory[crossover_name](params, k)
+            else:
+                yield crossover_factory[crossover_name](**params)
 
-    return tuple(crossovers)
+    return tuple(_generate_crossovers())
 
 
 @dataclass(slots=True)
@@ -97,8 +97,8 @@ class Crossover(ABC):
 
     def _create_child(
         self,
-        p1: Schedule,
-        p2: Schedule,
+        p1: np.ndarray,
+        p2: np.ndarray,
         p1_genes: np.ndarray,
         p2_genes: np.ndarray,
     ) -> Schedule:
@@ -108,7 +108,7 @@ class Crossover(ABC):
         self.assign_from_p2(child, p2, p2_genes)
         return child
 
-    def assign_from_p1(self, child: Schedule, p1: Schedule, p1_genes: np.ndarray) -> None:
+    def assign_from_p1(self, child: Schedule, p1: np.ndarray, p1_genes: np.ndarray) -> None:
         """Assign genes."""
         p1_gene_pairs = self.event_properties.paired_idx[p1_genes]
         for e1, e2 in zip(p1_genes, p1_gene_pairs, strict=True):
@@ -120,22 +120,24 @@ class Crossover(ABC):
                 child.assign(t1, e1)
                 child.assign(t2, e2)
 
-    def assign_from_p2(self, child: Schedule, p2: Schedule, p2_genes: np.ndarray) -> None:
+    def assign_from_p2(self, child: Schedule, p2: np.ndarray, p2_genes: np.ndarray) -> None:
         """Assign genes."""
         p2_genes_pairs = self.event_properties.paired_idx[p2_genes]
         p2_genes_rt = self.event_properties.roundtype_idx[p2_genes]
         for e1, e2, rt in zip(p2_genes, p2_genes_pairs, p2_genes_rt, strict=True):
             t1 = p2[e1]
-            if not child.needs_round(t1, rt) or child.conflicts(t1, e1):
+            if t1 == -1 or not child.needs_round(t1, rt) or child.conflicts(t1, e1):
                 continue
 
             if e2 == -1:
                 child.assign(t1, e1)
             else:
                 t2 = p2[e2]
-                if child.needs_round(t2, rt) and not child.conflicts(t2, e2):
-                    child.assign(t1, e1)
-                    child.assign(t2, e2)
+                if t2 == -1 or not child.needs_round(t2, rt) or child.conflicts(t2, e2):
+                    continue
+
+                child.assign(t1, e1)
+                child.assign(t2, e2)
 
 
 @dataclass(slots=True)
@@ -144,8 +146,8 @@ class EventCrossover(Crossover):
 
     def __str__(self) -> str:
         """Return a string representation of the crossover operator."""
-        if hasattr(self, "k"):
-            return f"{self.__class__.__name__}(k={self.k})"
+        if (k := getattr(self, "k", None)) is not None:
+            return f"{self.__class__.__name__}(k={k})"
         return f"{self.__class__.__name__}"
 
     @abstractmethod
@@ -159,7 +161,9 @@ class EventCrossover(Crossover):
 
     def cross(self, parents: Iterator[Schedule]) -> Iterator[Schedule]:
         """Produce child schedules from two parents."""
-        p1, p2 = parents
+        i, j = parents
+        p1 = i.schedule
+        p2 = j.schedule
         p1_genes, p2_genes = self.get_genes()
         yield self._create_child(p1, p2, p1_genes, p2_genes)
         yield self._create_child(p2, p1, p2_genes, p1_genes)

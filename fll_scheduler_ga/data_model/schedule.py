@@ -34,13 +34,10 @@ class Schedule:
     fitness: np.ndarray = field(default_factory=lambda: np.array([]))
     team_fitnesses: np.ndarray = field(default_factory=lambda: np.array([]))
     rank: int = -1
-
     origin: str = "Builder"
     mutations: int = 0
     clones: int = 0
-
     _hash: int | None = None
-
     team_events: dict[int, set[int]] = field(default_factory=dict)
     team_rounds: np.ndarray = field(default_factory=lambda: np.array([]))
 
@@ -62,26 +59,9 @@ class Schedule:
         """Return the number of scheduled events."""
         return np.count_nonzero(self.schedule >= 0)
 
-    def __bool__(self) -> bool:
-        """Return True if there are any scheduled events."""
-        return self.schedule.size > 0
-
     def get_size(self) -> int | np.signedinteger:
         """Return the number of scheduled events."""
-        return np.count_nonzero(self.schedule >= 0)
-
-    def __getitem__(self, event: int) -> int:
-        """Get the team assigned to a specific event."""
-        return self.schedule[event]
-
-    def __setitem__(self, event: int, team: int) -> None:
-        """Assign a team to a specific event."""
-        self.schedule[event] = team
-        self.reset_hash()
-
-    def __contains__(self, event: int) -> bool:
-        """Check if a specific event is scheduled."""
-        return self.schedule[event] != -1
+        return self.__len__()
 
     def __eq__(self, other: object) -> bool:
         """Two Schedules are equal if they assign the same teams to the same events."""
@@ -97,8 +77,8 @@ class Schedule:
         """Create a deep copy of the schedule."""
         return Schedule(
             schedule=self.schedule.copy(),
-            fitness=self.fitness.copy() if self.fitness is not None else None,
-            team_fitnesses=self.team_fitnesses.copy() if self.team_fitnesses is not None else None,
+            fitness=self.fitness.copy(),
+            team_fitnesses=self.team_fitnesses.copy(),
             rank=self.rank,
             origin=self.origin,
             mutations=self.mutations,
@@ -107,10 +87,6 @@ class Schedule:
             team_events={k: v.copy() for k, v in self.team_events.items()},
             team_rounds=self.team_rounds.copy(),
         )
-
-    def reset_hash(self) -> None:
-        """Reset the cached hash value."""
-        self._hash = None
 
     def swap_assignment(self, team: int, old_event: int, new_event: int) -> None:
         """Switch an event for a team in the schedule."""
@@ -144,9 +120,6 @@ class Schedule:
 
     def needs_round(self, team: int, roundtype: int) -> bool:
         """Check if a team still needs to participate in a given round type."""
-        if team == -1:
-            return False
-
         return self.team_rounds[team, roundtype] > 0
 
     def all_rounds_needed(self, roundtype: int) -> np.ndarray:

@@ -109,11 +109,11 @@ class EventProperties:
 class Event:
     """Data model for an event in a schedule."""
 
-    idx: int
-    roundtype: str
-    roundtype_idx: int
-    timeslot: TimeSlot
-    location: Location
+    idx: int = 0
+    roundtype: str = "Null"
+    roundtype_idx: int = 0
+    timeslot: TimeSlot = field(default_factory=TimeSlot)
+    location: Location = field(default_factory=Location)
     paired: int = 0
     conflicts: list[int] = field(default_factory=list)
 
@@ -125,17 +125,6 @@ class Event:
         """Pair this event with another event."""
         self.paired = other.idx
         other.paired = self.idx
-
-    @classmethod
-    def build_null(cls) -> Event:
-        """Build and return a Null Event."""
-        return cls(
-            idx=0,
-            roundtype="n",
-            roundtype_idx=0,
-            timeslot=TimeSlot.build_null(),
-            location=Location.build_null(),
-        )
 
 
 @dataclass(slots=True)
