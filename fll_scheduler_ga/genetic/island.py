@@ -11,7 +11,7 @@ import numpy as np
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterator
 
-    from ..config.schemas import GeneticModel
+    from ..config.pydantic_schemas import GeneticModel
     from ..data_model.schedule import Schedule
     from .builder import ScheduleBuilderRandom
     from .ga_context import GaContext

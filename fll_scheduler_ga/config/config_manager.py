@@ -95,7 +95,7 @@ class ConfigManager:
             idx = int(identifier)
             if 0 <= idx < len(self.available):
                 return self.available[idx]
-            msg = f"Index {idx} out of range (0-{len(self.available) - 1})"
+            msg = f"Index {idx} out of range 0-{len(self.available) - 1}"
             raise ValueError(msg)
 
         # Select by name, stem or path

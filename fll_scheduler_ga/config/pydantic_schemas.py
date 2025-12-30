@@ -285,7 +285,7 @@ class AppConfigModel(BaseModel):
     runtime: RuntimeModel
     imports: ImportModel
     exports: ExportModel
-    teams: TeamsModel
     fitness: FitnessModel
-    locations: tuple[LocationModel, ...] = ()
-    rounds: tuple[RoundModel, ...] = ()
+    teams: TeamsModel
+    locations: tuple[LocationModel, ...]
+    rounds: tuple[RoundModel, ...]

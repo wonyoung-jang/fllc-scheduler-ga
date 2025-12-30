@@ -15,7 +15,7 @@ from ..config.constants import MutationOp
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from ..config.schemas import OperatorConfig
+    from ..config.pydantic_schemas import OperatorConfig
     from ..data_model.event import EventFactory, EventProperties
     from ..data_model.schedule import Schedule
 

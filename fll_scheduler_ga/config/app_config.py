@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import itertools
-import json
 import logging
 from collections import Counter
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
+from line_profiler import profile
 
 from ..data_model.location import Location
 from ..data_model.timeslot import (
@@ -22,7 +22,7 @@ from ..data_model.timeslot import (
 )
 from .app_schemas import TournamentConfig, TournamentRound
 from .constants import CONFIG_FILE_DEFAULT
-from .schemas import (
+from .pydantic_schemas import (
     AppConfigModel,
     ExportModel,
     FitnessModel,
@@ -44,14 +44,15 @@ logger = logging.getLogger(__name__)
 class AppConfig:
     """Configuration for the FLL Scheduler GA application."""
 
+    genetic: GeneticModel
     runtime: RuntimeModel
     imports: ImportModel
     exports: ExportModel
-    genetic: GeneticModel
     fitness: FitnessModel
     tournament: TournamentConfig
     rng: np.random.Generator
 
+    @profile
     @classmethod
     def build(cls, path: Path | None = None) -> AppConfig:
         """Create and return the application configuration."""
@@ -62,10 +63,8 @@ class AppConfig:
             msg = f"Configuration file does not exist at: {path}"
             raise FileNotFoundError(msg)
 
-        with path.open(mode="r", encoding="utf-8") as f:
-            config_data = json.load(f)
-
-        config_model = AppConfigModel.model_validate(config_data)
+        config_data = path.read_text()
+        config_model = AppConfigModel.model_validate_json(config_data)
         return cls.build_from_model(config_model)
 
     @classmethod
@@ -76,10 +75,10 @@ class AppConfig:
         rng_seed = model.genetic.get_rng_seed()
         rng = np.random.default_rng(rng_seed)
         return AppConfig(
+            genetic=model.genetic,
             runtime=model.runtime,
             imports=model.imports,
             exports=model.exports,
-            genetic=model.genetic,
             fitness=model.fitness,
             tournament=tournament_config,
             rng=rng,
@@ -187,15 +186,16 @@ class AppConfig:
 
         def _generate_rounds() -> Iterator[TournamentRound]:
             for roundtype_idx, rnd in enumerate(round_models):
+                locations = tuple(loc for loc in all_locations if loc.locationtype == rnd.location)
+                _n_locations = len(locations)
+
                 start_dt = parse_time_str(rnd.start_time, time_fmt)
                 stop_dt = parse_time_str(rnd.stop_time, time_fmt)
                 times_dt = tuple(parse_time_str(t, time_fmt) for t in rnd.times) if rnd.times else ()
-                locations = tuple(loc for loc in all_locations if loc.locationtype == rnd.location)
+                _n_timeslots = calc_num_timeslots(len(times_dt), _n_locations, n_teams, rnd.rounds_per_team)
 
-                n_timeslots = calc_num_timeslots(len(times_dt), len(locations), n_teams, rnd.rounds_per_team)
-
-                dur_tdelta_cycle = validate_duration(start_dt, stop_dt, times_dt, rnd.duration_cycle, n_timeslots)
-                dur_tdelta_active = validate_duration(start_dt, stop_dt, times_dt, rnd.duration_active, n_timeslots)
+                dur_tdelta_cycle = validate_duration(start_dt, stop_dt, times_dt, rnd.duration_cycle, _n_timeslots)
+                dur_tdelta_active = validate_duration(start_dt, stop_dt, times_dt, rnd.duration_active, _n_timeslots)
 
                 timeslots = tuple(
                     TimeSlot(
@@ -205,7 +205,7 @@ class AppConfig:
                         stop_cycle=stop_cycle,
                     )
                     for start, stop_active, stop_cycle in init_timeslots(
-                        times_dt, dur_tdelta_cycle, dur_tdelta_active, n_timeslots, start_dt
+                        times_dt, dur_tdelta_cycle, dur_tdelta_active, _n_timeslots, start_dt
                     )
                 )
 
@@ -213,7 +213,7 @@ class AppConfig:
                 round_stop_time = timeslots[-1].stop_cycle
                 times_dt = tuple(ts.start for ts in timeslots)
 
-                slots_total = len(timeslots) * len(locations)
+                slots_total = _n_timeslots * _n_locations
                 slots_required = n_teams * rnd.rounds_per_team
                 slots_empty = slots_total - slots_required
 
@@ -230,7 +230,7 @@ class AppConfig:
                     duration_minutes=dur_tdelta_cycle,
                     location_type=rnd.location,
                     locations=locations,
-                    num_timeslots=n_timeslots,
+                    num_timeslots=_n_timeslots,
                     timeslots=timeslots,
                     slots_total=slots_total,
                     slots_required=slots_required,
@@ -268,4 +268,4 @@ class AppConfig:
         logger.debug("Initialized tournament configuration: %s", self.tournament)
         logger.debug("Initialized operator configuration: %s", self.genetic.operator)
         logger.debug("Initialized genetic algorithm parameters: %s", self.genetic.parameters)
-        logger.debug("Initialized random number generator: %s.", self.rng.bit_generator)
+        logger.debug("Initialized random number generator: %s.", self.rng)

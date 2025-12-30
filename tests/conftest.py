@@ -1,11 +1,46 @@
 """Fixtures for testing fll_scheduler_ga package."""
 
+from typing import Any
+
 import pytest
 
 from fll_scheduler_ga.data_model.timeslot import TIME_FORMAT_MAP, TimeSlot, parse_time_str
 
-FMT_24H = TIME_FORMAT_MAP[24]
-FMT_12H = TIME_FORMAT_MAP[12]
+FMT_24H: str = TIME_FORMAT_MAP[24]
+FMT_12H: str = TIME_FORMAT_MAP[12]
+
+
+@pytest.fixture
+def minimal_config_dict() -> dict[str, Any]:
+    """Return a minimal valid configuration dictionary."""
+    return {
+        "genetic": {
+            "parameters": {"population_size": 4, "generations": 2},
+            "operator": {
+                "crossover": {"types": ["KPoint"], "k_vals": [1]},
+                "mutation": {"types": ["SwapTeam_CrossTimeLocation"]},
+            },
+            "stagnation": {"enable": False},
+        },
+        "runtime": {"seed_file": "test_seed.pkl"},
+        "imports": {},
+        "exports": {},
+        "teams": {"teams": 4},
+        "fitness": {},
+        "locations": [{"name": "Table", "count": 2, "sides": 2}],
+        "rounds": [
+            {
+                "roundtype": "Match",
+                "location": "Table",
+                "rounds_per_team": 1,
+                "teams_per_round": 2,
+                "start_time": "09:00",
+                "stop_time": "09:30",
+                "duration_cycle": 5,
+                "duration_active": 3,
+            }
+        ],
+    }
 
 
 @pytest.fixture

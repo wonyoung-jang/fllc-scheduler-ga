@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
-    from ..config.schemas import StagnationModel
+    from ..config.pydantic_schemas import StagnationModel
     from .ga_generation import GaGeneration
 
 logger = logging.getLogger(__name__)

@@ -16,7 +16,7 @@ from ..data_model.schedule import Schedule
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
 
-    from ..config.schemas import OperatorConfig
+    from ..config.pydantic_schemas import OperatorConfig
     from ..data_model.event import EventFactory, EventProperties
 
 logger = getLogger(__name__)

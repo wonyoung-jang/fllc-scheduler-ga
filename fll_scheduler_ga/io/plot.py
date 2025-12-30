@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from matplotlib.figure import Figure
 
     from ..config.constants import FitnessObjective
-    from ..config.schemas import ExportModel
+    from ..config.pydantic_schemas import ExportModel
     from ..genetic.ga import GA
 
 

@@ -23,7 +23,7 @@ class ScheduleContext:
     event_props: EventProperties
     teams_list: np.ndarray
     teams_roundreqs_arr: np.ndarray
-    n_total_events: int
+    empty_schedule: np.ndarray
 
 
 @dataclass(slots=True)
@@ -47,7 +47,7 @@ class Schedule:
     def __post_init__(self) -> None:
         """Post-initialization to set up fitness array."""
         if self.schedule.size == 0:
-            self.schedule = np.full(Schedule.ctx.n_total_events, -1, dtype=int)
+            self.schedule = Schedule.ctx.empty_schedule.copy()
 
         if not self.team_events:
             self.team_events = defaultdict(set)

@@ -16,7 +16,7 @@ from .schedule_exporter import CsvScheduleExporter, HtmlScheduleExporter, normal
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from ..config.schemas import ExportModel
+    from ..config.pydantic_schemas import ExportModel
     from ..data_model.event import EventProperties
     from ..data_model.schedule import Schedule
     from ..genetic.ga import GA

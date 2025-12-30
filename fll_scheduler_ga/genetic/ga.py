@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
 
-    from ..config.schemas import GaParameters, GeneticModel, ImportModel
+    from ..config.pydantic_schemas import GaParameters, GeneticModel, ImportModel
     from ..data_model.schedule import Schedule
     from ..io.observers import GaObserver
     from ..operators.crossover import Crossover

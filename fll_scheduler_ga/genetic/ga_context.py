@@ -46,7 +46,7 @@ from .preflight_checker import PreFlightChecker
 if TYPE_CHECKING:
     from ..config.app_config import AppConfig
     from ..config.app_schemas import TournamentConfig
-    from ..config.schemas import ImportModel
+    from ..config.pydantic_schemas import ImportModel
     from ..operators.crossover import Crossover
     from ..operators.mutation import Mutation
     from ..operators.selection import Selection
@@ -81,13 +81,14 @@ class StandardGaContextFactory(GaContextFactory):
         # Run pre-flight checks before fitness benchmarking
         PreFlightChecker.build_then_run(event_properties, event_factory)
 
+        empty_schedule = np.full(n_total_events, -1, dtype=int)
         roundreqs_array = np.tile(tuple(tournament_config.roundreqs.values()), (tournament_config.num_teams, 1))
         Schedule.ctx = ScheduleContext(
             conflict_map=event_factory.as_conflict_map(),
             event_props=event_properties,
             teams_list=np.arange(tournament_config.num_teams, dtype=int),
             teams_roundreqs_arr=roundreqs_array,
-            n_total_events=n_total_events,
+            empty_schedule=empty_schedule,
         )
 
         constraints = (
