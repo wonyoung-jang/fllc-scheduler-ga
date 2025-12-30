@@ -11,6 +11,8 @@ MAIN_PACKAGE_DIR = Path("fll_scheduler_ga").resolve()
 CONFIG_FILE_DEFAULT = MAIN_PACKAGE_DIR / "config.json"
 LOGGING_CONFIG_PATH = MAIN_PACKAGE_DIR / "logging.json"
 
+RANDOM_SEED_RANGE = (1, 2**32 - 1)
+
 
 class SelectionOp(StrEnum):
     """Enum for selection operator keys."""

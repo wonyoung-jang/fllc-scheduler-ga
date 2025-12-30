@@ -1,1 +1,1 @@
-"""Tests for data model."""
+"""Tests for data_model package."""

@@ -2,13 +2,11 @@
 
 import logging
 
-import numpy as np
 from pydantic import BaseModel, Field, model_validator
 
 from .constants import CrossoverOp, MutationOp, SeedIslandStrategy, SeedPopSort
 
 logger = logging.getLogger(__name__)
-RANDOM_SEED_RANGE = (1, 2**32 - 1)
 
 
 class GaParameters(BaseModel):
@@ -22,7 +20,6 @@ class GaParameters(BaseModel):
     num_islands: int = Field(default=1, ge=1)
     migration_interval: int = Field(default=10, ge=1)
     migration_size: int = Field(default=1, ge=0)
-    rng_seed: int | str | None = None
 
     def __str__(self) -> str:
         """Representation of GA parameters."""
@@ -36,20 +33,7 @@ class GaParameters(BaseModel):
             f"\n\t  num_islands        : {self.num_islands}"
             f"\n\t  migrate_interval   : {self.migration_interval}"
             f"\n\t  migrate_size       : {self.migration_size}"
-            f"\n\t  rng_seed           : {self.rng_seed}"
         )
-
-    def get_rng_seed(self) -> int:
-        """Return the RNG seed as an integer."""
-        if isinstance(self.rng_seed, int):
-            return self.rng_seed
-
-        self.rng_seed = int(
-            np.random.default_rng().integers(*RANDOM_SEED_RANGE)
-            if self.rng_seed is None
-            else abs(hash(self.rng_seed)) % (RANDOM_SEED_RANGE[1] + 1)
-        )
-        return self.rng_seed
 
 
 class CrossoverModel(BaseModel):
@@ -93,13 +77,10 @@ class StagnationModel(BaseModel):
 class GeneticModel(BaseModel):
     """Configuration for the genetic algorithm."""
 
+    rng_seed: int | str | None = None
     parameters: GaParameters
     operator: OperatorConfig
     stagnation: StagnationModel
-
-    def get_rng_seed(self) -> int:
-        """Return the RNG seed as an integer."""
-        return self.parameters.get_rng_seed()
 
 
 class RuntimeModel(BaseModel):
@@ -151,32 +132,6 @@ class ExportModel(BaseModel):
     no_plotting: bool = False
     cmap_name: str = "viridis"
     team_identities: dict[int, str] = Field(default_factory=dict)
-
-
-class TeamsModel(BaseModel):
-    """Configuration for teams."""
-
-    teams: list[int | str] | int = 1
-
-    def __len__(self) -> int:
-        """Return the number of teams."""
-        if isinstance(self.teams, list):
-            return len(self.teams)
-        return self.teams
-
-    @model_validator(mode="after")
-    def validate(self) -> "TeamsModel":
-        """Validate that num_teams matches the length of identities if both are provided."""
-        if isinstance(self.teams, list):
-            self.teams = [str(t) for t in self.teams]
-        elif isinstance(self.teams, int):
-            self.teams = [str(i) for i in range(1, self.teams + 1)]
-        return self
-
-    def get_team_ids(self) -> dict[int, str]:
-        """Return a mapping of team indices to team identities."""
-        teams_list = self.teams if isinstance(self.teams, list) else [str(i) for i in range(1, self.teams + 1)]
-        return dict(enumerate(teams_list, start=1))
 
 
 class FitnessModel(BaseModel):
@@ -239,6 +194,12 @@ class FitnessModel(BaseModel):
         return tuple(w / denom_w for w in weights)
 
 
+class TeamsModel(BaseModel):
+    """Configuration for teams."""
+
+    teams: tuple[int | str, ...] | int = 1
+
+
 class LocationModel(BaseModel):
     """Input model for a location type."""
 
@@ -263,12 +224,12 @@ class RoundModel(BaseModel):
     @model_validator(mode="after")
     def validate(self) -> "RoundModel":
         """Validate that rounds_per_team and teams_per_round are positive."""
-        if not (self.start_time or self.times):
-            msg = f"Round '{self.roundtype}' must have either start_time or times defined."
-            raise ValueError(msg)
-
         if self.stop_time and not self.start_time:
             msg = f"Round '{self.roundtype}' has stop_time defined but no start_time."
+            raise ValueError(msg)
+
+        if not (self.start_time or self.times):
+            msg = f"Round '{self.roundtype}' must have either start_time or times defined."
             raise ValueError(msg)
 
         if self.duration_active > self.duration_cycle:

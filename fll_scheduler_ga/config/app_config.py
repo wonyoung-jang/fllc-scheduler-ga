@@ -21,7 +21,7 @@ from ..data_model.timeslot import (
     validate_duration,
 )
 from .app_schemas import TournamentConfig, TournamentRound
-from .constants import CONFIG_FILE_DEFAULT
+from .constants import CONFIG_FILE_DEFAULT, RANDOM_SEED_RANGE
 from .pydantic_schemas import (
     AppConfigModel,
     ExportModel,
@@ -38,6 +38,35 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+
+def get_team_identities(teams: tuple[str, ...]) -> dict[int, str]:
+    """Return a mapping of team indices to team identities."""
+    return dict(enumerate(teams, start=1))
+
+
+def get_teams_list(teams: tuple[int | str, ...] | int) -> tuple[str, ...]:
+    """Return a tuple of team identifiers."""
+    if isinstance(teams, int):
+        return tuple(str(i) for i in range(1, teams + 1))
+
+    if isinstance(teams, tuple):
+        return tuple(str(t) for t in teams)
+
+    msg = "teams must be either an int or a tuple of int/str."
+    raise TypeError(msg)
+
+
+def get_rng_seed(seed: int | str | None) -> int:
+    """Return the RNG seed as an integer."""
+    if isinstance(seed, int):
+        return seed
+
+    return int(
+        np.random.default_rng().integers(*RANDOM_SEED_RANGE)
+        if seed is None
+        else abs(hash(seed)) % (RANDOM_SEED_RANGE[1] + 1)
+    )
 
 
 @dataclass(slots=True)
@@ -70,10 +99,12 @@ class AppConfig:
     @classmethod
     def build_from_model(cls, model: AppConfigModel) -> AppConfig:
         """Create and return the application configuration from a Pydantic model."""
-        model.exports.team_identities = model.teams.get_team_ids()
-        tournament_config = cls.load_tournament_config(model)
-        rng_seed = model.genetic.get_rng_seed()
-        rng = np.random.default_rng(rng_seed)
+        teams_list = get_teams_list(model.teams.teams)
+        model.exports.team_identities = get_team_identities(teams_list)
+        n_teams = len(teams_list)
+        tournament_config = cls.load_tournament_config(model, n_teams)
+        seed = get_rng_seed(model.genetic.rng_seed)
+        rng = np.random.default_rng(seed)
         return AppConfig(
             genetic=model.genetic,
             runtime=model.runtime,
@@ -85,9 +116,8 @@ class AppConfig:
         )
 
     @classmethod
-    def load_tournament_config(cls, model: AppConfigModel) -> TournamentConfig:
+    def load_tournament_config(cls, model: AppConfigModel, n_teams: int) -> TournamentConfig:
         """Load and return the tournament configuration from the validated model."""
-        n_teams = len(model.teams)
         round_models = model.rounds
         time_fmt = cls.get_time_fmt(round_models)
         TimeSlot.time_fmt = time_fmt
@@ -268,4 +298,3 @@ class AppConfig:
         logger.debug("Initialized tournament configuration: %s", self.tournament)
         logger.debug("Initialized operator configuration: %s", self.genetic.operator)
         logger.debug("Initialized genetic algorithm parameters: %s", self.genetic.parameters)
-        logger.debug("Initialized random number generator: %s.", self.rng)
