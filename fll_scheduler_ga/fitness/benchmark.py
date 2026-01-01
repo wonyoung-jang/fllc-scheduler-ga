@@ -89,9 +89,9 @@ class StableConfigHash:
         config_representation = (
             self.config.get_canonical_round_tuples(),
             self.config.get_canonical_roundreqs_tuple(),
-            self.model.minbreak_target,
-            self.model.minbreak_penalty,
-            self.model.zeros_penalty,
+            self.model.penalties.minbreak_target,
+            self.model.penalties.minbreak,
+            self.model.penalties.zeros,
             self.config.num_teams,
         )
 
@@ -297,18 +297,20 @@ class FitnessBenchmarkBreaktime(FitnessBenchmarkObjective):
         coeff = std_dev / mean_break
         ratio = 1 / (1 + coeff)
 
-        minbreak_count = (breaks_active_minutes < self.model.minbreak_target).sum(axis=1)
-        where_breaks_lt_target = (breaks_active_minutes < self.model.minbreak_target) & (breaks_active_minutes > 0)
+        minbreak_count = (breaks_active_minutes < self.model.penalties.minbreak_target).sum(axis=1)
+        where_breaks_lt_target = (breaks_active_minutes < self.model.penalties.minbreak_target) & (
+            breaks_active_minutes > 0
+        )
         max_diff_breaktimes = np.zeros_like(minbreak_count)
         if where_breaks_lt_target.any():
-            diffs = self.model.minbreak_target - breaks_active_minutes
+            diffs = self.model.penalties.minbreak_target - breaks_active_minutes
             diffs[~where_breaks_lt_target] = 0.0
-            max_diff_breaktimes = diffs.max(axis=1) / self.model.minbreak_target
+            max_diff_breaktimes = diffs.max(axis=1) / self.model.penalties.minbreak_target
         minbreak_exp = minbreak_count + max_diff_breaktimes
-        minbreak_penalty = self.model.minbreak_penalty**minbreak_exp
+        minbreak_penalty = self.model.penalties.minbreak**minbreak_exp
 
         zeros_count = (breaks_cycle_minutes == 0).sum(axis=1)
-        zeros_penalty = self.model.zeros_penalty**zeros_count
+        zeros_penalty = self.model.penalties.zeros**zeros_count
 
         final_scores = ratio * zeros_penalty * minbreak_penalty
         final_scores[mean_break_zero_mask] = 0.0

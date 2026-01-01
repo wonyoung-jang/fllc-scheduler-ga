@@ -23,23 +23,27 @@ def minimal_config_dict() -> dict[str, Any]:
             "stagnation": {"enable": False},
         },
         "runtime": {"seed_file": "test_seed.pkl"},
-        "imports": {},
-        "exports": {},
-        "teams": {"teams": 4},
+        "io": {
+            "imports": {},
+            "exports": {},
+        },
         "fitness": {},
-        "locations": [{"name": "Table", "count": 2, "sides": 2}],
-        "rounds": [
-            {
-                "roundtype": "Match",
-                "location": "Table",
-                "rounds_per_team": 1,
-                "teams_per_round": 2,
-                "start_time": "09:00",
-                "stop_time": "09:30",
-                "duration_cycle": 5,
-                "duration_active": 3,
-            }
-        ],
+        "tournament": {
+            "teams": 4,
+            "locations": [{"name": "Table", "count": 2, "sides": 2}],
+            "rounds": [
+                {
+                    "roundtype": "Match",
+                    "location": "Table",
+                    "rounds_per_team": 1,
+                    "teams_per_round": 2,
+                    "start_time": "09:00",
+                    "stop_time": "09:30",
+                    "duration_cycle": 5,
+                    "duration_active": 3,
+                }
+            ],
+        },
     }
 
 

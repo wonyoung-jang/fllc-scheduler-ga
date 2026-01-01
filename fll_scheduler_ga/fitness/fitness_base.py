@@ -87,14 +87,15 @@ class FitnessBase(ABC):
         self.benchmark_opponents = self.benchmark.opponents
         self.benchmark_best_timeslot_score = self.benchmark.best_timeslot_score
         # Initialize from FitnessModel
-        self.loc_weight_rounds_inter = self.model.loc_weight_rounds_inter
-        self.loc_weight_rounds_intra = self.model.loc_weight_rounds_intra
-        self.agg_weights = self.model.get_fitness_tuple()
-        self.obj_weights = np.array(self.model.get_obj_weights(), dtype=float)
-        self.min_fitness_weight = self.model.min_fitness_weight
-        self.minbreak_target = self.model.minbreak_target
-        self.minbreak_penalty = self.model.minbreak_penalty
-        self.zeros_penalty = self.model.zeros_penalty
+        inter, intra = self.model.location_weights.get_weights_tuple()
+        self.loc_weight_rounds_inter = inter
+        self.loc_weight_rounds_intra = intra
+        self.agg_weights = self.model.aggregation.get_weights_tuple()
+        self.min_fitness_weight = self.model.aggregation.min_fit
+        self.obj_weights = np.array(self.model.objectives.get_weights_tuple(), dtype=float)
+        self.minbreak_target = self.model.penalties.minbreak_target
+        self.minbreak_penalty = self.model.penalties.minbreak
+        self.zeros_penalty = self.model.penalties.zeros
 
     @abstractmethod
     def evaluate(self, arr: np.ndarray) -> tuple[np.ndarray, np.ndarray]:

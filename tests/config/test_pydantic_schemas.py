@@ -6,7 +6,13 @@ import pytest
 from pydantic import ValidationError
 
 from fll_scheduler_ga.config.app_config import get_team_identities, get_teams_list
-from fll_scheduler_ga.config.pydantic_schemas import FitnessModel, ImportModel, RoundModel, TeamsModel
+from fll_scheduler_ga.config.pydantic_schemas import (
+    AggregationWeightsModel,
+    FitnessModel,
+    ImportModel,
+    LocationWeightsModel,
+    RoundModel,
+)
 
 
 def test_schemas_validation() -> None:
@@ -19,13 +25,9 @@ def test_schemas_validation() -> None:
         ImportModel(seed_island_strategy="invalid")
 
     # FitnessModel
-    fm = FitnessModel(weight_mean=0, weight_variation=0, weight_range=0, minbreak_penalty=-1)
-    fm_fitness_tuple = fm.get_fitness_tuple()
-    fm_obj_weights = fm.get_obj_weights()
-    assert all(w == 1 / 3 for w in fm_fitness_tuple)
+    fm = FitnessModel()
+    fm_obj_weights = fm.objectives.get_weights_tuple()
     assert all(w == 1.0 / 1.0 for w in fm_obj_weights)
-    assert fm.weight_mean == 1.0  # Default
-    assert fm.minbreak_penalty > 0
 
     # RoundModel
     with pytest.raises(ValidationError):
@@ -43,10 +45,46 @@ def test_schemas_validation() -> None:
             duration_cycle=5,
         )  # Active > Cycle
 
-    # TeamsModel
-    tm = TeamsModel(teams=5)
-    teams_list = get_teams_list(tm.teams)
+    # Teams
+    teams = 5
+    teams_list = get_teams_list(teams)
     assert len(teams_list) == 5
 
     ids = get_team_identities(teams_list)
     assert ids[1] == "1"
+
+
+def test_fitness_aggregation_model() -> None:
+    """Test AggregationWeightsModel behavior."""
+    agg_weights = AggregationWeightsModel(
+        mean=3,
+        variation=1,
+        range=1,
+        min_fit=0.3,
+    )
+    agg_weight_tuple = agg_weights.get_weights_tuple()
+    assert len(agg_weight_tuple) == 3
+    assert agg_weight_tuple == (3 / 5, 1 / 5, 1 / 5)
+
+
+def test_location_weights_model() -> None:
+    """Test LocationWeightsModel behavior."""
+    loc_weights = LocationWeightsModel(
+        inter_rounds=2.0,
+        intra_rounds=1.0,
+    )
+    loc_weight_tuple = loc_weights.get_weights_tuple()
+    assert len(loc_weight_tuple) == 2
+    assert loc_weight_tuple == (2.0 / 3.0, 1.0 / 3.0)
+
+
+def test_location_weights_model_zero_sum(caplog: pytest.LogCaptureFixture) -> None:
+    """Test LocationWeightsModel behavior when weights sum to zero."""
+    loc_weights = LocationWeightsModel(
+        inter_rounds=0.0,
+        intra_rounds=0.0,
+    )
+    loc_weight_tuple = loc_weights.get_weights_tuple()
+    assert len(loc_weight_tuple) == 2
+    assert loc_weight_tuple == (0.5, 0.5)
+    assert "Location weights sum to zero: resetting to equal weights of 0.5 each." in caplog.text

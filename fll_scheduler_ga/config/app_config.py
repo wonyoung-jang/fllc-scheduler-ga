@@ -92,7 +92,7 @@ class AppConfig:
     def build(cls, path: Path | None = None) -> AppConfig:
         """Create and return the application configuration."""
         if path is None:
-            path = CONFIG_FILE_DEFAULT.resolve()
+            path = CONFIG_FILE_DEFAULT
 
         if not path.exists():
             msg = f"Configuration file does not exist at: {path}"
@@ -105,21 +105,21 @@ class AppConfig:
     @classmethod
     def build_from_model(cls, model: AppConfigModel) -> AppConfig:
         """Create and return the application configuration from a Pydantic model."""
-        teams_list = get_teams_list(model.teams.teams)
-        model.exports.team_identities = get_team_identities(teams_list)
+        teams_list = get_teams_list(model.tournament.teams)
+        model.io.exports.team_identities = get_team_identities(teams_list)
         n_teams = len(teams_list)
 
-        _location_models = model.locations
+        _location_models = model.tournament.locations
         locations = LocationModelsParser(models=_location_models).parse()
 
-        tournament_config = cls.load_tournament_config(n_teams, model.rounds, locations)
+        tournament_config = cls.load_tournament_config(n_teams, model.tournament.rounds, locations)
         seed = get_rng_seed(model.genetic.rng_seed)
         rng = np.random.default_rng(seed)
         return AppConfig(
             genetic=model.genetic,
             runtime=model.runtime,
-            imports=model.imports,
-            exports=model.exports,
+            imports=model.io.imports,
+            exports=model.io.exports,
             fitness=model.fitness,
             tournament=tournament_config,
             rng=rng,

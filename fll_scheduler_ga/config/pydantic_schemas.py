@@ -136,70 +136,79 @@ class ExportModel(BaseModel):
     team_identities: dict[int, str] = Field(default_factory=dict)
 
 
+class IOModel(BaseModel):
+    """Configuration for input/output options."""
+
+    imports: ImportModel = Field(default_factory=ImportModel)
+    exports: ExportModel = Field(default_factory=ExportModel)
+
+
+class AggregationWeightsModel(BaseModel):
+    """Configuration for aggregation weights."""
+
+    mean: float | int = Field(default=1.0, ge=0.0)
+    variation: float | int = Field(default=1.0, ge=0.0)
+    range: float | int = Field(default=1.0, ge=0.0)
+    min_fit: float = Field(default=0.3, ge=0.0)
+
+    def get_weights_tuple(self) -> tuple[float, ...]:
+        """Return the aggregation weights as a tuple."""
+        weights = (self.mean, self.variation, self.range)
+        total = sum(weights)
+        return tuple(w / total for w in weights)
+
+
+class ObjectiveWeightsModel(BaseModel):
+    """Configuration for fitness objective weights."""
+
+    breaktime: float | int = Field(default=1.0, ge=0.0)
+    opponents: float | int = Field(default=1.0, ge=0.0)
+    locations: float | int = Field(default=1.0, ge=0.0)
+
+    def get_weights_tuple(self) -> tuple[float, ...]:
+        """Return the objective weights as a tuple."""
+        weights = (self.breaktime, self.locations, self.opponents)
+        maximum = max(*weights)
+        return tuple(w / maximum for w in weights)
+
+
+class LocationWeightsModel(BaseModel):
+    """Configuration for location weights."""
+
+    inter_rounds: float = Field(default=0.5, ge=0.0)
+    intra_rounds: float = Field(default=0.5, ge=0.0)
+
+    @model_validator(mode="after")
+    def validate(self) -> "LocationWeightsModel":
+        """Validate that weights sum to 1.0."""
+        total = self.inter_rounds + self.intra_rounds
+        if total <= 0.0:
+            self.inter_rounds = 0.5
+            self.intra_rounds = 0.5
+            logger.warning("Location weights sum to zero: resetting to equal weights of 0.5 each.")
+        return self
+
+    def get_weights_tuple(self) -> tuple[float, float]:
+        """Return the location weights as a tuple."""
+        total = self.inter_rounds + self.intra_rounds
+        return (self.inter_rounds / total, self.intra_rounds / total)
+
+
+class PenaltyModel(BaseModel):
+    """Configuration for penalty weights."""
+
+    zeros: float = Field(default=0.0001, lt=1.0)
+    minbreak: float = Field(default=0.3, lt=1.0)
+    minbreak_target: int = 30
+
+
 class FitnessModel(BaseModel):
     """Configuration for fitness weights."""
 
-    weight_mean: float | int = 1.0
-    weight_variation: float | int = 1.0
-    weight_range: float | int = 1.0
-    obj_weight_breaktime: float | int = 1.0
-    obj_weight_opponents: float | int = 1.0
-    obj_weight_locations: float | int = 1.0
-    zeros_penalty: float = 0.0001
-    minbreak_penalty: float = 0.1
-    minbreak_target: int = 30
-    min_fitness_weight: float = 0.5
-    loc_weight_rounds_inter: float = 0.9
-    loc_weight_rounds_intra: float = 0.1
-
-    @model_validator(mode="after")
-    def validate(self) -> "FitnessModel":
-        """Validate that fitness weights are non-negative."""
-        self.weight_mean = max(0.0, self.weight_mean)
-        self.weight_variation = max(0.0, self.weight_variation)
-        self.weight_range = max(0.0, self.weight_range)
-        weights = (
-            self.weight_mean,
-            self.weight_variation,
-            self.weight_range,
-        )
-        if all(w == 0.0 for w in weights):
-            self.weight_mean = 1.0
-            self.weight_variation = 1.0
-            self.weight_range = 1.0
-            logger.warning("All fitness weights were zero; defaulting all weights to 1.0.")
-
-        if self.minbreak_penalty <= 0.0:
-            self.minbreak_penalty = 0.1
-            logger.warning("minbreak_penalty must be positive; defaulting to 0.1.")
-
-        return self
-
-    def get_fitness_tuple(self) -> tuple[float, ...]:
-        """Return the fitness weights as a tuple."""
-        weights = (
-            self.weight_mean,
-            self.weight_variation,
-            self.weight_range,
-        )
-        sum_w = sum(weights)
-        return tuple(w / sum_w for w in weights)
-
-    def get_obj_weights(self) -> tuple[float, ...]:
-        """Return the objective weights as a tuple."""
-        weights = (
-            self.obj_weight_breaktime,
-            self.obj_weight_locations,
-            self.obj_weight_opponents,
-        )
-        denom_w = max(*weights)
-        return tuple(w / denom_w for w in weights)
-
-
-class TeamsModel(BaseModel):
-    """Configuration for teams."""
-
-    teams: tuple[int | str, ...] | int = 1
+    aggregation: AggregationWeightsModel = Field(default_factory=AggregationWeightsModel)
+    objectives: ObjectiveWeightsModel = Field(default_factory=ObjectiveWeightsModel)
+    location_weights: LocationWeightsModel = Field(default_factory=LocationWeightsModel)
+    penalties: PenaltyModel = Field(default_factory=PenaltyModel)
 
 
 class LocationModel(BaseModel):
@@ -241,14 +250,19 @@ class RoundModel(BaseModel):
         return self
 
 
+class TournamentModel(BaseModel):
+    """Root model for tournament configuration from JSON."""
+
+    teams: int | tuple[int | str, ...] = 1
+    locations: tuple[LocationModel, ...] = ()
+    rounds: tuple[RoundModel, ...] = ()
+
+
 class AppConfigModel(BaseModel):
     """Root model for the entire application configuration from JSON."""
 
-    genetic: GeneticModel
-    runtime: RuntimeModel
-    imports: ImportModel
-    exports: ExportModel
-    fitness: FitnessModel
-    teams: TeamsModel
-    locations: tuple[LocationModel, ...]
-    rounds: tuple[RoundModel, ...]
+    genetic: GeneticModel = Field(default_factory=GeneticModel)
+    runtime: RuntimeModel = Field(default_factory=RuntimeModel)
+    io: IOModel = Field(default_factory=IOModel)
+    fitness: FitnessModel = Field(default_factory=FitnessModel)
+    tournament: TournamentModel = Field(default_factory=TournamentModel)

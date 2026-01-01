@@ -44,101 +44,111 @@
     "import_file": "",
     "seed_file": "fll_scheduler_ga.pkl"
   },
-  "imports": {
-    "seed_pop_sort": "random",
-    "seed_island_strategy": "concentrated"
-  },
-  "exports": {
-    "output_dir": "fllc_schedule_outputs",
-    "summary_reports": true,
-    "schedules_csv": true,
-    "schedules_html": true,
-    "schedules_team_csv": true,
-    "pareto_summary": true,
-    "plot_fitness": true,
-    "plot_parallel": true,
-    "plot_scatter": true,
-    "front_only": true,
-    "no_plotting": false,
-    "cmap_name": "viridis"
-  },
-  "teams": {
-    "teams": 53
+  "io": {
+    "imports": {
+      "seed_pop_sort": "random",
+      "seed_island_strategy": "concentrated"
+    },
+    "exports": {
+      "output_dir": "fllc_schedule_outputs",
+      "summary_reports": true,
+      "schedules_csv": true,
+      "schedules_html": true,
+      "schedules_team_csv": true,
+      "pareto_summary": true,
+      "plot_fitness": true,
+      "plot_parallel": true,
+      "plot_scatter": true,
+      "front_only": true,
+      "no_plotting": false,
+      "cmap_name": "viridis"
+    }
   },
   "fitness": {
-    "weight_mean": 3,
-    "weight_variation": 1,
-    "weight_range": 1,
-    "obj_weight_breaktime": 1,
-    "obj_weight_locations": 1,
-    "obj_weight_opponents": 1,
-    "zeros_penalty": 0.0001,
-    "minbreak_penalty": 0.1,
-    "minbreak_target": 30,
-    "min_fitness_weight": 0.3,
-    "loc_weight_rounds_inter": 0.9,
-    "loc_weight_rounds_intra": 0.1
+    "aggregation": {
+      "mean": 3.0,
+      "variation": 1.0,
+      "range": 1.0,
+      "min_fit": 0.3
+    },
+    "objectives": {
+      "breaktime": 1.0,
+      "locations": 1.0,
+      "opponents": 1.0
+    },
+    "location_weights": {
+      "inter_rounds": 0.9,
+      "intra_rounds": 0.1
+    },
+    "penalties": {
+      "zeros": 0.0001,
+      "minbreak": 0.1,
+      "minbreak_target": 30
+    }
   },
-  "locations": [
-    {
-      "name": "Room",
-      "count": 9,
-      "sides": 1
-    },
-    {
-      "name": "Table",
-      "count": 4,
-      "sides": 2
-    }
-  ],
-  "rounds": [
-    {
-      "roundtype": "Judging",
-      "location": "Room",
-      "rounds_per_team": 1,
-      "teams_per_round": 1,
-      "start_time": "08:15",
-      "duration_cycle": 45,
-      "duration_active": 30
-    },
-    {
-      "roundtype": "Practice",
-      "location": "Table",
-      "rounds_per_team": 2,
-      "teams_per_round": 2,
-      "start_time": "09:00",
-      "duration_cycle": 11,
-      "duration_active": 2
-    },
-    {
-      "roundtype": "Table",
-      "location": "Table",
-      "rounds_per_team": 3,
-      "teams_per_round": 2,
-      "times": [
-        "14:00",
-        "14:07",
-        "14:15",
-        "14:22",
-        "14:30",
-        "14:37",
-        "14:45",
-        "14:52",
-        "15:00",
-        "15:07",
-        "15:15",
-        "15:22",
-        "15:30",
-        "15:37",
-        "15:45",
-        "15:52",
-        "16:00",
-        "16:07",
-        "16:15",
-        "16:22"
-      ],
-      "duration_cycle": 8,
-      "duration_active": 2
-    }
-  ]
+  "tournament": {
+    "teams": 53,
+    "locations": [
+      {
+        "name": "Room",
+        "count": 9,
+        "sides": 1
+      },
+      {
+        "name": "Table",
+        "count": 4,
+        "sides": 2
+      }
+    ],
+    "rounds": [
+      {
+        "roundtype": "Judging",
+        "location": "Room",
+        "rounds_per_team": 1,
+        "teams_per_round": 1,
+        "start_time": "08:15",
+        "duration_cycle": 45,
+        "duration_active": 30
+      },
+      {
+        "roundtype": "Practice",
+        "location": "Table",
+        "rounds_per_team": 2,
+        "teams_per_round": 2,
+        "start_time": "09:00",
+        "duration_cycle": 11,
+        "duration_active": 2
+      },
+      {
+        "roundtype": "Table",
+        "location": "Table",
+        "rounds_per_team": 3,
+        "teams_per_round": 2,
+        "times": [
+          "14:00",
+          "14:07",
+          "14:15",
+          "14:22",
+          "14:30",
+          "14:37",
+          "14:45",
+          "14:52",
+          "15:00",
+          "15:07",
+          "15:15",
+          "15:22",
+          "15:30",
+          "15:37",
+          "15:45",
+          "15:52",
+          "16:00",
+          "16:07",
+          "16:15",
+          "16:22"
+        ],
+        "duration_cycle": 8,
+        "duration_active": 2
+      }
+    ]
+  }
 }
