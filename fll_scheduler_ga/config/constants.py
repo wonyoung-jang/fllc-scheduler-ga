@@ -11,7 +11,9 @@ MAIN_PACKAGE_DIR = Path("fll_scheduler_ga").resolve()
 CONFIG_FILE_DEFAULT = MAIN_PACKAGE_DIR / "config.json"
 LOGGING_CONFIG_PATH = MAIN_PACKAGE_DIR / "logging.json"
 PICKLE_FILE_SCHEDULES = "fll_scheduler_ga.pkl"
+
 OUTPUT_DIR_DEFAULT = "fllc_schedule_outputs"
+CMAP_NAME_DEFAULT = "viridis"
 
 DATA_MODEL_VERSION = 3
 FITNESS_MODEL_VERSION = 3

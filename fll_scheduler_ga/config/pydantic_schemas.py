@@ -4,13 +4,14 @@ import logging
 
 from pydantic import BaseModel, Field, model_validator
 
-from fll_scheduler_ga.config.constants import OUTPUT_DIR_DEFAULT
+from fll_scheduler_ga.config.constants import CMAP_NAME_DEFAULT, OUTPUT_DIR_DEFAULT
 
 from .constants import PICKLE_FILE_SCHEDULES, CrossoverOp, MutationOp, SeedIslandStrategy, SeedPopSort
 
 logger = logging.getLogger(__name__)
 
 
+### GeneticModel
 class GaParameterModel(BaseModel):
     """Genetic Algorithm parameters."""
 
@@ -54,8 +55,8 @@ class MutationModel(BaseModel):
 class OperatorModel(BaseModel):
     """Container for operator configurations."""
 
-    crossover: CrossoverModel
-    mutation: MutationModel
+    crossover: CrossoverModel = Field(default_factory=CrossoverModel)
+    mutation: MutationModel = Field(default_factory=MutationModel)
 
     def __str__(self) -> str:
         """Represent the OperatorConfig."""
@@ -71,7 +72,7 @@ class StagnationModel(BaseModel):
     """Configuration for stagnation handling."""
 
     enable: bool = False
-    proportion: float = 0.8
+    proportion: float = Field(default=0.8, ge=0.0, le=1.0)
     threshold: int = 20
     cooldown: int = 50
 
@@ -80,9 +81,9 @@ class GeneticModel(BaseModel):
     """Configuration for the genetic algorithm."""
 
     rng_seed: int | str | None = None
-    parameters: GaParameterModel
-    operator: OperatorModel
-    stagnation: StagnationModel
+    parameters: GaParameterModel = Field(default_factory=GaParameterModel)
+    operator: OperatorModel = Field(default_factory=OperatorModel)
+    stagnation: StagnationModel = Field(default_factory=StagnationModel)
 
 
 class RuntimeModel(BaseModel):
@@ -92,9 +93,10 @@ class RuntimeModel(BaseModel):
     flush: bool = False
     flush_benchmarks: bool = False
     import_file: str = ""
-    seed_file: str = PICKLE_FILE_SCHEDULES
+    seed_file: str = Field(default=PICKLE_FILE_SCHEDULES, min_length=1)
 
 
+### IOModel
 class ImportModel(BaseModel):
     """Configuration for import options."""
 
@@ -121,7 +123,7 @@ class ImportModel(BaseModel):
 class ExportModel(BaseModel):
     """Configuration for export options."""
 
-    output_dir: str = OUTPUT_DIR_DEFAULT
+    output_dir: str = Field(default=OUTPUT_DIR_DEFAULT, min_length=1)
     summary_reports: bool = True
     schedules_csv: bool = True
     schedules_html: bool = True
@@ -132,7 +134,7 @@ class ExportModel(BaseModel):
     plot_scatter: bool = True
     front_only: bool = True
     no_plotting: bool = False
-    cmap_name: str = "viridis"
+    cmap_name: str = Field(default=CMAP_NAME_DEFAULT, min_length=1)
     team_identities: dict[int, str] = Field(default_factory=dict)
 
 
@@ -143,6 +145,7 @@ class IOModel(BaseModel):
     exports: ExportModel = Field(default_factory=ExportModel)
 
 
+### FitnessModel
 class AggregationWeightsModel(BaseModel):
     """Configuration for aggregation weights."""
 
@@ -197,9 +200,9 @@ class LocationWeightsModel(BaseModel):
 class PenaltyModel(BaseModel):
     """Configuration for penalty weights."""
 
-    zeros: float = Field(default=0.0001, lt=1.0)
-    minbreak: float = Field(default=0.3, lt=1.0)
-    minbreak_target: int = 30
+    zeros: float = Field(default=0.0001, lt=1.0, ge=0.0)
+    minbreak: float = Field(default=0.3, lt=1.0, ge=0.0)
+    minbreak_target: int = Field(default=30, gt=0)
 
 
 class FitnessModel(BaseModel):
@@ -211,6 +214,7 @@ class FitnessModel(BaseModel):
     penalties: PenaltyModel = Field(default_factory=PenaltyModel)
 
 
+### TournamentModel
 class LocationModel(BaseModel):
     """Input model for a location type."""
 
@@ -229,8 +233,8 @@ class RoundModel(BaseModel):
     start_time: str = ""
     stop_time: str = ""
     times: list[str] = Field(default_factory=list)
-    duration_cycle: int = 0
-    duration_active: int = 0
+    duration_cycle: int = Field(default=0, ge=0)
+    duration_active: int = Field(default=0, ge=0)
 
     @model_validator(mode="after")
     def validate(self) -> "RoundModel":
@@ -258,6 +262,7 @@ class TournamentModel(BaseModel):
     rounds: tuple[RoundModel, ...] = ()
 
 
+### AppConfigModel
 class AppConfigModel(BaseModel):
     """Root model for the entire application configuration from JSON."""
 
