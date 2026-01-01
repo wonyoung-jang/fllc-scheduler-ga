@@ -15,7 +15,7 @@ from ..config.constants import MutationOp
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from ..config.pydantic_schemas import OperatorConfig
+    from ..config.pydantic_schemas import OperatorModel
     from ..data_model.event import EventFactory, EventProperties
     from ..data_model.schedule import Schedule
 
@@ -26,7 +26,7 @@ logger = getLogger(__name__)
 
 def build_mutations(
     rng: np.random.Generator,
-    operators: OperatorConfig,
+    operators: OperatorModel,
     event_factory: EventFactory,
     event_properties: EventProperties,
 ) -> tuple[Mutation, ...]:

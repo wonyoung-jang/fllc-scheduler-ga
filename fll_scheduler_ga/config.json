@@ -1,15 +1,15 @@
 {
   "genetic": {
+    "rng_seed": null,
     "parameters": {
-      "generations": 50000,
+      "generations": 500,
       "population_size": 16,
       "offspring_size": 2,
       "crossover_chance": 0.5,
       "mutation_chance": 0.05,
       "num_islands": 8,
       "migration_interval": 200,
-      "migration_size": 1,
-      "rng_seed": null
+      "migration_size": 1
     },
     "operator": {
       "crossover": {
@@ -33,7 +33,8 @@
     "stagnation": {
       "enable": true,
       "proportion": 0.8,
-      "threshold": 400
+      "threshold": 400,
+      "cooldown": 200
     }
   },
   "runtime": {

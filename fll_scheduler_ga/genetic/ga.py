@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
 
-    from ..config.pydantic_schemas import GaParameters, GeneticModel, ImportModel
+    from ..config.pydantic_schemas import GaParameterModel, GeneticModel, ImportModel
     from ..data_model.schedule import Schedule
     from ..io.observers import GaObserver
     from ..operators.crossover import Crossover
@@ -228,7 +228,7 @@ class GASeeder:
 
     strategy: SeedingStrategy
     imports: ImportModel
-    ga_params: GaParameters
+    ga_params: GaParameterModel
     seed_pop: list[Schedule] | None
     rng: np.random.Generator
 

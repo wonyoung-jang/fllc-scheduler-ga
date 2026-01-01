@@ -16,7 +16,7 @@ from ..data_model.schedule import Schedule
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
 
-    from ..config.pydantic_schemas import OperatorConfig
+    from ..config.pydantic_schemas import OperatorModel
     from ..data_model.event import EventFactory, EventProperties
 
 logger = getLogger(__name__)
@@ -24,7 +24,7 @@ logger = getLogger(__name__)
 
 def build_crossovers(
     rng: np.random.Generator,
-    operators: OperatorConfig,
+    operators: OperatorModel,
     event_factory: EventFactory,
     event_properties: EventProperties,
 ) -> tuple[Crossover, ...]:

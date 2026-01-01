@@ -11,7 +11,7 @@ from .constants import PICKLE_FILE_SCHEDULES, CrossoverOp, MutationOp, SeedIslan
 logger = logging.getLogger(__name__)
 
 
-class GaParameters(BaseModel):
+class GaParameterModel(BaseModel):
     """Genetic Algorithm parameters."""
 
     population_size: int = Field(default=2, ge=2)
@@ -51,7 +51,7 @@ class MutationModel(BaseModel):
     types: tuple[MutationOp | str, ...] = ()
 
 
-class OperatorConfig(BaseModel):
+class OperatorModel(BaseModel):
     """Container for operator configurations."""
 
     crossover: CrossoverModel
@@ -80,8 +80,8 @@ class GeneticModel(BaseModel):
     """Configuration for the genetic algorithm."""
 
     rng_seed: int | str | None = None
-    parameters: GaParameters
-    operator: OperatorConfig
+    parameters: GaParameterModel
+    operator: OperatorModel
     stagnation: StagnationModel
 
 
@@ -205,16 +205,16 @@ class TeamsModel(BaseModel):
 class LocationModel(BaseModel):
     """Input model for a location type."""
 
-    name: str = ""
-    count: int = 1
-    sides: int = 1
+    name: str = Field(default="", min_length=1)
+    count: int = Field(default=1, ge=1)
+    sides: int = Field(default=1, ge=1)
 
 
 class RoundModel(BaseModel):
     """Input model for a tournament round."""
 
-    roundtype: str = ""
-    location: str = ""
+    roundtype: str = Field(default="", min_length=1)
+    location: str = Field(default="", min_length=1)
     rounds_per_team: int = Field(default=1, ge=1)
     teams_per_round: int = Field(default=1, ge=1)
     start_time: str = ""
