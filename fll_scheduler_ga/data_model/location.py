@@ -62,7 +62,8 @@ class Location:
         ltr_id = chr(ASCII_OFFSET + self.name)
         if self.side > 0:
             self._str = f"{self.locationtype} {ltr_id}{self.side}"
-        self._str = f"{self.locationtype} {ltr_id}"
+        else:
+            self._str = f"{self.locationtype} {ltr_id}"
 
         self._hash = hash((self.name, self.side))
 
