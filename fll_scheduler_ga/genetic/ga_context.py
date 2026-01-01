@@ -45,8 +45,8 @@ from .preflight_checker import PreFlightChecker
 
 if TYPE_CHECKING:
     from ..config.app_config import AppConfig
-    from ..config.app_schemas import TournamentConfig
     from ..config.pydantic_schemas import ImportModel
+    from ..data_model.app_schemas import TournamentConfig
     from ..operators.crossover import Crossover
     from ..operators.mutation import Mutation
     from ..operators.selection import Selection
@@ -69,54 +69,58 @@ class StandardGaContextFactory(GaContextFactory):
 
     def build(self, app_config: AppConfig) -> GaContext:
         """Build and return a GA context."""
-        rng = app_config.rng
-        tournament_config = app_config.tournament
-        n_total_events = tournament_config.get_n_total_events()
-        event_factory = EventFactory(tournament_config)
+        _rng = app_config.rng
+        _tournament_config = app_config.tournament
+        _genetic_model = app_config.genetic
+        _fitness_model = app_config.fitness
+
+        n_total_events = _tournament_config.get_n_total_events()
+        event_factory = EventFactory(config=_tournament_config)
         event_properties = EventProperties.build(
             n_total_events=n_total_events,
             event_map=event_factory.as_mapping(),
         )
 
         # Run pre-flight checks before fitness benchmarking
-        PreFlightChecker.build_then_run(event_properties, event_factory)
+        PreFlightChecker(event_properties, event_factory)
 
-        empty_schedule = np.full(n_total_events, -1, dtype=int)
-        roundreqs_array = np.tile(tuple(tournament_config.roundreqs.values()), (tournament_config.num_teams, 1))
         Schedule.ctx = ScheduleContext(
             conflict_map=event_factory.as_conflict_map(),
             event_props=event_properties,
-            teams_list=np.arange(tournament_config.num_teams, dtype=int),
-            teams_roundreqs_arr=roundreqs_array,
-            empty_schedule=empty_schedule,
+            teams_list=np.arange(_tournament_config.num_teams, dtype=int),
+            teams_roundreqs_arr=np.tile(
+                A=tuple(_tournament_config.roundreqs.values()),
+                reps=(_tournament_config.num_teams, 1),
+            ),
+            empty_schedule=np.full(n_total_events, -1, dtype=int),
         )
 
         constraints = (
             HardConstraintTruthiness(),
-            HardConstraintSize(total_slots_required=tournament_config.total_slots_required),
+            HardConstraintSize(total_slots_required=_tournament_config.total_slots_required),
             HardConstraintNoRoundsNeeded(),
         )
         checker = HardConstraintChecker(constraints=constraints)
         repairer = Repairer(
-            config=tournament_config,
+            config=_tournament_config,
             event_factory=event_factory,
             event_properties=event_properties,
-            rng=rng,
+            rng=_rng,
             checker=checker,
         )
         opponent_benchmarker = FitnessBenchmarkOpponent(
-            config=tournament_config,
+            config=_tournament_config,
             event_factory=event_factory,
         )
         breaktime_benchmarker = FitnessBenchmarkBreaktime(
-            config=tournament_config,
+            config=_tournament_config,
             event_factory=event_factory,
-            model=app_config.fitness,
+            model=_fitness_model,
         )
 
         config_hasher = StableConfigHash(
-            config=tournament_config,
-            model=app_config.fitness,
+            config=_tournament_config,
+            model=_fitness_model,
         )
         config_hash = config_hasher.generate_hash()
         benchmark_cache_dir = BENCHMARKS_CACHE
@@ -125,8 +129,8 @@ class StandardGaContextFactory(GaContextFactory):
 
         repository = PickleBenchmarkRepository(path=seed_file)
         benchmark = FitnessBenchmark(
-            config=tournament_config,
-            model=app_config.fitness,
+            config=_tournament_config,
+            model=_fitness_model,
             repository=repository,
             opponent_benchmarker=opponent_benchmarker,
             breaktime_benchmarker=breaktime_benchmarker,
@@ -135,16 +139,13 @@ class StandardGaContextFactory(GaContextFactory):
 
         benchmark.run()
         evaluator = FitnessEvaluator(
-            config=tournament_config,
+            config=_tournament_config,
             event_properties=event_properties,
             benchmark=benchmark,
-            model=app_config.fitness,
+            model=_fitness_model,
         )
 
-        ga_params = app_config.genetic.parameters
-        n_objectives = evaluator.n_objectives
-
-        points = calc_ref_points(n_objectives, ga_params.population_size)
+        points = calc_ref_points(evaluator.n_objectives, _genetic_model.parameters.population_size)
         n_refs = points.shape[0]
         norm_sq = calc_norm_sq_of_refs(points)
         ref_directions = ReferenceDirections(
@@ -153,20 +154,20 @@ class StandardGaContextFactory(GaContextFactory):
             norm_sq=norm_sq,
         )
         nsga3 = NSGA3(
-            rng=rng,
+            rng=_rng,
             refs=ref_directions,
             sorting=NonDominatedSorting(),
         )
 
-        selection = RandomSelect(rng)
-        operators = app_config.genetic.operator
-        crossovers = build_crossovers(rng, operators, event_factory, event_properties)
-        mutations = build_mutations(rng, operators, event_factory, event_properties)
+        selection = RandomSelect(_rng)
+        operators = _genetic_model.operator
+        crossovers = build_crossovers(_rng, operators, event_factory, event_properties)
+        mutations = build_mutations(_rng, operators, event_factory, event_properties)
 
         builder = ScheduleBuilderRandom(
             event_properties=event_properties,
-            rng=rng,
-            round_idx_to_tpr=tournament_config.round_idx_to_tpr,
+            rng=_rng,
+            round_idx_to_tpr=_tournament_config.round_idx_to_tpr,
             roundtype_events=event_factory.as_roundtypes(),
         )
 

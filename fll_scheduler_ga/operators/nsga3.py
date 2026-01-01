@@ -214,11 +214,9 @@ class NSGA3:
         dists: np.ndarray = np.linalg.norm(residuals, axis=2)
         min_dists = dists.min(axis=1)
 
-        # To break ties uniformly and vectorized:
+        # Mask tied positions with random values
         ties = dists == min_dists[:, None]
         rand_matrix = self.rng.random(dists.shape)
-
-        # Mask tied positions with random values
         rand_matrix[~ties] = -1.0
         chosen_refs = rand_matrix.argmax(axis=1)  # Index of chosen ref per individual
 

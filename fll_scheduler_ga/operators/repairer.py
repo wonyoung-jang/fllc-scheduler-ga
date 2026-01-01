@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 if TYPE_CHECKING:
-    from ..config.app_schemas import TournamentConfig
+    from ..data_model.app_schemas import TournamentConfig
     from ..data_model.event import EventFactory, EventProperties
     from ..data_model.schedule import Schedule
     from ..fitness.hard_constraint_checker import HardConstraintChecker

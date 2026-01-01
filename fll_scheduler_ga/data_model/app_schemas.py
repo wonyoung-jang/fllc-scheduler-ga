@@ -1,16 +1,38 @@
 """Dataclass models for application configuration."""
 
-import logging
-from collections.abc import Iterator
-from dataclasses import dataclass
-from datetime import datetime, timedelta
-from typing import Any
+from __future__ import annotations
 
-from ..data_model.event import Event
-from ..data_model.location import Location
-from ..data_model.timeslot import TimeSlot
+import logging
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
+
+from .event import Event
+from .timeslot import TimeSlot
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Iterator
+    from datetime import datetime, timedelta
+
+    from .location import Location
 
 logger = logging.getLogger(__name__)
+
+
+def are_rounds_overlapping(rounds: Iterable[TournamentRound]) -> bool:
+    """Check if any rounds are interleaved in time."""
+    _starts = (r.start_time for r in rounds)
+    _stops = (r.stop_time for r in rounds)
+    timeslots = tuple(
+        TimeSlot(
+            idx=0,
+            start=start,
+            stop_active=stop_cycle,
+            stop_cycle=stop_cycle,
+        )
+        for start, stop_cycle in zip(_starts, _stops, strict=True)
+    )
+
+    return any(timeslots[i].overlaps(timeslots[j]) for i in range(len(timeslots)) for j in range(i + 1, len(timeslots)))
 
 
 @dataclass(slots=True)

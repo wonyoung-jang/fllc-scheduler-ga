@@ -9,9 +9,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from line_profiler import profile
 
-from ..data_model.location import Location
+from ..data_model.app_schemas import TournamentConfig, TournamentRound, are_rounds_overlapping
+from ..data_model.location import Location, LocationModelsParser
 from ..data_model.timeslot import (
     TimeSlot,
     calc_num_timeslots,
@@ -20,7 +20,6 @@ from ..data_model.timeslot import (
     parse_time_str,
     validate_duration,
 )
-from .app_schemas import TournamentConfig, TournamentRound
 from .constants import CONFIG_FILE_DEFAULT, RANDOM_SEED_RANGE
 from .pydantic_schemas import (
     AppConfigModel,
@@ -28,16 +27,24 @@ from .pydantic_schemas import (
     FitnessModel,
     GeneticModel,
     ImportModel,
-    LocationModel,
     RoundModel,
     RuntimeModel,
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterable, Iterator
     from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+
+def get_all_sorted_attr(objects: Iterable[Any], get_by: str, sort_by: str) -> tuple[Any, ...]:
+    """Get all attributes of the TournamentRound objects."""
+    all_of = sorted(
+        itertools.chain.from_iterable(getattr(r, get_by) for r in objects),
+        key=lambda x: getattr(x, sort_by),
+    )
+    return tuple(all_of)
 
 
 def get_team_identities(teams: tuple[str, ...]) -> dict[int, str]:
@@ -81,7 +88,6 @@ class AppConfig:
     tournament: TournamentConfig
     rng: np.random.Generator
 
-    @profile
     @classmethod
     def build(cls, path: Path | None = None) -> AppConfig:
         """Create and return the application configuration."""
@@ -102,7 +108,11 @@ class AppConfig:
         teams_list = get_teams_list(model.teams.teams)
         model.exports.team_identities = get_team_identities(teams_list)
         n_teams = len(teams_list)
-        tournament_config = cls.load_tournament_config(model, n_teams)
+
+        _location_models = model.locations
+        locations = LocationModelsParser(models=_location_models).parse()
+
+        tournament_config = cls.load_tournament_config(n_teams, model.rounds, locations)
         seed = get_rng_seed(model.genetic.rng_seed)
         rng = np.random.default_rng(seed)
         return AppConfig(
@@ -116,18 +126,17 @@ class AppConfig:
         )
 
     @classmethod
-    def load_tournament_config(cls, model: AppConfigModel, n_teams: int) -> TournamentConfig:
+    def load_tournament_config(
+        cls,
+        n_teams: int,
+        round_models: tuple[RoundModel, ...],
+        locations: tuple[Location, ...],
+    ) -> TournamentConfig:
         """Load and return the tournament configuration from the validated model."""
-        round_models = model.rounds
         time_fmt = cls.get_time_fmt(round_models)
         TimeSlot.time_fmt = time_fmt
 
-        all_locations = cls.parse_location_config(model.locations)
-        if not all_locations:
-            msg = "No locations defined in the configuration file."
-            raise ValueError(msg)
-
-        rounds = cls.parse_rounds_config(round_models, n_teams, time_fmt, all_locations)
+        rounds = cls.parse_rounds_config(round_models, n_teams, time_fmt, locations)
         if not rounds:
             msg = "No rounds defined in the configuration file."
             raise ValueError(msg)
@@ -138,9 +147,9 @@ class AppConfig:
         unique_opponents_possible = 1 <= max(roundreqs.values()) <= n_teams - 1
         max_events_per_team = sum(roundreqs.values())
 
-        all_locations = cls.get_all_attributes_of_rounds(rounds, round_attr="locations", sort_attr="idx")
-        all_timeslots = cls.get_all_attributes_of_rounds(rounds, round_attr="timeslots", sort_attr="idx")
-        is_interleaved = cls.check_interleaved(rounds)
+        all_locations = get_all_sorted_attr(rounds, get_by="locations", sort_by="idx")
+        all_timeslots = get_all_sorted_attr(rounds, get_by="timeslots", sort_by="idx")
+        is_interleaved = are_rounds_overlapping(rounds)
 
         return TournamentConfig(
             num_teams=n_teams,
@@ -157,51 +166,23 @@ class AppConfig:
         )
 
     @classmethod
-    def get_time_fmt(cls, round_models: tuple[RoundModel, ...]) -> str:
+    def get_time_fmt(cls, round_models: Iterable[RoundModel]) -> str:
         """Get the time format from the rounds configuration."""
 
         def _generate_all_time_strs() -> Iterator[str]:
-            for rnd in round_models:
-                if rnd.start_time:
-                    yield rnd.start_time
-                if rnd.stop_time:
-                    yield rnd.stop_time
-                yield from rnd.times
+            for rm in round_models:
+                if rm.start_time:
+                    yield rm.start_time
+                if rm.stop_time:
+                    yield rm.stop_time
+                yield from rm.times
 
         format_counts = Counter(infer_time_format(t) for t in _generate_all_time_strs() if t)
-        if len(format_counts) == 1:
-            return str(format_counts.most_common(1)[0][0])
+        if len(format_counts) != 1:
+            msg = "Conflicting time formats found in configuration times."
+            raise ValueError(msg)
 
-        msg = "Conflicting time formats found in configuration times."
-        raise ValueError(msg)
-
-    @classmethod
-    def get_all_attributes_of_rounds(
-        cls, rounds: tuple[TournamentRound, ...], round_attr: str, sort_attr: str
-    ) -> tuple[Any, ...]:
-        """Get all attributes of the TournamentRound objects."""
-        all_of = list(itertools.chain.from_iterable(getattr(r, round_attr) for r in rounds))
-        all_of.sort(key=lambda x: getattr(x, sort_attr))
-        return tuple(all_of)
-
-    @classmethod
-    def check_interleaved(cls, rounds: tuple[TournamentRound, ...]) -> bool:
-        """Check if any rounds are interleaved in time."""
-        round_starts = (r.start_time for r in rounds)
-        round_stops = (r.stop_time for r in rounds)
-        timeslots = tuple(
-            TimeSlot(
-                idx=0,
-                start=start,
-                stop_active=stop_cycle,
-                stop_cycle=stop_cycle,
-            )
-            for start, stop_cycle in zip(round_starts, round_stops, strict=True)
-        )
-
-        return any(
-            timeslots[i].overlaps(timeslots[j]) for i in range(len(timeslots)) for j in range(i + 1, len(timeslots))
-        )
+        return str(format_counts.most_common(1)[0][0])
 
     @classmethod
     def parse_rounds_config(
@@ -215,17 +196,25 @@ class AppConfig:
         timeslot_idx_iter = itertools.count()
 
         def _generate_rounds() -> Iterator[TournamentRound]:
-            for roundtype_idx, rnd in enumerate(round_models):
-                locations = tuple(loc for loc in all_locations if loc.locationtype == rnd.location)
+            for roundtype_idx, round_model in enumerate(round_models):
+                _times = round_model.times
+                _rounds_per_team = round_model.rounds_per_team
+                _location = round_model.location
+
+                locations = tuple(loc for loc in all_locations if loc.locationtype == _location)
                 _n_locations = len(locations)
 
-                start_dt = parse_time_str(rnd.start_time, time_fmt)
-                stop_dt = parse_time_str(rnd.stop_time, time_fmt)
-                times_dt = tuple(parse_time_str(t, time_fmt) for t in rnd.times) if rnd.times else ()
-                _n_timeslots = calc_num_timeslots(len(times_dt), _n_locations, n_teams, rnd.rounds_per_team)
+                start_dt = parse_time_str(round_model.start_time, time_fmt)
+                stop_dt = parse_time_str(round_model.stop_time, time_fmt)
+                times_dt = tuple(parse_time_str(t, time_fmt) for t in _times) if _times else ()
+                _n_timeslots = calc_num_timeslots(len(times_dt), _n_locations, n_teams, _rounds_per_team)
 
-                dur_tdelta_cycle = validate_duration(start_dt, stop_dt, times_dt, rnd.duration_cycle, _n_timeslots)
-                dur_tdelta_active = validate_duration(start_dt, stop_dt, times_dt, rnd.duration_active, _n_timeslots)
+                dur_tdelta_cycle = validate_duration(
+                    start_dt, stop_dt, times_dt, round_model.duration_cycle, _n_timeslots
+                )
+                dur_tdelta_active = validate_duration(
+                    start_dt, stop_dt, times_dt, round_model.duration_active, _n_timeslots
+                )
 
                 timeslots = tuple(
                     TimeSlot(
@@ -244,21 +233,21 @@ class AppConfig:
                 times_dt = tuple(ts.start for ts in timeslots)
 
                 slots_total = _n_timeslots * _n_locations
-                slots_required = n_teams * rnd.rounds_per_team
+                slots_required = n_teams * _rounds_per_team
                 slots_empty = slots_total - slots_required
 
                 unfilled_allowed = slots_empty > 0
 
                 yield TournamentRound(
-                    roundtype=rnd.roundtype,
+                    roundtype=round_model.roundtype,
                     roundtype_idx=roundtype_idx,
-                    rounds_per_team=rnd.rounds_per_team,
-                    teams_per_round=rnd.teams_per_round,
+                    rounds_per_team=_rounds_per_team,
+                    teams_per_round=round_model.teams_per_round,
                     times=times_dt,
                     start_time=round_start_time,
                     stop_time=round_stop_time,
                     duration_minutes=dur_tdelta_cycle,
-                    location_type=rnd.location,
+                    location_type=_location,
                     locations=locations,
                     num_timeslots=_n_timeslots,
                     timeslots=timeslots,
@@ -270,25 +259,6 @@ class AppConfig:
 
         rounds = sorted(_generate_rounds(), key=lambda r: r.start_time)
         return tuple(rounds)
-
-    @classmethod
-    def parse_location_config(cls, location_models: tuple[LocationModel, ...]) -> tuple[Location, ...]:
-        """Parse and return a list of Location objects from the configuration."""
-        location_idx_iter = itertools.count()
-
-        def _generate_locations() -> Iterator[Location]:
-            for loctype in location_models:
-                for name in range(1, loctype.count + 1):
-                    for side_iter in range(1, loctype.sides + 1):
-                        yield Location(
-                            idx=next(location_idx_iter),
-                            locationtype=loctype.name,
-                            name=name,
-                            side=-1 if loctype.sides == 1 else side_iter,
-                            teams_per_round=loctype.sides,
-                        )
-
-        return tuple(_generate_locations())
 
     def log_creation_info(self) -> None:
         """Log information about the application configuration creation."""

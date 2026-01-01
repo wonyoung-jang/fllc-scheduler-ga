@@ -13,18 +13,17 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from ..config.constants import EPSILON
+from ..config.constants import EPSILON, FITNESS_MODEL_VERSION
 from .benchmark_repository import BenchmarkSeedData
 
 if TYPE_CHECKING:
-    from ..config.app_schemas import TournamentConfig
     from ..config.pydantic_schemas import FitnessModel
+    from ..data_model.app_schemas import TournamentConfig
     from ..data_model.event import EventFactory
     from .benchmark_repository import BenchmarkRepository
 
 logger = getLogger(__name__)
 BENCHMARKS_CACHE = Path(".benchmarks_cache/").resolve()
-FITNESS_MODEL_VERSION = 3
 
 
 @dataclass(slots=True)

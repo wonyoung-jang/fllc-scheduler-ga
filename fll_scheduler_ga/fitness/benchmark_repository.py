@@ -5,13 +5,15 @@ from __future__ import annotations
 import logging
 import pickle
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
+
+import numpy as np
+
+from ..config.constants import FITNESS_MODEL_VERSION
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    import numpy as np
 
 
 logger = logging.getLogger(__name__)
@@ -21,9 +23,9 @@ logger = logging.getLogger(__name__)
 class BenchmarkSeedData:
     """Seed data object for fitness benchmarks."""
 
-    version: int
-    opponents: np.ndarray
-    best_timeslot_score: float
+    version: int = FITNESS_MODEL_VERSION
+    opponents: np.ndarray = field(default_factory=lambda: np.array([]))
+    best_timeslot_score: float = 0.0
 
 
 @dataclass(slots=True)

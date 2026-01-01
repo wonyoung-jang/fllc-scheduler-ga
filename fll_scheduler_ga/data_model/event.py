@@ -14,7 +14,7 @@ from .location import Location
 from .timeslot import TimeSlot
 
 if TYPE_CHECKING:
-    from ..config.app_schemas import TournamentConfig
+    from .app_schemas import TournamentConfig
 
 logger = logging.getLogger(__name__)
 

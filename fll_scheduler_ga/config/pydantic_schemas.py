@@ -4,7 +4,9 @@ import logging
 
 from pydantic import BaseModel, Field, model_validator
 
-from .constants import CrossoverOp, MutationOp, SeedIslandStrategy, SeedPopSort
+from fll_scheduler_ga.config.constants import OUTPUT_DIR_DEFAULT
+
+from .constants import PICKLE_FILE_SCHEDULES, CrossoverOp, MutationOp, SeedIslandStrategy, SeedPopSort
 
 logger = logging.getLogger(__name__)
 
@@ -39,14 +41,14 @@ class GaParameters(BaseModel):
 class CrossoverModel(BaseModel):
     """Configuration for crossover operators."""
 
-    types: list[CrossoverOp | str] = Field(default_factory=list)
-    k_vals: list[int] = Field(default_factory=list)
+    types: tuple[CrossoverOp, ...] = ()
+    k_vals: tuple[int, ...] = ()
 
 
 class MutationModel(BaseModel):
     """Configuration for mutation operators."""
 
-    types: list[MutationOp | str] = Field(default_factory=list)
+    types: tuple[MutationOp | str, ...] = ()
 
 
 class OperatorConfig(BaseModel):
@@ -90,7 +92,7 @@ class RuntimeModel(BaseModel):
     flush: bool = False
     flush_benchmarks: bool = False
     import_file: str = ""
-    seed_file: str = "fll_scheduler_ga.pkl"
+    seed_file: str = PICKLE_FILE_SCHEDULES
 
 
 class ImportModel(BaseModel):
@@ -119,7 +121,7 @@ class ImportModel(BaseModel):
 class ExportModel(BaseModel):
     """Configuration for export options."""
 
-    output_dir: str = "fllc_schedule_outputs"
+    output_dir: str = OUTPUT_DIR_DEFAULT
     summary_reports: bool = True
     schedules_csv: bool = True
     schedules_html: bool = True

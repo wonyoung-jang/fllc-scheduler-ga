@@ -21,11 +21,9 @@ class PreFlightChecker:
     event_properties: EventProperties
     event_factory: EventFactory
 
-    @classmethod
-    def build_then_run(cls, event_properties: EventProperties, event_factory: EventFactory) -> None:
-        """Build a PreFlightChecker and run all checks."""
-        checker = cls(event_properties=event_properties, event_factory=event_factory)
-        checker.run_checks()
+    def __post_init__(self) -> None:
+        """Post-initialization run checks."""
+        self.run_checks()
 
     def run_checks(self) -> None:
         """Run all pre-flight checks."""

@@ -71,6 +71,11 @@ class Island:
         self.evolve()
         self.select_next_generation()
         self.fitness_history.update_fitness_history()
+        self.check_stagnation()
+        self.handle_underpopulation()
+
+    def check_stagnation(self) -> None:
+        """Check for stagnation without modifying the population."""
         if self.stagnation.is_stagnant():
             # Get the index of the schedule with the best fitness
             sum_fits = self.curr_schedule_fits.sum(axis=1)
@@ -91,7 +96,6 @@ class Island:
                 self.generation.curr,
                 idx_to_pop,
             )
-        self.handle_underpopulation()
 
     def add_to_population(self, schedule: Schedule) -> bool:
         """Add a schedule to a specific island's population if it's not a duplicate."""
@@ -104,9 +108,6 @@ class Island:
 
     def build_n_schedules(self, needed: int) -> None:
         """Build a number of schedules."""
-        if needed <= 0:
-            return
-
         created = 0
         while created < needed:
             s = self.builder.build()
@@ -122,17 +123,19 @@ class Island:
     def initialize(self) -> None:
         """Initialize the population for each island."""
         need = self.n_needed
-        if need == 0:
+        if need <= 0:
             logger.debug("Island %d: Population already full with %d individuals", self.identity, len(self))
             return
+
         logger.debug("Island %d: Initializing population with %d individuals", self.identity, need)
         self.build_n_schedules(need)
 
     def handle_underpopulation(self) -> None:
         """Handle underpopulation by creating new individuals."""
         need = self.n_needed
-        if need == 0:
+        if need <= 0:
             return
+
         logger.debug("Island %d: Handling underpopulation with %d individuals", self.identity, need)
         self.build_n_schedules(need)
 

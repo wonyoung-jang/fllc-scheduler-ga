@@ -9,15 +9,16 @@ from dataclasses import dataclass, field
 from logging import getLogger
 from typing import TYPE_CHECKING
 
+from ..config.constants import DATA_MODEL_VERSION
+
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
 
-    from ..config.app_schemas import TournamentConfig
+    from ..data_model.app_schemas import TournamentConfig
     from ..data_model.schedule import Schedule
 
 logger = getLogger(__name__)
-DATA_MODEL_VERSION = 2
 
 
 @dataclass(slots=True)
@@ -42,27 +43,31 @@ class GALoad:
             logger.debug("Loading seed population from: %s", self.seed_file)
             with self.seed_file.open("rb") as f:
                 data: GASeedData = pickle.load(f)
-        except (OSError, pickle.PicklingError):
+        except (OSError, pickle.PicklingError, AttributeError, ModuleNotFoundError):
             logger.warning("Could not load or parse seed file. Starting with a fresh population.")
             return None
         except EOFError:
             logger.debug("Pickle file is empty")
             return None
 
-        pop = []
-        if data.version != DATA_MODEL_VERSION:
-            logger.warning(
-                "Seed population data version mismatch: Expected (%d), found (%d). Dismissing old seed file...",
-                DATA_MODEL_VERSION,
-                data.version,
-            )
-        elif data.config != self.config:
-            logger.warning("Seed population does not match current config. Using current...")
-            data.config = self.config
-        elif not data.population:
-            logger.warning("Seed population is missing. Using current...")
-        else:
-            pop = data.population
+        try:
+            pop = []
+            if data.version != DATA_MODEL_VERSION:
+                logger.warning(
+                    "Seed population data version mismatch: Expected (%d), found (%d). Dismissing old seed file...",
+                    DATA_MODEL_VERSION,
+                    data.version,
+                )
+            elif data.config != self.config:
+                logger.warning("Seed population does not match current config. Using current...")
+                data.config = self.config
+            elif not data.population:
+                logger.warning("Seed population is missing. Using current...")
+            else:
+                pop = data.population
+        except AttributeError:
+            logger.warning("Seed population is malformed. Starting with a fresh population.")
+            return None
 
         data.population = pop
         return data
