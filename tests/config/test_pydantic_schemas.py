@@ -63,7 +63,6 @@ def test_fitness_aggregation_model() -> None:
         min_fit=0.3,
     )
     agg_weight_tuple = agg_weights.get_weights_tuple()
-    assert len(agg_weight_tuple) == 3
     assert agg_weight_tuple == (3 / 5, 1 / 5, 1 / 5)
 
 
@@ -74,7 +73,6 @@ def test_location_weights_model() -> None:
         intra_rounds=1.0,
     )
     loc_weight_tuple = loc_weights.get_weights_tuple()
-    assert len(loc_weight_tuple) == 2
     assert loc_weight_tuple == (2.0 / 3.0, 1.0 / 3.0)
 
 
@@ -85,6 +83,5 @@ def test_location_weights_model_zero_sum(caplog: pytest.LogCaptureFixture) -> No
         intra_rounds=0.0,
     )
     loc_weight_tuple = loc_weights.get_weights_tuple()
-    assert len(loc_weight_tuple) == 2
     assert loc_weight_tuple == (0.5, 0.5)
     assert "Location weights sum to zero: resetting to equal weights of 0.5 each." in caplog.text

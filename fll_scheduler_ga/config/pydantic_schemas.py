@@ -24,25 +24,11 @@ class GaParameterModel(BaseModel):
     migration_interval: int = Field(default=10, ge=1)
     migration_size: int = Field(default=1, ge=0)
 
-    def __str__(self) -> str:
-        """Representation of GA parameters."""
-        return (
-            f"\n\tGaParameters:"
-            f"\n\t  population_size    : {self.population_size}"
-            f"\n\t  generations        : {self.generations}"
-            f"\n\t  offspring_size     : {self.offspring_size}"
-            f"\n\t  crossover_chance   : {self.crossover_chance:.2f}"
-            f"\n\t  mutation_chance    : {self.mutation_chance:.2f}"
-            f"\n\t  num_islands        : {self.num_islands}"
-            f"\n\t  migrate_interval   : {self.migration_interval}"
-            f"\n\t  migrate_size       : {self.migration_size}"
-        )
-
 
 class CrossoverModel(BaseModel):
     """Configuration for crossover operators."""
 
-    types: tuple[CrossoverOp, ...] = ()
+    types: tuple[CrossoverOp | str, ...] = ()
     k_vals: tuple[int, ...] = ()
 
 
@@ -57,15 +43,6 @@ class OperatorModel(BaseModel):
 
     crossover: CrossoverModel = Field(default_factory=CrossoverModel)
     mutation: MutationModel = Field(default_factory=MutationModel)
-
-    def __str__(self) -> str:
-        """Represent the OperatorConfig."""
-        return (
-            f"\n\tOperatorConfig:"
-            f"\n\t  crossover_types:\n\t\t{'\n\t\t'.join(str(c) for c in self.crossover.types)}"
-            f"\n\t  crossover_ks:\n\t\t{'\n\t\t'.join(str(k) for k in self.crossover.k_vals)}"
-            f"\n\t  mutation_types:\n\t\t{'\n\t\t'.join(str(m) for m in self.mutation.types)}"
-        )
 
 
 class StagnationModel(BaseModel):

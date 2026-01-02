@@ -5,12 +5,11 @@ from __future__ import annotations
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
 import numpy as np
 
-if TYPE_CHECKING:
-    from .event import EventProperties
+from .event import EventProperties
 
 logger = logging.getLogger(__name__)
 
@@ -19,11 +18,11 @@ logger = logging.getLogger(__name__)
 class ScheduleContext:
     """Holds class-level context for Schedule instances."""
 
-    conflict_map: dict[int, set[int]]
-    event_props: EventProperties
-    teams_list: np.ndarray
-    teams_roundreqs_arr: np.ndarray
-    empty_schedule: np.ndarray
+    conflict_map: dict[int, set[int]] = field(default_factory=dict)
+    event_props: EventProperties = field(default_factory=EventProperties)
+    teams_list: np.ndarray = field(default_factory=lambda: np.array([]))
+    teams_roundreqs_arr: np.ndarray = field(default_factory=lambda: np.array([]))
+    empty_schedule: np.ndarray = field(default_factory=lambda: np.array([]))
 
 
 @dataclass(slots=True)

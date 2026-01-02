@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import itertools
 import logging
+import pprint as pp
 from collections import Counter
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -56,12 +57,7 @@ def get_teams_list(teams: tuple[int | str, ...] | int) -> tuple[str, ...]:
     """Return a tuple of team identifiers."""
     if isinstance(teams, int):
         return tuple(str(i) for i in range(1, teams + 1))
-
-    if isinstance(teams, tuple):
-        return tuple(str(t) for t in teams)
-
-    msg = "teams must be either an int or a tuple of int/str."
-    raise TypeError(msg)
+    return tuple(str(t) for t in teams)
 
 
 def get_rng_seed(seed: int | str | None) -> int:
@@ -266,5 +262,5 @@ class AppConfig:
         for r in self.tournament.rounds:
             logger.debug("Initialized tournament round: %s", r)
         logger.debug("Initialized tournament configuration: %s", self.tournament)
-        logger.debug("Initialized operator configuration: %s", self.genetic.operator)
-        logger.debug("Initialized genetic algorithm parameters: %s", self.genetic.parameters)
+        logger.debug("Initialized operator configuration: %s", pp.pformat(self.genetic.operator))
+        logger.debug("Initialized genetic algorithm parameters: %s", pp.pformat(self.genetic.parameters))

@@ -1,6 +1,8 @@
 """Unit tests for Location."""
 
-from fll_scheduler_ga.data_model.location import Location
+import pytest
+
+from fll_scheduler_ga.data_model.location import Location, LocationModelsParser
 
 
 def test_location_str() -> None:
@@ -31,3 +33,10 @@ def test_null_location() -> None:
     assert null_loc.side == -1
     assert null_loc.teams_per_round == 1
     assert str(null_loc) == "Null A"
+
+
+def test_location_models_parser_empty() -> None:
+    """Test LocationModelsParser with no location models."""
+    parser = LocationModelsParser(models=[])
+    with pytest.raises(ValueError, match=r"No locations defined in the configuration file."):
+        parser.parse()

@@ -23,22 +23,22 @@ logger = logging.getLogger(__name__)
 class EventProperties:
     """Holds properties of an event for fast access during evaluation."""
 
-    all_props: np.ndarray
-    roundtype: np.ndarray
-    roundtype_idx: np.ndarray
-    timeslot: np.ndarray
-    timeslot_idx: np.ndarray
-    start: np.ndarray
-    stop_active: np.ndarray
-    stop_cycle: np.ndarray
-    location: np.ndarray
-    loc_str: np.ndarray
-    loc_type: np.ndarray
-    loc_idx: np.ndarray
-    loc_name: np.ndarray
-    loc_side: np.ndarray
-    teams_per_round: np.ndarray
-    paired_idx: np.ndarray
+    all_props: np.ndarray = field(default_factory=lambda: np.array([]))
+    roundtype: np.ndarray = field(default_factory=lambda: np.array([]))
+    roundtype_idx: np.ndarray = field(default_factory=lambda: np.array([]))
+    timeslot: np.ndarray = field(default_factory=lambda: np.array([]))
+    timeslot_idx: np.ndarray = field(default_factory=lambda: np.array([]))
+    start: np.ndarray = field(default_factory=lambda: np.array([]))
+    stop_active: np.ndarray = field(default_factory=lambda: np.array([]))
+    stop_cycle: np.ndarray = field(default_factory=lambda: np.array([]))
+    location: np.ndarray = field(default_factory=lambda: np.array([]))
+    loc_str: np.ndarray = field(default_factory=lambda: np.array([]))
+    loc_type: np.ndarray = field(default_factory=lambda: np.array([]))
+    loc_idx: np.ndarray = field(default_factory=lambda: np.array([]))
+    loc_name: np.ndarray = field(default_factory=lambda: np.array([]))
+    loc_side: np.ndarray = field(default_factory=lambda: np.array([]))
+    teams_per_round: np.ndarray = field(default_factory=lambda: np.array([]))
+    paired_idx: np.ndarray = field(default_factory=lambda: np.array([]))
 
     @classmethod
     def build(cls, n_total_events: int, event_map: dict[int, Event]) -> EventProperties:
