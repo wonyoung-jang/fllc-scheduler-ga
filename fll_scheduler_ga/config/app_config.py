@@ -24,10 +24,9 @@ from ..data_model.timeslot import (
 from .constants import CONFIG_FILE_DEFAULT, RANDOM_SEED_RANGE
 from .pydantic_schemas import (
     AppConfigModel,
-    ExportModel,
     FitnessModel,
     GeneticModel,
-    ImportModel,
+    IOModel,
     RoundModel,
     RuntimeModel,
 )
@@ -78,8 +77,7 @@ class AppConfig:
 
     genetic: GeneticModel
     runtime: RuntimeModel
-    imports: ImportModel
-    exports: ExportModel
+    io: IOModel
     fitness: FitnessModel
     tournament: TournamentConfig
     rng: np.random.Generator
@@ -114,8 +112,7 @@ class AppConfig:
         return AppConfig(
             genetic=model.genetic,
             runtime=model.runtime,
-            imports=model.io.imports,
-            exports=model.io.exports,
+            io=model.io,
             fitness=model.fitness,
             tournament=tournament_config,
             rng=rng,
@@ -205,11 +202,12 @@ class AppConfig:
                 times_dt = tuple(parse_time_str(t, time_fmt) for t in _times) if _times else ()
                 _n_timeslots = calc_num_timeslots(len(times_dt), _n_locations, n_teams, _rounds_per_team)
 
+                start_stop = (start_dt, stop_dt)
                 dur_tdelta_cycle = validate_duration(
-                    start_dt, stop_dt, times_dt, round_model.duration_cycle, _n_timeslots
+                    start_stop, times_dt, round_model.duration_cycle, _n_timeslots
                 )
                 dur_tdelta_active = validate_duration(
-                    start_dt, stop_dt, times_dt, round_model.duration_active, _n_timeslots
+                    start_stop, times_dt, round_model.duration_active, _n_timeslots
                 )
 
                 timeslots = tuple(
@@ -230,7 +228,14 @@ class AppConfig:
 
                 slots_total = _n_timeslots * _n_locations
                 slots_required = n_teams * _rounds_per_team
+
                 slots_empty = slots_total - slots_required
+                if slots_empty < 0:
+                    msg = (
+                        "Insufficient capacity for TournamentRound (required > available).\n"
+                        "Suggestion: increase number of locations or timeslots."
+                    )
+                    raise ValueError(msg)
 
                 unfilled_allowed = slots_empty > 0
 
@@ -258,9 +263,9 @@ class AppConfig:
 
     def log_creation_info(self) -> None:
         """Log information about the application configuration creation."""
-        logger.debug("AppConfig created successfully.\n%s", self)
+        logger.debug("Initialized AppConfig: %s", pp.pformat(self))
         for r in self.tournament.rounds:
-            logger.debug("Initialized tournament round: %s", r)
-        logger.debug("Initialized tournament configuration: %s", self.tournament)
+            logger.debug("Initialized tournament round: %s", pp.pformat(r))
+        logger.debug("Initialized tournament configuration: %s", pp.pformat(self.tournament))
         logger.debug("Initialized operator configuration: %s", pp.pformat(self.genetic.operator))
         logger.debug("Initialized genetic algorithm parameters: %s", pp.pformat(self.genetic.parameters))

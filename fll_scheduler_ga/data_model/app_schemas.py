@@ -56,42 +56,6 @@ class TournamentRound:
     slots_empty: int
     unfilled_allowed: bool
 
-    def __post_init__(self) -> None:
-        """Post-initialization checks and logging."""
-        self.validate_slots_empty()
-
-    def __str__(self) -> str:
-        """Represent the TournamentRound."""
-        return (
-            f"\n\tRound:"
-            f"\n\t  roundtype        : {self.roundtype}"
-            f"\n\t  roundtype_idx    : {self.roundtype_idx}"
-            f"\n\t  teams_per_round  : {self.teams_per_round}"
-            f"\n\t  rounds_per_team  : {self.rounds_per_team}"
-            f"\n\t  times            : {[str(time) for time in self.times]}"
-            f"\n\t  start_time       : {self.start_time}"
-            f"\n\t  stop_time        : {self.stop_time}"
-            f"\n\t  duration_minutes : {self.duration_minutes}"
-            f"\n\t  location         : {self.location_type}"
-            f"\n\t  locations        : {[str(location) for location in self.locations]}"
-            f"\n\t  num_timeslots    : {self.num_timeslots}"
-            f"\n\t  timeslots        : {[str(timeslot) for timeslot in self.timeslots]}"
-            f"\n\t  slots_total      : {self.slots_total}"
-            f"\n\t  slots_required   : {self.slots_required}"
-            f"\n\t  slots_empty      : {self.slots_empty}"
-            f"\n\t  unfilled_allowed : {self.unfilled_allowed}"
-        )
-
-    def validate_slots_empty(self) -> int:
-        """Validate that slots_empty is not negative."""
-        if self.slots_empty < 0:
-            msg = (
-                "Insufficient capacity for TournamentRound (required > available).\n"
-                "Suggestion: increase number of locations or timeslots."
-            )
-            raise ValueError(msg)
-        return self.slots_empty
-
     def get_canonical_tuple(self) -> tuple[Any, ...]:
         """Return a canonical tuple representation of the configuration."""
         return (
@@ -172,23 +136,6 @@ class TournamentConfig:
     all_locations: tuple[Location, ...]
     all_timeslots: tuple[TimeSlot, ...]
     is_interleaved: bool
-
-    def __str__(self) -> str:
-        """Represent the TournamentConfig."""
-        return (
-            f"\n  TournamentConfig:"
-            f"\n    num_teams                 : {self.num_teams}"
-            f"\n    time_fmt                  : {self.time_fmt}"
-            f"\n    rounds                    : {[r.roundtype for r in self.rounds]}"
-            f"\n    round_requirements        : {self.roundreqs}"
-            f"\n    round_idx_to_tpr          : {self.round_idx_to_tpr}"
-            f"\n    total_slots_required      : {self.total_slots_required}"
-            f"\n    unique_opponents_possible : {self.unique_opponents_possible}"
-            f"\n    max_events_per_team       : {self.max_events_per_team}"
-            f"\n    all_locations             : {[str(loc) for loc in self.all_locations]}"
-            f"\n    all_timeslots             : {[str(ts) for ts in self.all_timeslots]}"
-            f"\n    is_interleaved            : {self.is_interleaved}"
-        )
 
     def __eq__(self, other: object) -> bool:
         """Check equality between two TournamentConfig instances."""

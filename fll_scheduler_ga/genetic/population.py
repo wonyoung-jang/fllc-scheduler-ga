@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class SchedulePopulation:
     """Population of schedules in the genetic algorithm."""
 
-    ranks: np.ndarray
+    ranks: np.ndarray = field(default_factory=lambda: np.array([]))
     schedules: np.ndarray = field(default_factory=lambda: np.array([]))
 
     def __len__(self) -> int:

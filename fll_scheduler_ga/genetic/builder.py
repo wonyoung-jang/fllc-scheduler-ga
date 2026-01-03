@@ -39,10 +39,11 @@ class ScheduleBuilderRandom(ScheduleBuilder):
         """Construct and return the final schedule."""
         schedule = Schedule(origin="Builder")
         for roundtype, evts in self.roundtype_events.items():
+            tpr = self.round_idx_to_tpr[roundtype]
             events = self.rng.permutation(evts)
-            if self.round_idx_to_tpr[roundtype] == 1:
+            if tpr == 1:
                 self.build_singles(schedule, events, roundtype)
-            elif self.round_idx_to_tpr[roundtype] == 2:
+            elif tpr == 2:
                 self.build_matches(schedule, events, roundtype)
         return schedule
 

@@ -73,8 +73,7 @@ def calc_num_timeslots(n_times: int, n_locs: int, n_teams: int, rounds_per_team:
 
 
 def validate_duration(
-    start_dt: datetime,
-    stop_dt: datetime,
+    start_stop: tuple[datetime, datetime],
     times_dt: tuple[datetime, ...],
     dur: int,
     n_timeslots: int,
@@ -86,19 +85,17 @@ def validate_duration(
     2. times + duration
     3. start + stop (need to calculate num_timeslots)
     """
+    start_dt, stop_dt = start_stop
     if (start_dt != DEFAULT_DT or times_dt) and dur:
         return timedelta(minutes=dur)
 
-    if start_dt and stop_dt:
-        if n_timeslots <= 0:
-            msg = "n_timeslots must be greater than zero to validate duration."
-            raise ValueError(msg)
-        diff = stop_dt - start_dt
-        total_available = diff.total_seconds()
-        minimum_duration = total_available // n_timeslots
-        return timedelta(minutes=max(1, minimum_duration // 60))
-
-    return timedelta(minutes=0)
+    if n_timeslots <= 0:
+        msg = "n_timeslots must be greater than zero to validate duration."
+        raise ValueError(msg)
+    diff = stop_dt - start_dt
+    total_available = diff.total_seconds()
+    minimum_duration = total_available // n_timeslots
+    return timedelta(minutes=max(1, minimum_duration // 60))
 
 
 def init_timeslots(

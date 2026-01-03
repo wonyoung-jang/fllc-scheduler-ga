@@ -187,7 +187,7 @@ class GA:
             self.fitness_history.current = self.aggregate_island_fitness()
             self.fitness_history.update_fitness_history()
 
-            self.generation.increment()
+            self.generation.curr += 1
 
             self._notify_on_generation_end(
                 generation=gen,

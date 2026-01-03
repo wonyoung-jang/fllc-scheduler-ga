@@ -235,11 +235,11 @@ class GaContext:
 
     def get_imports_model(self) -> ImportModel:
         """Get the imports model from the app config."""
-        return self.app_config.imports
+        return self.app_config.io.imports
 
     def get_seed_island_strategy(self) -> str:
         """Get the seed island strategy from the app config."""
-        return self.app_config.imports.seed_island_strategy
+        return self.app_config.io.imports.seed_island_strategy
 
 
 @dataclass(slots=True)
@@ -298,10 +298,11 @@ class RuntimeStartup:
             parent_dir = import_path.parent
             parent_dir.mkdir(parents=True, exist_ok=True)
             report_path = parent_dir / "report.txt"
-            summary_gen = ScheduleSummaryGenerator(self.config.exports.team_identities)
+            team_ids = self.config.io.exports.team_identities
+            summary_gen = ScheduleSummaryGenerator(team_ids)
             csv_schedule_exporter = CsvScheduleExporter(
                 time_fmt=self.context.app_config.tournament.time_fmt,
-                team_identities=self.config.exports.team_identities,
+                team_identities=team_ids,
                 event_properties=self.context.event_properties,
             )
             asyncio.run(summary_gen.export(imported_schedule, report_path))

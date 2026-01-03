@@ -55,13 +55,14 @@ def run_ga_engine(config_path: Path, progress: Progress | None = None, task_id: 
     if n_islands > 1 and migration_size > 0:
         migrate_generations[::migration_interval] = 1
 
+    _exports = app_config.io.exports
     ga = GA(
         context=context,
         genetic_model=app_config.genetic,
         rng=app_config.rng,
         observers=(LoggingObserver(),),
         seed_file=Path(app_config.runtime.seed_file),
-        save_front_only=app_config.exports.front_only,
+        save_front_only=_exports.front_only,
         generation=generation,
         operator_stats=operator_stats,
         fitness_history=fitness_history,
@@ -70,13 +71,10 @@ def run_ga_engine(config_path: Path, progress: Progress | None = None, task_id: 
     )
 
     if progress and task_id is not None:
-        existing = list(ga.observers)
-        existing.append(RichObserver(progress, task_id))
-        ga.observers = tuple(existing)
+        ga.observers = (*tuple(ga.observers), RichObserver(progress, task_id))
 
     ga.run()
-    exports = app_config.exports
-    output_dir = Path(exports.output_dir)
+    output_dir = Path(_exports.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     plot = MatplotlibVisualizer(
@@ -84,12 +82,12 @@ def run_ga_engine(config_path: Path, progress: Progress | None = None, task_id: 
         save_dir=output_dir,
         objectives=tuple(FitnessObjective),
         ref_points=ga.context.nsga3.refs.points,
-        export_model=exports,
+        export_model=_exports,
     )
     ga_exporter.generate_summary(
         ga=ga,
         output_dir=output_dir,
-        export_model=exports,
+        export_model=_exports,
         plot=plot,
     )
 
