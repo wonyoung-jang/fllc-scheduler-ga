@@ -28,3 +28,4 @@ wheels/
 
 profile.*
 scalene-*
+.pre-commit-config.yaml
