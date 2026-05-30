@@ -10,26 +10,15 @@ import numpy as np
 
 from fll_scheduler_ga.domain.event import Event
 from fll_scheduler_ga.domain.location import Location
-from fll_scheduler_ga.domain.timeslot import TimeSlot
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator
+    from collections.abc import Iterator
     from datetime import datetime, timedelta
 
     from fll_scheduler_ga.domain.location import Location
+    from fll_scheduler_ga.domain.timeslot import TimeSlot
 
 logger = logging.getLogger(__name__)
-
-
-def are_rounds_overlapping(rounds: Iterable[TournamentRound]) -> bool:
-    """Check if any rounds are interleaved in time."""
-    _starts = (r.start_time for r in rounds)
-    _stops = (r.stop_time for r in rounds)
-    timeslots = tuple(
-        TimeSlot(idx=0, start=start, stop_active=stop_cycle, stop_cycle=stop_cycle)
-        for start, stop_cycle in zip(_starts, _stops, strict=True)
-    )
-    return any(timeslots[i].overlaps(timeslots[j]) for i in range(len(timeslots)) for j in range(i + 1, len(timeslots)))
 
 
 @dataclass(slots=True)
@@ -202,31 +191,29 @@ class EventFactory:
         event_idx_iter = itertools.count()
         self.events = tuple(e for r in self.config.rounds for e in r.create_events(event_idx_iter))
         self.events_idx = np.array([e.idx for e in self.events], dtype=int)
-        _singles_or_side1 = tuple(e for e in self.events if e.paired == -1 or (e.paired != -1 and e.location.side == 1))
-        self.singles_or_side1_idx = np.array([e.idx for e in _singles_or_side1], dtype=int)
+        singles_or_side1 = tuple(e for e in self.events if e.paired == -1 or (e.paired != -1 and e.location.side == 1))
+        self.singles_or_side1_idx = np.array([e.idx for e in singles_or_side1], dtype=int)
         self.timeslots = defaultdict(list)
         self.matches = defaultdict(list)
         self.roundtypes = defaultdict(list)
         for e in self.events:
             self.timeslots[(e.roundtype_idx, e.timeslot.idx)].append(e.idx)
             self.roundtypes[e.roundtype_idx].append(e.idx)
-        for e in _singles_or_side1:
+        for e in singles_or_side1:
             if e.paired != -1:
                 self.matches[e.roundtype_idx].append((e.idx, e.paired))
+        n = len(self.events)
+        c_matrix = np.full((n, n), fill_value=False, dtype=bool)
         for e1, e2 in itertools.combinations(self.events, 2):
             if e1.timeslot.overlaps(e2.timeslot):
                 e1.conflicts.append(e2.idx)
                 e2.conflicts.append(e1.idx)
+                c_matrix[e1.idx, e2.idx] = True
+                c_matrix[e2.idx, e1.idx] = True
         for e in self.events:
             e.conflicts = sorted(set(e.conflicts))
             logger.debug("%s has %d conflicts: %s", e, len(e.conflicts), e.conflicts)
-        n = len(self.events)
-        _conflict_matrix = np.full((n, n), fill_value=False, dtype=bool)
-        for e1, e2 in itertools.combinations(self.events, 2):
-            if e1.timeslot.overlaps(e2.timeslot):
-                _conflict_matrix[e1.idx, e2.idx] = True
-                _conflict_matrix[e2.idx, e1.idx] = True
         for i in range(n):
-            _conflict_matrix[i, i] = True  # An event conflicts with itself
+            c_matrix[i, i] = True  # An event conflicts with itself
         self.mapping = {e.idx: e for e in self.events}
         self.conflict_map = {e.idx: set(e.conflicts) for e in self.events}

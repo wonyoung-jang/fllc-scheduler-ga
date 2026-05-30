@@ -23,8 +23,7 @@ from fll_scheduler_ga.fitness.benchmark import (
     StableConfigHash,
 )
 from fll_scheduler_ga.fitness.benchmark_repository import PickleBenchmarkRepository
-from fll_scheduler_ga.fitness.fitness_population import FitnessEvaluator
-from fll_scheduler_ga.fitness.fitness_schedule import FitnessEvaluatorSingle
+from fll_scheduler_ga.fitness.evaluator import FitnessEvaluator
 from fll_scheduler_ga.genetic.builder import ScheduleBuilderRandom
 from fll_scheduler_ga.operators.crossover import build_crossovers
 from fll_scheduler_ga.operators.mutation import build_mutations
@@ -264,13 +263,13 @@ class RuntimeStartup:
         imported_schedule = csv_importer.schedule
         if not self.context.check(imported_schedule):
             self.context.repair(imported_schedule)
-        evaluator_new = FitnessEvaluatorSingle(
+        evaluator = FitnessEvaluator(
             config=self.config.tournament,
             event_properties=self.context.event_properties,
             benchmark=self.context.evaluator.benchmark,
             model=self.config.fitness,
         )
-        if fits := evaluator_new.evaluate(imported_schedule.schedule):
+        if fits := evaluator.evaluate(np.array([imported_schedule.schedule], dtype=int)):
             sched_fits, team_fits = fits
             imported_schedule.fitness = sched_fits
             imported_schedule.team_fitnesses = team_fits

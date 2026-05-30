@@ -32,7 +32,7 @@ class Schedule:
     mutations: int = 0
     clones: int = 0
     _hash: int | None = None
-    team_events: dict[int, set[int]] = field(default_factory=dict)
+    team_events: dict[int, set[int]] = field(default_factory=lambda: defaultdict(set))
     team_rounds: np.ndarray = field(default_factory=lambda: np.array([]))
     # Class variables
     ctx: ClassVar[ScheduleContext]
@@ -41,8 +41,6 @@ class Schedule:
         """Post-initialization to set up fitness array."""
         if self.schedule.size == 0:
             self.schedule = Schedule.ctx.empty_schedule.copy()
-        if not self.team_events:
-            self.team_events = defaultdict(set)
         if self.team_rounds.size == 0:
             self.team_rounds = Schedule.ctx.teams_roundreqs_arr.copy()
 

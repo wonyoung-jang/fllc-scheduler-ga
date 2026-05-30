@@ -22,7 +22,7 @@ from fll_scheduler_ga.config.schemas import (
 )
 from fll_scheduler_ga.constants import CONFIG_FILE_DEFAULT, RANDOM_SEED_RANGE
 from fll_scheduler_ga.domain.location import Location
-from fll_scheduler_ga.domain.model import TournamentConfig, TournamentRound, are_rounds_overlapping
+from fll_scheduler_ga.domain.model import TournamentConfig, TournamentRound
 from fll_scheduler_ga.domain.timeslot import DEFAULT_DT, TimeSlot
 
 if TYPE_CHECKING:
@@ -191,6 +191,17 @@ def _get_time_fmt(round_models: Iterable[RoundModel]) -> str:
     return str(format_counts.most_common(1)[0][0])
 
 
+def _are_rounds_overlapping(rounds: Iterable[TournamentRound]) -> bool:
+    """Check if any rounds are interleaved in time."""
+    _starts = (r.start_time for r in rounds)
+    _stops = (r.stop_time for r in rounds)
+    timeslots = tuple(
+        TimeSlot(idx=0, start=start, stop_active=stop_cycle, stop_cycle=stop_cycle)
+        for start, stop_cycle in zip(_starts, _stops, strict=True)
+    )
+    return any(timeslots[i].overlaps(timeslots[j]) for i in range(len(timeslots)) for j in range(i + 1, len(timeslots)))
+
+
 def _load_tournament_config(
     n_teams: int, round_models: tuple[RoundModel, ...], locations: tuple[Location, ...]
 ) -> TournamentConfig:
@@ -208,7 +219,7 @@ def _load_tournament_config(
     max_events_per_team = sum(roundreqs.values())
     all_locations = _get_all_sorted_attr(rounds, get_by="locations", sort_by="idx")
     all_timeslots = _get_all_sorted_attr(rounds, get_by="timeslots", sort_by="idx")
-    is_interleaved = are_rounds_overlapping(rounds)
+    is_interleaved = _are_rounds_overlapping(rounds)
     return TournamentConfig(
         num_teams=n_teams,
         time_fmt=time_fmt,

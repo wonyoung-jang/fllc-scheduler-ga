@@ -87,9 +87,6 @@ class SwapMutation(Mutation):
         self.n_swap_candidates = len(self.swap_candidates)
         logger.debug("Initialized %d swap candidates for %s", self.n_swap_candidates, str(self))
 
-    @abstractmethod
-    def get_swap_candidates(self, schedule: Schedule) -> tuple[Match, ...] | tuple[None, ...]: ...
-
     def init_swap_candidates(self) -> Iterator[tuple[tuple[int, ...], ...]]:
         """Precompute any necessary data before mutation."""
         _ts_idx = self.event_properties.timeslot_idx
@@ -108,6 +105,9 @@ class SwapMutation(Mutation):
                 if not (_is_same_ts_and_loc or _is_swap_valid):
                     continue
                 yield (match1, match2)
+
+    @abstractmethod
+    def get_swap_candidates(self, schedule: Schedule) -> tuple[Match, ...] | tuple[None, ...]: ...
 
 
 class SwapTeamMutation(SwapMutation):
