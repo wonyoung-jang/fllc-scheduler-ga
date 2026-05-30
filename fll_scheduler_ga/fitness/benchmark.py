@@ -19,7 +19,6 @@ if TYPE_CHECKING:
     from fll_scheduler_ga.data_model.app_schemas import TournamentConfig
     from fll_scheduler_ga.data_model.event import EventFactory
     from fll_scheduler_ga.fitness.benchmark_repository import BenchmarkRepository
-
 logger = getLogger(__name__)
 BENCHMARKS_CACHE = Path(".benchmarks_cache/").resolve()
 
@@ -34,7 +33,6 @@ class FitnessBenchmark:
     opponent_benchmarker: FitnessBenchmarkOpponent
     breaktime_benchmarker: FitnessBenchmarkBreaktime
     flush_benchmarks: bool
-
     opponents: np.ndarray = field(init=False)
     best_timeslot_score: float = field(init=False)
 
@@ -43,7 +41,6 @@ class FitnessBenchmark:
         loaded_data = None
         if not self.flush_benchmarks:
             loaded_data = self.repository.load()
-
         if loaded_data and self._validate_data(loaded_data):
             self.opponents = loaded_data.opponents
             self.best_timeslot_score = loaded_data.best_timeslot_score
@@ -92,7 +89,6 @@ class StableConfigHash:
             self.model.penalties.zeros,
             self.config.num_teams,
         )
-
         # Using hashlib over built-in hash for stability
         return int(hashlib.sha256(str(config_representation).encode()).hexdigest(), 16)
 
@@ -117,7 +113,6 @@ class FitnessBenchmarkOpponent(FitnessBenchmarkObjective):
         """Run the opponent variety fitness benchmarking."""
         logger.info("Running opponent variety benchmarks...")
         logger.debug("Finding events per round type:")
-
         max_matches_possible = 0
         max_matches_required = 0
         non_matches_required = 0
@@ -132,39 +127,30 @@ class FitnessBenchmarkOpponent(FitnessBenchmarkObjective):
                 max_matches_required += roundreq
             elif round_to_tpr == 1:
                 non_matches_required += roundreq
-
         num_matches_considered = max_matches_required + non_matches_required + 1
-
         cache_scorer = {}
         for k in range(num_matches_considered):
             cache_scorer[k] = 0.0
-
         for n_rounds in range(1, max_matches_required + 1):
             ratio = n_rounds / max_matches_possible
             cache_scorer[n_rounds] = 1 / (1 + ratio)
-
         if non_matches_required > 0:
             cache_scorer[max_matches_required + non_matches_required] = 0
-
         maximum_score = cache_scorer[1]
         minimum_score = cache_scorer[max_matches_required]
         diff = maximum_score - minimum_score
         if diff <= 0:
             diff = EPSILON
-
         raw_scores = tuple(cache_scorer.values())
         logger.debug("Raw location/opponent scores: %s", raw_scores)
         opponents = [abs((s - maximum_score) / diff) if s != 0 else 0 for s in raw_scores]
         opponents_arr = np.array(opponents, dtype=float)
-
         logger.debug("Opponent variety scores:")
         for k, v in enumerate(opponents_arr):
             logger.debug("  %d opponent(s): %.6f", k, v)
-
         if not opponents_arr.any():
             logger.warning("No valid schedules could be generated.")
             return np.array([])
-
         return opponents_arr
 
 
@@ -181,58 +167,44 @@ class FitnessBenchmarkBreaktime(FitnessBenchmarkObjective):
         all_starts = np.array([int(ts.start.timestamp()) for ts in all_ts], dtype=int)
         all_stops_active = np.array([int(ts.stop_active.timestamp()) for ts in all_ts], dtype=int)
         all_stops_cycle = np.array([int(ts.stop_cycle.timestamp()) for ts in all_ts], dtype=int)
-
         logger.debug("Finding timeslots per round type:")
         timeslots_by_round = {r.roundtype: [ts.idx for ts in r.timeslots] for r in self.config.rounds}
-
         # Generate intra-round combinations
         round_slot_combos = self.generate_intra_round_breaktime_combinations(timeslots_by_round)
-
         # Filter, score, and store valid schedules
         logger.debug("Generating and filtering all possible team schedules")
-
         raw_product = itertools.product(*round_slot_combos)  # Cartesian product of round combinations
         flattened_indices = [list(itertools.chain.from_iterable(p)) for p in raw_product]
         if not flattened_indices:
             logger.warning("No possible schedules could be generated.")
             return 0
-
         # Convert to 2D matrix (n_combinations, n_events)
         indices_matrix = np.array(flattened_indices, dtype=int)
         total_combinations = indices_matrix.shape[0]
-
         logger.debug("indices_matrix (Shape: %s):\n%s", indices_matrix.shape, indices_matrix)
         logger.debug("total_combinations: %d", total_combinations)
         logger.debug("calculating breaktime scores vectorized...")
-
         valid_scores, _ = self.score_breaktime(indices_matrix, all_starts, all_stops_active, all_stops_cycle)
         num_valid = valid_scores.shape[0]
         logger.debug("num_valid: %d", num_valid)
         if num_valid == 0:
             logger.warning("No valid schedules could be generated.")
             return 0
-
         best_timeslot_score = valid_scores.max()
         if best_timeslot_score == 0:
             best_timeslot_score = 1  # Avoid division by zero
-
         logger.debug("Best timeslot score: %f", best_timeslot_score)
-
         # Normalize
         normalized_scores = valid_scores / best_timeslot_score
-
         # Reporting
         unique_scores = Counter(normalized_scores)
         logger.debug("Unique scores found: %d", len(unique_scores))
         logger.debug("Number of best scores: %d", unique_scores.get(1.0, 0))
-
         most_common = unique_scores.most_common(50)
         for score, count in most_common:
             logger.debug("  Score %s: %d occurrences", f"{score:<.16f}", count)
-
         avg_score = sum(score for score, _ in most_common) / len(most_common)
         logger.debug("Average score of most common: %f", avg_score)
-
         return best_timeslot_score
 
     def generate_intra_round_breaktime_combinations(
@@ -240,19 +212,16 @@ class FitnessBenchmarkBreaktime(FitnessBenchmarkObjective):
     ) -> list[tuple[tuple[int, ...], ...]]:
         """Generate all intra-round breaktime combinations."""
         logger.debug("Generating all possible schedules per round type:")
-
         round_slot_combos = []
         for rt, num_needed in self.config.roundreqs.items():
             timeslot_indices = timeslots_by_round.get(rt, [])
             combos = tuple(itertools.combinations(timeslot_indices, num_needed))
             round_slot_combos.append(combos)
-
             logger.debug("  roundtype: %s", rt)
             logger.debug("    %d timeslots", len(timeslot_indices))
             logger.debug("      timeslots: %s", timeslot_indices)
             logger.debug("    %d combinations", len(combos))
             logger.debug("      combinations: %s", combos)
-
         return round_slot_combos
 
     def score_breaktime(
@@ -262,39 +231,29 @@ class FitnessBenchmarkBreaktime(FitnessBenchmarkObjective):
         starts = starts[indices]
         stops = stops_active[indices]
         stops_cycle = stops_cycle[indices]
-
         order = starts.argsort(axis=1)
         starts_sorted = np.take_along_axis(starts, order, axis=1)
         stops_active_sorted = np.take_along_axis(stops, order, axis=1)
         stops_cycle_sorted = np.take_along_axis(stops_cycle, order, axis=1)
-
         start_next = starts_sorted[:, 1:]
         stop_active_curr = stops_active_sorted[:, :-1]
         stop_cycle_curr = stops_cycle_sorted[:, :-1]
-
         breaks_active_seconds = start_next - stop_active_curr
         breaks_active_minutes = breaks_active_seconds / 60
-
         breaks_cycle_seconds = start_next - stop_cycle_curr
         breaks_cycle_minutes = breaks_cycle_seconds / 60
-
         overlap_mask = (breaks_cycle_minutes < 0).any(axis=1)
         non_overlap_mask = ~overlap_mask
-
         valid_mask = breaks_cycle_minutes >= 0
         count = valid_mask.sum(axis=1, dtype=int)
-
         mean_break = breaks_cycle_minutes.sum(axis=1) / count
         mean_break_zero_mask = mean_break == 0
         mean_break[mean_break_zero_mask] = EPSILON
-
         diff_sq: np.ndarray = np.square(breaks_cycle_minutes - mean_break[:, np.newaxis])
         variance = diff_sq.sum(axis=1) / count
         std_dev: np.ndarray = np.sqrt(variance)
-
         coeff = std_dev / mean_break
         ratio = 1 / (1 + coeff)
-
         minbreak_count = (breaks_active_minutes < self.model.penalties.minbreak_target).sum(axis=1)
         where_breaks_lt_target = (breaks_active_minutes < self.model.penalties.minbreak_target) & (
             breaks_active_minutes > 0
@@ -306,15 +265,11 @@ class FitnessBenchmarkBreaktime(FitnessBenchmarkObjective):
             max_diff_breaktimes = diffs.max(axis=1) / self.model.penalties.minbreak_target
         minbreak_exp = minbreak_count + max_diff_breaktimes
         minbreak_penalty = self.model.penalties.minbreak**minbreak_exp
-
         zeros_count = (breaks_cycle_minutes == 0).sum(axis=1)
         zeros_penalty = self.model.penalties.zeros**zeros_count
-
         final_scores = ratio * zeros_penalty * minbreak_penalty
         final_scores[mean_break_zero_mask] = 0.0
         final_scores[overlap_mask] = 0.0
-
         final_scores = final_scores[non_overlap_mask]
         indices = indices[non_overlap_mask]
-
         return final_scores, indices

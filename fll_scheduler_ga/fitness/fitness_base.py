@@ -100,7 +100,7 @@ class FitnessBase(ABC):
             arr: Array of schedule representation(s)
 
         Returns:
-            tuple[np.ndarray, np.ndarray]: Tuple of (schedule fitness(es), team fitnesses)
+            tuple[np.ndarray, np.ndarray]: Tuple of (schedule fitness(es), team fitnesses).
 
         """
 
@@ -112,7 +112,7 @@ class FitnessBase(ABC):
             arr: Array of schedule representation(s)
 
         Returns:
-            np.ndarray: Array of team events
+            np.ndarray: Array of team events.
 
         """
 
@@ -121,9 +121,8 @@ class FitnessBase(ABC):
 
         Args:
             team_events: Array of event IDs for each team
-
         Returns:
-            tuple[np.ndarray, ...]: Tuple of sliced event properties arrays
+            tuple[np.ndarray, ...]: Tuple of sliced event properties arrays.
 
         """
         return (
@@ -141,9 +140,8 @@ class FitnessBase(ABC):
         Args:
             team_fitnesses: Array of team fitness scores
             team_axis: Axis along which teams are indexed
-
         Returns:
-            np.ndarray: Aggregated schedule fitness scores
+            np.ndarray: Aggregated schedule fitness scores.
 
         """
         min_s = team_fitnesses.min(axis=team_axis)
@@ -151,17 +149,13 @@ class FitnessBase(ABC):
         min_fitness_weight = self.min_fitness_weight
         mean_s = (mean_s * (1.0 - min_fitness_weight)) + (min_s * min_fitness_weight)
         mean_s[mean_s == 0] = self.epsilon
-
         stddev_s = team_fitnesses.std(axis=team_axis)
         coeff_s = stddev_s / mean_s
         vari_s = 1.0 / (1.0 + coeff_s)
-
         max_for_ptp = team_fitnesses.max(axis=team_axis)
         min_for_ptp = team_fitnesses.min(axis=team_axis)
         ptp = max_for_ptp - min_for_ptp
         range_s = 1.0 / (1.0 + ptp)
-
         mw, vw, rw = self.agg_weights
         schedule_fitnesses = (mean_s * mw) + (vari_s * vw) + (range_s * rw)
-
         return schedule_fitnesses * self.obj_weights

@@ -16,7 +16,6 @@ if TYPE_CHECKING:
 
     from fll_scheduler_ga.data_model.app_schemas import TournamentConfig, TournamentRound
     from fll_scheduler_ga.data_model.event import EventFactory, EventProperties
-
 logger = getLogger(__name__)
 RE_HHMM = re.compile(r"\d{2}:\d{2}")
 TIME_HEADER = "Time"
@@ -30,7 +29,6 @@ class CsvImporter:
     config: TournamentConfig
     event_factory: EventFactory
     event_properties: EventProperties
-
     schedule: Schedule = field(default_factory=Schedule)
     round_configs: dict[str, TournamentRound] = field(default_factory=dict)
     rtl_map: dict[tuple[str, tuple[datetime, ...], tuple[str, int, int, int]], int] = field(default_factory=dict)
@@ -48,7 +46,6 @@ class CsvImporter:
             loc_side = self.event_properties.loc_side[e]
             key = (rt, (ts.start, ts.stop_cycle), (loc_type, loc_name, teams_per_round, loc_side))
             self.rtl_map[key] = e
-
         self.import_schedule()
         if not self.schedule:
             logger.error("Failed to reconstruct schedule from CSV. Aborting.")
@@ -60,12 +57,10 @@ class CsvImporter:
             msg = f"CSV file does not exist at: {self.csv_path}"
             logger.warning(msg)
             return False
-
         if not self.config.rounds:
             msg = "Tournament configuration is required."
             logger.warning(msg)
             return False
-
         return True
 
     def import_schedule(self) -> None:
@@ -94,28 +89,23 @@ class CsvImporter:
         for row in reader:
             if not row or not any(row):
                 continue
-
             first_cell = row[0].strip()
             if first_cell in self.round_configs:
                 current_round_type = first_cell
                 header_locations = []
                 logger.debug("Parsing section: %s", current_round_type)
                 continue
-
             if not current_round_type:
                 continue
-
             if first_cell == TIME_HEADER:
                 header_locations = [h.strip() for h in row[1:]]
                 continue
-
             if header_locations and RE_HHMM.match(first_cell):
                 self.parse_csv_data_row(
                     row,
                     current_round_type,
                     header_locations,
                 )
-
         if self.schedule.any_rounds_needed():
             logger.warning("Schedule: %s", self.schedule)
             logger.warning("Some teams are missing required rounds defined in your config.")
@@ -144,16 +134,12 @@ class CsvImporter:
             start = datetime.strptime(time_str, time_fmt).replace(tzinfo=UTC)
             start_index = rc.times.index(start)
             stop = rc.times[start_index + 1] if start_index + 1 < len(rc.times) else start + rc.duration_minutes
-
         TimeSlot.time_fmt = time_fmt
         timeslot_t = (start, stop)
-
         for i, team_id_str in enumerate(row[1:]):
             if not (team_id_str := team_id_str.strip()):
                 continue
-
             team_id = int(team_id_str)
-
             loc_name_full = header_locations[i]
             loc_name_split = loc_name_full.split(" ")
             loctype = loc_name_split[0].strip()
@@ -167,16 +153,13 @@ class CsvImporter:
                 isdigit = locname.isdigit()
                 locname = int(locname) if isdigit else ord(locname) - ASCII_OFFSET
                 location_t = (loctype, locname, rc.teams_per_round, int(side))
-
             rtl_event_key = (curr_rt, timeslot_t, location_t)
             event = self.rtl_map.get(rtl_event_key)
-
             team = self.schedule.ctx.teams_list[team_id - 1]
             if team == -1:
                 logger.error("Team ID %d (%d) from CSV not found.", team_id, team_id - 1)
                 logger.error("%s", self.schedule.ctx.teams_list)
                 logger.error("%s", self.schedule.ctx.teams_list[team_id - 1])
                 continue
-
             if event is not None:
                 self.schedule.assign(team, event)

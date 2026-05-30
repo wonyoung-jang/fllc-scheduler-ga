@@ -16,7 +16,6 @@ if TYPE_CHECKING:
 
     from fll_scheduler_ga.config.pydantic_schemas import OperatorModel
     from fll_scheduler_ga.data_model.event import EventFactory, EventProperties
-
 logger = getLogger(__name__)
 
 
@@ -30,7 +29,6 @@ def build_crossovers(
     if not (crossover_types := operators.crossover.types):
         logger.warning("No crossover types enabled in the configuration. Crossover will not occur.")
         return ()
-
     crossover_factory: dict[str, Callable] = {
         CrossoverOp.K_POINT: lambda p, k: KPoint(**p, k=k),
         CrossoverOp.SCATTERED: Scattered,
@@ -50,14 +48,12 @@ def build_crossovers(
             if crossover_name not in crossover_factory:
                 msg = f"Unknown crossover type in config: {crossover_name}"
                 raise ValueError(msg)
-
             if crossover_name == CrossoverOp.K_POINT:
                 if crossover_ks := operators.crossover.k_vals:
                     for k in crossover_ks:
                         if k <= 0:
                             msg = f"Invalid crossover k value: {k}. Must be greater than 0."
                             raise ValueError(msg)
-
                         yield crossover_factory[crossover_name](params, k)
             else:
                 yield crossover_factory[crossover_name](**params)
@@ -72,7 +68,6 @@ class Crossover(ABC):
     event_factory: EventFactory
     event_properties: EventProperties
     rng: np.random.Generator
-
     events: np.ndarray = field(init=False)
     n_evts: int = field(init=False)
 
@@ -126,14 +121,12 @@ class Crossover(ABC):
             t1 = p2[e1]
             if t1 == -1 or not child.needs_round(t1, rt) or child.conflicts(t1, e1):
                 continue
-
             if e2 == -1:
                 child.assign(t1, e1)
             else:
                 t2 = p2[e2]
                 if t2 == -1 or not child.needs_round(t2, rt) or child.conflicts(t2, e2):
                     continue
-
                 child.assign(t1, e1)
                 child.assign(t2, e2)
 
@@ -183,13 +176,11 @@ class KPoint(EventCrossover):
     def get_genes(self) -> Iterable[np.ndarray]:
         """Get the genes for KPoint crossover."""
         n = self.n_evts
-
         # Single-point crossover
         if self.k == 1:
             # Pick a split point index directly (1 to n-1)
             split = self.rng.integers(1, n)
             return self.events[:split], self.events[split:]
-
         # Multi-point crossover
         splits = self.rng.choice(n - 1, size=self.k, replace=False) + 1
         mask = np.zeros(n, dtype=bool)
@@ -201,7 +192,6 @@ class KPoint(EventCrossover):
 @dataclass(slots=True)
 class Scattered(EventCrossover):
     """Scattered crossover operator for genetic algorithms.
-
     Shuffled indices split parent 50/50.
     """
 
@@ -215,7 +205,6 @@ class Scattered(EventCrossover):
 @dataclass(slots=True)
 class Uniform(EventCrossover):
     """Uniform crossover operator for genetic algorithms.
-
     Each gene is chosen from either parent by flipping a coin for each gene.
     The main difference with Scattered, is Scattered guarantees close to 50/50 splits.
     Uniform may result in more imbalanced splits.
@@ -231,7 +220,6 @@ class Uniform(EventCrossover):
 @dataclass(slots=True)
 class StructureCrossover(EventCrossover):
     """Structure-based crossover operator for genetic algorithms.
-
     Each gene is chosen based on a specific structure of the event.
     """
 
@@ -250,22 +238,17 @@ class StructureCrossover(EventCrossover):
     def _initialize_attributes(self) -> None:
         """Initialize attributes specific to the structure crossover."""
         eventmap = defaultdict(list)
-
         keys = self._get_group_keys()
         for key, e in zip(keys, self.events, strict=True):
             eventmap[key].append(e)
-
         sorted_keys = sorted(eventmap.keys())
         unique_ids = np.array(sorted_keys)
         n_ids = unique_ids.shape[0]
         max_len = max(len(evts) for evts in eventmap.values())
-
         self.lookup = np.full((n_ids, max_len), -1, dtype=int)
-
         for i, uid in enumerate(unique_ids):
             evts = eventmap[uid]
             self.lookup[i, : len(evts)] = evts
-
         self.structure = np.arange(n_ids)
 
     def get_genes(self) -> Iterable[np.ndarray]:
@@ -280,7 +263,6 @@ class StructureCrossover(EventCrossover):
 @dataclass(slots=True)
 class RoundTypeCrossover(StructureCrossover):
     """TournamentRound type crossover operator for genetic algorithms.
-
     Each gene is chosen based on the round type of the event.
     """
 
@@ -292,7 +274,6 @@ class RoundTypeCrossover(StructureCrossover):
 @dataclass(slots=True)
 class TimeSlotCrossover(StructureCrossover):
     """Time slot crossover operator for genetic algorithms.
-
     Each gene is chosen based on the time slot of the event.
     """
 
@@ -304,7 +285,6 @@ class TimeSlotCrossover(StructureCrossover):
 @dataclass(slots=True)
 class LocationCrossover(StructureCrossover):
     """Location crossover operator for genetic algorithms.
-
     Each gene is chosen based on the location of the event.
     """
 

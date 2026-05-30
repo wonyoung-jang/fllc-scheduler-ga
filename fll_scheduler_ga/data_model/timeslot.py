@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
-
 DEFAULT_DT = datetime.min.replace(tzinfo=UTC)
 TIME_FORMAT_MAP = {12: "%I:%M %p", 24: "%H:%M"}
 
@@ -20,7 +19,6 @@ class TimeSlot:
     start: datetime = DEFAULT_DT
     stop_active: datetime = DEFAULT_DT
     stop_cycle: datetime = DEFAULT_DT
-
     time_fmt: ClassVar[str]
 
     def __str__(self) -> str:
@@ -59,10 +57,8 @@ def calc_num_timeslots(n_times: int, n_locs: int, n_teams: int, rounds_per_team:
     """Calculate the number of timeslots needed for a round."""
     if n_times > 0:
         return n_times
-
     if n_locs > 0:
         return ceil((n_teams * rounds_per_team) / n_locs)
-
     msg = "Cannot calculate number of timeslots without times or locations."
     raise ValueError(msg)
 
@@ -78,12 +74,11 @@ def validate_duration(
     Valid conditions:
     1. start + duration
     2. times + duration
-    3. start + stop (need to calculate num_timeslots)
+    3. start + stop (need to calculate num_timeslots).
     """
     start_dt, stop_dt = start_stop
     if (start_dt != DEFAULT_DT or times_dt) and dur:
         return timedelta(minutes=dur)
-
     if n_timeslots <= 0:
         msg = "n_timeslots must be greater than zero to validate duration."
         raise ValueError(msg)
@@ -106,7 +101,6 @@ def init_timeslots(
         stops_active = (start + dur_active for start in starts)
         yield from zip(starts, stops_active, stops_cycle, strict=True)
         return
-
     current = start_dt
     for _ in range(n_timeslots):
         stop_cycle = current + dur_cycle

@@ -48,7 +48,6 @@ class ScheduleBuilderRandom(ScheduleBuilder):
             all_teams_needing_round = schedule.all_rounds_needed(roundtype)
             shuffled_teams = self.rng.permutation(all_teams_needing_round)
             available = (t for t in shuffled_teams if not schedule.conflicts(t, event))
-
             if (team := next(available, None)) is not None:
                 schedule.assign(team, event)
 
@@ -57,17 +56,13 @@ class ScheduleBuilderRandom(ScheduleBuilder):
         loc_sides = self.event_properties.loc_side[events]
         loc_sides_where_1 = loc_sides == 1
         loc_sides_where_1_idx = loc_sides_where_1.nonzero()[0]
-
         side1s = events[loc_sides_where_1_idx]
         side2s = self.event_properties.paired_idx[side1s]
-
         for e1, e2 in zip(side1s, side2s, strict=True):
             all_teams_needing_round = schedule.all_rounds_needed(roundtype)
             shuffled_teams = self.rng.permutation(all_teams_needing_round)
             available = (t for t in shuffled_teams if not schedule.conflicts(t, e1))
-
             if (t1 := next(available, None)) is not None:
                 schedule.assign(t1, e1)
-
             if (t2 := next(available, None)) is not None:
                 schedule.assign(t2, e2)

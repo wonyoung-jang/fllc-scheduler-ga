@@ -93,14 +93,12 @@ class ImportModel(BaseModel):
         if self.seed_pop_sort not in tuple(SeedPopSort):
             msg = f"Invalid seed_pop_sort: {self.seed_pop_sort}. Must be one of {[e.value for e in SeedPopSort]}."
             raise ValueError(msg)
-
         if self.seed_island_strategy not in tuple(SeedIslandStrategy):
             msg = (
                 f"Invalid seed_island_strategy: {self.seed_island_strategy}. "
                 f"Must be one of {[e.value for e in SeedIslandStrategy]}."
             )
             raise ValueError(msg)
-
         return self
 
 
@@ -226,15 +224,12 @@ class RoundModel(BaseModel):
         if self.stop_time and not self.start_time:
             msg = f"Round '{self.roundtype}' has stop_time defined but no start_time."
             raise ValueError(msg)
-
         if not (self.start_time or self.times):
             msg = f"Round '{self.roundtype}' must have either start_time or times defined."
             raise ValueError(msg)
-
         if self.duration_active > self.duration_cycle:
             msg = f"Round '{self.roundtype}' has duration_active greater than duration_cycle."
             raise ValueError(msg)
-
         return self
 
 

@@ -15,7 +15,6 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from fll_scheduler_ga.data_model.app_schemas import TournamentConfig
-
 FMT_24H: str = TIME_FORMAT_MAP[24]
 FMT_12H: str = TIME_FORMAT_MAP[12]
 

@@ -12,7 +12,6 @@ from fll_scheduler_ga.config.constants import EPSILON
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
-
 logger = getLogger(__name__)
 
 
@@ -66,7 +65,6 @@ class NonDominatedSorting:
         n_fit = fits.shape[0]
         if n_fit == 0:
             return []
-
         # Pairwise comparisons using broadcasting
         all_ge = (fits[:, None, :] >= fits[None, :, :]).all(axis=2)
         any_gt = (fits[:, None, :] > fits[None, :, :]).any(axis=2)
@@ -77,24 +75,20 @@ class NonDominatedSorting:
         # Adjacency lists: who each i dominates
         assigned = np.zeros(n_fit, dtype=bool)
         fronts: list[np.ndarray] = []
-
         # Initial front: those not dominated by anybody
         current_front: np.ndarray = (dom_count == 0).nonzero()[0]
         assigned[current_front] = True
         fronts.append(current_front)
         n_ranked = current_front.size
-
         # Build subsequent fronts
         while n_ranked < n_pop and current_front.size > 0:
             # Sum of domination relationships from current_front to each j
             decrement = dom[current_front, :].sum(axis=0)
             dom_count = dom_count - decrement
-
             # Next front: those now not dominated by anybody
             next_front: np.ndarray = ((dom_count == 0) & (~assigned)).nonzero()[0]
             if next_front.size == 0:
                 break
-
             assigned[next_front] = True
             fronts.append(next_front)
             n_ranked += next_front.size
@@ -117,19 +111,15 @@ class NSGA3:
         selected_indices = np.array([i for f in fronts for i in f], dtype=int)
         selected_fits = fits[selected_indices]
         refs, distances = self.norm_and_associate(selected_fits)
-
         if len(fronts) == 1:
             fronts[0] = self.rng.permutation(selected_indices)[:n_pop]
             fronts = tuple(fronts)
             flat = np.concatenate(fronts)
             ranks = self.ranks_from_fronts(fronts, fits.shape[0])
             return fronts, flat, ranks[flat]
-
         last_front_indices = fronts[last_idx]
         n_last_front = last_front_indices.size
-
         fronts = fronts[:last_idx]
-
         selected = selected_indices[:-n_last_front]
         n_remaining = n_pop - selected.size
         niche_selected = refs[:-n_last_front]
@@ -171,15 +161,12 @@ class NSGA3:
             # All reference points associated with individuals still available
             available_refs = np.unique(niche_refs[mask])
             ref_counts = counts[available_refs]
-
             # Minimum count among those reference points
             min_count = ref_counts.min()
-
             # Number of individuals to select from this niche
             n_select = n_remaining - n_selected
             niche_indices = available_refs[(ref_counts == min_count).nonzero()[0]]
             niche_indices = niche_indices[self.rng.permutation(niche_indices.size)[:n_select]]
-
             for niche_idx in niche_indices:
                 # Indices of individuals in this niche still available
                 next_i = ((niche_refs == niche_idx) & mask).nonzero()[0]
@@ -190,7 +177,6 @@ class NSGA3:
                 n_selected += 1
                 if n_selected >= n_remaining:
                     break
-
         # Return the masked indices
         return (~mask).nonzero()[0]
 
@@ -198,26 +184,20 @@ class NSGA3:
         """Normalize objectives then associate individuals with nearest reference points."""
         ideal = fits.max(axis=0)
         nadir = fits.min(axis=0)
-
         span = ideal - nadir
         span[span == 0.0] = EPSILON
-
         norm = (ideal - fits) / span
-
         coeffs = (norm @ self.refs.points.T) / self.refs.norm_sq
         coeffs[coeffs < 0.0] = 0.0
-
         proj = coeffs[:, :, None] * self.refs.points[None, :, :]
         residuals = norm[:, None, :] - proj
         dists: np.ndarray = np.linalg.norm(residuals, axis=2)
         min_dists = dists.min(axis=1)
-
         # Mask tied positions with random values
         ties = dists == min_dists[:, None]
         rand_matrix = self.rng.random(dists.shape)
         rand_matrix[~ties] = -1.0
         chosen_refs = rand_matrix.argmax(axis=1)  # Index of chosen ref per individual
-
         return chosen_refs, min_dists
 
     def count(self, niche_selected: np.ndarray) -> np.ndarray:

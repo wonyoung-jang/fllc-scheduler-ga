@@ -12,38 +12,31 @@ def test_schedule_operations(empty_schedule: Schedule, event_factory: EventFacto
     s = empty_schedule
     events = event_factory.build()
     e_idx = events[0].idx
-
     # Assign
     s.assign(0, e_idx)
     assert s.schedule[e_idx] == 0
     assert s.get_size() == 1
     assert e_idx in s.schedule
-
     # Unassign
     s.unassign(0, e_idx)
     assert s.schedule[e_idx] == -1
     assert s.get_size() == 0
-
     # Swap
     s.assign(0, e_idx)
     e_idx_2 = events[1].idx
     s.swap_assignment(0, e_idx, e_idx_2)
     assert s.schedule[e_idx] == -1
     assert s.schedule[e_idx_2] == 0
-
     # Assign null team
     s.assign(-1, e_idx)
     assert s.schedule[e_idx] == -1
-
     # Unassign null team
     s.unassign(-1, e_idx_2)
     assert s.schedule[e_idx_2] == 0
-
     # Swap null team
     s.swap_assignment(-1, e_idx_2, e_idx)
     assert s.schedule[e_idx_2] == 0
     assert s.schedule[e_idx] == -1
-
     # Conflict checks
     assert s.conflicts(0, e_idx_2)  # with assigned event
     assert not s.conflicts(-1, e_idx)  # null team
@@ -55,10 +48,8 @@ def test_schedule_clone_and_hash(empty_schedule: Schedule, event_factory: EventF
     s = empty_schedule
     events = event_factory.build()
     s.assign(0, events[0].idx)
-
     s_clone = s.clone()
     assert s == s_clone
-
     s.assign(1, events[1].idx)
     assert s != s_clone
 

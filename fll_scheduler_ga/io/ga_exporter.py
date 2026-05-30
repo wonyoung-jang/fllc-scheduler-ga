@@ -19,7 +19,6 @@ if TYPE_CHECKING:
     from fll_scheduler_ga.data_model.schedule import Schedule
     from fll_scheduler_ga.genetic.ga import GA
     from fll_scheduler_ga.io.plot import Visualizer
-
 logger = getLogger(__name__)
 
 
@@ -34,17 +33,13 @@ def generate_summary(
     total_pop = ga.total_population
     if not export_model.no_plotting and total_pop:
         plot.plot()
-
     schedules = ga.pareto_front() if export_model.front_only else total_pop
     schedules.sort(key=lambda s: (s.rank, -sum(s.fitness)))
-
     time_fmt = ga.context.app_config.tournament.time_fmt
     event_properties = ga.context.event_properties
-
     exporters = get_exporters(export_model, subdirs, time_fmt, event_properties, ga)
     export_manager = ExportManager(schedules=schedules, exporters=exporters)
     asyncio.run(export_manager.export_all())
-
     if export_model.pareto_summary:
         pareto_summary_gen = ParetoSummaryGenerator()
         pareto_summary_gen.export(total_pop, output_dir / "pareto_summary.csv")
@@ -121,7 +116,6 @@ class ExportManager:
             for i, sched in enumerate(self.schedules, start=1):
                 name = f"front{sched.rank}_sched{i}"
                 tasks.append(exporter.export(sched, subdir / f"{name}.{ext}"))
-
         await asyncio.gather(*tasks)
 
 
@@ -137,10 +131,8 @@ class OutputDirManager:
         if self.output_dir.exists():
             logger.debug("Output directory %s already exists. Clearing contents.", self.output_dir)
             shutil.rmtree(self.output_dir)
-
         self.output_dir.mkdir(parents=True, exist_ok=True)
         logger.debug("Output directory: %s", self.output_dir)
-
         self.subdirs.update(
             {
                 "csv": self.output_dir / "schedules_csv",
@@ -166,7 +158,6 @@ class ScheduleSummaryGenerator:
         length_objectives = [len(name) for name in objectives]
         max_len_obj = max(length_objectives, default=0) + 1
         txt.append(f"FLL Scheduler GA Summary Report (ID: {id(schedule)} | Hash: {hash(schedule)})\n")
-
         txt.append("\nAttributes:\n")
         txt.append("--------------------\n")
         txt.extend(
@@ -175,7 +166,6 @@ class ScheduleSummaryGenerator:
             if slot not in ("schedule", "fitness", "team_fitnesses", "team_events", "team_rounds")
         )
         txt.append(f"Length: {schedule.get_size()}\n")
-
         txt.append("\nFitness:\n")
         txt.append("--------------------------\n")
         for name, score in zip(objectives, schedule.fitness, strict=True):
@@ -183,41 +173,34 @@ class ScheduleSummaryGenerator:
         txt.append(f"{'-' * (max_len_obj + 15)}\n")
         txt.append(f"{'Total':<{max_len_obj}}: {schedule.fitness.sum()}\n")
         txt.append(f"{'Percentage':<{max_len_obj}}: {sum(schedule.fitness) / len(schedule.fitness):.2%}\n")
-
         team_fits = schedule.team_fitnesses
         min_obj = team_fits.min(axis=0)
         max_obj = team_fits.max(axis=0)
         mean_obj = team_fits.mean(axis=0)
         range_obj = max_obj - min_obj
-
         txt.append("\nPer-Objective Statistics (Team Distribution):\n")
         txt.append("-" * 65 + "\n")
         txt.append(f"{'Objective':<25} | {'Min':<8} | {'Max':<8} | {'Avg':<8} | {'Range':<8}\n")
         txt.append("-" * 65 + "\n")
-
         for i, name in enumerate(objectives):
             txt.append(
                 f"{name:<25} | {min_obj[i]:<8.6f} | {max_obj[i]:<8.6f} | {mean_obj[i]:<8.6f} | {range_obj[i]:<8.6f}\n"
             )
-
         all_teams = schedule.ctx.teams_list
         team_fits = schedule.team_fitnesses
         total_fits = team_fits.sum(axis=1)
         max_team_f = total_fits.max()
         min_team_f = total_fits.min()
-
         txt.append("\nTeam fitnesses (sorted by total fitness descending):\n")
         txt.append("----------------------------------------------------\n")
         txt.append(f"Max     : {max_team_f:.6f}\n")
         txt.append(f"Min     : {min_team_f:.6f}\n")
         txt.append(f"Range   : {max_team_f - min_team_f:.6f}\n")
         txt.append(f"Average : {sum(total_fits) / len(total_fits):.6f}\n")
-
         objs_header = "|".join(f"{name:<{length_objectives[i] + 1}}" for i, name in enumerate(objectives))
         header = f"\n{'Team':<5}|{objs_header}|Sum\n"
         txt.append(header)
         txt.append("-" * len(header) + "\n")
-
         normalized_teams = normalize_teams(schedule.schedule, self.team_identities)
         for t, fit in sorted(zip(all_teams, team_fits, strict=True), key=lambda x: -x[1].sum()):
             fitness_row = (
@@ -228,7 +211,6 @@ class ScheduleSummaryGenerator:
             if (team_id := normalized_teams[t]) == -1:
                 continue
             txt.append(f"{team_id:<5}|{fitness_str}|{sum(fit):.4f}\n")
-
         txt.append(
             "\nTeam Events (sorted, for dev use, diff check with others to ensure truly different schedules created):\n"
         )
@@ -238,7 +220,6 @@ class ScheduleSummaryGenerator:
         for events in team_events:
             events_str = ", ".join(str(e) for e in events) + "\n"
             txt.append(events_str)
-
         return tuple(txt)
 
     async def export(self, schedule: Schedule, path: Path) -> None:
@@ -263,16 +244,13 @@ class TeamScheduleGenerator:
         config = self.ga.context.app_config.tournament
         rows = []
         headers: list[str] = ["Team"]
-
         for roundtype, rounds_per_team in config.roundreqs.items():
             if rounds_per_team == 1:
                 headers.extend([f"{roundtype.capitalize()}", ""])
             else:
                 for i in range(1, rounds_per_team + 1):
                     headers.extend([f"{roundtype.capitalize()} {i}", ""])
-
         rows.append(tuple(headers))
-
         normalized_teams = normalize_teams(schedule.schedule, self.team_identities)
         team_events: dict[int, set[int]] = defaultdict(set)
         for event_id, t in enumerate(schedule.schedule):
@@ -280,7 +258,6 @@ class TeamScheduleGenerator:
                 continue
             team_id = normalized_teams[t]
             team_events[team_id].add(event_id)
-
         ep = self.ga.context.event_properties
         for team_id, events in sorted(team_events.items()):
             r = [str(team_id)]
@@ -312,7 +289,6 @@ class ParetoSummaryGenerator:
         header.extend(name.value for name in FitnessObjective)
         header.extend(["Sum", "Origin", "Mutations", "Clones"])
         summary.append(tuple(header))
-
         for i, s in enumerate(pop, start=1):
             row = [str(i), str(id(s)), str(hash(s)), str(s.get_size()), str(s.rank)]
             row.extend(f"{score:.4f}" for score in s.fitness)

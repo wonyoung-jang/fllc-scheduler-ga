@@ -15,7 +15,6 @@ if TYPE_CHECKING:
     from fll_scheduler_ga.genetic.ga import SchedulePopulation
     from fll_scheduler_ga.genetic.ga_context import GaContext
     from fll_scheduler_ga.genetic.stagnation import FitnessHistory, OperatorStats, StagnationHandler
-
 logger = getLogger(__name__)
 
 
@@ -32,11 +31,9 @@ class Island:
     fitness_history: FitnessHistory
     builder: ScheduleBuilderRandom
     population: SchedulePopulation
-
     stagnation: StagnationHandler = field(init=False)
     curr_schedule_fits: np.ndarray = field(init=False)
     selected: list[Schedule] = field(default_factory=list)
-
     _n_crossovers: int = field(init=False)
     _n_mutations: int = field(init=False)
     _n_pop: int = field(init=False)
@@ -50,7 +47,6 @@ class Island:
         ctx = self.context
         self._n_mutations = len(ctx.mutations)
         self._n_crossovers = len(ctx.crossovers)
-
         params = self.genetic_model.parameters
         self._n_pop = params.population_size
         self._n_offspring = params.offspring_size
@@ -84,7 +80,6 @@ class Island:
                 non_max_indices = [i for i in range(len(self.selected)) if i != max_idx]
                 i = self.rng.integers(0, len(non_max_indices))
                 idx_to_pop = non_max_indices[i]
-
             self.selected.pop(idx_to_pop)
             self.population.schedules = np.delete(arr=self.population.schedules, obj=idx_to_pop, axis=0)
             logger.debug(
@@ -123,7 +118,6 @@ class Island:
         if need <= 0:
             logger.debug("Island %d: Population already full with %d individuals", self.identity, len(self))
             return
-
         logger.debug("Island %d: Initializing population with %d individuals", self.identity, need)
         self.build_n_schedules(need)
 
@@ -132,7 +126,6 @@ class Island:
         need = self.n_needed
         if need <= 0:
             return
-
         logger.debug("Island %d: Handling underpopulation with %d individuals", self.identity, need)
         self.build_n_schedules(need)
 
@@ -164,7 +157,6 @@ class Island:
         """Perform main evolution loop: generations and migrations."""
         if not (pop := self.selected):
             return
-
         created_cycle = 0
         while created_cycle < self._n_offspring:
             parents_indices = self.context.select_parents(n=len(pop), k=2)
@@ -174,20 +166,16 @@ class Island:
                 offspring = self.crossover_schedule(parents)
             else:
                 offspring = (p.clone() for p in parents)
-
             for child in offspring:
                 if self._n_mutations > 0:
                     m_roll = True if not c_roll else self._chance_mutation > self.rng.random()
                     if m_roll:
                         self.mutate_schedule(child)
-
                 if self.add_to_population(child):
                     self.population.add(child.schedule)
-
                 created_cycle += 1
                 if created_cycle >= self._n_offspring:
                     break
-
         if not self.selected:
             msg = f"Island {self.identity}: No individuals in population after evolution."
             raise RuntimeError(msg)
@@ -204,14 +192,11 @@ class Island:
             _, flat, _ = self.context.select_nsga3(schedule_fits, n_pop)
         else:
             flat = np.arange(n_pop)
-
         self.fitness_history.current = schedule_fits[flat].mean(axis=0)
-
         total_pop: list[Schedule] = self.selected
         self.selected = []
         for i in flat:
             self.add_to_population(total_pop[i])
-
         self.population.schedules = self.population.schedules[flat]
         self.curr_schedule_fits = schedule_fits[flat]
 

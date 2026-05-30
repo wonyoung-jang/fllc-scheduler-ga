@@ -30,7 +30,6 @@ if TYPE_CHECKING:
     from fll_scheduler_ga.io.observers import GaObserver
     from fll_scheduler_ga.operators.crossover import Crossover
     from fll_scheduler_ga.operators.mutation import Mutation
-
 logger = logging.getLogger(__name__)
 
 
@@ -68,10 +67,8 @@ class GA:
     fitness_history: FitnessHistory
     generations_array: np.ndarray
     migrate_generations: np.ndarray
-
     total_population: list[Schedule] = field(default_factory=list)
     islands: list[Island] = field(default_factory=list)
-
     _n_islands: int = field(init=False)
     _n_generations: int = field(init=False)
 
@@ -80,7 +77,6 @@ class GA:
         params = self.genetic_model.parameters
         self._n_islands = params.num_islands
         self._n_generations = params.generations
-
         self.initialize_islands()
 
     def __len__(self) -> int:
@@ -175,7 +171,6 @@ class GA:
         )
         if not seeder.is_valid():
             return
-
         island_to_seed_idx = seeder.get_island_seeds()
         for i, seed_indices in island_to_seed_idx.items():
             island = self.islands[i]
@@ -194,16 +189,12 @@ class GA:
         for gen in self.generations_array:
             if self.migrate_generations[gen]:
                 self.migrate()
-
             # Run the generations
             for island in self.islands:
                 island.run_epoch()
-
             self.fitness_history.current = self.aggregate_island_fitness()
             self.fitness_history.update_fitness_history()
-
             self.generation += 1
-
             self._notify_on_generation_end(
                 generation=gen,
                 num_generations=self._n_generations,
@@ -288,7 +279,6 @@ class GAFinalizer:
         """Aggregate islands and run a final selection to produce the final population."""
         ga = self.ga
         ctx = ga.context
-
         self._deduplicate_population()
         self._log_operators(name="crossover", ratios=ga.operator_stats.crossover, ops=ctx.crossovers)
         self._log_operators(name="mutation", ratios=ga.operator_stats.mutation, ops=ctx.mutations)
@@ -301,12 +291,10 @@ class GAFinalizer:
         """Remove duplicate individuals from the population."""
         ga = self.ga
         ctx = ga.context
-
         unique_pop = [ind for island in ga.islands for ind in island.selected]
         pop_array = np.asarray([s.schedule for island in ga.islands for s in island.selected])
         schedule_fitness, team_fitnesses = ctx.evaluate(pop_array)
         _, flat, ranks = ctx.select_nsga3(schedule_fitness, len(unique_pop))
-
         selected = {}
         for rank, idx in zip(ranks, flat, strict=True):
             idx: int
@@ -315,7 +303,6 @@ class GAFinalizer:
             sch.team_fitnesses = team_fitnesses[idx]
             sch.rank = rank
             selected[hash(sch)] = sch
-
         ga.total_population = sorted(selected.values(), key=lambda s: (s.rank, -s.fitness.sum()))
 
     @staticmethod
@@ -323,7 +310,6 @@ class GAFinalizer:
         """Log statistics for crossover and mutation operators."""
         if not (op_strings := [f"{op!s}" for op in ops]):
             return
-
         log = f"{name.capitalize()} statistics:"
         max_len = max(len(s) for s in op_strings) + 1
         for op in op_strings:

@@ -34,7 +34,6 @@ class Schedule:
     _hash: int | None = None
     team_events: dict[int, set[int]] = field(default_factory=dict)
     team_rounds: np.ndarray = field(default_factory=lambda: np.array([]))
-
     # Class variables
     ctx: ClassVar[ScheduleContext]
 
@@ -42,10 +41,8 @@ class Schedule:
         """Post-initialization to set up fitness array."""
         if self.schedule.size == 0:
             self.schedule = Schedule.ctx.empty_schedule.copy()
-
         if not self.team_events:
             self.team_events = defaultdict(set)
-
         if self.team_rounds.size == 0:
             self.team_rounds = Schedule.ctx.teams_roundreqs_arr.copy()
 
@@ -86,7 +83,6 @@ class Schedule:
         """Switch an event for a team in the schedule."""
         if team == -1:
             return
-
         self.unassign(team, old_event)
         self.assign(team, new_event)
 
@@ -94,7 +90,6 @@ class Schedule:
         """Add an event to a team's scheduled events."""
         if team == -1:
             return
-
         roundtype = Schedule.ctx.event_props.roundtype_idx[event]
         self.team_events[team].add(event)
         self.team_rounds[team, roundtype] -= 1
@@ -105,7 +100,6 @@ class Schedule:
         """Remove an event from a team's scheduled events."""
         if team == -1:
             return
-
         roundtype = Schedule.ctx.event_props.roundtype_idx[event]
         self.team_events[team].remove(event)
         self.team_rounds[team, roundtype] += 1
@@ -138,16 +132,12 @@ class Schedule:
         """
         if team == -1:
             return False
-
         team_events = self.team_events[team]
         events_to_check = team_events
-
         if ignore is not None and ignore in team_events:
             events_to_check = events_to_check - {ignore}
-
         if new_event in events_to_check:
             return True
-
         return not events_to_check.isdisjoint(Schedule.ctx.conflict_map[new_event])
 
     def scheduled_events(self) -> np.ndarray:

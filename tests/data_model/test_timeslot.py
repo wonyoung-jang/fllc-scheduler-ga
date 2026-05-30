@@ -104,7 +104,6 @@ def test_less_than_timeslot(timeslot: TimeSlot, delta_minutes: int, *, expect_lt
 )
 def test_overlaps_timeslot(timeslot: TimeSlot, start_offset_min: int, stop_offset_min: int, *, expected: bool) -> None:
     """Parametrized overlaps tests.
-
     Offsets are minutes relative to timeslot.start (so original stop is +60).
     """
     other = TimeSlot(
@@ -281,9 +280,7 @@ class TestInitTimeslots:
         )
         dur_cycle = timedelta(minutes=30)
         dur_active = timedelta(minutes=20)
-
         result = tuple(init_timeslots(starts, dur_cycle, dur_active, 0, DEFAULT_DT))
-
         assert len(result) == 3
         # Check first timeslot
         assert result[0][0] == datetime(2026, 1, 1, 9, 0, tzinfo=UTC)
@@ -300,9 +297,7 @@ class TestInitTimeslots:
         dur_cycle = timedelta(minutes=30)
         dur_active = timedelta(minutes=20)
         n_timeslots = 4
-
         result = tuple(init_timeslots((), dur_cycle, dur_active, n_timeslots, start_dt))
-
         assert len(result) == 4
         # Check first timeslot
         assert result[0][0] == datetime(2026, 1, 1, 9, 0, tzinfo=UTC)
@@ -322,9 +317,7 @@ class TestInitTimeslots:
         start_dt = datetime(2026, 1, 1, 14, 0, tzinfo=UTC)
         dur_cycle = timedelta(minutes=45)
         dur_active = timedelta(minutes=30)
-
         result = tuple(init_timeslots((), dur_cycle, dur_active, 1, start_dt))
-
         assert len(result) == 1
         assert result[0][0] == datetime(2026, 1, 1, 14, 0, tzinfo=UTC)
         assert result[0][1] == datetime(2026, 1, 1, 14, 30, tzinfo=UTC)
@@ -335,9 +328,7 @@ class TestInitTimeslots:
         start_dt = datetime(2026, 1, 1, 9, 0, tzinfo=UTC)
         dur_cycle = timedelta(minutes=30)
         dur_active = timedelta(minutes=20)
-
         result = tuple(init_timeslots((), dur_cycle, dur_active, 0, start_dt))
-
         assert len(result) == 0
 
     def test_init_timeslots_with_different_active_cycle_durations(self) -> None:
@@ -346,9 +337,7 @@ class TestInitTimeslots:
         dur_cycle = timedelta(minutes=60)
         dur_active = timedelta(minutes=15)
         n_timeslots = 2
-
         result = tuple(init_timeslots((), dur_cycle, dur_active, n_timeslots, start_dt))
-
         assert len(result) == 2
         # First slot: 9:00-9:15 (active), 9:00-10:00 (cycle)
         assert result[0][0] == datetime(2026, 1, 1, 9, 0, tzinfo=UTC)

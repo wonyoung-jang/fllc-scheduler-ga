@@ -38,7 +38,6 @@ class LocationModelsParser:
         if not locations:
             msg = "No locations defined in the configuration file."
             raise ValueError(msg)
-
         return locations
 
 
@@ -51,7 +50,6 @@ class Location:
     name: int = 1
     side: int = -1
     teams_per_round: int = 1
-
     _str: str = ""
     _hash: int = 0
 
@@ -62,7 +60,6 @@ class Location:
             self._str = f"{self.locationtype} {ltr_id}{self.side}"
         else:
             self._str = f"{self.locationtype} {ltr_id}"
-
         self._hash = hash((self.name, self.side))
 
     def __str__(self) -> str:

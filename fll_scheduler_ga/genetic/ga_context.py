@@ -52,7 +52,6 @@ if TYPE_CHECKING:
     from fll_scheduler_ga.operators.crossover import Crossover
     from fll_scheduler_ga.operators.mutation import Mutation
     from fll_scheduler_ga.operators.selection import Selection
-
 logger = getLogger(__name__)
 
 
@@ -75,17 +74,14 @@ class StandardGaContextFactory(GaContextFactory):
         _tournament_config = app_config.tournament
         _genetic_model = app_config.genetic
         _fitness_model = app_config.fitness
-
         n_total_events = _tournament_config.get_n_total_events()
         event_factory = EventFactory(config=_tournament_config)
         event_properties = EventProperties.build(
             n_total_events=n_total_events,
             event_map=event_factory.as_mapping(),
         )
-
         # Run pre-flight checks before fitness benchmarking
         PreFlightChecker(event_properties, event_factory)
-
         Schedule.ctx = ScheduleContext(
             conflict_map=event_factory.as_conflict_map(),
             event_props=event_properties,
@@ -96,7 +92,6 @@ class StandardGaContextFactory(GaContextFactory):
             ),
             empty_schedule=np.full(n_total_events, -1, dtype=int),
         )
-
         constraints = (
             HardConstraintTruthiness(),
             HardConstraintSize(total_slots_required=_tournament_config.total_slots_required),
@@ -119,7 +114,6 @@ class StandardGaContextFactory(GaContextFactory):
             event_factory=event_factory,
             model=_fitness_model,
         )
-
         config_hasher = StableConfigHash(
             config=_tournament_config,
             model=_fitness_model,
@@ -128,7 +122,6 @@ class StandardGaContextFactory(GaContextFactory):
         benchmark_cache_dir = BENCHMARKS_CACHE
         benchmark_cache_dir.mkdir(parents=True, exist_ok=True)
         seed_file = benchmark_cache_dir / f"benchmark_cache_{config_hash}.pkl"
-
         repository = PickleBenchmarkRepository(path=seed_file)
         benchmark = FitnessBenchmark(
             config=_tournament_config,
@@ -138,7 +131,6 @@ class StandardGaContextFactory(GaContextFactory):
             breaktime_benchmarker=breaktime_benchmarker,
             flush_benchmarks=app_config.runtime.flush_benchmarks,
         )
-
         benchmark.run()
         evaluator = FitnessEvaluator(
             config=_tournament_config,
@@ -146,7 +138,6 @@ class StandardGaContextFactory(GaContextFactory):
             benchmark=benchmark,
             model=_fitness_model,
         )
-
         points = calc_ref_points(evaluator.n_objectives, _genetic_model.parameters.population_size)
         n_refs = points.shape[0]
         norm_sq = calc_norm_sq_of_refs(points)
@@ -160,19 +151,16 @@ class StandardGaContextFactory(GaContextFactory):
             refs=ref_directions,
             sorting=NonDominatedSorting(),
         )
-
         selection = RandomSelect(_rng)
         operators = _genetic_model.operator
         crossovers = build_crossovers(_rng, operators, event_factory, event_properties)
         mutations = build_mutations(_rng, operators, event_factory, event_properties)
-
         builder = ScheduleBuilderRandom(
             event_properties=event_properties,
             rng=_rng,
             round_idx_to_tpr=_tournament_config.round_idx_to_tpr,
             roundtype_events=event_factory.as_roundtypes(),
         )
-
         ga_context_instance = GaContext(
             app_config=app_config,
             event_factory=event_factory,
@@ -186,12 +174,10 @@ class StandardGaContextFactory(GaContextFactory):
             crossovers=crossovers,
             mutations=mutations,
         )
-
         RuntimeStartup(
             config=app_config,
             context=ga_context_instance,
         ).run()
-
         return ga_context_instance
 
 
@@ -270,7 +256,6 @@ class RuntimeStartup:
         if not self.config.runtime.import_file:
             logger.debug("No import file specified, skipping import step.")
             return None
-
         import_path = Path(self.config.runtime.import_file).resolve()
         csv_importer = CsvImporter(
             import_path,
@@ -280,19 +265,16 @@ class RuntimeStartup:
         )
         if not csv_importer.validate_inputs():
             return None
-
         csv_importer.run()
         imported_schedule = csv_importer.schedule
         if not self.context.checker.check(imported_schedule):
             self.context.repairer.repair(imported_schedule)
-
         evaluator_new = FitnessEvaluatorSingle(
             config=self.config.tournament,
             event_properties=self.context.event_properties,
             benchmark=self.context.evaluator.benchmark,
             model=self.config.fitness,
         )
-
         if fits := evaluator_new.evaluate(imported_schedule.schedule):
             sched_fits, team_fits = fits
             imported_schedule.fitness = sched_fits
@@ -309,7 +291,6 @@ class RuntimeStartup:
             )
             asyncio.run(summary_gen.export(imported_schedule, report_path))
             asyncio.run(csv_schedule_exporter.export(imported_schedule, parent_dir / "schedule.csv"))
-
         return imported_schedule
 
     def _add(self, seed_file: Path, imported_schedule: Schedule) -> None:
@@ -317,13 +298,9 @@ class RuntimeStartup:
         if not self.config.runtime.add_import_to_population:
             logger.debug("Not adding imported schedule to population.")
             return
-
         seed_data = GALoad(seed_file=seed_file, config=self.config.tournament).load()
-
         if seed_data is None:
             seed_data = GASeedData(config=self.config.tournament, population=[])
-
         if imported_schedule not in seed_data.population:
             seed_data.population.append(imported_schedule)
-
         GASave(seed_file=seed_file, data=seed_data).save()

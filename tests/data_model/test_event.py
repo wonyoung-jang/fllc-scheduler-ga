@@ -19,11 +19,9 @@ def test_event_factory_and_properties(event_factory: EventFactory, event_propert
     events = event_factory.build()
     assert len(events) > 0
     assert event_factory.build_indices().size == len(events)
-
     # Check conflicts
     conf_map = event_factory.as_conflict_map()
     assert isinstance(conf_map, dict)
-
     # Properties
     ep = event_properties
     assert ep.all_props.size == len(events)

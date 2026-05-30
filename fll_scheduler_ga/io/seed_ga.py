@@ -15,7 +15,6 @@ if TYPE_CHECKING:
 
     from fll_scheduler_ga.data_model.app_schemas import TournamentConfig
     from fll_scheduler_ga.data_model.schedule import Schedule
-
 logger = getLogger(__name__)
 
 
@@ -47,7 +46,6 @@ class GALoad:
         except EOFError:
             logger.debug("Pickle file is empty")
             return None
-
         try:
             pop = []
             if data.version != DATA_MODEL_VERSION:
@@ -66,7 +64,6 @@ class GALoad:
         except AttributeError:
             logger.warning("Seed population is malformed. Starting with a fresh population.")
             return None
-
         data.population = pop
         return data
 

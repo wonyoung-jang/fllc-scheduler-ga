@@ -61,7 +61,6 @@ def get_rng_seed(seed: int | str | None) -> int:
     """Return the RNG seed as an integer."""
     if isinstance(seed, int):
         return seed
-
     return int(
         np.random.default_rng().integers(*RANDOM_SEED_RANGE)
         if seed is None
@@ -85,11 +84,9 @@ class AppConfig:
         """Create and return the application configuration."""
         if path is None:
             path = CONFIG_FILE_DEFAULT
-
         if not path.exists():
             msg = f"Configuration file does not exist at: {path}"
             raise FileNotFoundError(msg)
-
         config_data = path.read_text()
         config_model = AppConfigModel.model_validate_json(config_data)
         return cls.build_from_model(config_model)
@@ -100,10 +97,8 @@ class AppConfig:
         teams_list = get_teams_list(model.tournament.teams)
         model.io.exports.team_identities = get_team_identities(teams_list)
         n_teams = len(teams_list)
-
         _location_models = model.tournament.locations
         locations = LocationModelsParser(models=_location_models).parse()
-
         tournament_config = cls.load_tournament_config(n_teams, model.tournament.rounds, locations)
         seed = get_rng_seed(model.genetic.rng_seed)
         rng = np.random.default_rng(seed)
@@ -126,22 +121,18 @@ class AppConfig:
         """Load and return the tournament configuration from the validated model."""
         time_fmt = cls.get_time_fmt(round_models)
         TimeSlot.time_fmt = time_fmt
-
         rounds = cls.parse_rounds_config(round_models, n_teams, time_fmt, locations)
         if not rounds:
             msg = "No rounds defined in the configuration file."
             raise ValueError(msg)
-
         roundreqs = {r.roundtype: r.rounds_per_team for r in rounds}
         round_idx_to_tpr = {r.roundtype_idx: r.teams_per_round for r in rounds}
         total_slots_required = sum(r.slots_required for r in rounds)
         unique_opponents_possible = 1 <= max(roundreqs.values()) <= n_teams - 1
         max_events_per_team = sum(roundreqs.values())
-
         all_locations = get_all_sorted_attr(rounds, get_by="locations", sort_by="idx")
         all_timeslots = get_all_sorted_attr(rounds, get_by="timeslots", sort_by="idx")
         is_interleaved = are_rounds_overlapping(rounds)
-
         return TournamentConfig(
             num_teams=n_teams,
             time_fmt=time_fmt,
@@ -172,7 +163,6 @@ class AppConfig:
         if len(format_counts) != 1:
             msg = "Conflicting time formats found in configuration times."
             raise ValueError(msg)
-
         return str(format_counts.most_common(1)[0][0])
 
     @classmethod
@@ -191,19 +181,15 @@ class AppConfig:
                 _times = round_model.times
                 _rounds_per_team = round_model.rounds_per_team
                 _location = round_model.location
-
                 locations = tuple(loc for loc in all_locations if loc.locationtype == _location)
                 _n_locations = len(locations)
-
                 start_dt = parse_time_str(round_model.start_time, time_fmt)
                 stop_dt = parse_time_str(round_model.stop_time, time_fmt)
                 times_dt = tuple(parse_time_str(t, time_fmt) for t in _times) if _times else ()
                 _n_timeslots = calc_num_timeslots(len(times_dt), _n_locations, n_teams, _rounds_per_team)
-
                 start_stop = (start_dt, stop_dt)
                 dur_tdelta_cycle = validate_duration(start_stop, times_dt, round_model.duration_cycle, _n_timeslots)
                 dur_tdelta_active = validate_duration(start_stop, times_dt, round_model.duration_active, _n_timeslots)
-
                 timeslots = tuple(
                     TimeSlot(
                         idx=next(timeslot_idx_iter),
@@ -215,14 +201,11 @@ class AppConfig:
                         times_dt, dur_tdelta_cycle, dur_tdelta_active, _n_timeslots, start_dt
                     )
                 )
-
                 round_start_time = timeslots[0].start
                 round_stop_time = timeslots[-1].stop_cycle
                 times_dt = tuple(ts.start for ts in timeslots)
-
                 slots_total = _n_timeslots * _n_locations
                 slots_required = n_teams * _rounds_per_team
-
                 slots_empty = slots_total - slots_required
                 if slots_empty < 0:
                     msg = (
@@ -230,9 +213,7 @@ class AppConfig:
                         "Suggestion: increase number of locations or timeslots."
                     )
                     raise ValueError(msg)
-
                 unfilled_allowed = slots_empty > 0
-
                 yield TournamentRound(
                     roundtype=round_model.roundtype,
                     roundtype_idx=roundtype_idx,

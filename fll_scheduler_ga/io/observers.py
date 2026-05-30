@@ -10,8 +10,6 @@ if TYPE_CHECKING:
     from rich.progress import Progress, TaskID
 
     from fll_scheduler_ga.data_model.schedule import Schedule
-
-
 logger = getLogger(__name__)
 
 

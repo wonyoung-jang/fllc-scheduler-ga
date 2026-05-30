@@ -13,7 +13,6 @@ from fll_scheduler_ga.data_model.timeslot import TimeSlot
 
 if TYPE_CHECKING:
     from fll_scheduler_ga.data_model.app_schemas import TournamentConfig
-
 logger = logging.getLogger(__name__)
 
 
@@ -78,7 +77,6 @@ class EventProperties:
             event_properties[i]["loc_side"] = e.location.side
             event_properties[i]["teams_per_round"] = e.location.teams_per_round
             event_properties[i]["paired_idx"] = e.paired
-
         names = event_properties.dtype.names
         names = names if isinstance(names, tuple) else ("",)
         event_prop_labels = ", ".join(names)
@@ -192,7 +190,6 @@ class EventFactory:
             if e1.timeslot.overlaps(e2.timeslot):
                 e1.conflicts.append(e2.idx)
                 e2.conflicts.append(e1.idx)
-
         for e in self.build():
             e.conflicts = sorted(set(e.conflicts))
             logger.debug("%s has %d conflicts: %s", e, len(e.conflicts), e.conflicts)

@@ -17,7 +17,6 @@ if TYPE_CHECKING:
     from fll_scheduler_ga.data_model.location import Location
     from fll_scheduler_ga.data_model.schedule import Schedule
     from fll_scheduler_ga.data_model.timeslot import TimeSlot
-
 logger = getLogger(__name__)
 
 
@@ -45,9 +44,7 @@ class ScheduleExporter(ABC):
         if not schedule:
             logger.warning("Cannot export an empty schedule.")
             return
-
         schedule_by_type = self._group_by_type(schedule)
-
         try:
             await self.write_to_file(schedule_by_type, path)
             logger.debug("Schedule successfully exported to %s", path)
@@ -61,7 +58,6 @@ class ScheduleExporter(ABC):
         for event, team in enumerate(schedule.schedule):
             if team == -1:
                 continue
-
             rt = self.event_properties.roundtype[event]
             grouped.setdefault(rt, {})
             grouped[rt][event] = normalized_teams[team]
@@ -93,13 +89,10 @@ class ScheduleExporter(ABC):
         """Generate a 2D matrix of strings representing the grid for a single round type."""
         if not schedule_dict:
             return []
-
         timeslots, locations, grid_lookup = self._build_grid_data(schedule_dict)
-
         # Header Row
         header = ["Time"] + [str(loc) for loc in locations]
         matrix = [header]
-
         # Data Rows
         for ts in timeslots:
             ts_str = ts.start.strftime(self.time_fmt) if ts.start else "N/A"
@@ -108,7 +101,6 @@ class ScheduleExporter(ABC):
                 team = grid_lookup.get((ts, loc))
                 row.append(str(team) if team is not None else "")
             matrix.append(row)
-
         return matrix
 
     @abstractmethod
@@ -130,7 +122,6 @@ class CsvScheduleExporter(ScheduleExporter):
             yield ["No events scheduled for this round type."]
             yield []
             return
-
         data = self.get_table_data(schedule_dict)
         yield from data
         yield []
@@ -153,18 +144,14 @@ class HtmlScheduleExporter(ScheduleExporter):
         if not schedule_dict:
             yield "<p>No events scheduled.</p>"
             return
-
         data = self.get_table_data(schedule_dict)
-
         # Table Start
         yield "<table>"
-
         # Thead
         yield "<thead><tr>"
         for cell in data[0]:
             yield f"<th>{html.escape(cell)}</th>"
         yield "</tr></thead>"
-
         # Tbody
         yield "<tbody>"
         for row in data[1:]:
@@ -175,7 +162,6 @@ class HtmlScheduleExporter(ScheduleExporter):
                 yield f"<{tag}>{html.escape(cell)}</{tag}>"
             yield "</tr>"
         yield "</tbody>"
-
         # Table End
         yield "</table>"
 
@@ -183,11 +169,9 @@ class HtmlScheduleExporter(ScheduleExporter):
         """Write the schedule to a file."""
         with filename.open("w", encoding="utf-8") as f:
             f.write(self._get_html_start())
-
             for title, schedule_dict in schedule_by_type.items():
                 f.write(f"<h2>{html.escape(title)}</h2>")
                 f.write("".join(self.render_grid(schedule_dict)))
-
             f.write(self._get_html_end())
 
     def _get_html_start(self) -> str:

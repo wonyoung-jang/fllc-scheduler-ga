@@ -26,7 +26,6 @@ def are_rounds_overlapping(rounds: Iterable[TournamentRound]) -> bool:
         )
         for start, stop_cycle in zip(_starts, _stops, strict=True)
     )
-
     return any(timeslots[i].overlaps(timeslots[j]) for i in range(len(timeslots)) for j in range(i + 1, len(timeslots)))
 
 
@@ -136,7 +135,6 @@ class TournamentConfig:
         """Check equality between two TournamentConfig instances."""
         if not isinstance(other, TournamentConfig):
             return NotImplemented
-
         return (
             self.num_teams == other.num_teams
             and self.time_fmt == other.time_fmt

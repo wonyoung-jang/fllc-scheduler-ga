@@ -1,7 +1,6 @@
 """Selection operators for genetic algorithms in FLL scheduling.
 
 The selection classes are sorted from highest to lowest selective pressure.
-
 Higher selective pressure means better individuals have a higher chance
 of being selected.
 """
@@ -48,13 +47,10 @@ class RandomSelect(Selection):
             # Two random indices
             i1 = self.rng.integers(0, n)
             i2 = self.rng.integers(0, n)
-
             # Ensure distinct
             while i1 == i2:
                 i2 = self.rng.integers(0, n)
-
             return np.array((i1, i2), dtype=int)
-
         choices = np.arange(n)
         self.rng.shuffle(choices)
         return choices[:k]

@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Any
 import matplotlib as mpl
 
 mpl.use("Agg")
-
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
@@ -21,8 +20,6 @@ if TYPE_CHECKING:
     from fll_scheduler_ga.config.constants import FitnessObjective
     from fll_scheduler_ga.config.pydantic_schemas import ExportModel
     from fll_scheduler_ga.genetic.ga import GA
-
-
 logger = logging.getLogger("visualize.plot")
 logging.getLogger("matplotlib").setLevel(logging.WARNING)
 logging.getLogger("PIL").setLevel(logging.WARNING)
@@ -72,19 +69,15 @@ class MatplotlibVisualizer(Visualizer):
         if not history.any():
             logger.error("Cannot plot fitness. No generation history was recorded.")
             return
-
         fig, ax = plt.subplots(figsize=(12, 7))
         columns = [f.value for f in self.objectives]
-
         x = np.arange(history.shape[0])
         for i, col in enumerate(columns):
             y = history[:, i]
             ax.plot(x, y, linewidth=2.5, alpha=0.9, label=col)
-
             z = np.polyfit(x, y, 3)
             p = np.poly1d(z)
             ax.plot(x, p(x), linestyle="--", linewidth=0.8, label=f"{col} Trend (deg={len(z) - 1})")
-
         ax.set(title="Fitness over time", xlabel="Generations", ylabel="Average fitnesses")
         ax.legend(title="Objectives", fontsize=10)
         fig.tight_layout()
@@ -95,12 +88,10 @@ class MatplotlibVisualizer(Visualizer):
         data = np.array([p.fitness for p in self.ga.total_population])
         ranks = np.array([p.rank for p in self.ga.total_population], dtype=int)
         fig, ax = plt.subplots(figsize=(12, 7))
-
         x = range(len(self.objectives))
         colors = plt.get_cmap(self.export_model.cmap_name)(np.linspace(0, 1, len(self.ga.total_population)))
         for i, ind_fitness in enumerate(data):
             ax.plot(x, ind_fitness, color=colors[i], alpha=0.7, linewidth=1.5)
-
         ax.set_xticks(x)
         ax.set_xticklabels(self.objectives, rotation=15, ha="right")
         ax.set(title="Trade-off parallel coordinates", xlabel="Objectives", ylabel="Score")
@@ -114,11 +105,9 @@ class MatplotlibVisualizer(Visualizer):
         if n_objectives not in (2, 3):
             logger.error("Cannot plot Pareto scatter for %d objectives. Only 2D and 3D supported.", n_objectives)
             return
-
         cmap_name = self.export_model.cmap_name
         data = np.array([p.fitness for p in self.ga.total_population])
         ranks = np.array([p.rank for p in self.ga.total_population], dtype=int)
-
         fig = plt.figure(figsize=(10, 8))
         ax = fig.add_subplot(projection="3d")
         x_obj, y_obj, z_obj = self.objectives
@@ -175,7 +164,6 @@ class MatplotlibVisualizer(Visualizer):
     ) -> None:
         """Attach a colorbar to the given axes."""
         unique_values = sorted(set(values))
-
         if len(unique_values) <= 10:
             cmap = plt.get_cmap(self.export_model.cmap_name, len(unique_values))
             norm = mcolors.BoundaryNorm(np.arange(min(values) - 0.5, max(values) + 1.5), cmap.N)
@@ -185,7 +173,6 @@ class MatplotlibVisualizer(Visualizer):
             norm = plt.Normalize(min(values), max(values))
             sm = plt.cm.ScalarMappable(norm=norm, cmap=self.export_model.cmap_name)
             cbar = plt.colorbar(mappable=sm, ax=ax)
-
         sm.set_array([])
         if label:
             cbar.set_label(label, fontsize=12)

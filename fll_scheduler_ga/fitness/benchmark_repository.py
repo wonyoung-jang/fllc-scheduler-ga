@@ -12,8 +12,6 @@ from fll_scheduler_ga.config.constants import FITNESS_MODEL_VERSION
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-
 logger = logging.getLogger(__name__)
 
 
@@ -50,14 +48,12 @@ class PickleBenchmarkRepository(BenchmarkRepository):
         logger.debug("Loading fitness benchmarks from cache: %s", self.path)
         if not self.path.exists():
             return None
-
         try:
             with self.path.open("rb") as f:
                 seed_data = pickle.load(f)
         except OSError, EOFError, AttributeError, ModuleNotFoundError, pickle.UnpicklingError:
             logger.debug("Failed to load fitness benchmarks from cache: %s", self.path)
             return None
-
         return seed_data
 
     def save(self, data: BenchmarkSeedData) -> None:

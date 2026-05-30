@@ -18,22 +18,17 @@ def test_schemas_validation() -> None:
     # ImportModel
     with pytest.raises(ValidationError):
         ImportModel(seed_pop_sort="invalid")
-
     with pytest.raises(ValidationError):
         ImportModel(seed_island_strategy="invalid")
-
     # FitnessModel
     fm = FitnessModel()
     fm_obj_weights = fm.objectives.get_weights_tuple()
     assert all(w == 1.0 / 1.0 for w in fm_obj_weights)
-
     # RoundModel
     with pytest.raises(ValidationError):
         RoundModel(roundtype="R1", start_time="", times=[])  # Missing times
-
     with pytest.raises(ValidationError):
         RoundModel(roundtype="R1", start_time="", stop_time="09:00")  # Stop without start
-
     with pytest.raises(ValidationError):
         RoundModel(
             roundtype="R1",
@@ -42,12 +37,10 @@ def test_schemas_validation() -> None:
             duration_active=10,
             duration_cycle=5,
         )  # Active > Cycle
-
     # Teams
     teams = 5
     teams_list = get_teams_list(teams)
     assert len(teams_list) == 5
-
     ids = get_team_identities(teams_list)
     assert ids[1] == "1"
 
