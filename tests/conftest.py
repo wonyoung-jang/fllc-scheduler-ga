@@ -6,11 +6,11 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pytest
 
-from fll_scheduler_ga.config.app_config import AppConfig
-from fll_scheduler_ga.domain.event import EventProperties
+from fll_scheduler_ga.config.app_config import TIME_FORMAT_MAP, AppConfig, build_app_config, parse_time_str
+from fll_scheduler_ga.domain.event import EventProperties, build_event_props
 from fll_scheduler_ga.domain.model import EventFactory
 from fll_scheduler_ga.domain.schedule import Schedule, ScheduleContext
-from fll_scheduler_ga.domain.timeslot import TIME_FORMAT_MAP, TimeSlot, parse_time_str
+from fll_scheduler_ga.domain.timeslot import TimeSlot
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -71,7 +71,7 @@ def app_config(minimal_config_dict: dict[str, Any], tmp_path: Path) -> AppConfig
     config_file = tmp_path / "config.json"
     with config_file.open("w") as f:
         json.dump(minimal_config_dict, f)
-    return AppConfig.build(config_file)
+    return build_app_config(config_file)
 
 
 @pytest.fixture
@@ -89,7 +89,7 @@ def event_factory(tournament_config: TournamentConfig) -> EventFactory:
 @pytest.fixture
 def event_properties(tournament_config: TournamentConfig, event_factory: EventFactory) -> EventProperties:
     """Return EventProperties."""
-    return EventProperties.build(tournament_config.get_n_total_events(), event_factory.as_mapping())
+    return build_event_props(tournament_config.get_n_total_events(), event_factory.mapping)
 
 
 @pytest.fixture
@@ -101,7 +101,7 @@ def schedule_context(
     roundreqs_array = np.tile(tuple(tournament_config.roundreqs.values()), (tournament_config.num_teams, 1))
     empty_schedule = np.full(n_total, -1, dtype=int)
     return ScheduleContext(
-        conflict_map=event_factory.as_conflict_map(),
+        conflict_map=event_factory.conflict_map,
         event_props=event_properties,
         teams_list=np.arange(tournament_config.num_teams, dtype=int),
         teams_roundreqs_arr=roundreqs_array,

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
-    from fll_scheduler_ga.config.pydantic_schemas import StagnationModel
+    from fll_scheduler_ga.config.schemas import StagnationModel
 
 
 @dataclass(slots=True)

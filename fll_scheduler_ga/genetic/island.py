@@ -9,7 +9,7 @@ import numpy as np
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from fll_scheduler_ga.config.pydantic_schemas import GeneticModel
+    from fll_scheduler_ga.config.schemas import GeneticModel
     from fll_scheduler_ga.domain.schedule import Schedule
     from fll_scheduler_ga.genetic.builder import ScheduleBuilderRandom
     from fll_scheduler_ga.genetic.ga_context import GaContext

@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from matplotlib.axes import Axes
     from matplotlib.figure import Figure
 
-    from fll_scheduler_ga.config.pydantic_schemas import ExportModel
+    from fll_scheduler_ga.config.schemas import ExportModel
     from fll_scheduler_ga.constants import FitnessObjective
     from fll_scheduler_ga.domain.schedule import Schedule
 

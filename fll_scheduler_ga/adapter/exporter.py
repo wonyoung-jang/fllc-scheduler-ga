@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from fll_scheduler_ga.adapter.plot import Visualizer
-    from fll_scheduler_ga.config.pydantic_schemas import ExportModel
+    from fll_scheduler_ga.config.schemas import ExportModel
     from fll_scheduler_ga.domain.event import EventProperties
     from fll_scheduler_ga.domain.location import Location
     from fll_scheduler_ga.domain.schedule import Schedule

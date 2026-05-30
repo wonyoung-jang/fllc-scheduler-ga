@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 def test_schedule_operations(empty_schedule: Schedule, event_factory: EventFactory) -> None:
     """Test Schedule assignment logic."""
     s = empty_schedule
-    events = event_factory.build()
+    events = event_factory.events
     e_idx = events[0].idx
     # Assign
     s.assign(0, e_idx)
@@ -46,7 +46,7 @@ def test_schedule_operations(empty_schedule: Schedule, event_factory: EventFacto
 def test_schedule_clone_and_hash(empty_schedule: Schedule, event_factory: EventFactory) -> None:
     """Test cloning and hashing."""
     s = empty_schedule
-    events = event_factory.build()
+    events = event_factory.events
     s.assign(0, events[0].idx)
     s_clone = s.clone()
     assert s == s_clone

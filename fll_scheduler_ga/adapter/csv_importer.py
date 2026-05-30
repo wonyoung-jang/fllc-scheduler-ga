@@ -14,8 +14,8 @@ from fll_scheduler_ga.domain.timeslot import TimeSlot
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from fll_scheduler_ga.domain.event import EventFactory, EventProperties
-    from fll_scheduler_ga.domain.model import TournamentConfig, TournamentRound
+    from fll_scheduler_ga.domain.event import EventProperties
+    from fll_scheduler_ga.domain.model import EventFactory, TournamentConfig, TournamentRound
 
 logger = getLogger(__name__)
 RE_HHMM = re.compile(r"\d{2}:\d{2}")
@@ -37,7 +37,7 @@ class CsvImporter:
     def run(self) -> None:
         """Run the CSV importer to build the schedule."""
         self.round_configs.update({r.roundtype: r for r in self.config.rounds})
-        for e in self.event_factory.build_indices():
+        for e in self.event_factory.events_idx:
             rt = self.event_properties.roundtype[e]
             ts: TimeSlot = self.event_properties.timeslot[e]
             loc_type = self.event_properties.loc_type[e]

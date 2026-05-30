@@ -7,10 +7,11 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from fll_scheduler_ga.domain.event import EventProperties
     from fll_scheduler_ga.domain.model import EventFactory, TournamentConfig
     from fll_scheduler_ga.domain.schedule import Schedule
-    from fll_scheduler_ga.fitness.hard_constraint_checker import HardConstraintChecker
 
 
 @dataclass(slots=True)
@@ -21,7 +22,7 @@ class Repairer:
     event_factory: EventFactory
     event_properties: EventProperties
     rng: np.random.Generator
-    checker: HardConstraintChecker
+    checker: Callable[[Schedule], bool]
     repair_map: dict[int, Any] = field(init=False)
     _rt_to_tpr: np.ndarray = field(init=False)
 

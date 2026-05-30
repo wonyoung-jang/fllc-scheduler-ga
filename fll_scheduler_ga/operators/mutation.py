@@ -13,7 +13,7 @@ from fll_scheduler_ga.constants import MutationOp
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
 
-    from fll_scheduler_ga.config.pydantic_schemas import OperatorModel
+    from fll_scheduler_ga.config.schemas import OperatorModel
     from fll_scheduler_ga.domain.event import EventProperties
     from fll_scheduler_ga.domain.model import EventFactory
     from fll_scheduler_ga.domain.schedule import Schedule
@@ -94,7 +94,7 @@ class SwapMutation(Mutation):
         """Precompute any necessary data before mutation."""
         _ts_idx = self.event_properties.timeslot_idx
         _loc_idx = self.event_properties.loc_idx
-        _as_matches = self.event_factory.as_matches()
+        _as_matches = self.event_factory.matches
         _same_ts = self.same_timeslot
         _same_loc = self.same_location
         _is_same_ts_and_loc = _same_ts and _same_loc
@@ -258,9 +258,9 @@ class TimeSlotSequenceMutation(Mutation):
     def init_candidates(self) -> tuple[dict[tuple[int, int], list[tuple[int, ...]]], dict[tuple[int, int], int]]:
         """Precompute candidate events for each timeslot."""
         ep = self.event_properties
-        timeslot_data = {}
-        keys_to_tpr = {}
-        timeslot_event_map = self.event_factory.as_timeslots()
+        timeslot_data: dict[tuple[int, int], list[tuple[int, ...]]] = {}
+        keys_to_tpr: dict[tuple[int, int], int] = {}
+        timeslot_event_map = self.event_factory.timeslots
         for key, events in timeslot_event_map.items():
             candidates = [e for e in events if ep.loc_side[e] == 1 or ep.paired_idx[e] == -1]
             timeslot_data[key] = [(e, ep.paired_idx[e]) for e in candidates]

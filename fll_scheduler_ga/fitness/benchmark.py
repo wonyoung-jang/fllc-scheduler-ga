@@ -14,7 +14,7 @@ from fll_scheduler_ga.constants import EPSILON, FITNESS_MODEL_VERSION
 from fll_scheduler_ga.fitness.benchmark_repository import BenchmarkSeedData
 
 if TYPE_CHECKING:
-    from fll_scheduler_ga.config.pydantic_schemas import FitnessModel
+    from fll_scheduler_ga.config.schemas import FitnessModel
     from fll_scheduler_ga.domain.model import EventFactory, TournamentConfig
     from fll_scheduler_ga.fitness.benchmark_repository import BenchmarkRepository
 
@@ -113,7 +113,7 @@ class FitnessBenchmarkOpponent(FitnessBenchmarkObjective):
         non_matches_required = 0
         round_str_to_idx = {r.roundtype: r.roundtype_idx for r in self.config.rounds}
         round_idx_to_rt = {v: k for k, v in round_str_to_idx.items()}
-        for rt, events in self.event_factory.as_roundtypes().items():
+        for rt, events in self.event_factory.roundtypes.items():
             rti_to_rt = round_idx_to_rt[rt]
             roundreq = self.config.roundreqs[rti_to_rt]
             round_to_tpr = self.config.round_idx_to_tpr[rt]

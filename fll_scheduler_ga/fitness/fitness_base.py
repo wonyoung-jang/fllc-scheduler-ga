@@ -9,7 +9,7 @@ import numpy as np
 from fll_scheduler_ga.constants import EPSILON, FitnessObjective
 
 if TYPE_CHECKING:
-    from fll_scheduler_ga.config.pydantic_schemas import FitnessModel
+    from fll_scheduler_ga.config.schemas import FitnessModel
     from fll_scheduler_ga.domain.event import EventProperties
     from fll_scheduler_ga.domain.model import TournamentConfig
     from fll_scheduler_ga.fitness.benchmark import FitnessBenchmark

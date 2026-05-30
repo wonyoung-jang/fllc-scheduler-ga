@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from fll_scheduler_ga.config.app_config import AppConfig
+from fll_scheduler_ga.config.app_config import build_app_config
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -19,4 +19,4 @@ def test_time_format_inference_error(minimal_config_dict: dict, tmp_path: Path) 
     with config_file.open("w") as f:
         json.dump(minimal_config_dict, f)
     with pytest.raises(ValueError, match=r"Conflicting time formats found in configuration times."):
-        AppConfig.build(config_file)
+        build_app_config(config_file)

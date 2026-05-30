@@ -13,7 +13,7 @@ from fll_scheduler_ga.adapter.csv_importer import CsvImporter
 from fll_scheduler_ga.adapter.exporter import CsvScheduleExporter, ScheduleSummaryGenerator
 from fll_scheduler_ga.adapter.seed_ga import GALoad, GASave, GASeedData
 from fll_scheduler_ga.constants import BENCHMARKS_CACHE
-from fll_scheduler_ga.domain.event import EventProperties
+from fll_scheduler_ga.domain.event import EventProperties, build_event_props
 from fll_scheduler_ga.domain.model import EventFactory
 from fll_scheduler_ga.domain.schedule import Schedule, ScheduleContext
 from fll_scheduler_ga.fitness.benchmark import (
@@ -25,12 +25,6 @@ from fll_scheduler_ga.fitness.benchmark import (
 from fll_scheduler_ga.fitness.benchmark_repository import PickleBenchmarkRepository
 from fll_scheduler_ga.fitness.fitness_population import FitnessEvaluator
 from fll_scheduler_ga.fitness.fitness_schedule import FitnessEvaluatorSingle
-from fll_scheduler_ga.fitness.hard_constraint_checker import (
-    HardConstraintChecker,
-    HardConstraintNoRoundsNeeded,
-    HardConstraintSize,
-    HardConstraintTruthiness,
-)
 from fll_scheduler_ga.genetic.builder import ScheduleBuilderRandom
 from fll_scheduler_ga.operators.crossover import build_crossovers
 from fll_scheduler_ga.operators.mutation import build_mutations
@@ -45,8 +39,10 @@ from fll_scheduler_ga.operators.repairer import Repairer
 from fll_scheduler_ga.operators.selection import RandomSelect
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from fll_scheduler_ga.config.app_config import AppConfig
-    from fll_scheduler_ga.config.pydantic_schemas import ImportModel
+    from fll_scheduler_ga.config.schemas import ImportModel
     from fll_scheduler_ga.domain.model import TournamentConfig
     from fll_scheduler_ga.domain.timeslot import TimeSlot
     from fll_scheduler_ga.operators.crossover import Crossover
@@ -75,7 +71,7 @@ class PreFlightChecker:
     def _check_location_timeslot_overlaps(self) -> None:
         """Check if different round types are scheduled in the same locations at the same time."""
         booked: dict[int, list[tuple[TimeSlot, str]]] = defaultdict(list)
-        for e in self.factory.build_indices():
+        for e in self.factory.events_idx:
             loc_str = self.props.loc_str[e]
             loc_idx = self.props.loc_idx[e]
             ts = self.props.timeslot[e]
@@ -93,6 +89,11 @@ class PreFlightChecker:
         logger.debug("Check passed: No location/time overlaps found.")
 
 
+def hard_constraint_checker(constraints: tuple[Callable[[Schedule], bool], ...]) -> Callable[[Schedule], bool]:
+    """Check hard constraints of a schedule."""
+    return lambda s: not any(constraint(s) for constraint in constraints)
+
+
 @dataclass(slots=True)
 class StandardGaContextFactory:
     """Standard implementation of GA context factory."""
@@ -101,22 +102,22 @@ class StandardGaContextFactory:
         """Build and return a GA context."""
         n_total_events = cfg.tournament.get_n_total_events()
         event_factory = EventFactory(config=cfg.tournament)
-        event_properties = EventProperties.build(n_total_events=n_total_events, event_map=event_factory.as_mapping())
+        event_properties = build_event_props(n_total_events=n_total_events, event_map=event_factory.mapping)
         pre_flight_checker = PreFlightChecker(props=event_properties, factory=event_factory)
         pre_flight_checker.run_checks()
         Schedule.ctx = ScheduleContext(
-            conflict_map=event_factory.as_conflict_map(),
+            conflict_map=event_factory.conflict_map,
             event_props=event_properties,
             teams_list=np.arange(cfg.tournament.num_teams, dtype=int),
             teams_roundreqs_arr=np.tile(A=tuple(cfg.tournament.roundreqs.values()), reps=(cfg.tournament.num_teams, 1)),
             empty_schedule=np.full(n_total_events, -1, dtype=int),
         )
         constraints = (
-            HardConstraintTruthiness(),
-            HardConstraintSize(total_slots_required=cfg.tournament.total_slots_required),
-            HardConstraintNoRoundsNeeded(),
+            lambda s: not s,
+            lambda s: s.get_size() != cfg.tournament.total_slots_required,
+            lambda s: s.any_rounds_needed(),
         )
-        checker = HardConstraintChecker(constraints=constraints)
+        checker = hard_constraint_checker(constraints)
         repairer = Repairer(
             config=cfg.tournament,
             event_factory=event_factory,
@@ -159,7 +160,7 @@ class StandardGaContextFactory:
             event_properties=event_properties,
             rng=cfg.rng,
             round_idx_to_tpr=cfg.tournament.round_idx_to_tpr,
-            roundtype_events=event_factory.as_roundtypes(),
+            roundtype_events=event_factory.roundtypes,
         )
         ga_context_instance = GaContext(
             app_config=cfg,
@@ -186,7 +187,7 @@ class GaContext:
     event_factory: EventFactory
     event_properties: EventProperties
     evaluator: FitnessEvaluator
-    checker: HardConstraintChecker
+    checker: Callable[[Schedule], bool]
     builder: ScheduleBuilderRandom
     repairer: Repairer
     nsga3: NSGA3
@@ -196,7 +197,7 @@ class GaContext:
 
     def check(self, schedule: Schedule) -> bool:
         """Check a schedule using the hard constraint checker."""
-        return self.checker.check(schedule)
+        return self.checker(schedule)
 
     def repair(self, schedule: Schedule) -> bool:
         """Repair a schedule using the repairer."""
@@ -261,8 +262,8 @@ class RuntimeStartup:
             return None
         csv_importer.run()
         imported_schedule = csv_importer.schedule
-        if not self.context.checker.check(imported_schedule):
-            self.context.repairer.repair(imported_schedule)
+        if not self.context.check(imported_schedule):
+            self.context.repair(imported_schedule)
         evaluator_new = FitnessEvaluatorSingle(
             config=self.config.tournament,
             event_properties=self.context.event_properties,

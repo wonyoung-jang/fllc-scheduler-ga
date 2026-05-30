@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from fll_scheduler_ga.config.config_manager import ConfigManager
+from fll_scheduler_ga.config.manager import ConfigManager
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -3,8 +3,8 @@
 import pytest
 from pydantic import ValidationError
 
-from fll_scheduler_ga.config.app_config import get_team_identities, get_teams_list
-from fll_scheduler_ga.config.pydantic_schemas import (
+from fll_scheduler_ga.config.app_config import _get_team_identities, _get_teams_list
+from fll_scheduler_ga.config.schemas import (
     AggregationWeightsModel,
     FitnessModel,
     ImportModel,
@@ -35,9 +35,9 @@ def test_schemas_validation() -> None:
         )  # Active > Cycle
     # Teams
     teams = 5
-    teams_list = get_teams_list(teams)
+    teams_list = _get_teams_list(teams)
     assert len(teams_list) == 5
-    ids = get_team_identities(teams_list)
+    ids = _get_team_identities(teams_list)
     assert ids[1] == "1"
 
 

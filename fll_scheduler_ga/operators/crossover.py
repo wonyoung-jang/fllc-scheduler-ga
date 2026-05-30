@@ -14,7 +14,7 @@ from fll_scheduler_ga.domain.schedule import Schedule
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator
 
-    from fll_scheduler_ga.config.pydantic_schemas import OperatorModel
+    from fll_scheduler_ga.config.schemas import OperatorModel
     from fll_scheduler_ga.domain.event import EventProperties
     from fll_scheduler_ga.domain.model import EventFactory
 
@@ -68,7 +68,7 @@ class Crossover(ABC):
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the crossover operator."""
-        self.events = self.event_factory.build_singles_or_side1_indices()
+        self.events = self.event_factory.singles_or_side1_idx
         self.n_evts = self.events.shape[0]
 
     @abstractmethod
