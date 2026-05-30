@@ -20,9 +20,9 @@ from fll_scheduler_ga.fitness.benchmark import (
     FitnessBenchmark,
     FitnessBenchmarkBreaktime,
     FitnessBenchmarkOpponent,
+    PickleBenchmarkRepository,
     StableConfigHash,
 )
-from fll_scheduler_ga.fitness.benchmark_repository import PickleBenchmarkRepository
 from fll_scheduler_ga.fitness.evaluator import FitnessEvaluator
 from fll_scheduler_ga.genetic.builder import ScheduleBuilderRandom
 from fll_scheduler_ga.operators.crossover import build_crossovers
