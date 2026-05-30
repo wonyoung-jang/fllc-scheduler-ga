@@ -26,7 +26,6 @@ class ScheduleBuilder(ABC):
         """Construct and return the final schedule."""
 
 
-@dataclass(slots=True)
 class ScheduleBuilderRandom(ScheduleBuilder):
     """Builder for building a valid random schedule."""
 

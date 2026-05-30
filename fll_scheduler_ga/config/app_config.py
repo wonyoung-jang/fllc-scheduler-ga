@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from fll_scheduler_ga.config.constants import CONFIG_FILE_DEFAULT, RANDOM_SEED_RANGE
 from fll_scheduler_ga.config.pydantic_schemas import (
     AppConfigModel,
     FitnessModel,
@@ -18,6 +17,7 @@ from fll_scheduler_ga.config.pydantic_schemas import (
     RoundModel,
     RuntimeModel,
 )
+from fll_scheduler_ga.constants import CONFIG_FILE_DEFAULT, RANDOM_SEED_RANGE
 from fll_scheduler_ga.data_model.app_schemas import TournamentConfig, TournamentRound, are_rounds_overlapping
 from fll_scheduler_ga.data_model.location import Location, LocationModelsParser
 from fll_scheduler_ga.data_model.timeslot import (

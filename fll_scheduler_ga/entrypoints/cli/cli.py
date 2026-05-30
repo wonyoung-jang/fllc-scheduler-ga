@@ -19,7 +19,7 @@ from fll_scheduler_ga.adapter.observers import LoggingObserver, RichObserver
 from fll_scheduler_ga.adapter.plot import MatplotlibVisualizer
 from fll_scheduler_ga.config.app_config import AppConfig
 from fll_scheduler_ga.config.config_manager import ConfigManager
-from fll_scheduler_ga.config.constants import LOGGING_CONFIG_PATH, FitnessObjective
+from fll_scheduler_ga.constants import LOGGING_CONFIG_PATH, FitnessObjective
 from fll_scheduler_ga.genetic.ga import GA
 from fll_scheduler_ga.genetic.ga_context import StandardGaContextFactory
 from fll_scheduler_ga.genetic.stagnation import FitnessHistory, OperatorStats

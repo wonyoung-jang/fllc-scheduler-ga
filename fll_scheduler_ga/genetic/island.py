@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
-    from collections.abc import Generator, Iterator
+    from collections.abc import Iterator
 
     from fll_scheduler_ga.config.pydantic_schemas import GeneticModel
     from fll_scheduler_ga.data_model.schedule import Schedule
@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from fll_scheduler_ga.genetic.ga import SchedulePopulation
     from fll_scheduler_ga.genetic.ga_context import GaContext
     from fll_scheduler_ga.genetic.stagnation import FitnessHistory, OperatorStats, StagnationHandler
+
 logger = getLogger(__name__)
 
 
@@ -160,7 +161,7 @@ class Island:
         created_cycle = 0
         while created_cycle < self._n_offspring:
             parents_indices = self.context.select_parents(n=len(pop), k=2)
-            parents: Generator[Schedule] = (pop[i] for i in parents_indices)
+            parents: Iterator[Schedule] = (pop[i] for i in parents_indices)
             c_roll = self._chance_crossover > self.rng.random()
             if c_roll and self._n_crossovers > 0:
                 offspring = self.crossover_schedule(parents)

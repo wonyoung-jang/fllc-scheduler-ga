@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from logging import getLogger
 from typing import TYPE_CHECKING
 
-from fll_scheduler_ga.config.constants import DATA_MODEL_VERSION
+from fll_scheduler_ga.constants import DATA_MODEL_VERSION
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -22,9 +22,9 @@ logger = getLogger(__name__)
 class GASeedData:
     """GA seed data object."""
 
-    version: int = DATA_MODEL_VERSION
     config: TournamentConfig | None = None
     population: list[Schedule] = field(default_factory=list)
+    version: int = DATA_MODEL_VERSION
 
 
 @dataclass(slots=True)

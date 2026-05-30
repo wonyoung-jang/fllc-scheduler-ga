@@ -9,7 +9,7 @@ from logging import getLogger
 from typing import TYPE_CHECKING
 
 from fll_scheduler_ga.adapter.schedule_exporter import CsvScheduleExporter, HtmlScheduleExporter, normalize_teams
-from fll_scheduler_ga.config.constants import FitnessObjective
+from fll_scheduler_ga.constants import FitnessObjective
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -15,7 +15,7 @@ from fll_scheduler_ga.adapter.seed_ga import (
     GASeedData,
     SeedingStrategy,
 )
-from fll_scheduler_ga.config.constants import SeedIslandStrategy, SeedPopSort
+from fll_scheduler_ga.constants import SeedIslandStrategy, SeedPopSort
 from fll_scheduler_ga.genetic.island import Island
 from fll_scheduler_ga.genetic.stagnation import FitnessHistory, OperatorStats, StagnationHandler
 
@@ -97,9 +97,7 @@ class GA:
                 operator_stats=self.operator_stats,
                 fitness_history=self.fitness_history.copy(),
                 builder=self.context.builder,
-                population=SchedulePopulation(
-                    ranks=np.empty((0,), dtype=int),
-                ),
+                population=SchedulePopulation(ranks=np.empty((0,), dtype=int)),
             )
             island.stagnation = StagnationHandler(
                 rng=self.rng,
@@ -116,10 +114,7 @@ class GA:
         try:
             start_time = time.time()
             self._notify_on_start(self._n_generations)
-            seed_data = GALoad(
-                seed_file=seed_file,
-                config=config,
-            ).load()
+            seed_data = GALoad(seed_file, config).load()
             if seed_data is not None:
                 self.seed_population(seed_data)
             self.initialize_population()

@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from logging import getLogger
 from typing import TYPE_CHECKING, TextIO
 
-from fll_scheduler_ga.config.constants import ASCII_OFFSET
+from fll_scheduler_ga.constants import ASCII_OFFSET
 from fll_scheduler_ga.data_model.schedule import Schedule
 from fll_scheduler_ga.data_model.timeslot import TimeSlot
 

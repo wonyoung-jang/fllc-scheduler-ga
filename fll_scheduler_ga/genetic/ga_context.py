@@ -2,6 +2,7 @@
 
 import asyncio
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from dataclasses import dataclass
 from logging import getLogger
 from pathlib import Path
@@ -32,7 +33,6 @@ from fll_scheduler_ga.fitness.hard_constraint_checker import (
     HardConstraintTruthiness,
 )
 from fll_scheduler_ga.genetic.builder import ScheduleBuilderRandom
-from fll_scheduler_ga.genetic.preflight_checker import PreFlightChecker
 from fll_scheduler_ga.operators.crossover import build_crossovers
 from fll_scheduler_ga.operators.mutation import build_mutations
 from fll_scheduler_ga.operators.nsga3 import (
@@ -49,10 +49,53 @@ if TYPE_CHECKING:
     from fll_scheduler_ga.config.app_config import AppConfig
     from fll_scheduler_ga.config.pydantic_schemas import ImportModel
     from fll_scheduler_ga.data_model.app_schemas import TournamentConfig
+    from fll_scheduler_ga.data_model.timeslot import TimeSlot
     from fll_scheduler_ga.operators.crossover import Crossover
     from fll_scheduler_ga.operators.mutation import Mutation
     from fll_scheduler_ga.operators.selection import Selection
+
 logger = getLogger(__name__)
+
+
+@dataclass(slots=True)
+class PreFlightChecker:
+    """Run pre-flight checks on the tournament configuration."""
+
+    properties: EventProperties
+    factory: EventFactory
+
+    def __post_init__(self) -> None:
+        """Post-initialization run checks."""
+        self.run_checks()
+
+    def run_checks(self) -> None:
+        """Run all pre-flight checks."""
+        try:
+            self.check_location_time_overlaps()
+            logger.debug("All preflight checks passed successfully.")
+        except ValueError:
+            logger.exception("Preflight checks failed. Please review the configuration.")
+            raise
+
+    def check_location_time_overlaps(self) -> None:
+        """Check if different round types are scheduled in the same locations at the same time."""
+        booked_slots: dict[int, list[tuple[TimeSlot, str]]] = defaultdict(list)
+        for e in self.factory.build_indices():
+            loc_str = self.properties.loc_str[e]
+            loc_idx = self.properties.loc_idx[e]
+            ts = self.properties.timeslot[e]
+            rt = self.properties.roundtype[e]
+            for existing_ts, existing_rt in booked_slots.get(loc_idx, []):
+                if ts.overlaps(existing_ts):
+                    msg = (
+                        f"Configuration conflict: TournamentRound '{rt}' and '{existing_rt}' "
+                        f"are scheduled in the same location ({loc_str} {loc_idx}) "
+                        f"at overlapping times ({ts} and "
+                        f"{existing_ts})."
+                    )
+                    raise ValueError(msg)
+            booked_slots[loc_idx].append((ts, rt))
+        logger.debug("Check passed: No location/time overlaps found.")
 
 
 @dataclass(slots=True)

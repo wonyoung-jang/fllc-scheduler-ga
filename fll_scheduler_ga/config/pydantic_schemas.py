@@ -4,7 +4,7 @@ import logging
 
 from pydantic import BaseModel, Field, model_validator
 
-from fll_scheduler_ga.config.constants import (
+from fll_scheduler_ga.constants import (
     CMAP_NAME_DEFAULT,
     OUTPUT_DIR_DEFAULT,
     PICKLE_FILE_SCHEDULES,

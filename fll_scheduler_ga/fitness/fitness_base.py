@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from fll_scheduler_ga.config.constants import EPSILON, FitnessObjective
+from fll_scheduler_ga.constants import EPSILON, FitnessObjective
 
 if TYPE_CHECKING:
     from fll_scheduler_ga.config.pydantic_schemas import FitnessModel

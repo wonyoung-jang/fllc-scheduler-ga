@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from fll_scheduler_ga.config.constants import CrossoverOp
+from fll_scheduler_ga.constants import CrossoverOp
 from fll_scheduler_ga.data_model.schedule import Schedule
 
 if TYPE_CHECKING:

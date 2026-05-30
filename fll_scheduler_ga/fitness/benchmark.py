@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from fll_scheduler_ga.config.constants import EPSILON, FITNESS_MODEL_VERSION
+from fll_scheduler_ga.constants import EPSILON, FITNESS_MODEL_VERSION
 from fll_scheduler_ga.fitness.benchmark_repository import BenchmarkSeedData
 
 if TYPE_CHECKING:

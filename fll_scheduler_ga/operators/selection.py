@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from fll_scheduler_ga.config.constants import SelectionOp
+from fll_scheduler_ga.constants import SelectionOp
 
 
 @dataclass(slots=True)

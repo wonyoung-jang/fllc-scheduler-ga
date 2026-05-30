@@ -8,10 +8,11 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from fll_scheduler_ga.config.constants import EPSILON
+from fll_scheduler_ga.constants import EPSILON
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
 logger = getLogger(__name__)
 
 

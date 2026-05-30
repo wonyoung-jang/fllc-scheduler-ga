@@ -13,6 +13,7 @@ from fll_scheduler_ga.data_model.timeslot import TimeSlot
 
 if TYPE_CHECKING:
     from fll_scheduler_ga.data_model.app_schemas import TournamentConfig
+
 logger = logging.getLogger(__name__)
 
 

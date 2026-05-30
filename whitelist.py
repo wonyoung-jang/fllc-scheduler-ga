@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel
 
-from fll_scheduler_ga.config.constants import FitnessObjective
+from fll_scheduler_ga.constants import FitnessObjective
 from fll_scheduler_ga.data_model.event import EventProperties
 
 FitnessObjective.BREAK_TIME  # noqa: B018

@@ -10,10 +10,10 @@ if TYPE_CHECKING:
     from rich.progress import Progress, TaskID
 
     from fll_scheduler_ga.data_model.schedule import Schedule
+
 logger = getLogger(__name__)
 
 
-@dataclass(slots=True)
 class GaObserver(ABC):
     """Abstract base class for observers in the FLL Scheduler GA."""
 
@@ -36,7 +36,6 @@ class GaObserver(ABC):
         """Call when the genetic algorithm run is finished."""
 
 
-@dataclass(slots=True)
 class LoggingObserver(GaObserver):
     """Observer that logs generation and best fitness information."""
 

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from fll_scheduler_ga.config.constants import MutationOp
+from fll_scheduler_ga.constants import MutationOp
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
