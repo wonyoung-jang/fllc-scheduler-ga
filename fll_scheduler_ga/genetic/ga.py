@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
     from fll_scheduler_ga.adapter.observers import GaObserver
     from fll_scheduler_ga.config.pydantic_schemas import GaParameterModel, GeneticModel, ImportModel
-    from fll_scheduler_ga.data_model.schedule import Schedule
+    from fll_scheduler_ga.domain.schedule import Schedule
     from fll_scheduler_ga.genetic.ga_context import GaContext
     from fll_scheduler_ga.operators.crossover import Crossover
     from fll_scheduler_ga.operators.mutation import Mutation

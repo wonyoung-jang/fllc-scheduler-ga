@@ -3,8 +3,8 @@
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from fll_scheduler_ga.data_model.event import EventFactory
-    from fll_scheduler_ga.data_model.schedule import Schedule
+    from fll_scheduler_ga.domain.event import EventFactory
+    from fll_scheduler_ga.domain.schedule import Schedule
 
 
 def test_schedule_operations(empty_schedule: Schedule, event_factory: EventFactory) -> None:

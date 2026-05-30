@@ -16,8 +16,8 @@ from fll_scheduler_ga.fitness.benchmark_repository import BenchmarkSeedData
 
 if TYPE_CHECKING:
     from fll_scheduler_ga.config.pydantic_schemas import FitnessModel
-    from fll_scheduler_ga.data_model.app_schemas import TournamentConfig
-    from fll_scheduler_ga.data_model.event import EventFactory
+    from fll_scheduler_ga.domain.app_schemas import TournamentConfig
+    from fll_scheduler_ga.domain.event import EventFactory
     from fll_scheduler_ga.fitness.benchmark_repository import BenchmarkRepository
 logger = getLogger(__name__)
 BENCHMARKS_CACHE = Path(".benchmarks_cache/").resolve()

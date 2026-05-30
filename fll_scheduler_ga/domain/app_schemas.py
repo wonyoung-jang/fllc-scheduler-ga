@@ -3,14 +3,14 @@
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from fll_scheduler_ga.data_model.event import Event
-from fll_scheduler_ga.data_model.timeslot import TimeSlot
+from fll_scheduler_ga.domain.event import Event
+from fll_scheduler_ga.domain.timeslot import TimeSlot
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
     from datetime import datetime, timedelta
 
-    from fll_scheduler_ga.data_model.location import Location
+    from fll_scheduler_ga.domain.location import Location
 
 
 def are_rounds_overlapping(rounds: Iterable[TournamentRound]) -> bool:

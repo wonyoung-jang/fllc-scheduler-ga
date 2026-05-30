@@ -9,13 +9,13 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from fll_scheduler_ga.constants import CrossoverOp
-from fll_scheduler_ga.data_model.schedule import Schedule
+from fll_scheduler_ga.domain.schedule import Schedule
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator
 
     from fll_scheduler_ga.config.pydantic_schemas import OperatorModel
-    from fll_scheduler_ga.data_model.event import EventFactory, EventProperties
+    from fll_scheduler_ga.domain.event import EventFactory, EventProperties
 logger = getLogger(__name__)
 
 

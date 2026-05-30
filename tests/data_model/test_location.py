@@ -2,7 +2,7 @@
 
 import pytest
 
-from fll_scheduler_ga.data_model.location import Location, LocationModelsParser
+from fll_scheduler_ga.domain.location import Location, LocationModelsParser
 
 
 def test_location_str() -> None:

@@ -8,11 +8,11 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from fll_scheduler_ga.data_model.location import Location
-from fll_scheduler_ga.data_model.timeslot import TimeSlot
+from fll_scheduler_ga.domain.location import Location
+from fll_scheduler_ga.domain.timeslot import TimeSlot
 
 if TYPE_CHECKING:
-    from fll_scheduler_ga.data_model.app_schemas import TournamentConfig
+    from fll_scheduler_ga.domain.app_schemas import TournamentConfig
 
 logger = logging.getLogger(__name__)
 

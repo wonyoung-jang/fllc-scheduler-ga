@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from fll_scheduler_ga.config.app_config import infer_time_format
-from fll_scheduler_ga.data_model.timeslot import (
+from fll_scheduler_ga.domain.timeslot import (
     DEFAULT_DT,
     TIME_FORMAT_MAP,
     TimeSlot,

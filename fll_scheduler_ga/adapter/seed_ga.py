@@ -13,8 +13,8 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
 
-    from fll_scheduler_ga.data_model.app_schemas import TournamentConfig
-    from fll_scheduler_ga.data_model.schedule import Schedule
+    from fll_scheduler_ga.domain.app_schemas import TournamentConfig
+    from fll_scheduler_ga.domain.schedule import Schedule
 logger = getLogger(__name__)
 
 

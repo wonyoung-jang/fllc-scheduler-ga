@@ -18,9 +18,9 @@ from fll_scheduler_ga.config.pydantic_schemas import (
     RuntimeModel,
 )
 from fll_scheduler_ga.constants import CONFIG_FILE_DEFAULT, RANDOM_SEED_RANGE
-from fll_scheduler_ga.data_model.app_schemas import TournamentConfig, TournamentRound, are_rounds_overlapping
-from fll_scheduler_ga.data_model.location import Location, LocationModelsParser
-from fll_scheduler_ga.data_model.timeslot import (
+from fll_scheduler_ga.domain.app_schemas import TournamentConfig, TournamentRound, are_rounds_overlapping
+from fll_scheduler_ga.domain.location import Location, LocationModelsParser
+from fll_scheduler_ga.domain.timeslot import (
     TimeSlot,
     calc_num_timeslots,
     infer_time_format,

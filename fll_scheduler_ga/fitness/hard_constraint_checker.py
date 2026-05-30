@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from fll_scheduler_ga.data_model.schedule import Schedule
+    from fll_scheduler_ga.domain.schedule import Schedule
 
 
 @dataclass(slots=True)

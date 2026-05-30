@@ -16,8 +16,8 @@ if TYPE_CHECKING:
 
     from fll_scheduler_ga.adapter.plot import Visualizer
     from fll_scheduler_ga.config.pydantic_schemas import ExportModel
-    from fll_scheduler_ga.data_model.event import EventProperties
-    from fll_scheduler_ga.data_model.schedule import Schedule
+    from fll_scheduler_ga.domain.event import EventProperties
+    from fll_scheduler_ga.domain.schedule import Schedule
     from fll_scheduler_ga.genetic.ga import GA
 logger = getLogger(__name__)
 

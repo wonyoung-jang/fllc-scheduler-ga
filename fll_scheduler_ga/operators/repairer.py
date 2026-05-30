@@ -7,9 +7,9 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 if TYPE_CHECKING:
-    from fll_scheduler_ga.data_model.app_schemas import TournamentConfig
-    from fll_scheduler_ga.data_model.event import EventFactory, EventProperties
-    from fll_scheduler_ga.data_model.schedule import Schedule
+    from fll_scheduler_ga.domain.app_schemas import TournamentConfig
+    from fll_scheduler_ga.domain.event import EventFactory, EventProperties
+    from fll_scheduler_ga.domain.schedule import Schedule
     from fll_scheduler_ga.fitness.hard_constraint_checker import HardConstraintChecker
 
 

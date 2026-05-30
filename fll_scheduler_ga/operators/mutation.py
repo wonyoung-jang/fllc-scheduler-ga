@@ -14,8 +14,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
 
     from fll_scheduler_ga.config.pydantic_schemas import OperatorModel
-    from fll_scheduler_ga.data_model.event import EventFactory, EventProperties
-    from fll_scheduler_ga.data_model.schedule import Schedule
+    from fll_scheduler_ga.domain.event import EventFactory, EventProperties
+    from fll_scheduler_ga.domain.schedule import Schedule
 type Match = tuple[int, int, int, int]
 logger = getLogger(__name__)
 

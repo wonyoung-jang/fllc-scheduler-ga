@@ -2,10 +2,10 @@
 
 from typing import TYPE_CHECKING
 
-from fll_scheduler_ga.data_model.event import Event, EventFactory, EventProperties
+from fll_scheduler_ga.domain.event import Event, EventFactory, EventProperties
 
 if TYPE_CHECKING:
-    from fll_scheduler_ga.data_model.timeslot import TimeSlot
+    from fll_scheduler_ga.domain.timeslot import TimeSlot
 
 
 def test_event_str(timeslot: TimeSlot) -> None:

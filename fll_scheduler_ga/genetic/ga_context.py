@@ -14,8 +14,8 @@ from fll_scheduler_ga.adapter.csv_importer import CsvImporter
 from fll_scheduler_ga.adapter.ga_exporter import ScheduleSummaryGenerator
 from fll_scheduler_ga.adapter.schedule_exporter import CsvScheduleExporter
 from fll_scheduler_ga.adapter.seed_ga import GALoad, GASave, GASeedData
-from fll_scheduler_ga.data_model.event import EventFactory, EventProperties
-from fll_scheduler_ga.data_model.schedule import Schedule, ScheduleContext
+from fll_scheduler_ga.domain.event import EventFactory, EventProperties
+from fll_scheduler_ga.domain.schedule import Schedule, ScheduleContext
 from fll_scheduler_ga.fitness.benchmark import (
     BENCHMARKS_CACHE,
     FitnessBenchmark,
@@ -48,8 +48,8 @@ from fll_scheduler_ga.operators.selection import RandomSelect
 if TYPE_CHECKING:
     from fll_scheduler_ga.config.app_config import AppConfig
     from fll_scheduler_ga.config.pydantic_schemas import ImportModel
-    from fll_scheduler_ga.data_model.app_schemas import TournamentConfig
-    from fll_scheduler_ga.data_model.timeslot import TimeSlot
+    from fll_scheduler_ga.domain.app_schemas import TournamentConfig
+    from fll_scheduler_ga.domain.timeslot import TimeSlot
     from fll_scheduler_ga.operators.crossover import Crossover
     from fll_scheduler_ga.operators.mutation import Mutation
     from fll_scheduler_ga.operators.selection import Selection

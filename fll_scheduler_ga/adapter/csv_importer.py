@@ -8,14 +8,14 @@ from logging import getLogger
 from typing import TYPE_CHECKING, TextIO
 
 from fll_scheduler_ga.constants import ASCII_OFFSET
-from fll_scheduler_ga.data_model.schedule import Schedule
-from fll_scheduler_ga.data_model.timeslot import TimeSlot
+from fll_scheduler_ga.domain.schedule import Schedule
+from fll_scheduler_ga.domain.timeslot import TimeSlot
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from fll_scheduler_ga.data_model.app_schemas import TournamentConfig, TournamentRound
-    from fll_scheduler_ga.data_model.event import EventFactory, EventProperties
+    from fll_scheduler_ga.domain.app_schemas import TournamentConfig, TournamentRound
+    from fll_scheduler_ga.domain.event import EventFactory, EventProperties
 
 logger = getLogger(__name__)
 RE_HHMM = re.compile(r"\d{2}:\d{2}")

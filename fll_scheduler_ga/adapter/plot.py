@@ -17,8 +17,8 @@ if TYPE_CHECKING:
     from matplotlib.axes import Axes
     from matplotlib.figure import Figure
 
-    from fll_scheduler_ga.constants import FitnessObjective
     from fll_scheduler_ga.config.pydantic_schemas import ExportModel
+    from fll_scheduler_ga.constants import FitnessObjective
     from fll_scheduler_ga.genetic.ga import GA
 logger = logging.getLogger("visualize.plot")
 logging.getLogger("matplotlib").setLevel(logging.WARNING)
