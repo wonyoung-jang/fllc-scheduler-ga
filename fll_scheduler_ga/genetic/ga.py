@@ -21,13 +21,12 @@ from fll_scheduler_ga.io.seed_ga import (
 
 if TYPE_CHECKING:
     from collections import Counter
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
     from pathlib import Path
 
     from fll_scheduler_ga.config.pydantic_schemas import GaParameterModel, GeneticModel, ImportModel
     from fll_scheduler_ga.data_model.schedule import Schedule
     from fll_scheduler_ga.genetic.ga_context import GaContext
-    from fll_scheduler_ga.genetic.ga_generation import GaGeneration
     from fll_scheduler_ga.io.observers import GaObserver
     from fll_scheduler_ga.operators.crossover import Crossover
     from fll_scheduler_ga.operators.mutation import Mutation
@@ -64,7 +63,7 @@ class GA:
     observers: tuple[GaObserver, ...]
     seed_file: Path
     save_front_only: bool
-    generation: GaGeneration
+    generation: int
     operator_stats: OperatorStats
     fitness_history: FitnessHistory
     generations_array: np.ndarray
@@ -203,7 +202,7 @@ class GA:
             self.fitness_history.current = self.aggregate_island_fitness()
             self.fitness_history.update_fitness_history()
 
-            self.generation.curr += 1
+            self.generation += 1
 
             self._notify_on_generation_end(
                 generation=gen,
@@ -270,10 +269,11 @@ class GASeeder:
 
     def _iter_seeds(self) -> Iterator[int]:
         """Yield indices for seeding strategies."""
-        iter_fn = {
+        iter_fn_map: dict[str, Callable] = {
             SeedPopSort.RANDOM: self.rng.permutation,
             SeedPopSort.BEST: np.arange,
-        }.get(self.imports.seed_pop_sort, self.rng.permutation)
+        }
+        iter_fn = iter_fn_map.get(self.imports.seed_pop_sort, self.rng.permutation)
         if isinstance(self.seed_pop, list):
             yield from iter_fn(len(self.seed_pop))
 

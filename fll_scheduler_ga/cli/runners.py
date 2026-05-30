@@ -10,7 +10,6 @@ from fll_scheduler_ga.config.app_config import AppConfig
 from fll_scheduler_ga.config.constants import FitnessObjective
 from fll_scheduler_ga.genetic.ga import GA
 from fll_scheduler_ga.genetic.ga_context import StandardGaContextFactory
-from fll_scheduler_ga.genetic.ga_generation import GaGeneration
 from fll_scheduler_ga.genetic.stagnation import FitnessHistory, OperatorStats
 from fll_scheduler_ga.io import ga_exporter
 from fll_scheduler_ga.io.observers import LoggingObserver, RichObserver
@@ -38,7 +37,7 @@ def run_ga_engine(config_path: Path, progress: Progress | None = None, task_id: 
 
     n_gen = app_config.genetic.parameters.generations
     n_obj = context.evaluator.n_objectives
-    generation = GaGeneration(curr=0)
+    generation = 0
     fitness_history = FitnessHistory(
         generation=generation,
         current=np.zeros((1, n_obj), dtype=float),

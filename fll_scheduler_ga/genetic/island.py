@@ -14,7 +14,6 @@ if TYPE_CHECKING:
     from fll_scheduler_ga.genetic.builder import ScheduleBuilderRandom
     from fll_scheduler_ga.genetic.ga import SchedulePopulation
     from fll_scheduler_ga.genetic.ga_context import GaContext
-    from fll_scheduler_ga.genetic.ga_generation import GaGeneration
     from fll_scheduler_ga.genetic.stagnation import FitnessHistory, OperatorStats, StagnationHandler
 
 logger = getLogger(__name__)
@@ -25,7 +24,7 @@ class Island:
     """Genetic algorithm island for the FLL Scheduler GA."""
 
     identity: int
-    generation: GaGeneration
+    generation: int
     context: GaContext
     rng: np.random.Generator
     genetic_model: GeneticModel
@@ -91,7 +90,7 @@ class Island:
             logger.debug(
                 "Stagnation. Island: %d. Generation: %d. Schedule Removed: %d.",
                 self.identity,
-                self.generation.curr,
+                self.generation,
                 idx_to_pop,
             )
 

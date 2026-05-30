@@ -9,7 +9,6 @@ import numpy as np
 
 if TYPE_CHECKING:
     from fll_scheduler_ga.config.pydantic_schemas import StagnationModel
-    from fll_scheduler_ga.genetic.ga_generation import GaGeneration
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +17,7 @@ logger = logging.getLogger(__name__)
 class FitnessHistory:
     """Abstract base class for fitness history tracking."""
 
-    generation: GaGeneration
+    generation: int
     current: np.ndarray
     history: np.ndarray
 
@@ -33,14 +32,12 @@ class FitnessHistory:
     def get_last_gen_fitness(self) -> np.ndarray:
         """Get the fitness of the last generation."""
         return (
-            self.history[self.generation.curr - 1]
-            if self.generation.curr > 0
-            else np.zeros(self.history.shape[1], dtype=float)
+            self.history[self.generation - 1] if self.generation > 0 else np.zeros(self.history.shape[1], dtype=float)
         )
 
     def update_fitness_history(self) -> None:
         """Update the fitness history with the current generation's fitnesses."""
-        self.history[self.generation.curr] = self.current
+        self.history[self.generation] = self.current
 
 
 @dataclass(slots=True)
@@ -94,7 +91,7 @@ class StagnationHandler:
     """Class for handling stagnation in the genetic algorithm."""
 
     rng: np.random.Generator
-    generation: GaGeneration
+    generation: int
     fitness_history: FitnessHistory
     model: StagnationModel
 
@@ -105,7 +102,7 @@ class StagnationHandler:
         if not self.model.enable:
             return False
 
-        curr = self.generation.curr
+        curr = self.generation
         if curr < self.model.threshold:
             return False
 
