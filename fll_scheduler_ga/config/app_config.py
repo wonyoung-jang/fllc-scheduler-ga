@@ -215,12 +215,7 @@ class AppConfig:
                 dur_tdelta_cycle = validate_duration(start_stop, times_dt, round_model.duration_cycle, _n_timeslots)
                 dur_tdelta_active = validate_duration(start_stop, times_dt, round_model.duration_active, _n_timeslots)
                 timeslots = tuple(
-                    TimeSlot(
-                        idx=next(timeslot_idx_iter),
-                        start=start,
-                        stop_active=stop_active,
-                        stop_cycle=stop_cycle,
-                    )
+                    TimeSlot(idx=next(timeslot_idx_iter), start=start, stop_active=stop_active, stop_cycle=stop_cycle)
                     for start, stop_active, stop_cycle in init_timeslots(
                         times_dt, dur_tdelta_cycle, dur_tdelta_active, _n_timeslots, start_dt
                     )

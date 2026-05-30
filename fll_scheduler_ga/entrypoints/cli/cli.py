@@ -227,7 +227,8 @@ def run_ga_engine(config_path: Path, progress: Progress | None = None, task_id: 
     output_dir = Path(_exports.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     plot = MatplotlibVisualizer(
-        ga=ga,
+        total_population=ga.total_population,
+        fitness_history=ga.fitness_history.history,
         save_dir=output_dir,
         objectives=tuple(FitnessObjective),
         ref_points=ga.context.nsga3.refs.points,

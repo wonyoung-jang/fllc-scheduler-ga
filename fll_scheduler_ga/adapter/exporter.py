@@ -113,15 +113,11 @@ class ScheduleExporter(ABC):
         return matrix
 
     @abstractmethod
-    async def write_to_file(self, schedule_by_type: dict[str, dict[int, int]], filename: Path) -> None:
-        """Write the schedule to a file."""
-
+    def render_grid(self, schedule_dict: dict[int, int]) -> Iterator[str | list[str]]: ...
     @abstractmethod
-    def render_grid(self, schedule_dict: dict[int, int]) -> Iterator[str | list[str]]:
-        """Render a schedule grid for a specific round type."""
+    async def write_to_file(self, schedule_by_type: dict[str, dict[int, int]], filename: Path) -> None: ...
 
 
-@dataclass(slots=True)
 class CsvScheduleExporter(ScheduleExporter):
     """Exporter for schedules in CSV format."""
 
@@ -144,7 +140,6 @@ class CsvScheduleExporter(ScheduleExporter):
                 writer.writerows(self.render_grid(schedule_dict))
 
 
-@dataclass(slots=True)
 class HtmlScheduleExporter(ScheduleExporter):
     """Exporter for schedules in HTML format."""
 

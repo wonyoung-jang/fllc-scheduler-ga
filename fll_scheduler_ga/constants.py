@@ -3,8 +3,6 @@
 from enum import StrEnum
 from pathlib import Path
 
-ASCII_OFFSET = 64
-EPSILON = 1e-12
 MAIN_PACKAGE_DIR = Path("fll_scheduler_ga").resolve()
 BENCHMARKS_CACHE = Path(".benchmarks_cache/").resolve()
 CONFIG_FILE_DEFAULT = MAIN_PACKAGE_DIR / "config.json"
@@ -15,6 +13,7 @@ CMAP_NAME_DEFAULT = "viridis"
 DATA_MODEL_VERSION = 3
 FITNESS_MODEL_VERSION = 3
 RANDOM_SEED_RANGE = (1, 2**32 - 1)
+EPSILON = 1e-12
 
 
 class SelectionOp(StrEnum):

@@ -16,7 +16,7 @@ from fll_scheduler_ga.adapter.seed_ga import (
     SeedingStrategy,
 )
 from fll_scheduler_ga.constants import SeedIslandStrategy, SeedPopSort
-from fll_scheduler_ga.genetic.island import Island
+from fll_scheduler_ga.genetic.island import Island, SchedulePopulation
 from fll_scheduler_ga.genetic.stagnation import FitnessHistory, OperatorStats, StagnationHandler
 
 if TYPE_CHECKING:
@@ -32,25 +32,6 @@ if TYPE_CHECKING:
     from fll_scheduler_ga.operators.mutation import Mutation
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass(slots=True)
-class SchedulePopulation:
-    """Population of schedules in the genetic algorithm."""
-
-    ranks: np.ndarray = field(default_factory=lambda: np.array([]))
-    schedules: np.ndarray = field(default_factory=lambda: np.array([]))
-
-    def __len__(self) -> int:
-        """Return the number of schedules in the population."""
-        return self.schedules.shape[0] if self.schedules is not None else 0
-
-    def add(self, schedule: np.ndarray) -> None:
-        """Add a new schedule to the population."""
-        if self.schedules.size == 0:
-            self.schedules = np.array([schedule], dtype=int)
-        else:
-            self.schedules = np.stack((*self.schedules, schedule), axis=0)
 
 
 @dataclass(slots=True)
@@ -122,14 +103,8 @@ class GA:
                 logger.critical("No valid schedule meeting all hard constraints was found.")
                 return
             self.run_epochs()
-        except Exception:
-            logger.exception("An error occurred during the genetic algorithm run.")
-            self.fitness_history.current = self.aggregate_island_fitness()
-            self.fitness_history.update_fitness_history()
         except KeyboardInterrupt:
-            logger.debug("Genetic algorithm run interrupted by user. Saving...")
-            self.fitness_history.current = self.aggregate_island_fitness()
-            self.fitness_history.update_fitness_history()
+            logger.exception("Genetic algorithm run interrupted by user. Saving...")
         finally:
             GAFinalizer(self).finalize(start_time)
             seed_ga_data = GASeedData(
@@ -273,24 +248,20 @@ class GAFinalizer:
 
     def finalize(self, start_time: float) -> None:
         """Aggregate islands and run a final selection to produce the final population."""
-        ga = self.ga
-        ctx = ga.context
         self._deduplicate_population()
-        self._log_operators(name="crossover", ratios=ga.operator_stats.crossover, ops=ctx.crossovers)
-        self._log_operators(name="mutation", ratios=ga.operator_stats.mutation, ops=ctx.mutations)
-        self._log_aggregate_stats(ga.operator_stats)
-        for island in ga.islands:
+        self._log_operators(name="crossover", ratios=self.ga.operator_stats.crossover, ops=self.ga.context.crossovers)
+        self._log_operators(name="mutation", ratios=self.ga.operator_stats.mutation, ops=self.ga.context.mutations)
+        self._log_aggregate_stats(self.ga.operator_stats)
+        for island in self.ga.islands:
             logger.debug("Island %d Fitness: %.2f", island.identity, sum(island.fitness_history.get_last_gen_fitness()))
         logger.debug("Total time taken: %.2f seconds", time.time() - start_time)
 
     def _deduplicate_population(self) -> None:
         """Remove duplicate individuals from the population."""
-        ga = self.ga
-        ctx = ga.context
-        unique_pop = [ind for island in ga.islands for ind in island.selected]
-        pop_array = np.asarray([s.schedule for island in ga.islands for s in island.selected])
-        schedule_fitness, team_fitnesses = ctx.evaluate(pop_array)
-        _, flat, ranks = ctx.select_nsga3(schedule_fitness, len(unique_pop))
+        unique_pop = [ind for island in self.ga.islands for ind in island.selected]
+        pop_array = np.asarray([s.schedule for island in self.ga.islands for s in island.selected])
+        schedule_fitness, team_fitnesses = self.ga.context.evaluate(pop_array)
+        _, flat, ranks = self.ga.context.select_nsga3(schedule_fitness, len(unique_pop))
         selected = {}
         for rank, idx in zip(ranks, flat, strict=True):
             idx: int
@@ -299,7 +270,7 @@ class GAFinalizer:
             sch.team_fitnesses = team_fitnesses[idx]
             sch.rank = rank
             selected[hash(sch)] = sch
-        ga.total_population = sorted(selected.values(), key=lambda s: (s.rank, -s.fitness.sum()))
+        self.ga.total_population = sorted(selected.values(), key=lambda s: (s.rank, -s.fitness.sum()))
 
     @staticmethod
     def _log_operators(name: str, ratios: dict[str, Counter], ops: tuple[Crossover | Mutation, ...]) -> None:
@@ -317,16 +288,15 @@ class GAFinalizer:
 
     def _log_aggregate_stats(self, operator_stats: OperatorStats) -> None:
         """Log aggregate statistics across all islands."""
-        ga = self.ga
         final_log = f"{'=' * 20}\nFinal statistics"
         crs_suc, crs_tot, crs_rte = operator_stats.get_crossover_stats()
         mut_suc, mut_tot, mut_rte = operator_stats.get_mutation_stats()
         off_suc, off_tot, off_rte = operator_stats.get_offspring_stats()
-        unique_inds = len(ga.total_population)
-        total_inds = len(ga)
+        unique_inds = len(self.ga.total_population)
+        total_inds = len(self.ga)
         unique_rte = f"{unique_inds / total_inds if total_inds > 0 else 0.0:.2%}"
         final_log += (
-            f"\n  Total islands          : {len(ga.islands)}"
+            f"\n  Total islands          : {len(self.ga.islands)}"
             f"\n  Unique individuals     : {unique_inds}/{total_inds} ({unique_rte})"
             f"\n  Crossover success rate : {crs_suc}/{crs_tot} ({crs_rte})"
             f"\n  Mutation success rate  : {mut_suc}/{mut_tot} ({mut_rte})"

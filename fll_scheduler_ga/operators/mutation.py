@@ -14,8 +14,10 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
 
     from fll_scheduler_ga.config.pydantic_schemas import OperatorModel
-    from fll_scheduler_ga.domain.event import EventFactory, EventProperties
+    from fll_scheduler_ga.domain.event import EventProperties
+    from fll_scheduler_ga.domain.model import EventFactory
     from fll_scheduler_ga.domain.schedule import Schedule
+
 type Match = tuple[int, int, int, int]
 logger = getLogger(__name__)
 
@@ -30,7 +32,7 @@ def build_mutations(
     if not (mutation_types := operators.mutation.types):
         logger.warning("No mutation types enabled in the configuration. Mutation will not occur.")
         return ()
-    mutation_factory: dict[str, Callable] = {
+    mutation_factory: dict[str, Callable[[dict], Mutation]] = {
         # SwapMatchMutation variants
         MutationOp.SWAP_MATCH_CROSS_TIME_LOCATION: lambda p: SwapMatchMutation(
             **p,
@@ -98,18 +100,7 @@ class Mutation(ABC):
     event_properties: EventProperties
 
     @abstractmethod
-    def mutate(self, schedule: Schedule) -> bool:
-        """Mutate a schedule schedule to introduce genetic diversity.
-
-        Args:
-            schedule (Schedule): The schedule to mutate.
-
-        Returns:
-            bool: True if mutation was successful, False otherwise.
-
-        """
-        msg = "Mutate method must be implemented by subclasses."
-        raise NotImplementedError(msg)
+    def mutate(self, schedule: Schedule) -> bool: ...
 
 
 @dataclass(slots=True)
@@ -128,18 +119,7 @@ class SwapMutation(Mutation):
         logger.debug("Initialized %d swap candidates for %s", self.n_swap_candidates, str(self))
 
     @abstractmethod
-    def get_swap_candidates(self, schedule: Schedule) -> tuple[Match, ...] | tuple[None, ...]:
-        """Get candidates for swapping teams in the schedule schedule.
-
-        Args:
-            schedule (Schedule): The schedule to analyze.
-
-        Returns:
-            tuple[Match, ...] | tuple[None, ...]: The matches selected for swapping, or None if no valid swap found.
-
-        """
-        msg = "get_swap_candidates method must be implemented by subclasses."
-        raise NotImplementedError(msg)
+    def get_swap_candidates(self, schedule: Schedule) -> tuple[Match, ...] | tuple[None, ...]: ...
 
     def init_swap_candidates(self) -> Iterator[tuple[tuple[int, ...], ...]]:
         """Precompute any necessary data before mutation."""
@@ -161,7 +141,6 @@ class SwapMutation(Mutation):
                 yield (match1, match2)
 
 
-@dataclass(slots=True)
 class SwapTeamMutation(SwapMutation):
     """Mutation operator for swapping single team between two matches."""
 
@@ -207,7 +186,6 @@ class SwapTeamMutation(SwapMutation):
         return None, None
 
 
-@dataclass(slots=True)
 class SwapMatchMutation(SwapMutation):
     """Base class for mutations that swap the locations of two entire matches."""
 
@@ -304,12 +282,9 @@ class TimeSlotSequenceMutation(Mutation):
         self.timeslot_keys = tuple(self.timeslot_candidates.keys())
 
     @abstractmethod
-    def permute_singles(self, items: list[int]) -> Iterator[int]:
-        """Permute the list of items. To be implemented by subclasses."""
-
+    def permute_singles(self, items: list[int]) -> Iterator[int]: ...
     @abstractmethod
-    def permute_matches(self, items: list[tuple[int, ...]]) -> Iterator[tuple[int, ...]]:
-        """Permute the list of items. To be implemented by subclasses."""
+    def permute_matches(self, items: list[tuple[int, ...]]) -> Iterator[tuple[int, ...]]: ...
 
     def init_candidates(
         self,
@@ -376,7 +351,6 @@ class TimeSlotSequenceMutation(Mutation):
         return True
 
 
-@dataclass(slots=True)
 class InversionMutation(TimeSlotSequenceMutation):
     """Inverts a sub-sequence of assignments within a single timeslot."""
 
@@ -397,7 +371,6 @@ class InversionMutation(TimeSlotSequenceMutation):
         return reversed([tuple(reversed(pair)) for pair in items])
 
 
-@dataclass(slots=True)
 class ScrambleMutation(TimeSlotSequenceMutation):
     """Scrambles a sub-sequence of assignments within a single timeslot."""
 

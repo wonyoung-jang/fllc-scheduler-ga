@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-fll-scheduler-ga = "fll_scheduler_ga.entrypoints.cli.__main__:main"
+fll-scheduler-ga = "fll_scheduler_ga.entrypoints.cli.__main__:app"
 
 [build-system]
 requires = ["uv_build>=0.9.1,<0.10.0"]

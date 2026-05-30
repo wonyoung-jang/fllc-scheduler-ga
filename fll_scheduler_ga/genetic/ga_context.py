@@ -1,7 +1,6 @@
 """Context for the genetic algorithm parts."""
 
 import asyncio
-from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass
 from logging import getLogger
@@ -14,7 +13,8 @@ from fll_scheduler_ga.adapter.csv_importer import CsvImporter
 from fll_scheduler_ga.adapter.exporter import CsvScheduleExporter, ScheduleSummaryGenerator
 from fll_scheduler_ga.adapter.seed_ga import GALoad, GASave, GASeedData
 from fll_scheduler_ga.constants import BENCHMARKS_CACHE
-from fll_scheduler_ga.domain.event import EventFactory, EventProperties
+from fll_scheduler_ga.domain.event import EventProperties
+from fll_scheduler_ga.domain.model import EventFactory
 from fll_scheduler_ga.domain.schedule import Schedule, ScheduleContext
 from fll_scheduler_ga.fitness.benchmark import (
     FitnessBenchmark,
@@ -60,31 +60,27 @@ logger = getLogger(__name__)
 class PreFlightChecker:
     """Run pre-flight checks on the tournament configuration."""
 
-    properties: EventProperties
+    props: EventProperties
     factory: EventFactory
-
-    def __post_init__(self) -> None:
-        """Post-initialization run checks."""
-        self.run_checks()
 
     def run_checks(self) -> None:
         """Run all pre-flight checks."""
         try:
-            self.check_location_time_overlaps()
+            self._check_location_timeslot_overlaps()
             logger.debug("All preflight checks passed successfully.")
         except ValueError:
             logger.exception("Preflight checks failed. Please review the configuration.")
             raise
 
-    def check_location_time_overlaps(self) -> None:
+    def _check_location_timeslot_overlaps(self) -> None:
         """Check if different round types are scheduled in the same locations at the same time."""
-        booked_slots: dict[int, list[tuple[TimeSlot, str]]] = defaultdict(list)
+        booked: dict[int, list[tuple[TimeSlot, str]]] = defaultdict(list)
         for e in self.factory.build_indices():
-            loc_str = self.properties.loc_str[e]
-            loc_idx = self.properties.loc_idx[e]
-            ts = self.properties.timeslot[e]
-            rt = self.properties.roundtype[e]
-            for existing_ts, existing_rt in booked_slots.get(loc_idx, []):
+            loc_str = self.props.loc_str[e]
+            loc_idx = self.props.loc_idx[e]
+            ts = self.props.timeslot[e]
+            rt = self.props.roundtype[e]
+            for existing_ts, existing_rt in booked.get(loc_idx, []):
                 if ts.overlaps(existing_ts):
                     msg = (
                         f"Configuration conflict: TournamentRound '{rt}' and '{existing_rt}' "
@@ -93,118 +89,83 @@ class PreFlightChecker:
                         f"{existing_ts})."
                     )
                     raise ValueError(msg)
-            booked_slots[loc_idx].append((ts, rt))
+            booked[loc_idx].append((ts, rt))
         logger.debug("Check passed: No location/time overlaps found.")
 
 
 @dataclass(slots=True)
-class GaContextFactory(ABC):
-    """Interface for GA context factory."""
-
-    @abstractmethod
-    def build(self, app_config: AppConfig) -> GaContext:
-        """Build and return a GA context."""
-
-
-@dataclass(slots=True)
-class StandardGaContextFactory(GaContextFactory):
+class StandardGaContextFactory:
     """Standard implementation of GA context factory."""
 
-    def build(self, app_config: AppConfig) -> GaContext:
+    def build(self, cfg: AppConfig) -> GaContext:
         """Build and return a GA context."""
-        _rng = app_config.rng
-        _tournament_config = app_config.tournament
-        _genetic_model = app_config.genetic
-        _fitness_model = app_config.fitness
-        n_total_events = _tournament_config.get_n_total_events()
-        event_factory = EventFactory(config=_tournament_config)
+        n_total_events = cfg.tournament.get_n_total_events()
+        event_factory = EventFactory(config=cfg.tournament)
         event_properties = EventProperties.build(
             n_total_events=n_total_events,
             event_map=event_factory.as_mapping(),
         )
-        # Run pre-flight checks before fitness benchmarking
-        PreFlightChecker(event_properties, event_factory)
+        pre_flight_checker = PreFlightChecker(props=event_properties, factory=event_factory)
+        pre_flight_checker.run_checks()
         Schedule.ctx = ScheduleContext(
             conflict_map=event_factory.as_conflict_map(),
             event_props=event_properties,
-            teams_list=np.arange(_tournament_config.num_teams, dtype=int),
-            teams_roundreqs_arr=np.tile(
-                A=tuple(_tournament_config.roundreqs.values()),
-                reps=(_tournament_config.num_teams, 1),
-            ),
+            teams_list=np.arange(cfg.tournament.num_teams, dtype=int),
+            teams_roundreqs_arr=np.tile(A=tuple(cfg.tournament.roundreqs.values()), reps=(cfg.tournament.num_teams, 1)),
             empty_schedule=np.full(n_total_events, -1, dtype=int),
         )
         constraints = (
             HardConstraintTruthiness(),
-            HardConstraintSize(total_slots_required=_tournament_config.total_slots_required),
+            HardConstraintSize(total_slots_required=cfg.tournament.total_slots_required),
             HardConstraintNoRoundsNeeded(),
         )
         checker = HardConstraintChecker(constraints=constraints)
         repairer = Repairer(
-            config=_tournament_config,
+            config=cfg.tournament,
             event_factory=event_factory,
             event_properties=event_properties,
-            rng=_rng,
+            rng=cfg.rng,
             checker=checker,
         )
-        opponent_benchmarker = FitnessBenchmarkOpponent(
-            config=_tournament_config,
-            event_factory=event_factory,
-        )
+        opponent_benchmarker = FitnessBenchmarkOpponent(config=cfg.tournament, event_factory=event_factory)
         breaktime_benchmarker = FitnessBenchmarkBreaktime(
-            config=_tournament_config,
-            event_factory=event_factory,
-            model=_fitness_model,
+            config=cfg.tournament, event_factory=event_factory, model=cfg.fitness
         )
-        config_hasher = StableConfigHash(
-            config=_tournament_config,
-            model=_fitness_model,
-        )
+        config_hasher = StableConfigHash(config=cfg.tournament, model=cfg.fitness)
         config_hash = config_hasher.generate_hash()
         benchmark_cache_dir = BENCHMARKS_CACHE
         benchmark_cache_dir.mkdir(parents=True, exist_ok=True)
         seed_file = benchmark_cache_dir / f"benchmark_cache_{config_hash}.pkl"
         repository = PickleBenchmarkRepository(path=seed_file)
         benchmark = FitnessBenchmark(
-            config=_tournament_config,
-            model=_fitness_model,
+            config=cfg.tournament,
+            model=cfg.fitness,
             repository=repository,
             opponent_benchmarker=opponent_benchmarker,
             breaktime_benchmarker=breaktime_benchmarker,
-            flush_benchmarks=app_config.runtime.flush_benchmarks,
+            flush_benchmarks=cfg.runtime.flush_benchmarks,
         )
         benchmark.run()
         evaluator = FitnessEvaluator(
-            config=_tournament_config,
-            event_properties=event_properties,
-            benchmark=benchmark,
-            model=_fitness_model,
+            config=cfg.tournament, event_properties=event_properties, benchmark=benchmark, model=cfg.fitness
         )
-        points = calc_ref_points(evaluator.n_objectives, _genetic_model.parameters.population_size)
+        points = calc_ref_points(evaluator.n_objectives, cfg.genetic.parameters.population_size)
         n_refs = points.shape[0]
         norm_sq = calc_norm_sq_of_refs(points)
-        ref_directions = ReferenceDirections(
-            n_refs=n_refs,
-            points=points,
-            norm_sq=norm_sq,
-        )
-        nsga3 = NSGA3(
-            rng=_rng,
-            refs=ref_directions,
-            sorting=NonDominatedSorting(),
-        )
-        selection = RandomSelect(_rng)
-        operators = _genetic_model.operator
-        crossovers = build_crossovers(_rng, operators, event_factory, event_properties)
-        mutations = build_mutations(_rng, operators, event_factory, event_properties)
+        ref_directions = ReferenceDirections(n_refs=n_refs, points=points, norm_sq=norm_sq)
+        nsga3 = NSGA3(rng=cfg.rng, refs=ref_directions, sorting=NonDominatedSorting())
+        selection = RandomSelect(cfg.rng)
+        operators = cfg.genetic.operator
+        crossovers = build_crossovers(cfg.rng, operators, event_factory, event_properties)
+        mutations = build_mutations(cfg.rng, operators, event_factory, event_properties)
         builder = ScheduleBuilderRandom(
             event_properties=event_properties,
-            rng=_rng,
-            round_idx_to_tpr=_tournament_config.round_idx_to_tpr,
+            rng=cfg.rng,
+            round_idx_to_tpr=cfg.tournament.round_idx_to_tpr,
             roundtype_events=event_factory.as_roundtypes(),
         )
         ga_context_instance = GaContext(
-            app_config=app_config,
+            app_config=cfg,
             event_factory=event_factory,
             event_properties=event_properties,
             builder=builder,
@@ -217,7 +178,7 @@ class StandardGaContextFactory(GaContextFactory):
             mutations=mutations,
         )
         RuntimeStartup(
-            config=app_config,
+            config=cfg,
             context=ga_context_instance,
         ).run()
         return ga_context_instance

@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
     from fll_scheduler_ga.config.pydantic_schemas import ExportModel
     from fll_scheduler_ga.constants import FitnessObjective
-    from fll_scheduler_ga.genetic.ga import GA
+    from fll_scheduler_ga.domain.schedule import Schedule
 
 logger = logging.getLogger("visualize.plot")
 logging.getLogger("matplotlib").setLevel(logging.WARNING)
@@ -27,24 +27,23 @@ logging.getLogger("PIL").setLevel(logging.WARNING)
 plt.style.use("seaborn-v0_8-whitegrid")
 
 
-@dataclass(slots=True)
 class Visualizer(ABC):
     """Abstract base class for visualizers."""
 
-    ga: GA
-    save_dir: str | Path | None
-    objectives: tuple[FitnessObjective, ...]
-    ref_points: np.ndarray
-    export_model: ExportModel
-
     @abstractmethod
-    def plot(self) -> None:
-        """Create all plots."""
+    def plot(self) -> None: ...
 
 
 @dataclass(slots=True)
 class MatplotlibVisualizer(Visualizer):
     """A class for creating and managing plots related to the GA run."""
+
+    total_population: list[Schedule]
+    fitness_history: np.ndarray
+    save_dir: str | Path | None
+    objectives: tuple[FitnessObjective, ...]
+    ref_points: np.ndarray
+    export_model: ExportModel
 
     def plot(self) -> None:
         """Create all plots."""
@@ -65,7 +64,7 @@ class MatplotlibVisualizer(Visualizer):
             save_dir: Directory to save the figure. If None, the plot is shown.
 
         """
-        history = self.ga.fitness_history.history
+        history = self.fitness_history
         history = history[history[:, 0] >= 0]  # Filter out generations (if program terminated early)
         if not history.any():
             logger.error("Cannot plot fitness. No generation history was recorded.")
@@ -86,11 +85,11 @@ class MatplotlibVisualizer(Visualizer):
 
     def plot_parallel(self) -> None:
         """Create the parallel coordinates plot."""
-        data = np.array([p.fitness for p in self.ga.total_population])
-        ranks = np.array([p.rank for p in self.ga.total_population], dtype=int)
+        data = np.array([p.fitness for p in self.total_population])
+        ranks = np.array([p.rank for p in self.total_population], dtype=int)
         fig, ax = plt.subplots(figsize=(12, 7))
         x = range(len(self.objectives))
-        colors = plt.get_cmap(self.export_model.cmap_name)(np.linspace(0, 1, len(self.ga.total_population)))
+        colors = plt.get_cmap(self.export_model.cmap_name)(np.linspace(0, 1, len(self.total_population)))
         for i, ind_fitness in enumerate(data):
             ax.plot(x, ind_fitness, color=colors[i], alpha=0.7, linewidth=1.5)
         ax.set_xticks(x)
@@ -107,8 +106,8 @@ class MatplotlibVisualizer(Visualizer):
             logger.error("Cannot plot Pareto scatter for %d objectives. Only 2D and 3D supported.", n_objectives)
             return
         cmap_name = self.export_model.cmap_name
-        data = np.array([p.fitness for p in self.ga.total_population])
-        ranks = np.array([p.rank for p in self.ga.total_population], dtype=int)
+        data = np.array([p.fitness for p in self.total_population])
+        ranks = np.array([p.rank for p in self.total_population], dtype=int)
         fig = plt.figure(figsize=(10, 8))
         ax = fig.add_subplot(projection="3d")
         x_obj, y_obj, z_obj = self.objectives

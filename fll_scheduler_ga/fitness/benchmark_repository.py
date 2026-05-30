@@ -25,17 +25,13 @@ class BenchmarkSeedData:
     best_timeslot_score: float = 0.0
 
 
-@dataclass(slots=True)
 class BenchmarkRepository(ABC):
     """Abstract interface for storing and retrieving benchmark data."""
 
     @abstractmethod
-    def load(self) -> BenchmarkSeedData | None:
-        """Load benchmark data."""
-
+    def load(self) -> BenchmarkSeedData | None: ...
     @abstractmethod
-    def save(self, data: BenchmarkSeedData) -> None:
-        """Save benchmark data."""
+    def save(self, data: BenchmarkSeedData) -> None: ...
 
 
 @dataclass(slots=True)

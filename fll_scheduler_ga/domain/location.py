@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from fll_scheduler_ga.constants import ASCII_OFFSET
+ASCII_OFFSET = 64
 
 
 @dataclass(slots=True)

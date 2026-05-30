@@ -24,8 +24,7 @@ class TimeSlot:
 
     def __str__(self) -> str:
         """Get a string representation of the time slot."""
-        fmt = TimeSlot.time_fmt
-        return f"{self.start.strftime(fmt)}-{self.stop_cycle.strftime(fmt)}"
+        return f"{self.start.strftime(TimeSlot.time_fmt)}-{self.stop_cycle.strftime(TimeSlot.time_fmt)}"
 
     def __lt__(self, other: TimeSlot) -> bool:
         """Less-than comparison based on start time."""
@@ -65,10 +64,7 @@ def calc_num_timeslots(n_times: int, n_locs: int, n_teams: int, rounds_per_team:
 
 
 def validate_duration(
-    start_stop: tuple[datetime, datetime],
-    times_dt: tuple[datetime, ...],
-    dur: int,
-    n_timeslots: int,
+    start_stop: tuple[datetime, datetime], times_dt: tuple[datetime, ...], dur: int, n_timeslots: int
 ) -> timedelta:
     """Validate the times configuration for a round.
 
@@ -90,11 +86,7 @@ def validate_duration(
 
 
 def init_timeslots(
-    starts: tuple[datetime, ...],
-    dur_cycle: timedelta,
-    dur_active: timedelta,
-    n_timeslots: int,
-    start_dt: datetime,
+    starts: tuple[datetime, ...], dur_cycle: timedelta, dur_active: timedelta, n_timeslots: int, start_dt: datetime
 ) -> Iterator[tuple[datetime, ...]]:
     """Initialize the timeslots for the round."""
     if starts and dur_active and dur_cycle:

@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 if TYPE_CHECKING:
-    from fll_scheduler_ga.domain.event import EventFactory, EventProperties
-    from fll_scheduler_ga.domain.model import TournamentConfig
+    from fll_scheduler_ga.domain.event import EventProperties
+    from fll_scheduler_ga.domain.model import EventFactory, TournamentConfig
     from fll_scheduler_ga.domain.schedule import Schedule
     from fll_scheduler_ga.fitness.hard_constraint_checker import HardConstraintChecker
 
@@ -50,48 +50,62 @@ class Repairer:
         self, schedule: Schedule, teams: dict[tuple[int, int], list[int]], events: dict[tuple[int, int], list[int]]
     ) -> bool:
         """Recursively repair the schedule by attempting to assign events to teams."""
-        repair_map = self.repair_map
         while schedule.get_size() < self.config.total_slots_required:
-            filled = True
-            for key, teams_for_rt in teams.items():
-                _, tpr = key
-                if not (events_for_rt := events.get(key)):
-                    break
-                if not (repair_fn := repair_map.get(tpr)):
-                    msg = f"No assignment function for teams per round: {tpr}"
-                    raise ValueError(msg)
-                teams[key], events[key] = repair_fn(
-                    teams=dict(enumerate(teams_for_rt)),
-                    events=dict(enumerate(events_for_rt)),
-                    schedule=schedule,
-                )
-                if teams[key]:  # noqa: PLR1733
-                    filled = False
-                    break
-            if filled:
+            if self._attempt_repair_step(teams, events, schedule):
                 return True
-            event_indices = schedule.scheduled_events()
-            self.rng.shuffle(event_indices)
-            event = event_indices[0]
-            e_rt_idx = self.event_properties.roundtype_idx[event]
-            ek = (e_rt_idx, self.config.round_idx_to_tpr[e_rt_idx])
-            e1, e2 = event, None
-            event_paired = self.event_properties.paired_idx[event]
-            if event_paired != -1:
-                if self.event_properties.loc_side[event] == 1:
-                    e1, e2 = event, event_paired
-                elif self.event_properties.loc_side[event] == 2:
-                    e1, e2 = event_paired, event
-            events[ek].append(e1)
-            t1 = schedule.schedule[e1]
-            teams[ek].append(t1)
-            schedule.unassign(t1, e1)
-            if e2 is not None:
-                t2 = schedule.schedule[e2]
-                if t2 != -1:
-                    teams[ek].append(t2)
-                    schedule.unassign(t2, e2)
+            self._unassign_and_requeue_event(teams, events, schedule)
         return schedule.get_size() == self.config.total_slots_required
+
+    def _attempt_repair_step(
+        self, teams: dict[tuple[int, int], list[int]], events: dict[tuple[int, int], list[int]], schedule: Schedule
+    ) -> bool:
+        """Attempt to apply a repair function for the current round type.
+
+        Returns True if the schedule is considered resolved for this step.
+        """
+        for key, teams_for_rt in teams.items():
+            _, tpr = key
+            if not (events_for_rt := events.get(key)):
+                return True
+            if not (repair_fn := self.repair_map.get(tpr)):
+                msg = f"No assignment function for teams per round: {tpr}"
+                raise ValueError(msg)
+            _teams, _events = repair_fn(
+                teams=dict(enumerate(teams_for_rt)),
+                events=dict(enumerate(events_for_rt)),
+                schedule=schedule,
+            )
+            teams[key] = _teams
+            events[key] = _events
+            if _teams:
+                return False
+        return True
+
+    def _unassign_and_requeue_event(
+        self,
+        teams: dict[tuple[int, int], list[int]],
+        events: dict[tuple[int, int], list[int]],
+        schedule: Schedule,
+    ) -> None:
+        """Select a random scheduled event, handle pairing logic, and move it back to the queue."""
+        event_indices = schedule.scheduled_events()
+        self.rng.shuffle(event_indices)
+        primary_event = event_indices[0]
+        e_rt_idx = self.event_properties.roundtype_idx[primary_event]
+        ek = (e_rt_idx, self.config.round_idx_to_tpr[e_rt_idx])
+        paired_event = self.event_properties.paired_idx[primary_event]
+        loc_side = self.event_properties.loc_side[primary_event]
+        if paired_event != -1:
+            e1, e2 = (paired_event, primary_event) if loc_side == 2 else (primary_event, paired_event)
+        else:
+            e1, e2 = primary_event, None
+        t1 = schedule.schedule[e1]
+        events[ek].append(e1)
+        teams[ek].append(t1)
+        schedule.unassign(t1, e1)
+        if e2 is not None and (t2 := schedule.schedule[e2]) != -1:
+            teams[ek].append(t2)
+            schedule.unassign(t2, e2)
 
     def get_rt_tpr_maps(
         self, schedule: Schedule

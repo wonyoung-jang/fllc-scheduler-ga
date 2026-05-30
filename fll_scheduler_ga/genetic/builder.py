@@ -1,6 +1,5 @@
 """Builder for creating a valid schedule individual."""
 
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -13,21 +12,13 @@ if TYPE_CHECKING:
 
 
 @dataclass(slots=True)
-class ScheduleBuilder(ABC):
-    """Base class for schedule builders."""
+class ScheduleBuilderRandom:
+    """Builder for building a valid random schedule."""
 
     event_properties: EventProperties
     rng: np.random.Generator
     round_idx_to_tpr: dict[int, int]
     roundtype_events: dict[int, list[int]]
-
-    @abstractmethod
-    def build(self) -> Schedule:
-        """Construct and return the final schedule."""
-
-
-class ScheduleBuilderRandom(ScheduleBuilder):
-    """Builder for building a valid random schedule."""
 
     def build(self) -> Schedule:
         """Construct and return the final schedule."""

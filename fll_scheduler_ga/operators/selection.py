@@ -20,7 +20,17 @@ class Selection(ABC):
     rng: np.random.Generator = field(default_factory=np.random.default_rng)
 
     @abstractmethod
-    def select(self, n: int, k: int) -> np.ndarray:
+    def select(self, n: int, k: int) -> np.ndarray: ...
+
+
+class RandomSelect(Selection):
+    """Random selection of individuals from the population."""
+
+    def __str__(self) -> str:
+        """Return a string representation of the selection operator."""
+        return SelectionOp.RANDOM_SELECT
+
+    def select(self, n: int, k: int = 2) -> np.ndarray:
         """Select individuals from the population to form the next generation.
 
         Args:
@@ -31,18 +41,6 @@ class Selection(ABC):
             np.ndarray: The indices of the selected individuals.
 
         """
-
-
-@dataclass(slots=True)
-class RandomSelect(Selection):
-    """Random selection of individuals from the population."""
-
-    def __str__(self) -> str:
-        """Return a string representation of the selection operator."""
-        return SelectionOp.RANDOM_SELECT
-
-    def select(self, n: int, k: int = 2) -> np.ndarray:
-        """Select individuals from the population to form the next generation."""
         if k == 2:
             # Two random indices
             i1 = self.rng.integers(0, n)

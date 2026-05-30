@@ -15,7 +15,9 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator
 
     from fll_scheduler_ga.config.pydantic_schemas import OperatorModel
-    from fll_scheduler_ga.domain.event import EventFactory, EventProperties
+    from fll_scheduler_ga.domain.event import EventProperties
+    from fll_scheduler_ga.domain.model import EventFactory
+
 logger = getLogger(__name__)
 
 
@@ -37,11 +39,7 @@ def build_crossovers(
         CrossoverOp.TIMESLOT_CROSSOVER: TimeSlotCrossover,
         CrossoverOp.LOCATION_CROSSOVER: LocationCrossover,
     }
-    params = {
-        "event_factory": event_factory,
-        "event_properties": event_properties,
-        "rng": rng,
-    }
+    params = {"event_factory": event_factory, "event_properties": event_properties, "rng": rng}
 
     def _generate_crossovers() -> Iterator[Crossover]:
         for crossover_name in crossover_types:
@@ -77,16 +75,7 @@ class Crossover(ABC):
         self.n_evts = self.events.shape[0]
 
     @abstractmethod
-    def cross(self, parents: Iterator[Schedule]) -> Iterator[Schedule]:
-        """Produce child schedules from two parents.
-
-        Args:
-            parents (Iterator[Schedule]): An iterator containing the first and second parent schedules.
-
-        Yields:
-            Schedule : The child schedule produced from crossover.
-
-        """
+    def cross(self, parents: Iterator[Schedule]) -> Iterator[Schedule]: ...
 
     def _create_child(
         self,
@@ -131,7 +120,6 @@ class Crossover(ABC):
                 child.assign(t2, e2)
 
 
-@dataclass(slots=True)
 class EventCrossover(Crossover):
     """Abstract base class for crossover operators in the FLL Scheduler GA."""
 
@@ -142,13 +130,7 @@ class EventCrossover(Crossover):
         return f"{self.__class__.__name__}"
 
     @abstractmethod
-    def get_genes(self) -> Iterable[np.ndarray]:
-        """Get the genes for the crossover.
-
-        Returns:
-            Iterable[np.ndarray]: Genes for each parent.
-
-        """
+    def get_genes(self) -> Iterable[np.ndarray]: ...
 
     def cross(self, parents: Iterator[Schedule]) -> Iterator[Schedule]:
         """Produce child schedules from two parents."""
@@ -175,23 +157,21 @@ class KPoint(EventCrossover):
 
     def get_genes(self) -> Iterable[np.ndarray]:
         """Get the genes for KPoint crossover."""
-        n = self.n_evts
         # Single-point crossover
         if self.k == 1:
-            # Pick a split point index directly (1 to n-1)
-            split = self.rng.integers(1, n)
+            split = self.rng.integers(1, self.n_evts)
             return self.events[:split], self.events[split:]
         # Multi-point crossover
-        splits = self.rng.choice(n - 1, size=self.k, replace=False) + 1
-        mask = np.zeros(n, dtype=bool)
+        splits = self.rng.choice(self.n_evts - 1, size=self.k, replace=False) + 1
+        mask = np.zeros(self.n_evts, dtype=bool)
         mask[splits] = True
         np.bitwise_xor.accumulate(mask, out=mask)
         return self.events[mask], self.events[~mask]
 
 
-@dataclass(slots=True)
 class Scattered(EventCrossover):
     """Scattered crossover operator for genetic algorithms.
+
     Shuffled indices split parent 50/50.
     """
 
@@ -202,9 +182,9 @@ class Scattered(EventCrossover):
         return np.array_split(permuted_indices, 2)
 
 
-@dataclass(slots=True)
 class Uniform(EventCrossover):
     """Uniform crossover operator for genetic algorithms.
+
     Each gene is chosen from either parent by flipping a coin for each gene.
     The main difference with Scattered, is Scattered guarantees close to 50/50 splits.
     Uniform may result in more imbalanced splits.
@@ -220,6 +200,7 @@ class Uniform(EventCrossover):
 @dataclass(slots=True)
 class StructureCrossover(EventCrossover):
     """Structure-based crossover operator for genetic algorithms.
+
     Each gene is chosen based on a specific structure of the event.
     """
 
@@ -232,8 +213,7 @@ class StructureCrossover(EventCrossover):
         self._initialize_attributes()
 
     @abstractmethod
-    def _get_group_keys(self) -> np.ndarray:
-        """Get all group keys for the events."""
+    def _get_group_keys(self) -> np.ndarray: ...
 
     def _initialize_attributes(self) -> None:
         """Initialize attributes specific to the structure crossover."""
@@ -260,9 +240,9 @@ class StructureCrossover(EventCrossover):
         return p1_indices[p1_indices >= 0], p2_indices[p2_indices >= 0]
 
 
-@dataclass(slots=True)
 class RoundTypeCrossover(StructureCrossover):
     """TournamentRound type crossover operator for genetic algorithms.
+
     Each gene is chosen based on the round type of the event.
     """
 
@@ -271,9 +251,9 @@ class RoundTypeCrossover(StructureCrossover):
         return self.event_properties.roundtype_idx[self.events]
 
 
-@dataclass(slots=True)
 class TimeSlotCrossover(StructureCrossover):
     """Time slot crossover operator for genetic algorithms.
+
     Each gene is chosen based on the time slot of the event.
     """
 
@@ -282,9 +262,9 @@ class TimeSlotCrossover(StructureCrossover):
         return self.event_properties.timeslot_idx[self.events]
 
 
-@dataclass(slots=True)
 class LocationCrossover(StructureCrossover):
     """Location crossover operator for genetic algorithms.
+
     Each gene is chosen based on the location of the event.
     """
 

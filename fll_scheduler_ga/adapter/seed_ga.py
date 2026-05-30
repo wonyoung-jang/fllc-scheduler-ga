@@ -88,16 +88,13 @@ class GASave:
             logger.exception("Error saving population to seed file: %s", path)
 
 
-@dataclass(slots=True)
 class SeedingStrategy(ABC):
     """Abstract base class for GA seeding strategies."""
 
     @abstractmethod
-    def get_indices(self, seed_indices: Iterator[int], n_islands: int, n_pop: int) -> dict[int, list[int]]:
-        """Get the seed indices for each island."""
+    def get_indices(self, seed_indices: Iterator[int], n_islands: int, n_pop: int) -> dict[int, list[int]]: ...
 
 
-@dataclass(slots=True)
 class DistributedSeedingStrategy(SeedingStrategy):
     """Distributed seeding strategy for GA islands."""
 
@@ -109,7 +106,6 @@ class DistributedSeedingStrategy(SeedingStrategy):
         return island_to_seed
 
 
-@dataclass(slots=True)
 class ConcentratedSeedingStrategy(SeedingStrategy):
     """Concentrated seeding strategy for GA islands."""
 

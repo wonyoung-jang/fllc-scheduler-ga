@@ -15,8 +15,7 @@ from fll_scheduler_ga.fitness.benchmark_repository import BenchmarkSeedData
 
 if TYPE_CHECKING:
     from fll_scheduler_ga.config.pydantic_schemas import FitnessModel
-    from fll_scheduler_ga.domain.event import EventFactory
-    from fll_scheduler_ga.domain.model import TournamentConfig
+    from fll_scheduler_ga.domain.model import EventFactory, TournamentConfig
     from fll_scheduler_ga.fitness.benchmark_repository import BenchmarkRepository
 
 logger = getLogger(__name__)
@@ -104,7 +103,6 @@ class FitnessBenchmarkObjective(ABC):
         """Run the specific benchmark. To be implemented by subclasses."""
 
 
-@dataclass(slots=True)
 class FitnessBenchmarkOpponent(FitnessBenchmarkObjective):
     """Benchmark for opponent variety fitness."""
 
