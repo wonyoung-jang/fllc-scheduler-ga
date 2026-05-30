@@ -85,6 +85,8 @@ class Island:
         self.fitness_history.update_fitness_history()
         self.check_stagnation()
         self.handle_underpopulation()
+        self.generation += 1
+        self.stagnation.generation = self.generation
 
     def check_stagnation(self) -> None:
         """Check for stagnation without modifying the population."""

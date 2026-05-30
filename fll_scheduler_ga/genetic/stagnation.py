@@ -31,6 +31,7 @@ class FitnessHistory:
     def update_fitness_history(self) -> None:
         """Update the fitness history with the current generation's fitnesses."""
         self.history[self.generation] = self.current
+        self.generation += 1
 
 
 @dataclass(slots=True)

@@ -7,10 +7,8 @@ import numpy as np
 import pytest
 
 from fll_scheduler_ga.config.app_config import TIME_FORMAT_MAP, AppConfig, build_app_config, parse_time_str
-from fll_scheduler_ga.domain.event import EventProperties, build_event_props
-from fll_scheduler_ga.domain.model import EventFactory
+from fll_scheduler_ga.domain.model import EventFactory, EventProperties, TimeSlot, build_event_props
 from fll_scheduler_ga.domain.schedule import Schedule, ScheduleContext
-from fll_scheduler_ga.domain.timeslot import TimeSlot
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -6,7 +6,7 @@ from typing import ClassVar
 
 import numpy as np
 
-from fll_scheduler_ga.domain.event import EventProperties
+from fll_scheduler_ga.domain.model import EventProperties
 
 
 @dataclass(slots=True)

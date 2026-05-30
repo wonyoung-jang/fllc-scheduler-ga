@@ -8,7 +8,7 @@ from fll_scheduler_ga.domain.schedule import Schedule
 if TYPE_CHECKING:
     import numpy as np
 
-    from fll_scheduler_ga.domain.event import EventProperties
+    from fll_scheduler_ga.domain.model import EventProperties
 
 
 @dataclass(slots=True)

@@ -14,8 +14,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
 
     from fll_scheduler_ga.config.schemas import OperatorModel
-    from fll_scheduler_ga.domain.event import EventProperties
-    from fll_scheduler_ga.domain.model import EventFactory
+    from fll_scheduler_ga.domain.model import EventFactory, EventProperties
     from fll_scheduler_ga.domain.schedule import Schedule
 
 type Match = tuple[int, int, int, int]

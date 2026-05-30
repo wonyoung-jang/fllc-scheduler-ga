@@ -68,26 +68,18 @@ class FitnessBenchmark:
         self.repository.save(data)
 
 
-@dataclass(slots=True)
-class StableConfigHash:
+def generate_stable_config_hash(config: TournamentConfig, model: FitnessModel) -> int:
     """Generate a stable hash for a given tournament configuration."""
-
-    config: TournamentConfig
-    model: FitnessModel
-
-    def generate_hash(self) -> int:
-        """Generate a stable hash for the parts of the config that define the benchmark."""
-        # Create a tuple representation of relevant config parts
-        config_representation = (
-            self.config.get_canonical_round_tuples(),
-            self.config.get_canonical_roundreqs_tuple(),
-            self.model.penalties.minbreak_target,
-            self.model.penalties.minbreak,
-            self.model.penalties.zeros,
-            self.config.num_teams,
-        )
-        # Using hashlib over built-in hash for stability
-        return int(hashlib.sha256(str(config_representation).encode()).hexdigest(), 16)
+    representation = (
+        config.get_canonical_round_tuples(),
+        config.get_canonical_roundreqs_tuple(),
+        model.penalties.minbreak_target,
+        model.penalties.minbreak,
+        model.penalties.zeros,
+        config.num_teams,
+    )
+    # Using hashlib over built-in hash for stability
+    return int(hashlib.sha256(str(representation).encode()).hexdigest(), 16)
 
 
 @dataclass(slots=True)

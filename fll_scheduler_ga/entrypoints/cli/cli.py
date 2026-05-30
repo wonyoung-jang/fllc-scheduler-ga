@@ -17,11 +17,11 @@ from rich.table import Table
 from fll_scheduler_ga.adapter.exporter import generate_summary
 from fll_scheduler_ga.adapter.observer import LoggingObserver, RichObserver
 from fll_scheduler_ga.adapter.plot import MatplotlibVisualizer
-from fll_scheduler_ga.config.app_config import AppConfig, build_app_config, log_appconfig_creation_info
+from fll_scheduler_ga.config.app_config import build_app_config, log_appconfig_creation_info
 from fll_scheduler_ga.config.manager import ConfigManager
 from fll_scheduler_ga.constants import LOGGING_CONFIG_PATH, FitnessObjective
 from fll_scheduler_ga.genetic.ga import GA
-from fll_scheduler_ga.genetic.ga_context import StandardGaContextFactory
+from fll_scheduler_ga.genetic.ga_context import build_ga_context
 from fll_scheduler_ga.genetic.stagnation import FitnessHistory, OperatorStats
 
 if TYPE_CHECKING:
@@ -179,10 +179,9 @@ def batch(count: int = typer.Argument(..., min=1, help="Number of times to run t
 
 def run_ga_engine(config_path: Path, progress: Progress | None = None, task_id: TaskID | None = None) -> GA:
     """Core logic to build and run the GA."""
-    app_config: AppConfig = build_app_config(config_path)
+    app_config = build_app_config(config_path)
     log_appconfig_creation_info(app_config)
-    context_factory = StandardGaContextFactory()
-    context = context_factory.build(app_config)
+    context = build_ga_context(app_config)
     trackers = ("success", "total")
     crossover_counters = {str(c): 0 for c in context.crossovers}
     mutation_counters = {str(m): 0 for m in context.mutations}

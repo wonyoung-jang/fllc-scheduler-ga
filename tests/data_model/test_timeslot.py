@@ -12,7 +12,7 @@ from fll_scheduler_ga.config.app_config import (
     parse_time_str,
     validate_duration,
 )
-from fll_scheduler_ga.domain.timeslot import DEFAULT_DT, TimeSlot
+from fll_scheduler_ga.domain.model import DEFAULT_DT, TimeSlot
 
 FMT_24H = TIME_FORMAT_MAP[24]
 FMT_12H = TIME_FORMAT_MAP[12]

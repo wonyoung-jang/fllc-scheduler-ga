@@ -1,6 +1,5 @@
 """Context for the genetic algorithm parts."""
 
-import asyncio
 from collections import defaultdict
 from dataclasses import dataclass
 from logging import getLogger
@@ -13,15 +12,14 @@ from fll_scheduler_ga.adapter.csv_importer import CsvImporter
 from fll_scheduler_ga.adapter.exporter import CsvScheduleExporter, ScheduleSummaryGenerator
 from fll_scheduler_ga.adapter.seed_ga import GALoad, GASave, GASeedData
 from fll_scheduler_ga.constants import BENCHMARKS_CACHE
-from fll_scheduler_ga.domain.event import EventProperties, build_event_props
-from fll_scheduler_ga.domain.model import EventFactory
+from fll_scheduler_ga.domain.model import EventFactory, EventProperties, build_event_props
 from fll_scheduler_ga.domain.schedule import Schedule, ScheduleContext
 from fll_scheduler_ga.fitness.benchmark import (
     FitnessBenchmark,
     FitnessBenchmarkBreaktime,
     FitnessBenchmarkOpponent,
     PickleBenchmarkRepository,
-    StableConfigHash,
+    generate_stable_config_hash,
 )
 from fll_scheduler_ga.fitness.evaluator import FitnessEvaluator
 from fll_scheduler_ga.genetic.builder import ScheduleBuilderRandom
@@ -42,8 +40,7 @@ if TYPE_CHECKING:
 
     from fll_scheduler_ga.config.app_config import AppConfig
     from fll_scheduler_ga.config.schemas import ImportModel
-    from fll_scheduler_ga.domain.model import TournamentConfig
-    from fll_scheduler_ga.domain.timeslot import TimeSlot
+    from fll_scheduler_ga.domain.model import TimeSlot, TournamentConfig
     from fll_scheduler_ga.operators.crossover import Crossover
     from fll_scheduler_ga.operators.mutation import Mutation
     from fll_scheduler_ga.operators.selection import Selection
@@ -93,89 +90,84 @@ def hard_constraint_checker(constraints: tuple[Callable[[Schedule], bool], ...])
     return lambda s: not any(constraint(s) for constraint in constraints)
 
 
-@dataclass(slots=True)
-class StandardGaContextFactory:
-    """Standard implementation of GA context factory."""
-
-    def build(self, cfg: AppConfig) -> GaContext:
-        """Build and return a GA context."""
-        n_total_events = cfg.tournament.get_n_total_events()
-        event_factory = EventFactory(config=cfg.tournament)
-        event_properties = build_event_props(n_total_events=n_total_events, event_map=event_factory.mapping)
-        pre_flight_checker = PreFlightChecker(props=event_properties, factory=event_factory)
-        pre_flight_checker.run_checks()
-        Schedule.ctx = ScheduleContext(
-            conflict_map=event_factory.conflict_map,
-            event_props=event_properties,
-            teams_list=np.arange(cfg.tournament.num_teams, dtype=int),
-            teams_roundreqs_arr=np.tile(A=tuple(cfg.tournament.roundreqs.values()), reps=(cfg.tournament.num_teams, 1)),
-            empty_schedule=np.full(n_total_events, -1, dtype=int),
-        )
-        constraints = (
-            lambda s: not s,
-            lambda s: s.get_size() != cfg.tournament.total_slots_required,
-            lambda s: s.any_rounds_needed(),
-        )
-        checker = hard_constraint_checker(constraints)
-        repairer = Repairer(
-            config=cfg.tournament,
-            event_factory=event_factory,
-            event_properties=event_properties,
-            rng=cfg.rng,
-            checker=checker,
-        )
-        opponent_benchmarker = FitnessBenchmarkOpponent(config=cfg.tournament, event_factory=event_factory)
-        breaktime_benchmarker = FitnessBenchmarkBreaktime(
-            config=cfg.tournament, event_factory=event_factory, model=cfg.fitness
-        )
-        config_hasher = StableConfigHash(config=cfg.tournament, model=cfg.fitness)
-        config_hash = config_hasher.generate_hash()
-        benchmark_cache_dir = BENCHMARKS_CACHE
-        benchmark_cache_dir.mkdir(parents=True, exist_ok=True)
-        seed_file = benchmark_cache_dir / f"benchmark_cache_{config_hash}.pkl"
-        repository = PickleBenchmarkRepository(path=seed_file)
-        benchmark = FitnessBenchmark(
-            config=cfg.tournament,
-            model=cfg.fitness,
-            repository=repository,
-            opponent_benchmarker=opponent_benchmarker,
-            breaktime_benchmarker=breaktime_benchmarker,
-            flush_benchmarks=cfg.runtime.flush_benchmarks,
-        )
-        benchmark.run()
-        evaluator = FitnessEvaluator(
-            config=cfg.tournament, event_properties=event_properties, benchmark=benchmark, model=cfg.fitness
-        )
-        points = calc_ref_points(evaluator.n_objectives, cfg.genetic.parameters.population_size)
-        n_refs = points.shape[0]
-        norm_sq = calc_norm_sq_of_refs(points)
-        ref_directions = ReferenceDirections(n_refs=n_refs, points=points, norm_sq=norm_sq)
-        nsga3 = NSGA3(rng=cfg.rng, refs=ref_directions, sorting=NonDominatedSorting())
-        selection = RandomSelect(cfg.rng)
-        operators = cfg.genetic.operator
-        crossovers = build_crossovers(cfg.rng, operators, event_factory, event_properties)
-        mutations = build_mutations(cfg.rng, operators, event_factory, event_properties)
-        builder = ScheduleBuilderRandom(
-            event_properties=event_properties,
-            rng=cfg.rng,
-            round_idx_to_tpr=cfg.tournament.round_idx_to_tpr,
-            roundtype_events=event_factory.roundtypes,
-        )
-        ga_context_instance = GaContext(
-            app_config=cfg,
-            event_factory=event_factory,
-            event_properties=event_properties,
-            builder=builder,
-            repairer=repairer,
-            evaluator=evaluator,
-            checker=checker,
-            nsga3=nsga3,
-            selection=selection,
-            crossovers=crossovers,
-            mutations=mutations,
-        )
-        RuntimeStartup(config=cfg, context=ga_context_instance).run()
-        return ga_context_instance
+def build_ga_context(cfg: AppConfig) -> GaContext:
+    """Build and return a GA context."""
+    n_total_events = cfg.tournament.get_n_total_events()
+    event_factory = EventFactory(config=cfg.tournament)
+    event_properties = build_event_props(n_total_events=n_total_events, event_map=event_factory.mapping)
+    pre_flight_checker = PreFlightChecker(props=event_properties, factory=event_factory)
+    pre_flight_checker.run_checks()
+    Schedule.ctx = ScheduleContext(
+        conflict_map=event_factory.conflict_map,
+        event_props=event_properties,
+        teams_list=np.arange(cfg.tournament.num_teams, dtype=int),
+        teams_roundreqs_arr=np.tile(A=tuple(cfg.tournament.roundreqs.values()), reps=(cfg.tournament.num_teams, 1)),
+        empty_schedule=np.full(n_total_events, -1, dtype=int),
+    )
+    constraints = (
+        lambda s: not s,
+        lambda s: s.get_size() != cfg.tournament.total_slots_required,
+        lambda s: s.any_rounds_needed(),
+    )
+    checker = hard_constraint_checker(constraints)
+    repairer = Repairer(
+        config=cfg.tournament,
+        event_factory=event_factory,
+        event_properties=event_properties,
+        rng=cfg.rng,
+        checker=checker,
+    )
+    opponent_benchmarker = FitnessBenchmarkOpponent(config=cfg.tournament, event_factory=event_factory)
+    breaktime_benchmarker = FitnessBenchmarkBreaktime(
+        config=cfg.tournament, event_factory=event_factory, model=cfg.fitness
+    )
+    config_hash = generate_stable_config_hash(config=cfg.tournament, model=cfg.fitness)
+    benchmark_cache_dir = BENCHMARKS_CACHE
+    benchmark_cache_dir.mkdir(parents=True, exist_ok=True)
+    seed_file = benchmark_cache_dir / f"benchmark_cache_{config_hash}.pkl"
+    repository = PickleBenchmarkRepository(path=seed_file)
+    benchmark = FitnessBenchmark(
+        config=cfg.tournament,
+        model=cfg.fitness,
+        repository=repository,
+        opponent_benchmarker=opponent_benchmarker,
+        breaktime_benchmarker=breaktime_benchmarker,
+        flush_benchmarks=cfg.runtime.flush_benchmarks,
+    )
+    benchmark.run()
+    evaluator = FitnessEvaluator(
+        config=cfg.tournament, event_properties=event_properties, benchmark=benchmark, model=cfg.fitness
+    )
+    points = calc_ref_points(evaluator.n_objectives, cfg.genetic.parameters.population_size)
+    n_refs = points.shape[0]
+    norm_sq = calc_norm_sq_of_refs(points)
+    ref_directions = ReferenceDirections(n_refs=n_refs, points=points, norm_sq=norm_sq)
+    nsga3 = NSGA3(rng=cfg.rng, refs=ref_directions, sorting=NonDominatedSorting())
+    selection = RandomSelect(cfg.rng)
+    operators = cfg.genetic.operator
+    crossovers = build_crossovers(cfg.rng, operators, event_factory, event_properties)
+    mutations = build_mutations(cfg.rng, operators, event_factory, event_properties)
+    builder = ScheduleBuilderRandom(
+        event_properties=event_properties,
+        rng=cfg.rng,
+        round_idx_to_tpr=cfg.tournament.round_idx_to_tpr,
+        roundtype_events=event_factory.roundtypes,
+    )
+    ga_context_instance = GaContext(
+        app_config=cfg,
+        event_factory=event_factory,
+        event_properties=event_properties,
+        builder=builder,
+        repairer=repairer,
+        evaluator=evaluator,
+        checker=checker,
+        nsga3=nsga3,
+        selection=selection,
+        crossovers=crossovers,
+        mutations=mutations,
+    )
+    RuntimeStartup(config=cfg, context=ga_context_instance).run()
+    return ga_context_instance
 
 
 @dataclass(slots=True)
@@ -263,13 +255,7 @@ class RuntimeStartup:
         imported_schedule = csv_importer.schedule
         if not self.context.check(imported_schedule):
             self.context.repair(imported_schedule)
-        evaluator = FitnessEvaluator(
-            config=self.config.tournament,
-            event_properties=self.context.event_properties,
-            benchmark=self.context.evaluator.benchmark,
-            model=self.config.fitness,
-        )
-        if fits := evaluator.evaluate(np.array([imported_schedule.schedule], dtype=int)):
+        if fits := self.context.evaluate(np.array([imported_schedule.schedule], dtype=int)):
             sched_fits, team_fits = fits
             imported_schedule.fitness = sched_fits
             imported_schedule.team_fitnesses = team_fits
@@ -283,8 +269,8 @@ class RuntimeStartup:
                 team_identities=team_ids,
                 event_properties=self.context.event_properties,
             )
-            asyncio.run(summary_gen.export(imported_schedule, report_path))
-            asyncio.run(csv_schedule_exporter.export(imported_schedule, parent_dir / "schedule.csv"))
+            summary_gen.export(imported_schedule, report_path)
+            csv_schedule_exporter.export(imported_schedule, parent_dir / "schedule.csv")
         return imported_schedule
 
     def _add(self, seed_file: Path, imported_schedule: Schedule) -> None:

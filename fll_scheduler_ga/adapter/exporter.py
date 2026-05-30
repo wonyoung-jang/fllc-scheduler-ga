@@ -1,6 +1,5 @@
 """Module for exporting schedules to different formats."""
 
-import asyncio
 import csv
 import html
 import shutil
@@ -20,10 +19,8 @@ if TYPE_CHECKING:
 
     from fll_scheduler_ga.adapter.plot import Visualizer
     from fll_scheduler_ga.config.schemas import ExportModel
-    from fll_scheduler_ga.domain.event import EventProperties
-    from fll_scheduler_ga.domain.location import Location
+    from fll_scheduler_ga.domain.model import EventProperties, Location, TimeSlot
     from fll_scheduler_ga.domain.schedule import Schedule
-    from fll_scheduler_ga.domain.timeslot import TimeSlot
     from fll_scheduler_ga.genetic.ga import GA
 
 logger = getLogger(__name__)
@@ -48,14 +45,14 @@ class ScheduleExporter(ABC):
     team_identities: dict[int, str]
     event_properties: EventProperties
 
-    async def export(self, schedule: Schedule, path: Path) -> None:
+    def export(self, schedule: Schedule, path: Path) -> None:
         """Export the schedule to a given filename."""
         if not schedule:
             logger.warning("Cannot export an empty schedule.")
             return
         schedule_by_type = self._group_by_type(schedule)
         try:
-            await self.write_to_file(schedule_by_type, path)
+            self.write_to_file(schedule_by_type, path)
             logger.debug("Schedule successfully exported to %s", path)
         except OSError:
             logger.exception("Failed to export schedule to %s", path)
@@ -108,7 +105,7 @@ class ScheduleExporter(ABC):
     @abstractmethod
     def render_grid(self, schedule_dict: dict[int, int]) -> Iterator[str | list[str]]: ...
     @abstractmethod
-    async def write_to_file(self, schedule_by_type: dict[str, dict[int, int]], filename: Path) -> None: ...
+    def write_to_file(self, schedule_by_type: dict[str, dict[int, int]], filename: Path) -> None: ...
 
 
 class CsvScheduleExporter(ScheduleExporter):
@@ -124,7 +121,7 @@ class CsvScheduleExporter(ScheduleExporter):
         yield from data
         yield []
 
-    async def write_to_file(self, schedule_by_type: dict[str, dict[int, int]], filename: Path) -> None:
+    def write_to_file(self, schedule_by_type: dict[str, dict[int, int]], filename: Path) -> None:
         """Write the schedule to a file."""
         with filename.open("w", newline="", encoding="utf-8") as csvfile:
             writer = csv.writer(csvfile)
@@ -162,7 +159,7 @@ class HtmlScheduleExporter(ScheduleExporter):
         # Table End
         yield "</table>"
 
-    async def write_to_file(self, schedule_by_type: dict[str, dict[int, int]], filename: Path) -> None:
+    def write_to_file(self, schedule_by_type: dict[str, dict[int, int]], filename: Path) -> None:
         """Write the schedule to a file."""
         with filename.open("w", encoding="utf-8") as f:
             f.write(self._get_html_start())
@@ -235,7 +232,7 @@ def generate_summary(ga: GA, output_dir: Path, export_model: ExportModel, plot: 
     event_properties = ga.context.event_properties
     exporters = get_exporters(export_model, subdirs, time_fmt, event_properties, ga)
     export_manager = ExportManager(schedules=schedules, exporters=exporters)
-    asyncio.run(export_manager.export_all())
+    export_manager.export_all()
     if export_model.pareto_summary:
         pareto_summary_gen = ParetoSummaryGenerator()
         pareto_summary_gen.export(total_pop, output_dir / "pareto_summary.csv")
@@ -284,14 +281,12 @@ class ExportManager:
     schedules: list[Schedule]
     exporters: tuple
 
-    async def export_all(self) -> None:
-        """Export all schedules to the different formats asynchronously."""
-        tasks = []
+    def export_all(self) -> None:
+        """Export all schedules to different formats."""
         for exporter, subdir, ext in self.exporters:
             for i, sched in enumerate(self.schedules, start=1):
                 name = f"front{sched.rank}_sched{i}"
-                tasks.append(exporter.export(sched, subdir / f"{name}.{ext}"))
-        await asyncio.gather(*tasks)
+                exporter.export(sched, subdir / f"{name}.{ext}")
 
 
 @dataclass(slots=True)
@@ -397,7 +392,7 @@ class ScheduleSummaryGenerator:
             txt.append(events_str)
         return tuple(txt)
 
-    async def export(self, schedule: Schedule, path: Path) -> None:
+    def export(self, schedule: Schedule, path: Path) -> None:
         """Generate a text summary report for a single schedule."""
         try:
             with path.open("w", encoding="utf-8") as f:
@@ -442,7 +437,7 @@ class TeamScheduleGenerator:
             rows.append(tuple(r))
         return tuple(rows)
 
-    async def export(self, schedule: Schedule, path: Path) -> None:
+    def export(self, schedule: Schedule, path: Path) -> None:
         """Generate a CSV file with team schedules, sorted by team IDs."""
         try:
             with path.open("w", newline="", encoding="utf-8") as f:

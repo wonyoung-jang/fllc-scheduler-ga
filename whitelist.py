@@ -3,7 +3,7 @@
 from pydantic import BaseModel
 
 from fll_scheduler_ga.constants import FitnessObjective
-from fll_scheduler_ga.domain.event import EventProperties
+from fll_scheduler_ga.domain.model import EventProperties
 
 FitnessObjective.BREAK_TIME  # noqa: B018
 FitnessObjective.LOCATION_CONSISTENCY  # noqa: B018

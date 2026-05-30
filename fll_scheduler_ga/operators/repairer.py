@@ -9,8 +9,7 @@ import numpy as np
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from fll_scheduler_ga.domain.event import EventProperties
-    from fll_scheduler_ga.domain.model import EventFactory, TournamentConfig
+    from fll_scheduler_ga.domain.model import EventFactory, EventProperties, TournamentConfig
     from fll_scheduler_ga.domain.schedule import Schedule
 
 

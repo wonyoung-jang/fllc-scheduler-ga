@@ -21,9 +21,7 @@ from fll_scheduler_ga.config.schemas import (
     RuntimeModel,
 )
 from fll_scheduler_ga.constants import CONFIG_FILE_DEFAULT, RANDOM_SEED_RANGE
-from fll_scheduler_ga.domain.location import Location
-from fll_scheduler_ga.domain.model import TournamentConfig, TournamentRound
-from fll_scheduler_ga.domain.timeslot import DEFAULT_DT, TimeSlot
+from fll_scheduler_ga.domain.model import DEFAULT_DT, Location, TimeSlot, TournamentConfig, TournamentRound
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
