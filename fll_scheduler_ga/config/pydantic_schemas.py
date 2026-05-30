@@ -1,7 +1,6 @@
 """Pydantic models for application configuration."""
 
 import logging
-from typing import Self
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -88,7 +87,7 @@ class ImportModel(BaseModel):
     seed_island_strategy: str = SeedIslandStrategy.DISTRIBUTED
 
     @model_validator(mode="after")
-    def validate(self) -> Self:
+    def validate(self) -> ImportModel:
         """Validate import options."""
         if self.seed_pop_sort not in tuple(SeedPopSort):
             msg = f"Invalid seed_pop_sort: {self.seed_pop_sort}. Must be one of {[e.value for e in SeedPopSort]}."
@@ -164,7 +163,7 @@ class LocationWeightsModel(BaseModel):
     intra_rounds: float = Field(default=0.5, ge=0.0)
 
     @model_validator(mode="after")
-    def validate(self) -> Self:
+    def validate(self) -> LocationWeightsModel:
         """Validate that weights sum to 1.0."""
         total = self.inter_rounds + self.intra_rounds
         if total <= 0.0:
@@ -219,7 +218,7 @@ class RoundModel(BaseModel):
     duration_active: int = Field(default=0, ge=0)
 
     @model_validator(mode="after")
-    def validate(self) -> Self:
+    def validate(self) -> RoundModel:
         """Validate that rounds_per_team and teams_per_round are positive."""
         if self.stop_time and not self.start_time:
             msg = f"Round '{self.roundtype}' has stop_time defined but no start_time."

@@ -16,7 +16,7 @@ class HardConstraintChecker:
 
     def check(self, schedule: Schedule) -> bool:
         """Check the hard constraints of a schedule."""
-        return not any(constraint.is_violated(schedule) for constraint in self.constraints)
+        return not any(constraint(schedule) for constraint in self.constraints)
 
 
 @dataclass(slots=True)
@@ -24,7 +24,7 @@ class HardConstraint(ABC):
     """Base class for hard constraints."""
 
     @abstractmethod
-    def is_violated(self, schedule: Schedule) -> bool:
+    def __call__(self, schedule: Schedule) -> bool:
         """Check the hard constraint on the given schedule."""
 
 
@@ -32,7 +32,7 @@ class HardConstraint(ABC):
 class HardConstraintTruthiness(HardConstraint):
     """A hard constraint that always returns True."""
 
-    def is_violated(self, schedule: Schedule) -> bool:
+    def __call__(self, schedule: Schedule) -> bool:
         """Check the hard constraint on the given schedule."""
         return not schedule
 
@@ -43,7 +43,7 @@ class HardConstraintSize(HardConstraint):
 
     total_slots_required: int
 
-    def is_violated(self, schedule: Schedule) -> bool:
+    def __call__(self, schedule: Schedule) -> bool:
         """Check the hard constraint on the given schedule."""
         return schedule.get_size() != self.total_slots_required
 
@@ -52,6 +52,6 @@ class HardConstraintSize(HardConstraint):
 class HardConstraintNoRoundsNeeded(HardConstraint):
     """A hard constraint that checks if any rounds are still needed."""
 
-    def is_violated(self, schedule: Schedule) -> bool:
+    def __call__(self, schedule: Schedule) -> bool:
         """Check the hard constraint on the given schedule."""
         return schedule.any_rounds_needed()

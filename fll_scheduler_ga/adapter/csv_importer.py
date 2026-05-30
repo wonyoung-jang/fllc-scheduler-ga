@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 
     from fll_scheduler_ga.data_model.app_schemas import TournamentConfig, TournamentRound
     from fll_scheduler_ga.data_model.event import EventFactory, EventProperties
+
 logger = getLogger(__name__)
 RE_HHMM = re.compile(r"\d{2}:\d{2}")
 TIME_HEADER = "Time"

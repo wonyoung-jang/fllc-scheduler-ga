@@ -14,15 +14,15 @@ from rich.console import Console
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn, TextColumn, TimeRemainingColumn
 from rich.table import Table
 
+from fll_scheduler_ga.adapter import ga_exporter
+from fll_scheduler_ga.adapter.observers import LoggingObserver, RichObserver
+from fll_scheduler_ga.adapter.plot import MatplotlibVisualizer
 from fll_scheduler_ga.config.app_config import AppConfig
 from fll_scheduler_ga.config.config_manager import ConfigManager
 from fll_scheduler_ga.config.constants import LOGGING_CONFIG_PATH, FitnessObjective
 from fll_scheduler_ga.genetic.ga import GA
 from fll_scheduler_ga.genetic.ga_context import StandardGaContextFactory
 from fll_scheduler_ga.genetic.stagnation import FitnessHistory, OperatorStats
-from fll_scheduler_ga.io import ga_exporter
-from fll_scheduler_ga.io.observers import LoggingObserver, RichObserver
-from fll_scheduler_ga.io.plot import MatplotlibVisualizer
 
 if TYPE_CHECKING:
     from rich.progress import TaskID

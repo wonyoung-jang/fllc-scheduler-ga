@@ -5,7 +5,7 @@ import logging
 import pprint as pp
 from collections import Counter
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -80,7 +80,7 @@ class AppConfig:
     rng: np.random.Generator
 
     @classmethod
-    def build(cls, path: Path | None = None) -> Self:
+    def build(cls, path: Path | None = None) -> AppConfig:
         """Create and return the application configuration."""
         if path is None:
             path = CONFIG_FILE_DEFAULT
@@ -92,7 +92,7 @@ class AppConfig:
         return cls.build_from_model(config_model)
 
     @classmethod
-    def build_from_model(cls, model: AppConfigModel) -> Self:
+    def build_from_model(cls, model: AppConfigModel) -> AppConfig:
         """Create and return the application configuration from a Pydantic model."""
         teams_list = get_teams_list(model.tournament.teams)
         model.io.exports.team_identities = get_team_identities(teams_list)
@@ -102,7 +102,7 @@ class AppConfig:
         tournament_config = cls.load_tournament_config(n_teams, model.tournament.rounds, locations)
         seed = get_rng_seed(model.genetic.rng_seed)
         rng = np.random.default_rng(seed)
-        return cls(
+        return AppConfig(
             genetic=model.genetic,
             runtime=model.runtime,
             io=model.io,
