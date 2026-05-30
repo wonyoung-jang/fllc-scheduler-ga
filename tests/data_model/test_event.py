@@ -2,9 +2,10 @@
 
 from typing import TYPE_CHECKING
 
-from fll_scheduler_ga.domain.event import Event, EventFactory, EventProperties
+from fll_scheduler_ga.domain.event import Event, EventProperties
 
 if TYPE_CHECKING:
+    from fll_scheduler_ga.domain.model import EventFactory
     from fll_scheduler_ga.domain.timeslot import TimeSlot
 
 

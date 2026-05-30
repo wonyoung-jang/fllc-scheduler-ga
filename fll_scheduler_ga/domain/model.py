@@ -26,12 +26,7 @@ def are_rounds_overlapping(rounds: Iterable[TournamentRound]) -> bool:
     _starts = (r.start_time for r in rounds)
     _stops = (r.stop_time for r in rounds)
     timeslots = tuple(
-        TimeSlot(
-            idx=0,
-            start=start,
-            stop_active=stop_cycle,
-            stop_cycle=stop_cycle,
-        )
+        TimeSlot(idx=0, start=start, stop_active=stop_cycle, stop_cycle=stop_cycle)
         for start, stop_cycle in zip(_starts, _stops, strict=True)
     )
     return any(timeslots[i].overlaps(timeslots[j]) for i in range(len(timeslots)) for j in range(i + 1, len(timeslots)))

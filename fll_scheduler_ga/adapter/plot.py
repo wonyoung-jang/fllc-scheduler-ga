@@ -112,14 +112,7 @@ class MatplotlibVisualizer(Visualizer):
         ax = fig.add_subplot(projection="3d")
         x_obj, y_obj, z_obj = self.objectives
         ax.view_init(azim=45, elev=40)
-        ax.scatter(
-            data[:, 0],
-            data[:, 1],
-            data[:, 2],
-            s=60,
-            c=ranks,
-            cmap=cmap_name,
-        )
+        ax.scatter(data[:, 0], data[:, 1], data[:, 2], s=60, c=ranks, cmap=cmap_name)
         ax.set(
             title=f"{n_objectives}D scatter plot of schedules",
             xlabel=x_obj,
@@ -130,12 +123,7 @@ class MatplotlibVisualizer(Visualizer):
         self._attach_colorbar(ax, ranks, label="Rank")
         self.finalize(fig, f"pareto_scatter_{n_objectives}d.png")
         ax.scatter(
-            self.ref_points[:, 0],
-            self.ref_points[:, 1],
-            self.ref_points[:, 2],
-            s=30,
-            c="red",
-            label="Reference Points",
+            self.ref_points[:, 0], self.ref_points[:, 1], self.ref_points[:, 2], s=30, c="red", label="Reference Points"
         )
         ax.legend()
         self.finalize(fig, f"pareto_scatter_{n_objectives}d_ref.png")
@@ -157,10 +145,7 @@ class MatplotlibVisualizer(Visualizer):
             plt.close(fig)
 
     def _attach_colorbar(
-        self,
-        ax: Axes,
-        values: np.ndarray[tuple[int, ...], np.dtype[Any]],
-        label: str | None = None,
+        self, ax: Axes, values: np.ndarray[tuple[int, ...], np.dtype[Any]], label: str | None = None
     ) -> None:
         """Attach a colorbar to the given axes."""
         unique_values = sorted(set(values))

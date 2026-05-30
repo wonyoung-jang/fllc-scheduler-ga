@@ -62,9 +62,7 @@ class FitnessBenchmark:
     def save_benchmarks(self) -> None:
         """Save the current benchmarks via repository."""
         data = BenchmarkSeedData(
-            version=FITNESS_MODEL_VERSION,
-            opponents=self.opponents,
-            best_timeslot_score=self.best_timeslot_score,
+            version=FITNESS_MODEL_VERSION, opponents=self.opponents, best_timeslot_score=self.best_timeslot_score
         )
         self.repository.save(data)
 

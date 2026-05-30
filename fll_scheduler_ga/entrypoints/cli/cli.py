@@ -80,8 +80,7 @@ def set_active_config(identifier: str) -> None:
 
 @app.command(name="add")
 def add_config(
-    src: Annotated[str, typer.Option("--src", "-s")],
-    name: Annotated[str, typer.Option("--name", "-n")] = "",
+    src: Annotated[str, typer.Option("--src", "-s")], name: Annotated[str, typer.Option("--name", "-n")] = ""
 ) -> None:
     """Add a new configuration file.
 
@@ -234,10 +233,5 @@ def run_ga_engine(config_path: Path, progress: Progress | None = None, task_id: 
         ref_points=ga.context.nsga3.refs.points,
         export_model=_exports,
     )
-    generate_summary(
-        ga=ga,
-        output_dir=output_dir,
-        export_model=_exports,
-        plot=plot,
-    )
+    generate_summary(ga=ga, output_dir=output_dir, export_model=_exports, plot=plot)
     return ga

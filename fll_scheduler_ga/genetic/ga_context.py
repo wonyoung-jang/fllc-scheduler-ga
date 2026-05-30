@@ -101,10 +101,7 @@ class StandardGaContextFactory:
         """Build and return a GA context."""
         n_total_events = cfg.tournament.get_n_total_events()
         event_factory = EventFactory(config=cfg.tournament)
-        event_properties = EventProperties.build(
-            n_total_events=n_total_events,
-            event_map=event_factory.as_mapping(),
-        )
+        event_properties = EventProperties.build(n_total_events=n_total_events, event_map=event_factory.as_mapping())
         pre_flight_checker = PreFlightChecker(props=event_properties, factory=event_factory)
         pre_flight_checker.run_checks()
         Schedule.ctx = ScheduleContext(
@@ -177,10 +174,7 @@ class StandardGaContextFactory:
             crossovers=crossovers,
             mutations=mutations,
         )
-        RuntimeStartup(
-            config=cfg,
-            context=ga_context_instance,
-        ).run()
+        RuntimeStartup(config=cfg, context=ga_context_instance).run()
         return ga_context_instance
 
 
@@ -261,10 +255,7 @@ class RuntimeStartup:
             return None
         import_path = Path(self.config.runtime.import_file).resolve()
         csv_importer = CsvImporter(
-            import_path,
-            self.config.tournament,
-            self.context.event_factory,
-            self.context.event_properties,
+            import_path, self.config.tournament, self.context.event_factory, self.context.event_properties
         )
         if not csv_importer.validate_inputs():
             return None

@@ -3,7 +3,7 @@
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from fll_scheduler_ga.domain.event import EventFactory
+    from fll_scheduler_ga.domain.model import EventFactory
     from fll_scheduler_ga.domain.schedule import Schedule
 
 

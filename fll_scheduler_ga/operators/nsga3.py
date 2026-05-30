@@ -147,12 +147,7 @@ class NSGA3:
         return ranks
 
     def niche(
-        self,
-        counts: np.ndarray,
-        n_last_front: int,
-        n_remaining: int,
-        niche_refs: np.ndarray,
-        niche_dists: np.ndarray,
+        self, counts: np.ndarray, n_last_front: int, n_remaining: int, niche_refs: np.ndarray, niche_dists: np.ndarray
     ) -> np.ndarray:
         """Select k individuals from the last front using a niching mechanism."""
         # Mask of individuals in the last front still available for selection

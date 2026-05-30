@@ -31,11 +31,7 @@ def test_schemas_validation() -> None:
         RoundModel(roundtype="R1", start_time="", stop_time="09:00")  # Stop without start
     with pytest.raises(ValidationError):
         RoundModel(
-            roundtype="R1",
-            start_time="09:00",
-            stop_time="10:00",
-            duration_active=10,
-            duration_cycle=5,
+            roundtype="R1", start_time="09:00", stop_time="10:00", duration_active=10, duration_cycle=5
         )  # Active > Cycle
     # Teams
     teams = 5
@@ -47,32 +43,21 @@ def test_schemas_validation() -> None:
 
 def test_fitness_aggregation_model() -> None:
     """Test AggregationWeightsModel behavior."""
-    agg_weights = AggregationWeightsModel(
-        mean=3,
-        variation=1,
-        range=1,
-        min_fit=0.3,
-    )
+    agg_weights = AggregationWeightsModel(mean=3, variation=1, range=1, min_fit=0.3)
     agg_weight_tuple = agg_weights.get_weights_tuple()
     assert agg_weight_tuple == (3 / 5, 1 / 5, 1 / 5)
 
 
 def test_location_weights_model() -> None:
     """Test LocationWeightsModel behavior."""
-    loc_weights = LocationWeightsModel(
-        inter_rounds=2.0,
-        intra_rounds=1.0,
-    )
+    loc_weights = LocationWeightsModel(inter_rounds=2.0, intra_rounds=1.0)
     loc_weight_tuple = loc_weights.get_weights_tuple()
     assert loc_weight_tuple == (2.0 / 3.0, 1.0 / 3.0)
 
 
 def test_location_weights_model_zero_sum(caplog: pytest.LogCaptureFixture) -> None:
     """Test LocationWeightsModel behavior when weights sum to zero."""
-    loc_weights = LocationWeightsModel(
-        inter_rounds=0.0,
-        intra_rounds=0.0,
-    )
+    loc_weights = LocationWeightsModel(inter_rounds=0.0, intra_rounds=0.0)
     loc_weight_tuple = loc_weights.get_weights_tuple()
     assert loc_weight_tuple == (0.5, 0.5)
     assert "Location weights sum to zero: resetting to equal weights of 0.5 each." in caplog.text

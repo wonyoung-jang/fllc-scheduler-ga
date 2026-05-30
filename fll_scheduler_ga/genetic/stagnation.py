@@ -20,11 +20,7 @@ class FitnessHistory:
 
     def copy(self) -> FitnessHistory:
         """Create a copy of the fitness history."""
-        return FitnessHistory(
-            generation=self.generation,
-            current=self.current.copy(),
-            history=self.history.copy(),
-        )
+        return FitnessHistory(generation=self.generation, current=self.current.copy(), history=self.history.copy())
 
     def get_last_gen_fitness(self) -> np.ndarray:
         """Get the fitness of the last generation."""

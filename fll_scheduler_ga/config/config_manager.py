@@ -36,10 +36,7 @@ class ConfigManager:
 
     def refresh_list(self) -> None:
         """Refresh the internal list of JSON files."""
-        self.available = sorted(
-            (f for f in self.directory.iterdir() if f.suffix == ".json"),
-            key=lambda f: f.name,
-        )
+        self.available = sorted((f for f in self.directory.iterdir() if f.suffix == ".json"), key=lambda f: f.name)
 
     def get_active_config(self) -> Path:
         """Retrieve the last used configuration if it still exists."""

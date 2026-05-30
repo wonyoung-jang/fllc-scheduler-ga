@@ -40,8 +40,7 @@ logger = logging.getLogger(__name__)
 def get_all_sorted_attr(objects: Iterable[Any], get_by: str, sort_by: str) -> tuple[Any, ...]:
     """Get all attributes of the TournamentRound objects."""
     all_of = sorted(
-        itertools.chain.from_iterable(getattr(r, get_by) for r in objects),
-        key=lambda x: getattr(x, sort_by),
+        itertools.chain.from_iterable(getattr(r, get_by) for r in objects), key=lambda x: getattr(x, sort_by)
     )
     return tuple(all_of)
 
@@ -137,10 +136,7 @@ class AppConfig:
 
     @classmethod
     def load_tournament_config(
-        cls,
-        n_teams: int,
-        round_models: tuple[RoundModel, ...],
-        locations: tuple[Location, ...],
+        cls, n_teams: int, round_models: tuple[RoundModel, ...], locations: tuple[Location, ...]
     ) -> TournamentConfig:
         """Load and return the tournament configuration from the validated model."""
         time_fmt = cls.get_time_fmt(round_models)
@@ -191,11 +187,7 @@ class AppConfig:
 
     @classmethod
     def parse_rounds_config(
-        cls,
-        round_models: tuple[RoundModel, ...],
-        n_teams: int,
-        time_fmt: str,
-        all_locations: tuple[Location, ...],
+        cls, round_models: tuple[RoundModel, ...], n_teams: int, time_fmt: str, all_locations: tuple[Location, ...]
     ) -> tuple[TournamentRound, ...]:
         """Parse and return TournamentRound objects from the configuration."""
         timeslot_idx_iter = itertools.count()

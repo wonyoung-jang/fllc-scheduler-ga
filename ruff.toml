@@ -73,11 +73,13 @@ fixable = ["ALL"]
 unfixable = []
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 
+[lint.isort]
+split-on-trailing-comma = false
+
 [format]
 quote-style = "double"
 indent-style = "space"
-skip-magic-trailing-comma = false
+skip-magic-trailing-comma = true
 line-ending = "auto"
 docstring-code-format = false
 docstring-code-line-length = "dynamic"
-

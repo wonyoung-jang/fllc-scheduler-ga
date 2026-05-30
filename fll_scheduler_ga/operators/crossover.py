@@ -22,10 +22,7 @@ logger = getLogger(__name__)
 
 
 def build_crossovers(
-    rng: np.random.Generator,
-    operators: OperatorModel,
-    event_factory: EventFactory,
-    event_properties: EventProperties,
+    rng: np.random.Generator, operators: OperatorModel, event_factory: EventFactory, event_properties: EventProperties
 ) -> tuple[Crossover, ...]:
     """Build and return a tuple of crossover operators based on the configuration."""
     if not (crossover_types := operators.crossover.types):
@@ -77,13 +74,7 @@ class Crossover(ABC):
     @abstractmethod
     def cross(self, parents: Iterator[Schedule]) -> Iterator[Schedule]: ...
 
-    def _create_child(
-        self,
-        p1: np.ndarray,
-        p2: np.ndarray,
-        p1_genes: np.ndarray,
-        p2_genes: np.ndarray,
-    ) -> Schedule:
+    def _create_child(self, p1: np.ndarray, p2: np.ndarray, p1_genes: np.ndarray, p2_genes: np.ndarray) -> Schedule:
         """Create a child schedule from two parents."""
         child = Schedule(origin=f"(C | {self!s})")
         self.assign_from_p1(child, p1, p1_genes)

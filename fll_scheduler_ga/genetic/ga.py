@@ -108,13 +108,9 @@ class GA:
         finally:
             GAFinalizer(self).finalize(start_time)
             seed_ga_data = GASeedData(
-                config=config,
-                population=self.pareto_front() if self.save_front_only else self.total_population,
+                config=config, population=self.pareto_front() if self.save_front_only else self.total_population
             )
-            GASave(
-                seed_file=seed_file,
-                data=seed_ga_data,
-            ).save()
+            GASave(seed_file=seed_file, data=seed_ga_data).save()
             self._notify_on_finish(self.total_population, self.pareto_front())
 
     def pareto_front(self) -> list[Schedule]:
@@ -231,10 +227,7 @@ class GASeeder:
 
     def _iter_seeds(self) -> Iterator[int]:
         """Yield indices for seeding strategies."""
-        iter_fn_map: dict[str, Callable] = {
-            SeedPopSort.RANDOM: self.rng.permutation,
-            SeedPopSort.BEST: np.arange,
-        }
+        iter_fn_map: dict[str, Callable] = {SeedPopSort.RANDOM: self.rng.permutation, SeedPopSort.BEST: np.arange}
         iter_fn = iter_fn_map.get(self.imports.seed_pop_sort, self.rng.permutation)
         if isinstance(self.seed_pop, list):
             yield from iter_fn(len(self.seed_pop))

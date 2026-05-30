@@ -23,10 +23,7 @@ logger = getLogger(__name__)
 
 
 def build_mutations(
-    rng: np.random.Generator,
-    operators: OperatorModel,
-    event_factory: EventFactory,
-    event_properties: EventProperties,
+    rng: np.random.Generator, operators: OperatorModel, event_factory: EventFactory, event_properties: EventProperties
 ) -> tuple[Mutation, ...]:
     """Build and return a tuple of mutation operators based on the configuration."""
     if not (mutation_types := operators.mutation.types):
@@ -35,51 +32,23 @@ def build_mutations(
     mutation_factory: dict[str, Callable[[dict], Mutation]] = {
         # SwapMatchMutation variants
         MutationOp.SWAP_MATCH_CROSS_TIME_LOCATION: lambda p: SwapMatchMutation(
-            **p,
-            same_timeslot=False,
-            same_location=False,
+            **p, same_timeslot=False, same_location=False
         ),
-        MutationOp.SWAP_MATCH_SAME_LOCATION: lambda p: SwapMatchMutation(
-            **p,
-            same_timeslot=False,
-            same_location=True,
-        ),
-        MutationOp.SWAP_MATCH_SAME_TIME: lambda p: SwapMatchMutation(
-            **p,
-            same_timeslot=True,
-            same_location=False,
-        ),
+        MutationOp.SWAP_MATCH_SAME_LOCATION: lambda p: SwapMatchMutation(**p, same_timeslot=False, same_location=True),
+        MutationOp.SWAP_MATCH_SAME_TIME: lambda p: SwapMatchMutation(**p, same_timeslot=True, same_location=False),
         # SwapTeamMutation variants
         MutationOp.SWAP_TEAM_CROSS_TIME_LOCATION: lambda p: SwapTeamMutation(
-            **p,
-            same_timeslot=False,
-            same_location=False,
+            **p, same_timeslot=False, same_location=False
         ),
-        MutationOp.SWAP_TEAM_SAME_LOCATION: lambda p: SwapTeamMutation(
-            **p,
-            same_timeslot=False,
-            same_location=True,
-        ),
-        MutationOp.SWAP_TEAM_SAME_TIME: lambda p: SwapTeamMutation(
-            **p,
-            same_timeslot=True,
-            same_location=False,
-        ),
+        MutationOp.SWAP_TEAM_SAME_LOCATION: lambda p: SwapTeamMutation(**p, same_timeslot=False, same_location=True),
+        MutationOp.SWAP_TEAM_SAME_TIME: lambda p: SwapTeamMutation(**p, same_timeslot=True, same_location=False),
         # SwapTableSideMutation variant
-        MutationOp.SWAP_TABLE_SIDE: lambda p: SwapTableSideMutation(
-            **p,
-            same_timeslot=True,
-            same_location=True,
-        ),
+        MutationOp.SWAP_TABLE_SIDE: lambda p: SwapTableSideMutation(**p, same_timeslot=True, same_location=True),
         # TimeSlotSequenceMutation variants
         MutationOp.INVERSION: lambda p: InversionMutation(**p),
         MutationOp.SCRAMBLE: lambda p: ScrambleMutation(**p),
     }
-    params = {
-        "rng": rng,
-        "event_factory": event_factory,
-        "event_properties": event_properties,
-    }
+    params = {"rng": rng, "event_factory": event_factory, "event_properties": event_properties}
 
     def _generate_mutations() -> Iterator[Mutation]:
         for mutation_name in mutation_types:
@@ -286,9 +255,7 @@ class TimeSlotSequenceMutation(Mutation):
     @abstractmethod
     def permute_matches(self, items: list[tuple[int, ...]]) -> Iterator[tuple[int, ...]]: ...
 
-    def init_candidates(
-        self,
-    ) -> tuple[dict[tuple[int, int], list[tuple[int, ...]]], dict[tuple[int, int], int]]:
+    def init_candidates(self) -> tuple[dict[tuple[int, int], list[tuple[int, ...]]], dict[tuple[int, int], int]]:
         """Precompute candidate events for each timeslot."""
         ep = self.event_properties
         timeslot_data = {}

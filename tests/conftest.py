@@ -7,7 +7,8 @@ import numpy as np
 import pytest
 
 from fll_scheduler_ga.config.app_config import AppConfig
-from fll_scheduler_ga.domain.event import EventFactory, EventProperties
+from fll_scheduler_ga.domain.event import EventProperties
+from fll_scheduler_ga.domain.model import EventFactory
 from fll_scheduler_ga.domain.schedule import Schedule, ScheduleContext
 from fll_scheduler_ga.domain.timeslot import TIME_FORMAT_MAP, TimeSlot, parse_time_str
 
@@ -15,6 +16,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from fll_scheduler_ga.domain.model import TournamentConfig
+
 FMT_24H: str = TIME_FORMAT_MAP[24]
 FMT_12H: str = TIME_FORMAT_MAP[12]
 
@@ -24,45 +26,19 @@ def minimal_config_dict() -> dict[str, Any]:
     """Return a minimal valid configuration dictionary."""
     return {
         "genetic": {
-            "parameters": {
-                "population_size": 4,
-                "generations": 2,
-            },
+            "parameters": {"population_size": 4, "generations": 2},
             "operator": {
-                "crossover": {
-                    "types": ["KPoint"],
-                    "k_vals": [1],
-                },
-                "mutation": {
-                    "types": ["SwapTeam_CrossTimeLocation"],
-                },
+                "crossover": {"types": ["KPoint"], "k_vals": [1]},
+                "mutation": {"types": ["SwapTeam_CrossTimeLocation"]},
             },
-            "stagnation": {
-                "enable": False,
-            },
+            "stagnation": {"enable": False},
         },
-        "runtime": {
-            "seed_file": "test_seed.pkl",
-        },
-        "io": {
-            "imports": {},
-            "exports": {},
-        },
+        "runtime": {"seed_file": "test_seed.pkl"},
+        "io": {"imports": {}, "exports": {}},
         "fitness": {},
         "tournament": {
             "teams": 4,
-            "locations": [
-                {
-                    "name": "Room",
-                    "count": 1,
-                    "sides": 1,
-                },
-                {
-                    "name": "Table",
-                    "count": 2,
-                    "sides": 2,
-                },
-            ],
+            "locations": [{"name": "Room", "count": 1, "sides": 1}, {"name": "Table", "count": 2, "sides": 2}],
             "rounds": [
                 {
                     "roundtype": "Judging",
@@ -118,9 +94,7 @@ def event_properties(tournament_config: TournamentConfig, event_factory: EventFa
 
 @pytest.fixture
 def schedule_context(
-    tournament_config: TournamentConfig,
-    event_factory: EventFactory,
-    event_properties: EventProperties,
+    tournament_config: TournamentConfig, event_factory: EventFactory, event_properties: EventProperties
 ) -> ScheduleContext:
     """Initialize ScheduleContext."""
     n_total = tournament_config.get_n_total_events()

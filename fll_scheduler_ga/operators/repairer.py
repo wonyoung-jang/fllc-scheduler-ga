@@ -27,10 +27,7 @@ class Repairer:
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
-        self.repair_map = {
-            1: self.repair_singles,
-            2: self.repair_matches,
-        }
+        self.repair_map = {1: self.repair_singles, 2: self.repair_matches}
         max_rt = max(self.config.round_idx_to_tpr.keys())
         self._rt_to_tpr = np.zeros(max_rt + 1, dtype=int)
         for rt, tpr in self.config.round_idx_to_tpr.items():
@@ -71,9 +68,7 @@ class Repairer:
                 msg = f"No assignment function for teams per round: {tpr}"
                 raise ValueError(msg)
             _teams, _events = repair_fn(
-                teams=dict(enumerate(teams_for_rt)),
-                events=dict(enumerate(events_for_rt)),
-                schedule=schedule,
+                teams=dict(enumerate(teams_for_rt)), events=dict(enumerate(events_for_rt)), schedule=schedule
             )
             teams[key] = _teams
             events[key] = _events
@@ -82,10 +77,7 @@ class Repairer:
         return True
 
     def _unassign_and_requeue_event(
-        self,
-        teams: dict[tuple[int, int], list[int]],
-        events: dict[tuple[int, int], list[int]],
-        schedule: Schedule,
+        self, teams: dict[tuple[int, int], list[int]], events: dict[tuple[int, int], list[int]], schedule: Schedule
     ) -> None:
         """Select a random scheduled event, handle pairing logic, and move it back to the queue."""
         event_indices = schedule.scheduled_events()

@@ -81,16 +81,9 @@ class ScheduleExporter(ABC):
             ts = self.event_properties.timeslot[event]
             loc = self.event_properties.location[event]
             grid_lookup[(ts, loc)] = team
-        timeslots: list[TimeSlot] = sorted(
-            {i[0] for i in grid_lookup},
-            key=lambda ts: ts.start,
-        )
+        timeslots: list[TimeSlot] = sorted({i[0] for i in grid_lookup}, key=lambda ts: ts.start)
         locations: list[Location] = sorted(
-            {i[1] for i in grid_lookup},
-            key=lambda loc: (
-                loc.name,
-                loc.side if loc.side != -1 else 0,
-            ),
+            {i[1] for i in grid_lookup}, key=lambda loc: (loc.name, loc.side if loc.side != -1 else 0)
         )
         return timeslots, locations, grid_lookup
 
@@ -230,12 +223,7 @@ class HtmlScheduleExporter(ScheduleExporter):
         """
 
 
-def generate_summary(
-    ga: GA,
-    output_dir: Path,
-    export_model: ExportModel,
-    plot: Visualizer,
-) -> None:
+def generate_summary(ga: GA, output_dir: Path, export_model: ExportModel, plot: Visualizer) -> None:
     """Run the fll-scheduler-ga application and generate summary reports."""
     subdirs = OutputDirManager(output_dir).subdirs
     total_pop = ga.total_population
@@ -254,11 +242,7 @@ def generate_summary(
 
 
 def get_exporters(
-    export_model: ExportModel,
-    subdirs: dict[str, Path],
-    time_fmt: str,
-    event_properties: EventProperties,
-    ga: GA,
+    export_model: ExportModel, subdirs: dict[str, Path], time_fmt: str, event_properties: EventProperties, ga: GA
 ) -> tuple:
     """Get the list of exporters based on the export model."""
     exporters = []
@@ -266,9 +250,7 @@ def get_exporters(
         exporters.append(
             (
                 CsvScheduleExporter(
-                    time_fmt=time_fmt,
-                    team_identities=export_model.team_identities,
-                    event_properties=event_properties,
+                    time_fmt=time_fmt, team_identities=export_model.team_identities, event_properties=event_properties
                 ),
                 subdirs["csv"],
                 "csv",
@@ -278,9 +260,7 @@ def get_exporters(
         exporters.append(
             (
                 HtmlScheduleExporter(
-                    time_fmt=time_fmt,
-                    team_identities=export_model.team_identities,
-                    event_properties=event_properties,
+                    time_fmt=time_fmt, team_identities=export_model.team_identities, event_properties=event_properties
                 ),
                 subdirs["html"],
                 "html",
@@ -288,24 +268,11 @@ def get_exporters(
         )
     if export_model.summary_reports:
         exporters.append(
-            (
-                ScheduleSummaryGenerator(
-                    team_identities=export_model.team_identities,
-                ),
-                subdirs["txt"],
-                "txt",
-            )
+            (ScheduleSummaryGenerator(team_identities=export_model.team_identities), subdirs["txt"], "txt")
         )
     if export_model.schedules_team_csv:
         exporters.append(
-            (
-                TeamScheduleGenerator(
-                    ga=ga,
-                    team_identities=export_model.team_identities,
-                ),
-                subdirs["team"],
-                "csv",
-            ),
+            (TeamScheduleGenerator(ga=ga, team_identities=export_model.team_identities), subdirs["team"], "csv")
         )
     return tuple(exporters)
 

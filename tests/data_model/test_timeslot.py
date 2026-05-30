@@ -104,6 +104,7 @@ def test_less_than_timeslot(timeslot: TimeSlot, delta_minutes: int, *, expect_lt
 )
 def test_overlaps_timeslot(timeslot: TimeSlot, start_offset_min: int, stop_offset_min: int, *, expected: bool) -> None:
     """Parametrized overlaps tests.
+
     Offsets are minutes relative to timeslot.start (so original stop is +60).
     """
     other = TimeSlot(
@@ -122,18 +123,10 @@ def test_overlaps_timeslot(timeslot: TimeSlot, start_offset_min: int, stop_offse
         (0, 4, 10, 2, 5),  # enough locations
         (0, 0, 10, 2, None),  # cannot calculate
     ],
-    ids=[
-        "enough_times",
-        "enough_locations",
-        "cannot_calculate",
-    ],
+    ids=["enough_times", "enough_locations", "cannot_calculate"],
 )
 def test_calc_num_timeslots(
-    n_times: int,
-    n_locs: int,
-    n_teams: int,
-    rounds_per_team: int,
-    expected: int | None,
+    n_times: int, n_locs: int, n_teams: int, rounds_per_team: int, expected: int | None
 ) -> None:
     """Parametrized tests for calc_num_timeslots function."""
     if expected is not None:
@@ -178,23 +171,14 @@ class TestValidateDuration:
         self, start_dt: datetime, dur: int, expected_minutes: int
     ) -> None:
         """Test validate_duration with start time and duration specified."""
-        result = validate_duration(
-            start_stop=(start_dt, DEFAULT_DT),
-            times_dt=(),
-            dur=dur,
-            n_timeslots=0,
-        )
+        result = validate_duration(start_stop=(start_dt, DEFAULT_DT), times_dt=(), dur=dur, n_timeslots=0)
         assert result == timedelta(minutes=expected_minutes)
 
     @pytest.mark.parametrize(
         ("times", "dur", "expected_minutes"),
         [
             ((datetime(2026, 1, 1, 9, 0, tzinfo=UTC),), 20, 20),
-            (
-                (datetime(2026, 1, 1, 9, 0, tzinfo=UTC), datetime(2026, 1, 1, 10, 0, tzinfo=UTC)),
-                45,
-                45,
-            ),
+            ((datetime(2026, 1, 1, 9, 0, tzinfo=UTC), datetime(2026, 1, 1, 10, 0, tzinfo=UTC)), 45, 45),
         ],
         ids=["single_time", "multiple_times"],
     )
@@ -202,12 +186,7 @@ class TestValidateDuration:
         self, times: tuple[datetime, ...], dur: int, expected_minutes: int
     ) -> None:
         """Test validate_duration with explicit times and duration specified."""
-        result = validate_duration(
-            start_stop=(DEFAULT_DT, DEFAULT_DT),
-            times_dt=times,
-            dur=dur,
-            n_timeslots=0,
-        )
+        result = validate_duration(start_stop=(DEFAULT_DT, DEFAULT_DT), times_dt=times, dur=dur, n_timeslots=0)
         assert result == timedelta(minutes=expected_minutes)
 
     @pytest.mark.parametrize(
@@ -223,22 +202,14 @@ class TestValidateDuration:
         self, start_dt: datetime, stop_dt: datetime, n_timeslots: int, expected_minutes: int
     ) -> None:
         """Test validate_duration calculates duration from start/stop times."""
-        result = validate_duration(
-            start_stop=(start_dt, stop_dt),
-            times_dt=(),
-            dur=0,
-            n_timeslots=n_timeslots,
-        )
+        result = validate_duration(start_stop=(start_dt, stop_dt), times_dt=(), dur=0, n_timeslots=n_timeslots)
         assert result == timedelta(minutes=expected_minutes)
 
     def test_validate_duration_start_stop_invalid_n_timeslots(self) -> None:
         """Test validate_duration raises error when n_timeslots is invalid."""
         with pytest.raises(ValueError, match=r"n_timeslots must be greater than zero"):
             validate_duration(
-                start_stop=(
-                    datetime(2026, 1, 1, 9, 0, tzinfo=UTC),
-                    datetime(2026, 1, 1, 10, 0, tzinfo=UTC),
-                ),
+                start_stop=(datetime(2026, 1, 1, 9, 0, tzinfo=UTC), datetime(2026, 1, 1, 10, 0, tzinfo=UTC)),
                 times_dt=(),
                 dur=0,
                 n_timeslots=0,
@@ -247,12 +218,7 @@ class TestValidateDuration:
     def test_validate_duration_with_default_dt_and_no_dur_raises_error(self) -> None:
         """Test validate_duration with DEFAULT_DT values and no duration raises error."""
         with pytest.raises(ValueError, match=r"n_timeslots must be greater than zero"):
-            validate_duration(
-                start_stop=(DEFAULT_DT, DEFAULT_DT),
-                times_dt=(),
-                dur=0,
-                n_timeslots=0,
-            )
+            validate_duration(start_stop=(DEFAULT_DT, DEFAULT_DT), times_dt=(), dur=0, n_timeslots=0)
 
     def test_validate_duration_minimum_one_minute(self) -> None:
         """Test validate_duration returns minimum 1 minute for very small durations."""
