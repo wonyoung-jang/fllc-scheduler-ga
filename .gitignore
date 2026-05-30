@@ -29,3 +29,4 @@ wheels/
 profile.*
 scalene-*
 .pre-commit-config.yaml
+.tally-config.toml

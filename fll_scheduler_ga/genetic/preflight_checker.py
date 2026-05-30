@@ -8,8 +8,8 @@ from logging import getLogger
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ..data_model.event import EventFactory, EventProperties
-    from ..data_model.timeslot import TimeSlot
+    from fll_scheduler_ga.data_model.event import EventFactory, EventProperties
+    from fll_scheduler_ga.data_model.timeslot import TimeSlot
 
 logger = getLogger(__name__)
 

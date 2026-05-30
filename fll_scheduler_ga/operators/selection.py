@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from ..config.constants import SelectionOp
+from fll_scheduler_ga.config.constants import SelectionOp
 
 
 @dataclass(slots=True)

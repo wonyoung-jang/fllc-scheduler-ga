@@ -7,7 +7,7 @@ from logging import getLogger
 
 import numpy as np
 
-from .fitness_base import FitnessBase
+from fll_scheduler_ga.fitness.fitness_base import FitnessBase
 
 logger = getLogger(__name__)
 

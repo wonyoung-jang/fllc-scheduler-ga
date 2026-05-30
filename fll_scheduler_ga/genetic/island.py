@@ -11,13 +11,13 @@ import numpy as np
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterator
 
-    from ..config.pydantic_schemas import GeneticModel
-    from ..data_model.schedule import Schedule
-    from .builder import ScheduleBuilderRandom
-    from .ga_context import GaContext
-    from .ga_generation import GaGeneration
-    from .population import SchedulePopulation
-    from .stagnation import FitnessHistory, OperatorStats, StagnationHandler
+    from fll_scheduler_ga.config.pydantic_schemas import GeneticModel
+    from fll_scheduler_ga.data_model.schedule import Schedule
+    from fll_scheduler_ga.genetic.builder import ScheduleBuilderRandom
+    from fll_scheduler_ga.genetic.ga_context import GaContext
+    from fll_scheduler_ga.genetic.ga_generation import GaGeneration
+    from fll_scheduler_ga.genetic.population import SchedulePopulation
+    from fll_scheduler_ga.genetic.stagnation import FitnessHistory, OperatorStats, StagnationHandler
 
 logger = getLogger(__name__)
 

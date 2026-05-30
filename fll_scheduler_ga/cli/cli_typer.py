@@ -18,9 +18,9 @@ from rich.progress import (
 )
 from rich.table import Table
 
-from ..config.config_manager import ConfigManager
-from .loggers import initialize_logging
-from .runners import run_ga_engine
+from fll_scheduler_ga.cli.loggers import initialize_logging
+from fll_scheduler_ga.cli.runners import run_ga_engine
+from fll_scheduler_ga.config.config_manager import ConfigManager
 
 app = typer.Typer(
     name="Tournament Scheduler",

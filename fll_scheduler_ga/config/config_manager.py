@@ -7,7 +7,7 @@ import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .constants import CONFIG_FILE_DEFAULT
+from fll_scheduler_ga.config.constants import CONFIG_FILE_DEFAULT
 
 logger = logging.getLogger(__name__)
 CONFIG_DIR = Path(".configs/").resolve()

@@ -8,15 +8,15 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..config.app_config import AppConfig
-from ..config.constants import FitnessObjective
-from ..genetic.ga import GA
-from ..genetic.ga_context import StandardGaContextFactory
-from ..genetic.ga_generation import GaGeneration
-from ..genetic.stagnation import FitnessHistory, OperatorStats
-from ..io import ga_exporter
-from ..io.observers import LoggingObserver, RichObserver
-from ..io.plot import MatplotlibVisualizer
+from fll_scheduler_ga.config.app_config import AppConfig
+from fll_scheduler_ga.config.constants import FitnessObjective
+from fll_scheduler_ga.genetic.ga import GA
+from fll_scheduler_ga.genetic.ga_context import StandardGaContextFactory
+from fll_scheduler_ga.genetic.ga_generation import GaGeneration
+from fll_scheduler_ga.genetic.stagnation import FitnessHistory, OperatorStats
+from fll_scheduler_ga.io import ga_exporter
+from fll_scheduler_ga.io.observers import LoggingObserver, RichObserver
+from fll_scheduler_ga.io.plot import MatplotlibVisualizer
 
 if TYPE_CHECKING:
     from rich.progress import Progress, TaskID

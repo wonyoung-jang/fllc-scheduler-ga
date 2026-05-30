@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     import numpy as np
     from rich.progress import Progress, TaskID
 
-    from ..data_model.schedule import Schedule
+    from fll_scheduler_ga.data_model.schedule import Schedule
 
 
 logger = getLogger(__name__)

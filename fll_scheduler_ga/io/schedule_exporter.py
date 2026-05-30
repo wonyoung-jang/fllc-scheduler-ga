@@ -15,10 +15,10 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
 
-    from ..data_model.event import EventProperties
-    from ..data_model.location import Location
-    from ..data_model.schedule import Schedule
-    from ..data_model.timeslot import TimeSlot
+    from fll_scheduler_ga.data_model.event import EventProperties
+    from fll_scheduler_ga.data_model.location import Location
+    from fll_scheduler_ga.data_model.schedule import Schedule
+    from fll_scheduler_ga.data_model.timeslot import TimeSlot
 
 logger = getLogger(__name__)
 

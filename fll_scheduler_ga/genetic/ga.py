@@ -9,8 +9,11 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..config.constants import SeedIslandStrategy, SeedPopSort
-from ..io.seed_ga import (
+from fll_scheduler_ga.config.constants import SeedIslandStrategy, SeedPopSort
+from fll_scheduler_ga.genetic.island import Island
+from fll_scheduler_ga.genetic.population import SchedulePopulation
+from fll_scheduler_ga.genetic.stagnation import FitnessHistory, OperatorStats, StagnationHandler
+from fll_scheduler_ga.io.seed_ga import (
     ConcentratedSeedingStrategy,
     DistributedSeedingStrategy,
     GALoad,
@@ -18,22 +21,19 @@ from ..io.seed_ga import (
     GASeedData,
     SeedingStrategy,
 )
-from .island import Island
-from .population import SchedulePopulation
-from .stagnation import FitnessHistory, OperatorStats, StagnationHandler
 
 if TYPE_CHECKING:
     from collections import Counter
     from collections.abc import Iterator
     from pathlib import Path
 
-    from ..config.pydantic_schemas import GaParameterModel, GeneticModel, ImportModel
-    from ..data_model.schedule import Schedule
-    from ..io.observers import GaObserver
-    from ..operators.crossover import Crossover
-    from ..operators.mutation import Mutation
-    from .ga_context import GaContext
-    from .ga_generation import GaGeneration
+    from fll_scheduler_ga.config.pydantic_schemas import GaParameterModel, GeneticModel, ImportModel
+    from fll_scheduler_ga.data_model.schedule import Schedule
+    from fll_scheduler_ga.genetic.ga_context import GaContext
+    from fll_scheduler_ga.genetic.ga_generation import GaGeneration
+    from fll_scheduler_ga.io.observers import GaObserver
+    from fll_scheduler_ga.operators.crossover import Crossover
+    from fll_scheduler_ga.operators.mutation import Mutation
 
 logger = logging.getLogger(__name__)
 

@@ -13,13 +13,14 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from ..config.constants import EPSILON, FITNESS_MODEL_VERSION
-from .benchmark_repository import BenchmarkSeedData
+from fll_scheduler_ga.config.constants import EPSILON, FITNESS_MODEL_VERSION
+from fll_scheduler_ga.fitness.benchmark_repository import BenchmarkSeedData
 
 if TYPE_CHECKING:
-    from ..config.pydantic_schemas import FitnessModel
-    from ..data_model.app_schemas import TournamentConfig
-    from ..data_model.event import EventFactory
+    from fll_scheduler_ga.config.pydantic_schemas import FitnessModel
+    from fll_scheduler_ga.data_model.app_schemas import TournamentConfig
+    from fll_scheduler_ga.data_model.event import EventFactory
+
     from .benchmark_repository import BenchmarkRepository
 
 logger = getLogger(__name__)

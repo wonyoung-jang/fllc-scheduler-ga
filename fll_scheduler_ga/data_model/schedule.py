@@ -9,7 +9,7 @@ from typing import ClassVar
 
 import numpy as np
 
-from .event import EventProperties
+from fll_scheduler_ga.data_model.event import EventProperties
 
 logger = logging.getLogger(__name__)
 

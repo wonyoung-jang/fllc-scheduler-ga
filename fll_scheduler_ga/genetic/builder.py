@@ -7,12 +7,12 @@ from dataclasses import dataclass
 from logging import getLogger
 from typing import TYPE_CHECKING
 
-from ..data_model.schedule import Schedule
+from fll_scheduler_ga.data_model.schedule import Schedule
 
 if TYPE_CHECKING:
     import numpy as np
 
-    from ..data_model.event import EventProperties
+    from fll_scheduler_ga.data_model.event import EventProperties
 
 logger = getLogger(__name__)
 

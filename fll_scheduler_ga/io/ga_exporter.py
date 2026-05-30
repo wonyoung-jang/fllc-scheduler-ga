@@ -10,17 +10,17 @@ from dataclasses import dataclass, field
 from logging import getLogger
 from typing import TYPE_CHECKING
 
-from ..config.constants import FitnessObjective
-from .schedule_exporter import CsvScheduleExporter, HtmlScheduleExporter, normalize_teams
+from fll_scheduler_ga.config.constants import FitnessObjective
+from fll_scheduler_ga.io.schedule_exporter import CsvScheduleExporter, HtmlScheduleExporter, normalize_teams
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from ..config.pydantic_schemas import ExportModel
-    from ..data_model.event import EventProperties
-    from ..data_model.schedule import Schedule
-    from ..genetic.ga import GA
-    from .plot import Visualizer
+    from fll_scheduler_ga.config.pydantic_schemas import ExportModel
+    from fll_scheduler_ga.data_model.event import EventProperties
+    from fll_scheduler_ga.data_model.schedule import Schedule
+    from fll_scheduler_ga.genetic.ga import GA
+    from fll_scheduler_ga.io.plot import Visualizer
 
 logger = getLogger(__name__)
 

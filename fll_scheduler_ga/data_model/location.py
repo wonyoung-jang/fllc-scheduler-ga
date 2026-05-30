@@ -6,12 +6,12 @@ import itertools
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from ..config.constants import ASCII_OFFSET
+from fll_scheduler_ga.config.constants import ASCII_OFFSET
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
 
-    from ..config.pydantic_schemas import LocationModel
+    from fll_scheduler_ga.config.pydantic_schemas import LocationModel
 
 
 @dataclass(slots=True)

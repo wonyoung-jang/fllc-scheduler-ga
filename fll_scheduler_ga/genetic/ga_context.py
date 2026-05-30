@@ -11,45 +11,49 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from fll_scheduler_ga.operators.nsga3 import calc_norm_sq_of_refs, calc_ref_points
-
-from ..data_model.event import EventFactory, EventProperties
-from ..data_model.schedule import Schedule, ScheduleContext
-from ..fitness.benchmark import (
+from fll_scheduler_ga.data_model.event import EventFactory, EventProperties
+from fll_scheduler_ga.data_model.schedule import Schedule, ScheduleContext
+from fll_scheduler_ga.fitness.benchmark import (
     BENCHMARKS_CACHE,
     FitnessBenchmark,
     FitnessBenchmarkBreaktime,
     FitnessBenchmarkOpponent,
     StableConfigHash,
 )
-from ..fitness.benchmark_repository import PickleBenchmarkRepository
-from ..fitness.fitness_population import FitnessEvaluator
-from ..fitness.fitness_schedule import FitnessEvaluatorSingle
-from ..fitness.hard_constraint_checker import (
+from fll_scheduler_ga.fitness.benchmark_repository import PickleBenchmarkRepository
+from fll_scheduler_ga.fitness.fitness_population import FitnessEvaluator
+from fll_scheduler_ga.fitness.fitness_schedule import FitnessEvaluatorSingle
+from fll_scheduler_ga.fitness.hard_constraint_checker import (
     HardConstraintChecker,
     HardConstraintNoRoundsNeeded,
     HardConstraintSize,
     HardConstraintTruthiness,
 )
-from ..io.csv_importer import CsvImporter
-from ..io.ga_exporter import ScheduleSummaryGenerator
-from ..io.schedule_exporter import CsvScheduleExporter
-from ..io.seed_ga import GALoad, GASave, GASeedData
-from ..operators.crossover import build_crossovers
-from ..operators.mutation import build_mutations
-from ..operators.nsga3 import NSGA3, NonDominatedSorting, ReferenceDirections
-from ..operators.repairer import Repairer
-from ..operators.selection import RandomSelect
-from .builder import ScheduleBuilderRandom
-from .preflight_checker import PreFlightChecker
+from fll_scheduler_ga.genetic.builder import ScheduleBuilderRandom
+from fll_scheduler_ga.genetic.preflight_checker import PreFlightChecker
+from fll_scheduler_ga.io.csv_importer import CsvImporter
+from fll_scheduler_ga.io.ga_exporter import ScheduleSummaryGenerator
+from fll_scheduler_ga.io.schedule_exporter import CsvScheduleExporter
+from fll_scheduler_ga.io.seed_ga import GALoad, GASave, GASeedData
+from fll_scheduler_ga.operators.crossover import build_crossovers
+from fll_scheduler_ga.operators.mutation import build_mutations
+from fll_scheduler_ga.operators.nsga3 import (
+    NSGA3,
+    NonDominatedSorting,
+    ReferenceDirections,
+    calc_norm_sq_of_refs,
+    calc_ref_points,
+)
+from fll_scheduler_ga.operators.repairer import Repairer
+from fll_scheduler_ga.operators.selection import RandomSelect
 
 if TYPE_CHECKING:
-    from ..config.app_config import AppConfig
-    from ..config.pydantic_schemas import ImportModel
-    from ..data_model.app_schemas import TournamentConfig
-    from ..operators.crossover import Crossover
-    from ..operators.mutation import Mutation
-    from ..operators.selection import Selection
+    from fll_scheduler_ga.config.app_config import AppConfig
+    from fll_scheduler_ga.config.pydantic_schemas import ImportModel
+    from fll_scheduler_ga.data_model.app_schemas import TournamentConfig
+    from fll_scheduler_ga.operators.crossover import Crossover
+    from fll_scheduler_ga.operators.mutation import Mutation
+    from fll_scheduler_ga.operators.selection import Selection
 
 logger = getLogger(__name__)
 

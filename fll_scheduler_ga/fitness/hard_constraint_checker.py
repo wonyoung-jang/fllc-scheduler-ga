@@ -8,7 +8,7 @@ from logging import getLogger
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ..data_model.schedule import Schedule
+    from fll_scheduler_ga.data_model.schedule import Schedule
 
 logger = getLogger(__name__)
 

@@ -10,14 +10,14 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..config.constants import CrossoverOp
-from ..data_model.schedule import Schedule
+from fll_scheduler_ga.config.constants import CrossoverOp
+from fll_scheduler_ga.data_model.schedule import Schedule
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
 
-    from ..config.pydantic_schemas import OperatorModel
-    from ..data_model.event import EventFactory, EventProperties
+    from fll_scheduler_ga.config.pydantic_schemas import OperatorModel
+    from fll_scheduler_ga.data_model.event import EventFactory, EventProperties
 
 logger = getLogger(__name__)
 

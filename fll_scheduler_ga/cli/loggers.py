@@ -6,7 +6,7 @@ import json
 import logging.config
 from typing import TYPE_CHECKING
 
-from ..config.constants import LOGGING_CONFIG_PATH
+from fll_scheduler_ga.config.constants import LOGGING_CONFIG_PATH
 
 if TYPE_CHECKING:
     from pathlib import Path

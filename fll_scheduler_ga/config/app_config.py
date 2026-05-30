@@ -11,24 +11,24 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from ..data_model.app_schemas import TournamentConfig, TournamentRound, are_rounds_overlapping
-from ..data_model.location import Location, LocationModelsParser
-from ..data_model.timeslot import (
-    TimeSlot,
-    calc_num_timeslots,
-    infer_time_format,
-    init_timeslots,
-    parse_time_str,
-    validate_duration,
-)
-from .constants import CONFIG_FILE_DEFAULT, RANDOM_SEED_RANGE
-from .pydantic_schemas import (
+from fll_scheduler_ga.config.constants import CONFIG_FILE_DEFAULT, RANDOM_SEED_RANGE
+from fll_scheduler_ga.config.pydantic_schemas import (
     AppConfigModel,
     FitnessModel,
     GeneticModel,
     IOModel,
     RoundModel,
     RuntimeModel,
+)
+from fll_scheduler_ga.data_model.app_schemas import TournamentConfig, TournamentRound, are_rounds_overlapping
+from fll_scheduler_ga.data_model.location import Location, LocationModelsParser
+from fll_scheduler_ga.data_model.timeslot import (
+    TimeSlot,
+    calc_num_timeslots,
+    infer_time_format,
+    init_timeslots,
+    parse_time_str,
+    validate_duration,
 )
 
 if TYPE_CHECKING:
@@ -203,12 +203,8 @@ class AppConfig:
                 _n_timeslots = calc_num_timeslots(len(times_dt), _n_locations, n_teams, _rounds_per_team)
 
                 start_stop = (start_dt, stop_dt)
-                dur_tdelta_cycle = validate_duration(
-                    start_stop, times_dt, round_model.duration_cycle, _n_timeslots
-                )
-                dur_tdelta_active = validate_duration(
-                    start_stop, times_dt, round_model.duration_active, _n_timeslots
-                )
+                dur_tdelta_cycle = validate_duration(start_stop, times_dt, round_model.duration_cycle, _n_timeslots)
+                dur_tdelta_active = validate_duration(start_stop, times_dt, round_model.duration_active, _n_timeslots)
 
                 timeslots = tuple(
                     TimeSlot(

@@ -9,14 +9,14 @@ from dataclasses import dataclass, field
 from logging import getLogger
 from typing import TYPE_CHECKING
 
-from ..config.constants import DATA_MODEL_VERSION
+from fll_scheduler_ga.config.constants import DATA_MODEL_VERSION
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
 
-    from ..data_model.app_schemas import TournamentConfig
-    from ..data_model.schedule import Schedule
+    from fll_scheduler_ga.data_model.app_schemas import TournamentConfig
+    from fll_scheduler_ga.data_model.schedule import Schedule
 
 logger = getLogger(__name__)
 

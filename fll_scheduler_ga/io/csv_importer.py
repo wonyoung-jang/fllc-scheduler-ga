@@ -9,15 +9,15 @@ from datetime import UTC, datetime
 from logging import getLogger
 from typing import TYPE_CHECKING, TextIO
 
-from ..config.constants import ASCII_OFFSET
-from ..data_model.schedule import Schedule
-from ..data_model.timeslot import TimeSlot
+from fll_scheduler_ga.config.constants import ASCII_OFFSET
+from fll_scheduler_ga.data_model.schedule import Schedule
+from fll_scheduler_ga.data_model.timeslot import TimeSlot
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from ..data_model.app_schemas import TournamentConfig, TournamentRound
-    from ..data_model.event import EventFactory, EventProperties
+    from fll_scheduler_ga.data_model.app_schemas import TournamentConfig, TournamentRound
+    from fll_scheduler_ga.data_model.event import EventFactory, EventProperties
 
 logger = getLogger(__name__)
 RE_HHMM = re.compile(r"\d{2}:\d{2}")

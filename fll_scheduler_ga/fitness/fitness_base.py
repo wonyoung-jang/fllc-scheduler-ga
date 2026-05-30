@@ -9,13 +9,13 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..config.constants import EPSILON, FitnessObjective
+from fll_scheduler_ga.config.constants import EPSILON, FitnessObjective
 
 if TYPE_CHECKING:
-    from ..config.pydantic_schemas import FitnessModel
-    from ..data_model.app_schemas import TournamentConfig
-    from ..data_model.event import EventProperties
-    from .benchmark import FitnessBenchmark
+    from fll_scheduler_ga.config.pydantic_schemas import FitnessModel
+    from fll_scheduler_ga.data_model.app_schemas import TournamentConfig
+    from fll_scheduler_ga.data_model.event import EventProperties
+    from fll_scheduler_ga.fitness.benchmark import FitnessBenchmark
 
 logger = logging.getLogger(__name__)
 

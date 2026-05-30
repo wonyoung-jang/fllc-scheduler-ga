@@ -20,9 +20,9 @@ if TYPE_CHECKING:
     from matplotlib.axes import Axes
     from matplotlib.figure import Figure
 
-    from ..config.constants import FitnessObjective
-    from ..config.pydantic_schemas import ExportModel
-    from ..genetic.ga import GA
+    from fll_scheduler_ga.config.constants import FitnessObjective
+    from fll_scheduler_ga.config.pydantic_schemas import ExportModel
+    from fll_scheduler_ga.genetic.ga import GA
 
 
 logger = logging.getLogger("visualize.plot")

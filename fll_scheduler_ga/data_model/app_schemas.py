@@ -6,14 +6,14 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from .event import Event
-from .timeslot import TimeSlot
+from fll_scheduler_ga.data_model.event import Event
+from fll_scheduler_ga.data_model.timeslot import TimeSlot
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
     from datetime import datetime, timedelta
 
-    from .location import Location
+    from fll_scheduler_ga.data_model.location import Location
 
 logger = logging.getLogger(__name__)
 
