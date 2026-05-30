@@ -1,6 +1,5 @@
 """Dataclass models for application configuration."""
 
-import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -12,8 +11,6 @@ if TYPE_CHECKING:
     from datetime import datetime, timedelta
 
     from fll_scheduler_ga.data_model.location import Location
-
-logger = logging.getLogger(__name__)
 
 
 def are_rounds_overlapping(rounds: Iterable[TournamentRound]) -> bool:

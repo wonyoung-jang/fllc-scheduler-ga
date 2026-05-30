@@ -1,6 +1,5 @@
 """Stagnation handler for GA."""
 
-import logging
 from collections import Counter
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -9,8 +8,6 @@ import numpy as np
 
 if TYPE_CHECKING:
     from fll_scheduler_ga.config.pydantic_schemas import StagnationModel
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)

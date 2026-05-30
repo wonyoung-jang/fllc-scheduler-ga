@@ -60,7 +60,7 @@ class EventProperties:
                 ("paired_idx", int),
             ]
         )
-        event_properties = np.zeros(n_total_events, dtype=event_prop_dtype)
+        event_properties: np.ndarray = np.zeros(n_total_events, dtype=event_prop_dtype)
         for i in range(n_total_events):
             e = event_map[i]
             event_properties[i]["roundtype"] = e.roundtype

@@ -1,6 +1,5 @@
 """Base class for fitness evaluators."""
 
-import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -14,8 +13,6 @@ if TYPE_CHECKING:
     from fll_scheduler_ga.data_model.app_schemas import TournamentConfig
     from fll_scheduler_ga.data_model.event import EventProperties
     from fll_scheduler_ga.fitness.benchmark import FitnessBenchmark
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)

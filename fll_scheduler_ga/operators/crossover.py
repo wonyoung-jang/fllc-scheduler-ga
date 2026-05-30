@@ -12,7 +12,7 @@ from fll_scheduler_ga.config.constants import CrossoverOp
 from fll_scheduler_ga.data_model.schedule import Schedule
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator
+    from collections.abc import Callable, Iterable, Iterator
 
     from fll_scheduler_ga.config.pydantic_schemas import OperatorModel
     from fll_scheduler_ga.data_model.event import EventFactory, EventProperties
@@ -31,7 +31,7 @@ def build_crossovers(
         logger.warning("No crossover types enabled in the configuration. Crossover will not occur.")
         return ()
 
-    crossover_factory = {
+    crossover_factory: dict[str, Callable] = {
         CrossoverOp.K_POINT: lambda p, k: KPoint(**p, k=k),
         CrossoverOp.SCATTERED: Scattered,
         CrossoverOp.UNIFORM: Uniform,

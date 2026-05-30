@@ -1,13 +1,10 @@
 """Fitness evaluator for the FLL Scheduler GA."""
 
 from dataclasses import dataclass
-from logging import getLogger
 
 import numpy as np
 
 from fll_scheduler_ga.fitness.fitness_base import FitnessBase
-
-logger = getLogger(__name__)
 
 
 @dataclass(slots=True)

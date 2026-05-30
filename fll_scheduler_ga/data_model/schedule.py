@@ -1,6 +1,5 @@
 """Represents a schedule (individual) with its associated fitness score."""
 
-import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import ClassVar
@@ -8,8 +7,6 @@ from typing import ClassVar
 import numpy as np
 
 from fll_scheduler_ga.data_model.event import EventProperties
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)

@@ -2,13 +2,10 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from logging import getLogger
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from fll_scheduler_ga.data_model.schedule import Schedule
-
-logger = getLogger(__name__)
 
 
 @dataclass(slots=True)

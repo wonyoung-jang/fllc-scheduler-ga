@@ -11,7 +11,7 @@ import numpy as np
 from fll_scheduler_ga.config.constants import MutationOp
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
     from fll_scheduler_ga.config.pydantic_schemas import OperatorModel
     from fll_scheduler_ga.data_model.event import EventFactory, EventProperties
@@ -33,7 +33,7 @@ def build_mutations(
         logger.warning("No mutation types enabled in the configuration. Mutation will not occur.")
         return ()
 
-    mutation_factory = {
+    mutation_factory: dict[str, Callable] = {
         # SwapMatchMutation variants
         MutationOp.SWAP_MATCH_CROSS_TIME_LOCATION: lambda p: SwapMatchMutation(
             **p,
