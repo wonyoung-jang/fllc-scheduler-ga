@@ -14,8 +14,8 @@ from rich.console import Console
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn, TextColumn, TimeRemainingColumn
 from rich.table import Table
 
-from fll_scheduler_ga.adapter import ga_exporter
-from fll_scheduler_ga.adapter.observers import LoggingObserver, RichObserver
+from fll_scheduler_ga.adapter.exporter import generate_summary
+from fll_scheduler_ga.adapter.observer import LoggingObserver, RichObserver
 from fll_scheduler_ga.adapter.plot import MatplotlibVisualizer
 from fll_scheduler_ga.config.app_config import AppConfig
 from fll_scheduler_ga.config.config_manager import ConfigManager
@@ -233,7 +233,7 @@ def run_ga_engine(config_path: Path, progress: Progress | None = None, task_id: 
         ref_points=ga.context.nsga3.refs.points,
         export_model=_exports,
     )
-    ga_exporter.generate_summary(
+    generate_summary(
         ga=ga,
         output_dir=output_dir,
         export_model=_exports,

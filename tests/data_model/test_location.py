@@ -2,7 +2,8 @@
 
 import pytest
 
-from fll_scheduler_ga.domain.location import Location, LocationModelsParser
+from fll_scheduler_ga.config.app_config import parse_locations
+from fll_scheduler_ga.domain.location import Location
 
 
 def test_location_str() -> None:
@@ -37,6 +38,5 @@ def test_null_location() -> None:
 
 def test_location_models_parser_empty() -> None:
     """Test LocationModelsParser with no location models."""
-    parser = LocationModelsParser(models=[])
     with pytest.raises(ValueError, match=r"No locations defined in the configuration file."):
-        parser.parse()
+        parse_locations(models=())

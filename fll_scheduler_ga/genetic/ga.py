@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
     from pathlib import Path
 
-    from fll_scheduler_ga.adapter.observers import GaObserver
+    from fll_scheduler_ga.adapter.observer import GaObserver
     from fll_scheduler_ga.config.pydantic_schemas import GaParameterModel, GeneticModel, ImportModel
     from fll_scheduler_ga.domain.schedule import Schedule
     from fll_scheduler_ga.genetic.ga_context import GaContext

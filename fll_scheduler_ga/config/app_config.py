@@ -14,12 +14,13 @@ from fll_scheduler_ga.config.pydantic_schemas import (
     FitnessModel,
     GeneticModel,
     IOModel,
+    LocationModel,
     RoundModel,
     RuntimeModel,
 )
 from fll_scheduler_ga.constants import CONFIG_FILE_DEFAULT, RANDOM_SEED_RANGE
-from fll_scheduler_ga.domain.app_schemas import TournamentConfig, TournamentRound, are_rounds_overlapping
-from fll_scheduler_ga.domain.location import Location, LocationModelsParser
+from fll_scheduler_ga.domain.location import Location
+from fll_scheduler_ga.domain.model import TournamentConfig, TournamentRound, are_rounds_overlapping
 from fll_scheduler_ga.domain.timeslot import (
     TimeSlot,
     calc_num_timeslots,
@@ -68,6 +69,29 @@ def get_rng_seed(seed: int | str | None) -> int:
     )
 
 
+def parse_locations(models: tuple[LocationModel, ...]) -> tuple[Location, ...]:
+    """Parse location models into Location instances."""
+    _idx_counter = itertools.count()
+
+    def _generate_locations() -> Iterator[Location]:
+        for loctype in models:
+            for name in range(1, loctype.count + 1):
+                for side_iter in range(1, loctype.sides + 1):
+                    yield Location(
+                        idx=next(_idx_counter),
+                        locationtype=loctype.name,
+                        name=name,
+                        side=-1 if loctype.sides == 1 else side_iter,
+                        teams_per_round=loctype.sides,
+                    )
+
+    locations = tuple(_generate_locations())
+    if not locations:
+        msg = "No locations defined in the configuration file."
+        raise ValueError(msg)
+    return locations
+
+
 @dataclass(slots=True)
 class AppConfig:
     """Configuration for the FLL Scheduler GA application."""
@@ -98,7 +122,7 @@ class AppConfig:
         model.io.exports.team_identities = get_team_identities(teams_list)
         n_teams = len(teams_list)
         _location_models = model.tournament.locations
-        locations = LocationModelsParser(models=_location_models).parse()
+        locations = parse_locations(_location_models)
         tournament_config = cls.load_tournament_config(n_teams, model.tournament.rounds, locations)
         seed = get_rng_seed(model.genetic.rng_seed)
         rng = np.random.default_rng(seed)

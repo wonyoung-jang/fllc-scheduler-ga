@@ -14,7 +14,7 @@ from fll_scheduler_ga.domain.timeslot import TIME_FORMAT_MAP, TimeSlot, parse_ti
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from fll_scheduler_ga.domain.app_schemas import TournamentConfig
+    from fll_scheduler_ga.domain.model import TournamentConfig
 FMT_24H: str = TIME_FORMAT_MAP[24]
 FMT_12H: str = TIME_FORMAT_MAP[12]
 

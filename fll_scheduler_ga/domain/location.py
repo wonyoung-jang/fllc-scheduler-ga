@@ -1,44 +1,8 @@
 """Location data model for FLL Scheduler GA."""
 
-import itertools
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 from fll_scheduler_ga.constants import ASCII_OFFSET
-
-if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator
-
-    from fll_scheduler_ga.config.pydantic_schemas import LocationModel
-
-
-@dataclass(slots=True)
-class LocationModelsParser:
-    """Parser for location models into Location instances."""
-
-    models: Iterable[LocationModel]
-
-    def parse(self) -> tuple[Location, ...]:
-        """Parse location models into Location instances."""
-        _idx_counter = itertools.count()
-
-        def _generate_locations() -> Iterator[Location]:
-            for loctype in self.models:
-                for name in range(1, loctype.count + 1):
-                    for side_iter in range(1, loctype.sides + 1):
-                        yield Location(
-                            idx=next(_idx_counter),
-                            locationtype=loctype.name,
-                            name=name,
-                            side=-1 if loctype.sides == 1 else side_iter,
-                            teams_per_round=loctype.sides,
-                        )
-
-        locations = tuple(_generate_locations())
-        if not locations:
-            msg = "No locations defined in the configuration file."
-            raise ValueError(msg)
-        return locations
 
 
 @dataclass(slots=True)

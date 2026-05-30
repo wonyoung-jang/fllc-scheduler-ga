@@ -6,6 +6,7 @@ from pathlib import Path
 ASCII_OFFSET = 64
 EPSILON = 1e-12
 MAIN_PACKAGE_DIR = Path("fll_scheduler_ga").resolve()
+BENCHMARKS_CACHE = Path(".benchmarks_cache/").resolve()
 CONFIG_FILE_DEFAULT = MAIN_PACKAGE_DIR / "config.json"
 LOGGING_CONFIG_PATH = MAIN_PACKAGE_DIR / "logging.json"
 PICKLE_FILE_SCHEDULES = "fll_scheduler_ga.pkl"

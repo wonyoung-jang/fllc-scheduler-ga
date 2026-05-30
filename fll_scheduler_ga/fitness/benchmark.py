@@ -6,7 +6,6 @@ from abc import ABC, abstractmethod
 from collections import Counter
 from dataclasses import dataclass, field
 from logging import getLogger
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -16,11 +15,11 @@ from fll_scheduler_ga.fitness.benchmark_repository import BenchmarkSeedData
 
 if TYPE_CHECKING:
     from fll_scheduler_ga.config.pydantic_schemas import FitnessModel
-    from fll_scheduler_ga.domain.app_schemas import TournamentConfig
     from fll_scheduler_ga.domain.event import EventFactory
+    from fll_scheduler_ga.domain.model import TournamentConfig
     from fll_scheduler_ga.fitness.benchmark_repository import BenchmarkRepository
+
 logger = getLogger(__name__)
-BENCHMARKS_CACHE = Path(".benchmarks_cache/").resolve()
 
 
 @dataclass(slots=True)

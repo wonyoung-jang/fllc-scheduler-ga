@@ -14,8 +14,8 @@ from fll_scheduler_ga.domain.timeslot import TimeSlot
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from fll_scheduler_ga.domain.app_schemas import TournamentConfig, TournamentRound
     from fll_scheduler_ga.domain.event import EventFactory, EventProperties
+    from fll_scheduler_ga.domain.model import TournamentConfig, TournamentRound
 
 logger = getLogger(__name__)
 RE_HHMM = re.compile(r"\d{2}:\d{2}")
@@ -36,8 +36,7 @@ class CsvImporter:
 
     def run(self) -> None:
         """Run the CSV importer to build the schedule."""
-        self.round_configs = {r.roundtype: r for r in self.config.rounds}
-        self.rtl_map = {}
+        self.round_configs.update({r.roundtype: r for r in self.config.rounds})
         for e in self.event_factory.build_indices():
             rt = self.event_properties.roundtype[e]
             ts: TimeSlot = self.event_properties.timeslot[e]
@@ -55,12 +54,10 @@ class CsvImporter:
     def validate_inputs(self) -> bool:
         """Validate the inputs for the CSV importer."""
         if not self.csv_path or not self.csv_path.exists():
-            msg = f"CSV file does not exist at: {self.csv_path}"
-            logger.warning(msg)
+            logger.warning("CSV file does not exist at: %s", self.csv_path)
             return False
         if not self.config.rounds:
-            msg = "Tournament configuration is required."
-            logger.warning(msg)
+            logger.warning("Tournament configuration is required.")
             return False
         return True
 
@@ -69,7 +66,7 @@ class CsvImporter:
         try:
             self.schedule = Schedule(origin="CSV Importer")
             with self.csv_path.open(encoding="utf-8-sig") as f:
-                self.schedule_from_csv(f)
+                self._parse_schedule(f)
         except FileNotFoundError:
             logger.exception("Schedule file not found at: %s", self.csv_path)
             return
@@ -77,7 +74,7 @@ class CsvImporter:
             logger.exception("An unexpected error occurred while parsing the CSV")
             return
 
-    def schedule_from_csv(self, csv_file: TextIO) -> None:
+    def _parse_schedule(self, csv_file: TextIO) -> None:
         """Reconstruct a Schedule object by parsing a grid-based CSV file.
 
         Args:
@@ -102,21 +99,12 @@ class CsvImporter:
                 header_locations = [h.strip() for h in row[1:]]
                 continue
             if header_locations and RE_HHMM.match(first_cell):
-                self.parse_csv_data_row(
-                    row,
-                    current_round_type,
-                    header_locations,
-                )
+                self._parse_row(row, current_round_type, header_locations)
         if self.schedule.any_rounds_needed():
             logger.warning("Schedule: %s", self.schedule)
             logger.warning("Some teams are missing required rounds defined in your config.")
 
-    def parse_csv_data_row(
-        self,
-        row: list[str],
-        curr_rt: str,
-        header_locations: list[str],
-    ) -> None:
+    def _parse_row(self, row: list[str], curr_rt: str, header_locations: list[str]) -> None:
         """Parse a single data row from the CSV and update the schedule.
 
         Args:

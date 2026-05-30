@@ -12,7 +12,7 @@ from fll_scheduler_ga.domain.location import Location
 from fll_scheduler_ga.domain.timeslot import TimeSlot
 
 if TYPE_CHECKING:
-    from fll_scheduler_ga.domain.app_schemas import TournamentConfig
+    from fll_scheduler_ga.domain.model import TournamentConfig
 
 logger = logging.getLogger(__name__)
 
