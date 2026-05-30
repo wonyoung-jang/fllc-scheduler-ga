@@ -1,7 +1,5 @@
 """Module for exporting schedules in various formats."""
 
-from __future__ import annotations
-
 import csv
 import html
 from abc import ABC, abstractmethod

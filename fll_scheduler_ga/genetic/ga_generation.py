@@ -1,7 +1,5 @@
 """Generation tracker for GA."""
 
-from __future__ import annotations
-
 import logging
 from dataclasses import dataclass
 

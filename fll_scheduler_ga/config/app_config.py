@@ -1,13 +1,11 @@
 """Configuration for the FLL Scheduler GA application."""
 
-from __future__ import annotations
-
 import itertools
 import logging
 import pprint as pp
 from collections import Counter
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Self
 
 import numpy as np
 
@@ -83,7 +81,7 @@ class AppConfig:
     rng: np.random.Generator
 
     @classmethod
-    def build(cls, path: Path | None = None) -> AppConfig:
+    def build(cls, path: Path | None = None) -> Self:
         """Create and return the application configuration."""
         if path is None:
             path = CONFIG_FILE_DEFAULT
@@ -97,7 +95,7 @@ class AppConfig:
         return cls.build_from_model(config_model)
 
     @classmethod
-    def build_from_model(cls, model: AppConfigModel) -> AppConfig:
+    def build_from_model(cls, model: AppConfigModel) -> Self:
         """Create and return the application configuration from a Pydantic model."""
         teams_list = get_teams_list(model.tournament.teams)
         model.io.exports.team_identities = get_team_identities(teams_list)
@@ -109,7 +107,7 @@ class AppConfig:
         tournament_config = cls.load_tournament_config(n_teams, model.tournament.rounds, locations)
         seed = get_rng_seed(model.genetic.rng_seed)
         rng = np.random.default_rng(seed)
-        return AppConfig(
+        return cls(
             genetic=model.genetic,
             runtime=model.runtime,
             io=model.io,

@@ -1,17 +1,20 @@
 """Fixtures for testing fll_scheduler_ga package."""
 
 import json
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pytest
 
 from fll_scheduler_ga.config.app_config import AppConfig
-from fll_scheduler_ga.data_model.app_schemas import TournamentConfig
 from fll_scheduler_ga.data_model.event import EventFactory, EventProperties
 from fll_scheduler_ga.data_model.schedule import Schedule, ScheduleContext
 from fll_scheduler_ga.data_model.timeslot import TIME_FORMAT_MAP, TimeSlot, parse_time_str
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from fll_scheduler_ga.data_model.app_schemas import TournamentConfig
 
 FMT_24H: str = TIME_FORMAT_MAP[24]
 FMT_12H: str = TIME_FORMAT_MAP[12]

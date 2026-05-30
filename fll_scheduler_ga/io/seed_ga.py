@@ -1,7 +1,5 @@
 """Seed data I/O for genetic algorithm."""
 
-from __future__ import annotations
-
 import pickle
 from abc import ABC, abstractmethod
 from collections import defaultdict
@@ -43,7 +41,7 @@ class GALoad:
             logger.debug("Loading seed population from: %s", self.seed_file)
             with self.seed_file.open("rb") as f:
                 data: GASeedData = pickle.load(f)
-        except (OSError, pickle.PicklingError, AttributeError, ModuleNotFoundError):
+        except OSError, pickle.PicklingError, AttributeError, ModuleNotFoundError:
             logger.warning("Could not load or parse seed file. Starting with a fresh population.")
             return None
         except EOFError:
@@ -88,7 +86,7 @@ class GASave:
             logger.debug("Saving final population of size %d to seed file: %s", len(seed_ga_data.population), path)
             with path.open("wb") as f:
                 pickle.dump(seed_ga_data, f)
-        except (OSError, pickle.PicklingError, EOFError):
+        except OSError, pickle.PicklingError, EOFError:
             logger.exception("Error saving population to seed file: %s", path)
 
 

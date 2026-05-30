@@ -1,7 +1,5 @@
 """Location data model for FLL Scheduler GA."""
 
-from __future__ import annotations
-
 import itertools
 from dataclasses import dataclass
 from typing import TYPE_CHECKING

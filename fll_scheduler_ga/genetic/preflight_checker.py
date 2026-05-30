@@ -1,7 +1,5 @@
 """Context for the genetic algorithm parts."""
 
-from __future__ import annotations
-
 from collections import defaultdict
 from dataclasses import dataclass
 from logging import getLogger

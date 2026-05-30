@@ -1,7 +1,5 @@
 """Evaluate an existing, grid-based CSV schedule against the GA's fitness metrics."""
 
-from __future__ import annotations
-
 import csv
 import re
 from dataclasses import dataclass, field

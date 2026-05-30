@@ -1,7 +1,5 @@
 """Main entry point for the fll-scheduler-ga package."""
 
-from __future__ import annotations
-
 import logging
 import shutil
 from dataclasses import dataclass, field

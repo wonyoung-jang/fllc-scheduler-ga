@@ -1,7 +1,5 @@
 """Event data model for FLL scheduling."""
 
-from __future__ import annotations
-
 import itertools
 import logging
 from collections import defaultdict

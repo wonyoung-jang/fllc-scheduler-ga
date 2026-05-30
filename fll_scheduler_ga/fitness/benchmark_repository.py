@@ -1,7 +1,5 @@
 """Repository interface and implementations for benchmark data."""
 
-from __future__ import annotations
-
 import logging
 import pickle
 from abc import ABC, abstractmethod
@@ -56,7 +54,7 @@ class PickleBenchmarkRepository(BenchmarkRepository):
         try:
             with self.path.open("rb") as f:
                 seed_data = pickle.load(f)
-        except (OSError, EOFError, AttributeError, ModuleNotFoundError, pickle.UnpicklingError):
+        except OSError, EOFError, AttributeError, ModuleNotFoundError, pickle.UnpicklingError:
             logger.debug("Failed to load fitness benchmarks from cache: %s", self.path)
             return None
 
@@ -69,5 +67,5 @@ class PickleBenchmarkRepository(BenchmarkRepository):
             with self.path.open("wb") as f:
                 pickle.dump(data, f)
             logger.info("Fitness benchmarks saved to cache: %s", self.path)
-        except (OSError, pickle.PicklingError, EOFError):
+        except OSError, pickle.PicklingError, EOFError:
             logger.exception("Failed to save fitness benchmarks to cache.")

@@ -1,7 +1,5 @@
 """Fitness evaluator for a single FLL schedule."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from logging import getLogger
 

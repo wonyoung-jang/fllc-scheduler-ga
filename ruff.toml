@@ -1,0 +1,83 @@
+line-length = 120
+indent-width = 4
+target-version = "py314"
+fix = true
+unsafe-fixes = true
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".ipynb_checkpoints",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pyenv",
+    ".pytest_cache",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    ".vscode",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "site-packages",
+    "venv",
+]
+extend-exclude = [
+    "docs",
+    "..playground",
+]
+
+
+[lint]
+select = ["ALL"]
+ignore = [
+    "ANN401",
+    "D102",
+    "D203",
+    "D213",
+    "COM812",
+    "ERA001",
+    "PLR2004",
+    "T201",
+    "TD002",
+    "TD003",
+    "FIX002",
+    "S",
+    "PTH102",
+    "PTH103",
+    "PTH107",
+    "PTH108",
+    "PTH110",
+    "PTH112",
+    "PTH113",
+    "PTH114",
+    "PTH117",
+    "PTH118",
+    "PTH119",
+    "PTH120",
+    "PTH122",
+    "PTH123",
+    "PTH206",
+    "PTH211",
+]
+fixable = ["ALL"]
+unfixable = []
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+docstring-code-format = false
+docstring-code-line-length = "dynamic"
+

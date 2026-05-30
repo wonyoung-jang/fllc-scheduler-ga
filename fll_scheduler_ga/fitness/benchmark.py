@@ -1,7 +1,5 @@
 """Benchmarking module for fitness evaluation in tournament scheduling."""
 
-from __future__ import annotations
-
 import hashlib
 import itertools
 from abc import ABC, abstractmethod
@@ -20,8 +18,7 @@ if TYPE_CHECKING:
     from fll_scheduler_ga.config.pydantic_schemas import FitnessModel
     from fll_scheduler_ga.data_model.app_schemas import TournamentConfig
     from fll_scheduler_ga.data_model.event import EventFactory
-
-    from .benchmark_repository import BenchmarkRepository
+    from fll_scheduler_ga.fitness.benchmark_repository import BenchmarkRepository
 
 logger = getLogger(__name__)
 BENCHMARKS_CACHE = Path(".benchmarks_cache/").resolve()

@@ -1,7 +1,5 @@
 """Main cli api for the fll-scheduler-ga package."""
 
-from __future__ import annotations
-
 import json
 import logging.config
 from typing import TYPE_CHECKING

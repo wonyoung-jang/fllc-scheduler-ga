@@ -1,7 +1,5 @@
 """Time data module for the Tournament Scheduler."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from math import ceil
@@ -11,10 +9,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
 DEFAULT_DT = datetime.min.replace(tzinfo=UTC)
-TIME_FORMAT_MAP = {
-    12: "%I:%M %p",
-    24: "%H:%M",
-}
+TIME_FORMAT_MAP = {12: "%I:%M %p", 24: "%H:%M"}
 
 
 @dataclass(slots=True, frozen=True)

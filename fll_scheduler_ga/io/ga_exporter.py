@@ -1,7 +1,5 @@
 """Module for exporting schedules to different formats."""
 
-from __future__ import annotations
-
 import asyncio
 import csv
 import shutil

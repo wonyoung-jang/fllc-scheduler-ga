@@ -1,7 +1,5 @@
 """Module to hold constants for the scheduler."""
 
-from __future__ import annotations
-
 from enum import StrEnum
 from pathlib import Path
 

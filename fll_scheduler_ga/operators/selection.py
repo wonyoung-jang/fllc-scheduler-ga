@@ -6,8 +6,6 @@ Higher selective pressure means better individuals have a higher chance
 of being selected.
 """
 
-from __future__ import annotations
-
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 

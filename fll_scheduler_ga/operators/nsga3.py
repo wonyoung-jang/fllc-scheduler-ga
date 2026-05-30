@@ -1,7 +1,5 @@
 """Tools for Non-dominated Sorting Genetic Algorithm III (NSGA-III)."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from itertools import combinations
 from logging import getLogger

@@ -1,7 +1,5 @@
 """Methods to create plots."""
 
-from __future__ import annotations
-
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass

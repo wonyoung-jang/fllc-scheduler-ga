@@ -1,7 +1,5 @@
 """Genetic algorithm for FLL Scheduler GA."""
 
-from __future__ import annotations
-
 import logging
 import time
 from dataclasses import dataclass, field
@@ -11,7 +9,6 @@ import numpy as np
 
 from fll_scheduler_ga.config.constants import SeedIslandStrategy, SeedPopSort
 from fll_scheduler_ga.genetic.island import Island
-from fll_scheduler_ga.genetic.population import SchedulePopulation
 from fll_scheduler_ga.genetic.stagnation import FitnessHistory, OperatorStats, StagnationHandler
 from fll_scheduler_ga.io.seed_ga import (
     ConcentratedSeedingStrategy,
@@ -36,6 +33,25 @@ if TYPE_CHECKING:
     from fll_scheduler_ga.operators.mutation import Mutation
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(slots=True)
+class SchedulePopulation:
+    """Population of schedules in the genetic algorithm."""
+
+    ranks: np.ndarray = field(default_factory=lambda: np.array([]))
+    schedules: np.ndarray = field(default_factory=lambda: np.array([]))
+
+    def __len__(self) -> int:
+        """Return the number of schedules in the population."""
+        return self.schedules.shape[0] if self.schedules is not None else 0
+
+    def add(self, schedule: np.ndarray) -> None:
+        """Add a new schedule to the population."""
+        if self.schedules.size == 0:
+            self.schedules = np.array([schedule], dtype=int)
+        else:
+            self.schedules = np.stack((*self.schedules, schedule), axis=0)
 
 
 @dataclass(slots=True)
@@ -146,7 +162,7 @@ class GA:
 
     def seed_population(self, seed_data: GASeedData) -> None:
         """Seed the population for each island."""
-        seed_strategy_map = {
+        seed_strategy_map: dict[str, type[SeedingStrategy]] = {
             SeedIslandStrategy.DISTRIBUTED: DistributedSeedingStrategy,
             SeedIslandStrategy.CONCENTRATED: ConcentratedSeedingStrategy,
         }
