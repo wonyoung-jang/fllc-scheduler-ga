@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from logging import getLogger
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -10,10 +10,11 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from fll_scheduler_ga.domain.schedule import Schedule
-    from fll_scheduler_ga.domain.schema import GeneticModel
-    from fll_scheduler_ga.genetic.builder import ScheduleBuilderRandom
+    from fll_scheduler_ga.domain.schema import GaParameterModel
     from fll_scheduler_ga.genetic.context import GaContext
     from fll_scheduler_ga.genetic.stagnation import FitnessHistory, OperatorStats, StagnationHandler
+    from fll_scheduler_ga.operators.crossover import Crossover
+    from fll_scheduler_ga.operators.mutation import Mutation
 
 logger = getLogger(__name__)
 
@@ -22,7 +23,6 @@ logger = getLogger(__name__)
 class SchedulePopulation:
     """Population of schedules in the genetic algorithm."""
 
-    ranks: np.ndarray = field(default_factory=lambda: np.array([]))
     schedules: np.ndarray = field(default_factory=lambda: np.array([]))
 
     def __len__(self) -> int:
@@ -32,9 +32,9 @@ class SchedulePopulation:
     def add(self, schedule: np.ndarray) -> None:
         """Add a new schedule to the population."""
         if self.schedules.size == 0:
-            self.schedules = np.array([schedule], dtype=int)
+            self.schedules = schedule[np.newaxis, :]
         else:
-            self.schedules = np.stack((*self.schedules, schedule), axis=0)
+            self.schedules = np.vstack((self.schedules, schedule[np.newaxis, :]))
 
 
 @dataclass(slots=True)
@@ -42,53 +42,54 @@ class Island:
     """Genetic algorithm island for the FLL Scheduler GA."""
 
     identity: int
-    generation: int
     context: GaContext
     rng: np.random.Generator
-    genetic_model: GeneticModel
+    ga_param: GaParameterModel
     operator_stats: OperatorStats
     fitness_history: FitnessHistory
-    builder: ScheduleBuilderRandom
-    population: SchedulePopulation
-    stagnation: StagnationHandler = field(init=False)
-    curr_schedule_fits: np.ndarray = field(init=False)
+    stagnation: StagnationHandler
+    population: SchedulePopulation = field(default_factory=SchedulePopulation)
     selected: list[Schedule] = field(default_factory=list)
-    _n_crossovers: int = field(init=False)
-    _n_mutations: int = field(init=False)
-    _n_pop: int = field(init=False)
-    _n_offspring: int = field(init=False)
-    _n_migration: int = field(init=False)
-    _chance_crossover: float = field(init=False)
-    _chance_mutation: float = field(init=False)
-
-    def __post_init__(self) -> None:
-        """Post-initialization to set up stagnation handler and mutation count."""
-        self._n_mutations = len(self.context.mutations)
-        self._n_crossovers = len(self.context.crossovers)
-        self._n_pop = self.genetic_model.parameters.population_size
-        self._n_offspring = self.genetic_model.parameters.offspring_size
-        self._n_migration = self.genetic_model.parameters.migration_size
-        self._chance_crossover = self.genetic_model.parameters.crossover_chance
-        self._chance_mutation = self.genetic_model.parameters.mutation_chance
+    generation: int = 0
+    curr_schedule_fits: np.ndarray = field(init=False)
 
     def __len__(self) -> int:
         """Return the number of individuals in the island's population."""
         return len(self.population)
 
+    @property
+    def n_needed(self) -> int:
+        """Return the number of individuals needed to fill the population."""
+        return self.ga_param.population_size - len(self)
+
+    def initialize(self) -> None:
+        """Initialize the population for each island."""
+        if self.n_needed <= 0:
+            logger.debug("Island %d: Population already full with %d individuals", self.identity, len(self))
+            return
+        logger.debug("Island %d: Initializing population with %d individuals", self.identity, self.n_needed)
+        self._build_n_schedules(self.n_needed)
+
     def run_epoch(self) -> None:
         """Run a full epoch: evaluate, select, evolve, and handle stagnation."""
-        self.handle_underpopulation()
-        self.evolve()
-        self.select_next_generation()
+        self._handle_underpopulation()
+        self._evolve()
+        self._select_next_generation()
         self.fitness_history.update_fitness_history()
-        self.check_stagnation()
-        self.handle_underpopulation()
+        self._check_stagnation()
+        self._handle_underpopulation()
         self.generation += 1
-        self.stagnation.generation = self.generation
 
-    def check_stagnation(self) -> None:
+    def _handle_underpopulation(self) -> None:
+        """Handle underpopulation by creating new individuals."""
+        if self.n_needed <= 0:
+            return
+        logger.debug("Island %d: Handling underpopulation with %d individuals", self.identity, self.n_needed)
+        self._build_n_schedules(self.n_needed)
+
+    def _check_stagnation(self) -> None:
         """Check for stagnation without modifying the population."""
-        if self.stagnation.is_stagnant():
+        if self.stagnation.is_stagnant(self.generation, self.fitness_history.history):
             # Get the index of the schedule with the best fitness
             sum_fits = self.curr_schedule_fits.sum(axis=1)
             max_idx = sum_fits.argmax()
@@ -96,15 +97,14 @@ class Island:
             if self.rng.random() < 0.1:
                 idx_to_pop = max_idx
             else:
-                non_max_indices = [i for i in range(len(self.selected)) if i != max_idx]
-                i = self.rng.integers(0, len(non_max_indices))
-                idx_to_pop = non_max_indices[i]
+                candidates = np.delete(np.arange(len(self.selected)), max_idx)
+                idx_to_pop = self.rng.choice(candidates)
             self.selected.pop(idx_to_pop)
             self.population.schedules = np.delete(arr=self.population.schedules, obj=idx_to_pop, axis=0)
             logger.debug(
                 "Stagnation. Island: %d. Generation: %d. Schedule Removed: %d.",
                 self.identity,
-                self.generation,
+                self.generation + 1,
                 idx_to_pop,
             )
 
@@ -117,41 +117,22 @@ class Island:
             return True
         return False
 
-    def build_n_schedules(self, needed: int) -> None:
+    def _build_n_schedules(self, needed: int) -> None:
         """Build a number of schedules."""
         created = 0
         while created < needed:
-            s = self.builder.build()
+            s = self.context.build()
             if self.context.repair(s) and self.add_to_population(s):
                 self.population.add(s.schedule)
                 created += 1
 
-    @property
-    def n_needed(self) -> int:
-        """Return the number of individuals needed to fill the population."""
-        return self._n_pop - len(self)
+    def _get_operator(self, ops: tuple) -> Any:
+        """Randomly select an operator from a tuple of operators."""
+        return ops[self.rng.integers(0, len(ops))]
 
-    def initialize(self) -> None:
-        """Initialize the population for each island."""
-        need = self.n_needed
-        if need <= 0:
-            logger.debug("Island %d: Population already full with %d individuals", self.identity, len(self))
-            return
-        logger.debug("Island %d: Initializing population with %d individuals", self.identity, need)
-        self.build_n_schedules(need)
-
-    def handle_underpopulation(self) -> None:
-        """Handle underpopulation by creating new individuals."""
-        need = self.n_needed
-        if need <= 0:
-            return
-        logger.debug("Island %d: Handling underpopulation with %d individuals", self.identity, need)
-        self.build_n_schedules(need)
-
-    def mutate_schedule(self, schedule: Schedule) -> bool:
+    def _mutate_child(self, schedule: Schedule) -> bool:
         """Mutate a child schedule."""
-        m_idx = self.rng.integers(0, self._n_mutations)
-        m = self.context.mutations[m_idx]
+        m: Mutation = self._get_operator(self.context.mutations)
         m_str = str(m)
         self.operator_stats.count_mutation("total", m_str)
         if m.mutate(schedule):
@@ -160,10 +141,9 @@ class Island:
             return True
         return False
 
-    def crossover_schedule(self, parents: Iterator[Schedule]) -> Iterator[Schedule]:
+    def _crossover_parents(self, parents: Iterator[Schedule]) -> Iterator[Schedule]:
         """Perform crossover between two parent schedules."""
-        c_idx = self.rng.integers(0, self._n_crossovers)
-        c = self.context.crossovers[c_idx]
+        c: Crossover = self._get_operator(self.context.crossovers)
         c_str = str(c)
         for child in c.cross(parents):
             self.operator_stats.count_crossover("total", c_str)
@@ -172,41 +152,37 @@ class Island:
             if self.context.repair(child):
                 yield child
 
-    def evolve(self) -> None:
+    def _evolve(self) -> None:
         """Perform main evolution loop: generations and migrations."""
         if not (pop := self.selected):
             return
         created_cycle = 0
-        while created_cycle < self._n_offspring:
+        while created_cycle < self.ga_param.offspring_size:
             parents_indices = self.context.select_parents(n=len(pop), k=2)
             parents: Iterator[Schedule] = (pop[i] for i in parents_indices)
-            c_roll = self._chance_crossover > self.rng.random()
-            if c_roll and self._n_crossovers > 0:
-                offspring = self.crossover_schedule(parents)
+            c_roll = self.ga_param.crossover_chance > self.rng.random()
+            if c_roll and len(self.context.crossovers) > 0:
+                offspring = self._crossover_parents(parents)
             else:
                 offspring = (p.clone() for p in parents)
             for child in offspring:
-                if self._n_mutations > 0:
-                    m_roll = True if not c_roll else self._chance_mutation > self.rng.random()
+                if created_cycle >= self.ga_param.offspring_size:
+                    break
+                if len(self.context.mutations) > 0:
+                    m_roll = True if not c_roll else self.ga_param.mutation_chance > self.rng.random()
                     if m_roll:
-                        self.mutate_schedule(child)
+                        self._mutate_child(child)
                 if self.add_to_population(child):
                     self.population.add(child.schedule)
                 created_cycle += 1
-                if created_cycle >= self._n_offspring:
-                    break
         if not self.selected:
             msg = f"Island {self.identity}: No individuals in population after evolution."
             raise RuntimeError(msg)
 
-    def evaluate_pop(self) -> tuple[np.ndarray, ...]:
-        """Evaluate the entire population."""
-        return self.context.evaluate(self.population.schedules)
-
-    def select_next_generation(self) -> None:
+    def _select_next_generation(self) -> None:
         """Select the next generation using NSGA-III principles."""
-        n_pop = self._n_pop
-        schedule_fits, _ = self.evaluate_pop()
+        n_pop = self.ga_param.population_size
+        schedule_fits, _ = self.context.evaluate(self.population.schedules)
         if schedule_fits.shape[0] != n_pop:
             _, flat, _ = self.context.select_nsga3(schedule_fits, n_pop)
         else:
@@ -221,7 +197,7 @@ class Island:
 
     def give_migrants(self) -> Iterator[Schedule]:
         """Randomly yield migrants from population."""
-        for _ in range(self._n_migration):
+        for _ in range(self.ga_param.migration_size):
             i = self.rng.integers(low=0, high=len(self.selected))
             self.population.schedules = np.delete(self.population.schedules, i, axis=0)
             yield self.selected.pop(i)

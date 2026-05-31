@@ -22,14 +22,14 @@ class GAFinalizer:
 
     ga: GA
 
-    def finalize(self) -> None:
+    def __call__(self) -> None:
         """Aggregate islands and run a final selection to produce the final population."""
         self._log_operators(name="crossover", ratios=self.ga.operator_stats.crossover, ops=self.ga.context.crossovers)
         self._log_operators(name="mutation", ratios=self.ga.operator_stats.mutation, ops=self.ga.context.mutations)
         self._log_aggregate_stats(self.ga.operator_stats)
         for island in self.ga.islands:
             logger.debug("Island %d Fitness: %.2f", island.identity, sum(island.fitness_history.get_last_gen_fitness()))
-        logger.debug("Total time taken: %.2f seconds", time.time() - self.ga.start_time)
+        logger.debug("Total time taken: %.2f seconds", time.perf_counter() - self.ga.start_time)
 
     @staticmethod
     def _log_operators(name: str, ratios: dict[str, Counter], ops: tuple[Crossover | Mutation, ...]) -> None:

@@ -3,16 +3,16 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from fll_scheduler_ga.config.app_config import (
-    TIME_FORMAT_MAP,
-    calc_num_timeslots,
-    infer_time_format,
-    init_timeslots,
-    parse_time_str,
-    validate_duration,
-)
 
 from fll_scheduler_ga.domain.model import DEFAULT_DT, TimeSlot
+from fll_scheduler_ga.domain.schema import (
+    TIME_FORMAT_MAP,
+    _calc_num_timeslots,
+    _infer_time_format,
+    _init_timeslots,
+    _parse_time_str,
+    _validate_duration,
+)
 
 FMT_24H = TIME_FORMAT_MAP[24]
 FMT_12H = TIME_FORMAT_MAP[12]
@@ -28,8 +28,8 @@ FMT_12H = TIME_FORMAT_MAP[12]
     ids=["12h", "24h", "empty"],
 )
 def test_parse_time_str(dt_str: str, fmt: str, expected: datetime) -> None:
-    """Parametrized tests for parse_time_str function."""
-    result = parse_time_str(dt_str, fmt)
+    """Parametrized tests for _parse_time_str function."""
+    result = _parse_time_str(dt_str, fmt)
     assert result == expected
 
 
@@ -43,9 +43,9 @@ def test_parse_time_str(dt_str: str, fmt: str, expected: datetime) -> None:
 )
 def test_timeslot_str(start_str: str, stop_active_str: str, stop_cycle_str: str, fmt: str, expected: str) -> None:
     """Parametrized tests for string representation of TimeSlot."""
-    start = parse_time_str(start_str, fmt)
-    stop_active = parse_time_str(stop_active_str, fmt)
-    stop_cycle = parse_time_str(stop_cycle_str, fmt)
+    start = _parse_time_str(start_str, fmt)
+    stop_active = _parse_time_str(stop_active_str, fmt)
+    stop_cycle = _parse_time_str(stop_cycle_str, fmt)
     TimeSlot.time_fmt = fmt
     timeslot = TimeSlot(idx=0, start=start, stop_active=stop_active, stop_cycle=stop_cycle)
     assert str(timeslot) == expected
@@ -127,13 +127,13 @@ def test_overlaps_timeslot(timeslot: TimeSlot, start_offset_min: int, stop_offse
 def test_calc_num_timeslots(
     n_times: int, n_locs: int, n_teams: int, rounds_per_team: int, expected: int | None
 ) -> None:
-    """Parametrized tests for calc_num_timeslots function."""
+    """Parametrized tests for _calc_num_timeslots function."""
     if expected is not None:
-        result = calc_num_timeslots(n_times, n_locs, n_teams, rounds_per_team)
+        result = _calc_num_timeslots(n_times, n_locs, n_teams, rounds_per_team)
         assert result == expected
     else:
         with pytest.raises(ValueError, match=r"Cannot calculate number of timeslots without times or locations."):
-            calc_num_timeslots(n_times, n_locs, n_teams, rounds_per_team)
+            _calc_num_timeslots(n_times, n_locs, n_teams, rounds_per_team)
 
 
 @pytest.mark.parametrize(
@@ -150,12 +150,12 @@ def test_calc_num_timeslots(
 )
 def test_infer_time_format(dt_str: str, expected: str) -> None:
     """Test inferring time format from string."""
-    inferred = infer_time_format(dt_str)
+    inferred = _infer_time_format(dt_str)
     assert inferred == expected or (inferred is None and expected is None)
 
 
 class TestValidateDuration:
-    """Tests for validate_duration function."""
+    """Tests for _validate_duration function."""
 
     @pytest.mark.parametrize(
         ("start_dt", "dur", "expected_minutes"),
@@ -169,8 +169,8 @@ class TestValidateDuration:
     def test_validate_duration_with_start_and_duration(
         self, start_dt: datetime, dur: int, expected_minutes: int
     ) -> None:
-        """Test validate_duration with start time and duration specified."""
-        result = validate_duration(start_stop=(start_dt, DEFAULT_DT), times_dt=(), dur=dur, n_timeslots=0)
+        """Test _validate_duration with start time and duration specified."""
+        result = _validate_duration(start_stop=(start_dt, DEFAULT_DT), times_dt=(), dur=dur, n_timeslots=0)
         assert result == timedelta(minutes=expected_minutes)
 
     @pytest.mark.parametrize(
@@ -184,8 +184,8 @@ class TestValidateDuration:
     def test_validate_duration_with_times_and_duration(
         self, times: tuple[datetime, ...], dur: int, expected_minutes: int
     ) -> None:
-        """Test validate_duration with explicit times and duration specified."""
-        result = validate_duration(start_stop=(DEFAULT_DT, DEFAULT_DT), times_dt=times, dur=dur, n_timeslots=0)
+        """Test _validate_duration with explicit times and duration specified."""
+        result = _validate_duration(start_stop=(DEFAULT_DT, DEFAULT_DT), times_dt=times, dur=dur, n_timeslots=0)
         assert result == timedelta(minutes=expected_minutes)
 
     @pytest.mark.parametrize(
@@ -200,14 +200,14 @@ class TestValidateDuration:
     def test_validate_duration_with_start_stop_calculates(
         self, start_dt: datetime, stop_dt: datetime, n_timeslots: int, expected_minutes: int
     ) -> None:
-        """Test validate_duration calculates duration from start/stop times."""
-        result = validate_duration(start_stop=(start_dt, stop_dt), times_dt=(), dur=0, n_timeslots=n_timeslots)
+        """Test _validate_duration calculates duration from start/stop times."""
+        result = _validate_duration(start_stop=(start_dt, stop_dt), times_dt=(), dur=0, n_timeslots=n_timeslots)
         assert result == timedelta(minutes=expected_minutes)
 
     def test_validate_duration_start_stop_invalid_n_timeslots(self) -> None:
-        """Test validate_duration raises error when n_timeslots is invalid."""
+        """Test _validate_duration raises error when n_timeslots is invalid."""
         with pytest.raises(ValueError, match=r"n_timeslots must be greater than zero"):
-            validate_duration(
+            _validate_duration(
                 start_stop=(datetime(2026, 1, 1, 9, 0, tzinfo=UTC), datetime(2026, 1, 1, 10, 0, tzinfo=UTC)),
                 times_dt=(),
                 dur=0,
@@ -215,13 +215,13 @@ class TestValidateDuration:
             )
 
     def test_validate_duration_with_default_dt_and_no_dur_raises_error(self) -> None:
-        """Test validate_duration with DEFAULT_DT values and no duration raises error."""
+        """Test _validate_duration with DEFAULT_DT values and no duration raises error."""
         with pytest.raises(ValueError, match=r"n_timeslots must be greater than zero"):
-            validate_duration(start_stop=(DEFAULT_DT, DEFAULT_DT), times_dt=(), dur=0, n_timeslots=0)
+            _validate_duration(start_stop=(DEFAULT_DT, DEFAULT_DT), times_dt=(), dur=0, n_timeslots=0)
 
     def test_validate_duration_minimum_one_minute(self) -> None:
-        """Test validate_duration returns minimum 1 minute for very small durations."""
-        result = validate_duration(
+        """Test _validate_duration returns minimum 1 minute for very small durations."""
+        result = _validate_duration(
             start_stop=(
                 datetime(2026, 1, 1, 9, 0, 0, tzinfo=UTC),
                 datetime(2026, 1, 1, 9, 0, 30, tzinfo=UTC),  # 30 seconds
@@ -234,10 +234,10 @@ class TestValidateDuration:
 
 
 class TestInitTimeslots:
-    """Tests for init_timeslots function."""
+    """Tests for _init_timeslots function."""
 
     def test_init_timeslots_with_explicit_starts(self) -> None:
-        """Test init_timeslots with explicit start times provided."""
+        """Test _init_timeslots with explicit start times provided."""
         starts = (
             datetime(2026, 1, 1, 9, 0, tzinfo=UTC),
             datetime(2026, 1, 1, 9, 30, tzinfo=UTC),
@@ -245,7 +245,7 @@ class TestInitTimeslots:
         )
         dur_cycle = timedelta(minutes=30)
         dur_active = timedelta(minutes=20)
-        result = tuple(init_timeslots(starts, dur_cycle, dur_active, 0, DEFAULT_DT))
+        result = tuple(_init_timeslots(starts, dur_cycle, dur_active, 0, DEFAULT_DT))
         assert len(result) == 3
         # Check first timeslot
         assert result[0][0] == datetime(2026, 1, 1, 9, 0, tzinfo=UTC)
@@ -257,12 +257,12 @@ class TestInitTimeslots:
         assert result[2][2] == datetime(2026, 1, 1, 10, 30, tzinfo=UTC)  # last + cycle
 
     def test_init_timeslots_with_start_dt_and_count(self) -> None:
-        """Test init_timeslots generating slots from start datetime and count."""
+        """Test _init_timeslots generating slots from start datetime and count."""
         start_dt = datetime(2026, 1, 1, 9, 0, tzinfo=UTC)
         dur_cycle = timedelta(minutes=30)
         dur_active = timedelta(minutes=20)
         n_timeslots = 4
-        result = tuple(init_timeslots((), dur_cycle, dur_active, n_timeslots, start_dt))
+        result = tuple(_init_timeslots((), dur_cycle, dur_active, n_timeslots, start_dt))
         assert len(result) == 4
         # Check first timeslot
         assert result[0][0] == datetime(2026, 1, 1, 9, 0, tzinfo=UTC)
@@ -278,31 +278,31 @@ class TestInitTimeslots:
         assert result[3][2] == datetime(2026, 1, 1, 11, 0, tzinfo=UTC)
 
     def test_init_timeslots_single_slot(self) -> None:
-        """Test init_timeslots with single timeslot generation."""
+        """Test _init_timeslots with single timeslot generation."""
         start_dt = datetime(2026, 1, 1, 14, 0, tzinfo=UTC)
         dur_cycle = timedelta(minutes=45)
         dur_active = timedelta(minutes=30)
-        result = tuple(init_timeslots((), dur_cycle, dur_active, 1, start_dt))
+        result = tuple(_init_timeslots((), dur_cycle, dur_active, 1, start_dt))
         assert len(result) == 1
         assert result[0][0] == datetime(2026, 1, 1, 14, 0, tzinfo=UTC)
         assert result[0][1] == datetime(2026, 1, 1, 14, 30, tzinfo=UTC)
         assert result[0][2] == datetime(2026, 1, 1, 14, 45, tzinfo=UTC)
 
     def test_init_timeslots_empty_when_no_timeslots(self) -> None:
-        """Test init_timeslots returns empty iterator when n_timeslots is 0."""
+        """Test _init_timeslots returns empty iterator when n_timeslots is 0."""
         start_dt = datetime(2026, 1, 1, 9, 0, tzinfo=UTC)
         dur_cycle = timedelta(minutes=30)
         dur_active = timedelta(minutes=20)
-        result = tuple(init_timeslots((), dur_cycle, dur_active, 0, start_dt))
+        result = tuple(_init_timeslots((), dur_cycle, dur_active, 0, start_dt))
         assert len(result) == 0
 
     def test_init_timeslots_with_different_active_cycle_durations(self) -> None:
-        """Test init_timeslots where active duration differs from cycle."""
+        """Test _init_timeslots where active duration differs from cycle."""
         start_dt = datetime(2026, 1, 1, 9, 0, tzinfo=UTC)
         dur_cycle = timedelta(minutes=60)
         dur_active = timedelta(minutes=15)
         n_timeslots = 2
-        result = tuple(init_timeslots((), dur_cycle, dur_active, n_timeslots, start_dt))
+        result = tuple(_init_timeslots((), dur_cycle, dur_active, n_timeslots, start_dt))
         assert len(result) == 2
         # First slot: 9:00-9:15 (active), 9:00-10:00 (cycle)
         assert result[0][0] == datetime(2026, 1, 1, 9, 0, tzinfo=UTC)

@@ -158,6 +158,10 @@ class GaContext:
     crossovers: tuple[Crossover, ...]
     mutations: tuple[Mutation, ...]
 
+    def build(self) -> Schedule:
+        """Build a new schedule using the builder."""
+        return self.builder.build()
+
     def check(self, schedule: Schedule) -> bool:
         """Check a schedule using the hard constraint checker."""
         return self.checker(schedule)

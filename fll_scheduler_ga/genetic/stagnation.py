@@ -2,12 +2,8 @@
 
 from collections import Counter
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 import numpy as np
-
-if TYPE_CHECKING:
-    from fll_scheduler_ga.domain.schema import StagnationModel
 
 
 @dataclass(slots=True)
@@ -32,6 +28,34 @@ class FitnessHistory:
         """Update the fitness history with the current generation's fitnesses."""
         self.history[self.generation] = self.current
         self.generation += 1
+
+
+@dataclass(slots=True)
+class StagnationHandler:
+    """Class for handling stagnation in the genetic algorithm."""
+
+    enabled: bool
+    threshold: int
+    proportion: float
+    cooldown: int
+    _last_stagnant_gen: int = 0
+
+    def is_stagnant(self, curr: int, history: np.ndarray) -> bool:
+        """Check if the GA has stagnated based on fitness history."""
+        if not self.enabled or curr < self.threshold:
+            return False
+        # Get recent history
+        recents = history[curr - self.threshold : curr]
+        # Checks if any of the recent fitnesses exactly the same as the first in this range
+        equal_mask = recents[0] == recents[1:]
+        # Count how many are equal in all objectives
+        equal_sum = equal_mask.sum(axis=1) > 0
+        equal_count = equal_sum.sum()
+        # Determine stagnation
+        if equal_count > self.threshold * self.proportion and curr - self._last_stagnant_gen >= self.cooldown:
+            self._last_stagnant_gen = curr
+            return True
+        return False
 
 
 @dataclass(slots=True)
@@ -61,53 +85,17 @@ class OperatorStats:
         rate = f"{s_sum / t_sum if t_sum > 0 else 0.0:.2%}"
         return s_sum, t_sum, rate
 
-    def get_crossover_stats(self) -> tuple[int, int, str]:
-        """Get the crossover statistics for a specific operator."""
-        s = self.crossover.get("success", Counter())
-        t = self.crossover.get("total", Counter())
-        s_sum = sum(s.values())
-        t_sum = sum(t.values())
+    def _get_operator_stats(self, operators: dict[str, Counter]) -> tuple[int, int, str]:
+        """Get the statistics for a specific set of operators."""
+        s_sum = sum(operators.get("success", Counter()).values())
+        t_sum = sum(operators.get("total", Counter()).values())
         rate = f"{s_sum / t_sum if t_sum > 0 else 0.0:.2%}"
         return s_sum, t_sum, rate
+
+    def get_crossover_stats(self) -> tuple[int, int, str]:
+        """Get the crossover statistics for a specific operator."""
+        return self._get_operator_stats(self.crossover)
 
     def get_mutation_stats(self) -> tuple[int, int, str]:
         """Get the mutation statistics for a specific operator."""
-        s = self.mutation.get("success", Counter())
-        t = self.mutation.get("total", Counter())
-        s_sum = sum(s.values())
-        t_sum = sum(t.values())
-        rate = f"{s_sum / t_sum if t_sum > 0 else 0.0:.2%}"
-        return s_sum, t_sum, rate
-
-
-@dataclass(slots=True)
-class StagnationHandler:
-    """Class for handling stagnation in the genetic algorithm."""
-
-    rng: np.random.Generator
-    generation: int
-    fitness_history: FitnessHistory
-    model: StagnationModel
-    _last_stagnant_gen: int = 0
-
-    def is_stagnant(self) -> bool:
-        """Check if the GA has stagnated based on fitness history."""
-        if not self.model.enable:
-            return False
-        curr = self.generation
-        if curr < self.model.threshold:
-            return False
-        # Get recent history
-        recents = self.fitness_history.history[curr - self.model.threshold : curr]
-        # Checks if any of the recent fitnesses exactly the same as the first in this range
-        equal_mask = recents[0] == recents[1:]
-        # Count how many are equal in all objectives
-        equal_sum = equal_mask.sum(axis=1) > 0
-        equal_count = equal_sum.sum()
-        # Determine stagnation
-        if equal_count > self.model.threshold * self.model.proportion:
-            if curr - self._last_stagnant_gen < self.model.cooldown:
-                return False
-            self._last_stagnant_gen = curr
-            return True
-        return False
+        return self._get_operator_stats(self.mutation)

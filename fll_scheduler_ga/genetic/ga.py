@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from fll_scheduler_ga.genetic.island import Island, SchedulePopulation
+from fll_scheduler_ga.genetic.island import Island
 from fll_scheduler_ga.genetic.stagnation import FitnessHistory, OperatorStats, StagnationHandler
 
 if TYPE_CHECKING:
@@ -27,7 +27,6 @@ class GA:
     genetic_model: GeneticModel
     rng: np.random.Generator
     observers: tuple[GaObserver, ...]
-    generation: int
     operator_stats: OperatorStats
     fitness_history: FitnessHistory
     generations_array: np.ndarray
@@ -37,33 +36,26 @@ class GA:
     total_population: list[Schedule] = field(default_factory=list)
     islands: list[Island] = field(default_factory=list)
     start_time: float = 0.0
-    _n_islands: int = field(init=False)
-    _ngen: int = field(init=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
-        self._n_islands = self.genetic_model.parameters.num_islands
-        self._ngen = self.genetic_model.parameters.generations
-        n_islands = self._n_islands
-        for i in range(n_islands):
-            island = Island(
-                identity=i,
-                generation=self.generation,
-                context=self.context,
-                genetic_model=self.genetic_model,
-                rng=self.rng,
-                operator_stats=self.operator_stats,
-                fitness_history=self.fitness_history.copy(),
-                builder=self.context.builder,
-                population=SchedulePopulation(ranks=np.empty((0,), dtype=int)),
+        for i in range(self.genetic_model.parameters.num_islands):
+            self.islands.append(
+                Island(
+                    identity=i,
+                    context=self.context,
+                    ga_param=self.genetic_model.parameters,
+                    rng=self.rng,
+                    operator_stats=self.operator_stats,
+                    fitness_history=self.fitness_history.copy(),
+                    stagnation=StagnationHandler(
+                        enabled=self.genetic_model.stagnation.enable,
+                        threshold=self.genetic_model.stagnation.threshold,
+                        proportion=self.genetic_model.stagnation.proportion,
+                        cooldown=self.genetic_model.stagnation.cooldown,
+                    ),
+                )
             )
-            island.stagnation = StagnationHandler(
-                rng=self.rng,
-                generation=self.generation,
-                fitness_history=island.fitness_history,
-                model=self.genetic_model.stagnation,
-            )
-            self.islands.append(island)
 
     def __len__(self) -> int:
         """Return the number of individuals in the population."""
@@ -82,8 +74,8 @@ class GA:
     def run(self) -> None:
         """Run the genetic algorithm and return the best schedule found."""
         try:
-            self.start_time = time.time()
-            self.notify_on_start(self._ngen)
+            self.start_time = time.perf_counter()
+            self.notify_on_start()
             logger.debug("Seeding population...")
             self.seed_population()
             logger.debug("Initializing population...")
@@ -96,7 +88,7 @@ class GA:
             logger.exception("Genetic algorithm run interrupted by user. Saving...")
         finally:
             self._deduplicate_population()
-            self.notify_on_finish(self.total_population, self.pareto_front)
+            self.notify_on_finish()
 
     def seed_population(self) -> None:
         """Seed the population for each island."""
@@ -122,14 +114,11 @@ class GA:
                 island.run_epoch()
             self.fitness_history.current = self.avg_island_fit
             self.fitness_history.update_fitness_history()
-            self.generation += 1
-            self.notify_on_generation_end(
-                gen=gen, ngen=self._ngen, best_fit=self.fitness_history.get_last_gen_fitness(), npop=len(self)
-            )
+            self.notify_on_generation_end(gen)
 
     def migrate(self) -> None:
         """Migrate the best individuals between islands using a ring topology."""
-        n = len(self.islands)
+        n = self.genetic_model.parameters.num_islands
         for i, dest in enumerate(self.islands):
             src = self.islands[(i + 1) % n]
             migrants = src.give_migrants()
@@ -141,27 +130,29 @@ class GA:
         pop_array = np.asarray([s.schedule for island in self.islands for s in island.selected])
         schedule_fitness, team_fitnesses = self.context.evaluate(pop_array)
         _, flat, ranks = self.context.select_nsga3(schedule_fitness, len(unique_pop))
-        selected = {}
+        selected = set()
         for rank, idx in zip(ranks, flat, strict=True):
             idx: int
             sch = unique_pop[idx]
             sch.fitness = schedule_fitness[idx]
             sch.team_fitnesses = team_fitnesses[idx]
             sch.rank = rank
-            selected[hash(sch)] = sch
-        self.total_population = sorted(selected.values(), key=lambda s: (s.rank, -s.fitness.sum()))
+            selected.add(sch)
+        self.total_population = sorted(selected, key=lambda s: (s.rank, -s.fitness.sum()))
 
-    def notify_on_start(self, ngen: int) -> None:
+    def notify_on_start(self) -> None:
         """Notify observers when the genetic algorithm run starts."""
         for obs in self.observers:
-            obs.on_start(ngen)
+            obs.on_start(self.genetic_model.parameters.generations)
 
-    def notify_on_generation_end(self, gen: int, ngen: int, best_fit: np.ndarray, npop: int) -> None:
+    def notify_on_generation_end(self, gen: int) -> None:
         """Notify observers at the end of a generation."""
         for obs in self.observers:
-            obs.on_generation_end(gen, ngen, best_fit, npop)
+            obs.on_generation_end(
+                gen, self.genetic_model.parameters.generations, self.fitness_history.get_last_gen_fitness(), len(self)
+            )
 
-    def notify_on_finish(self, pop: list[Schedule], pareto_front: list[Schedule]) -> None:
+    def notify_on_finish(self) -> None:
         """Notify observers when the genetic algorithm run is finished."""
         for obs in self.observers:
-            obs.on_finish(pop, pareto_front)
+            obs.on_finish(self.total_population, self.pareto_front)
