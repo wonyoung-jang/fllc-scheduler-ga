@@ -9,8 +9,8 @@ import numpy as np
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
+    from fll_scheduler_ga.adapter.schema import GaParameterModel
     from fll_scheduler_ga.domain.schedule import Schedule
-    from fll_scheduler_ga.domain.schema import GaParameterModel
     from fll_scheduler_ga.genetic.context import GaContext
     from fll_scheduler_ga.genetic.stagnation import FitnessHistory, OperatorStats, StagnationHandler
     from fll_scheduler_ga.operators.crossover import Crossover

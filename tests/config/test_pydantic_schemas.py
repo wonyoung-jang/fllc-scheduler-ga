@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from fll_scheduler_ga.domain.schema import (
+from fll_scheduler_ga.adapter.schema import (
     AggregationWeightsModel,
     FitnessModel,
     ImportModel,

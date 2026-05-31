@@ -6,9 +6,9 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pytest
 
+from fll_scheduler_ga.adapter.schema import TIME_FORMAT_MAP, AppConfig, _parse_time_str, build_app_config
 from fll_scheduler_ga.domain.model import EventFactory, EventProperties, TimeSlot, build_event_props
 from fll_scheduler_ga.domain.schedule import Schedule, ScheduleContext
-from fll_scheduler_ga.domain.schema import TIME_FORMAT_MAP, AppConfig, _parse_time_str, build_app_config
 
 if TYPE_CHECKING:
     from pathlib import Path

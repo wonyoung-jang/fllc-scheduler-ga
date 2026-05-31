@@ -18,9 +18,9 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from fll_scheduler_ga.adapter.plot import Visualizer
+    from fll_scheduler_ga.adapter.schema import ExportModel
     from fll_scheduler_ga.domain.model import EventProperties, Location, TimeSlot
     from fll_scheduler_ga.domain.schedule import Schedule
-    from fll_scheduler_ga.domain.schema import ExportModel
     from fll_scheduler_ga.genetic.ga import GA
 
 logger = getLogger(__name__)
@@ -228,9 +228,7 @@ def generate_summary(ga: GA, output_dir: Path, export_model: ExportModel, plot: 
         plot.plot()
     schedules = ga.pareto_front if export_model.front_only else total_pop
     schedules.sort(key=lambda s: (s.rank, -sum(s.fitness)))
-    time_fmt = ga.context.app_config.tournament.time_fmt
-    event_properties = ga.context.event_properties
-    exporters = get_exporters(export_model, subdirs, time_fmt, event_properties, ga)
+    exporters = get_exporters(export_model, subdirs, ga)
     export_manager = ExportManager(schedules=schedules, exporters=exporters)
     export_manager.export_all()
     if export_model.pareto_summary:
@@ -238,16 +236,16 @@ def generate_summary(ga: GA, output_dir: Path, export_model: ExportModel, plot: 
         pareto_summary_gen.export(total_pop, output_dir / "pareto_summary.csv")
 
 
-def get_exporters(
-    export_model: ExportModel, subdirs: dict[str, Path], time_fmt: str, event_properties: EventProperties, ga: GA
-) -> tuple:
+def get_exporters(export_model: ExportModel, subdirs: dict[str, Path], ga: GA) -> tuple:
     """Get the list of exporters based on the export model."""
     exporters = []
     if export_model.schedules_csv:
         exporters.append(
             (
                 CsvScheduleExporter(
-                    time_fmt=time_fmt, team_identities=export_model.team_identities, event_properties=event_properties
+                    time_fmt=ga.context.tournament_config.time_fmt,
+                    team_identities=export_model.team_identities,
+                    event_properties=ga.context.event_properties,
                 ),
                 subdirs["csv"],
                 "csv",
@@ -257,7 +255,9 @@ def get_exporters(
         exporters.append(
             (
                 HtmlScheduleExporter(
-                    time_fmt=time_fmt, team_identities=export_model.team_identities, event_properties=event_properties
+                    time_fmt=ga.context.tournament_config.time_fmt,
+                    team_identities=export_model.team_identities,
+                    event_properties=ga.context.event_properties,
                 ),
                 subdirs["html"],
                 "html",
@@ -411,7 +411,7 @@ class TeamScheduleGenerator:
 
     def get_team_schedule(self, schedule: Schedule) -> tuple[tuple[str, ...], ...]:
         """Get the schedule for each team."""
-        config = self.ga.context.app_config.tournament
+        config = self.ga.context.tournament_config
         rows = []
         headers: list[str] = ["Team"]
         for roundtype, rounds_per_team in config.roundreqs.items():

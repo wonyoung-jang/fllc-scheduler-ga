@@ -34,8 +34,8 @@ from fll_scheduler_ga.operators.selection import RandomSelect
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from fll_scheduler_ga.adapter.schema import AppConfig, ImportModel
     from fll_scheduler_ga.domain.model import TimeSlot, TournamentConfig
-    from fll_scheduler_ga.domain.schema import AppConfig, ImportModel
     from fll_scheduler_ga.operators.crossover import Crossover
     from fll_scheduler_ga.operators.mutation import Mutation
     from fll_scheduler_ga.operators.selection import Selection
@@ -82,8 +82,8 @@ def _hard_constraint_checker(constraints: tuple[Callable[[Schedule], bool], ...]
 def build_ga_context(cfg: AppConfig) -> GaContext:
     """Build and return a GA context."""
     n_total_evts = cfg.tournament.get_n_total_events()
-    evt_factory = EventFactory(config=cfg.tournament)
-    evt_props = build_event_props(n_total_events=n_total_evts, event_map=evt_factory.mapping)
+    evt_factory = EventFactory(cfg.tournament)
+    evt_props = build_event_props(n_total_evts, evt_factory.mapping)
     _run_preflight_checks(evt_props, evt_factory)
     Schedule.ctx = ScheduleContext(
         conflict_map=evt_factory.conflict_map,
@@ -115,11 +115,7 @@ def build_ga_context(cfg: AppConfig) -> GaContext:
         config=cfg.tournament, event_properties=evt_props, benchmark=benchmark, model=cfg.fitness
     )
     points = calc_ref_points(evaluator.n_objectives, cfg.genetic.parameters.population_size)
-    n_refs = points.shape[0]
-    norm_sq = calc_norm_sq_of_refs(points)
-    ref_directions = ReferenceDirections(n_refs=n_refs, points=points, norm_sq=norm_sq)
-    crossovers = build_crossovers(cfg.rng, cfg.genetic.operator, evt_factory, evt_props)
-    mutations = build_mutations(cfg.rng, cfg.genetic.operator, evt_factory, evt_props)
+    ref_directions = ReferenceDirections(points.shape[0], points, calc_norm_sq_of_refs(points))
     return GaContext(
         app_config=cfg,
         event_factory=evt_factory,
@@ -130,15 +126,13 @@ def build_ga_context(cfg: AppConfig) -> GaContext:
             round_idx_to_tpr=cfg.tournament.round_idx_to_tpr,
             roundtype_events=evt_factory.roundtypes,
         ),
-        repairer=Repairer(
-            config=cfg.tournament, event_factory=evt_factory, event_properties=evt_props, rng=cfg.rng, checker=checker
-        ),
+        repairer=Repairer(cfg.tournament, evt_factory, evt_props, cfg.rng, checker),
         evaluator=evaluator,
         checker=checker,
-        nsga3=NSGA3(rng=cfg.rng, refs=ref_directions, sorting=NonDominatedSorting()),
+        nsga3=NSGA3(cfg.rng, ref_directions, NonDominatedSorting()),
         selection=RandomSelect(cfg.rng),
-        crossovers=crossovers,
-        mutations=mutations,
+        crossovers=build_crossovers(cfg.rng, cfg.genetic.operator, evt_factory, evt_props),
+        mutations=build_mutations(cfg.rng, cfg.genetic.operator, evt_factory, evt_props),
     )
 
 
@@ -191,6 +185,11 @@ class GaContext:
     def import_model(self) -> ImportModel:
         """Get the imports model from the app config."""
         return self.app_config.io.imports
+
+    @property
+    def seed_pop_sort(self) -> str:
+        """Get the seed population sort strategy from the app config."""
+        return self.app_config.io.imports.seed_pop_sort
 
     @property
     def seed_island_strategy(self) -> str:

@@ -4,8 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from fll_scheduler_ga.domain.model import DEFAULT_DT, TimeSlot
-from fll_scheduler_ga.domain.schema import (
+from fll_scheduler_ga.adapter.schema import (
     TIME_FORMAT_MAP,
     _calc_num_timeslots,
     _infer_time_format,
@@ -13,6 +12,7 @@ from fll_scheduler_ga.domain.schema import (
     _parse_time_str,
     _validate_duration,
 )
+from fll_scheduler_ga.domain.model import DEFAULT_DT, TimeSlot
 
 FMT_24H = TIME_FORMAT_MAP[24]
 FMT_12H = TIME_FORMAT_MAP[12]

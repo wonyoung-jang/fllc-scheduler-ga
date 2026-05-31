@@ -12,8 +12,8 @@ from fll_scheduler_ga.genetic.stagnation import FitnessHistory, OperatorStats, S
 
 if TYPE_CHECKING:
     from fll_scheduler_ga.adapter.observer import GaObserver
+    from fll_scheduler_ga.adapter.schema import GeneticModel
     from fll_scheduler_ga.domain.schedule import Schedule
-    from fll_scheduler_ga.domain.schema import GeneticModel
     from fll_scheduler_ga.genetic.context import GaContext
 
 logger = logging.getLogger(__name__)

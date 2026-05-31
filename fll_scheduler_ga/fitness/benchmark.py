@@ -16,8 +16,8 @@ from fll_scheduler_ga.constants import EPSILON, FITNESS_MODEL_VERSION
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from fll_scheduler_ga.adapter.schema import FitnessModel
     from fll_scheduler_ga.domain.model import EventFactory, TournamentConfig
-    from fll_scheduler_ga.domain.schema import FitnessModel
 
 logger = getLogger(__name__)
 
