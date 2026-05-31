@@ -10,14 +10,14 @@ import numpy as np
 from fll_scheduler_ga.constants import BENCHMARKS_CACHE
 from fll_scheduler_ga.domain.model import EventFactory, EventProperties, build_event_props
 from fll_scheduler_ga.domain.schedule import Schedule, ScheduleContext
-from fll_scheduler_ga.fitness.benchmark import (
+from fll_scheduler_ga.genetic.fitness import (
     FitnessBenchmark,
     FitnessBenchmarkBreaktime,
     FitnessBenchmarkOpponent,
+    FitnessEvaluator,
     PickleBenchmarkRepository,
     generate_stable_config_hash,
 )
-from fll_scheduler_ga.fitness.evaluator import FitnessEvaluator
 from fll_scheduler_ga.operators.crossover import build_crossovers
 from fll_scheduler_ga.operators.mutation import build_mutations
 from fll_scheduler_ga.operators.nsga3 import (

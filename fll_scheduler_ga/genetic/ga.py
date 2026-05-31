@@ -299,7 +299,7 @@ class Island:
                 if created_cycle >= self.ga_param.offspring_size:
                     break
                 if len(self.context.mutations) > 0:
-                    m_roll = True if not c_roll else self.ga_param.mutation_chance > self.rng.random()
+                    m_roll = not c_roll or self.ga_param.mutation_chance > self.rng.random()
                     if m_roll:
                         self._mutate_child(child)
                 if self.add_to_population(child):
