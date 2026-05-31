@@ -11,12 +11,11 @@ import numpy as np
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from fll_scheduler_ga.adapter.observer import GaObserver
+    from fll_scheduler_ga.adapter.monitoring import GaObserver
     from fll_scheduler_ga.adapter.schema import GaParameterModel, GeneticModel
     from fll_scheduler_ga.domain.schedule import Schedule
     from fll_scheduler_ga.genetic.context import GaContext
-    from fll_scheduler_ga.operators.crossover import Crossover
-    from fll_scheduler_ga.operators.mutation import Mutation
+    from fll_scheduler_ga.genetic.operator import Crossover, Mutation
 
 logger = logging.getLogger(__name__)
 

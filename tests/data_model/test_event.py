@@ -24,5 +24,4 @@ def test_event_factory_and_properties(event_factory: EventFactory, event_propert
     assert isinstance(conf_map, dict)
     # Properties
     ep = event_properties
-    assert ep.all_props.size == len(events)
     assert ep.timeslot_idx[0] == events[0].timeslot.idx

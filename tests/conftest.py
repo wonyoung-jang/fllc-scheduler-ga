@@ -7,7 +7,13 @@ import numpy as np
 import pytest
 
 from fll_scheduler_ga.adapter.schema import TIME_FORMAT_MAP, AppConfig, _parse_time_str, build_app_config
-from fll_scheduler_ga.domain.model import EventFactory, EventProperties, TimeSlot, build_event_props
+from fll_scheduler_ga.domain.model import (
+    EventFactory,
+    EventProperties,
+    TimeSlot,
+    build_event_factory,
+    build_event_props,
+)
 from fll_scheduler_ga.domain.schedule import Schedule, ScheduleContext
 
 if TYPE_CHECKING:
@@ -81,13 +87,13 @@ def tournament_config(app_config: AppConfig) -> TournamentConfig:
 @pytest.fixture
 def event_factory(tournament_config: TournamentConfig) -> EventFactory:
     """Return an EventFactory."""
-    return EventFactory(tournament_config)
+    return build_event_factory(tournament_config.rounds)
 
 
 @pytest.fixture
-def event_properties(tournament_config: TournamentConfig, event_factory: EventFactory) -> EventProperties:
+def event_properties(event_factory: EventFactory) -> EventProperties:
     """Return EventProperties."""
-    return build_event_props(tournament_config.get_n_total_events(), event_factory.mapping)
+    return build_event_props(event_factory.mapping)
 
 
 @pytest.fixture
@@ -95,7 +101,7 @@ def schedule_context(
     tournament_config: TournamentConfig, event_factory: EventFactory, event_properties: EventProperties
 ) -> ScheduleContext:
     """Initialize ScheduleContext."""
-    n_total = tournament_config.get_n_total_events()
+    n_total = tournament_config.n_total_events
     roundreqs_array = np.tile(tuple(tournament_config.roundreqs.values()), (tournament_config.num_teams, 1))
     empty_schedule = np.full(n_total, -1, dtype=int)
     return ScheduleContext(

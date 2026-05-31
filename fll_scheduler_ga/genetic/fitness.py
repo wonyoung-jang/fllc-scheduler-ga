@@ -2,20 +2,16 @@
 
 import hashlib
 import itertools
-import pickle
-from abc import ABC, abstractmethod
 from collections import Counter
 from dataclasses import dataclass, field
 from logging import getLogger
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import numpy as np
 
-from fll_scheduler_ga.constants import EPSILON, FITNESS_MODEL_VERSION, FitnessObjective
+from fll_scheduler_ga.constants import EPSILON, FitnessObjective
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from fll_scheduler_ga.adapter.schema import FitnessModel
     from fll_scheduler_ga.domain.model import EventFactory, EventProperties, TournamentConfig
 
@@ -30,17 +26,18 @@ class FitnessEvaluator:
     # Configurations
     config: TournamentConfig
     event_properties: EventProperties
-    benchmark: FitnessBenchmark
     model: FitnessModel
+    benchmark_opponents: np.ndarray
+    benchmark_best_timeslot_score: float
     # Globals
     max_int: int = np.iinfo(np.int64).max
     n_objectives: int = len(tuple(FitnessObjective))
     epsilon: float = EPSILON
     # TournamentConfig
-    n_teams: int = 0
-    n_max_events: int = 0
-    n_match_rt: int = 0
-    n_single_rt: int = 0
+    n_teams: int = field(init=False)
+    n_max_events: int = field(init=False)
+    n_match_rt: int = field(init=False)
+    n_single_rt: int = field(init=False)
     single_roundtypes: np.ndarray = field(init=False)
     match_roundtypes: np.ndarray = field(init=False)
     rt_array: np.ndarray = field(init=False)
@@ -51,18 +48,15 @@ class FitnessEvaluator:
     _loc_idx: np.ndarray = field(init=False)
     _paired_idx: np.ndarray = field(init=False)
     _roundtype_idx: np.ndarray = field(init=False)
-    # FitnessBenchmark
-    benchmark_opponents: np.ndarray = field(init=False)
-    benchmark_best_timeslot_score: float = 0.0
     # FitnessModel
-    loc_weight_rounds_inter: float = 0.0
-    loc_weight_rounds_intra: float = 0.0
-    agg_weights: tuple[float, ...] = ()
+    loc_weight_rounds_inter: float = field(init=False)
+    loc_weight_rounds_intra: float = field(init=False)
+    agg_weights: tuple[float, ...] = field(init=False)
     obj_weights: np.ndarray = field(init=False)
-    min_fitness_weight: float = 0.0
-    minbreak_target: int = 0
-    minbreak_penalty: float = 0.0
-    zeros_penalty: float = 0.0
+    min_fitness_weight: float = field(init=False)
+    minbreak_target: int = field(init=False)
+    minbreak_penalty: float = field(init=False)
+    zeros_penalty: float = field(init=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the configuration."""
@@ -86,9 +80,6 @@ class FitnessEvaluator:
         self._loc_idx = _ep.loc_idx
         self._paired_idx = _ep.paired_idx
         self._roundtype_idx = _ep.roundtype_idx
-        # Initialize from FitnessBenchmark
-        self.benchmark_opponents = self.benchmark.opponents
-        self.benchmark_best_timeslot_score = self.benchmark.best_timeslot_score
         # Initialize from FitnessModel
         inter, intra = self.model.location_weights.get_weights_tuple()
         self.loc_weight_rounds_inter = inter
@@ -343,57 +334,11 @@ class FitnessEvaluator:
         return schedule_fitnesses * self.obj_weights
 
 
-@dataclass(slots=True)
-class FitnessBenchmark:
-    """Benchmark for evaluating fitness scores."""
-
-    config: TournamentConfig
-    model: FitnessModel
-    repository: BenchmarkRepository
-    opponent_benchmarker: FitnessBenchmarkOpponent
-    breaktime_benchmarker: FitnessBenchmarkBreaktime
-    flush_benchmarks: bool
-    opponents: np.ndarray = field(init=False)
-    best_timeslot_score: float = field(init=False)
-
-    def __post_init__(self) -> None:
-        """Run the fitness benchmarking process."""
-        loaded_data = None
-        if not self.flush_benchmarks:
-            loaded_data = self.repository.load()
-        if loaded_data and self._validate_data(loaded_data):
-            self.opponents = loaded_data.opponents
-            self.best_timeslot_score = loaded_data.best_timeslot_score
-        else:
-            logger.info("Calculating new benchmarks...")
-            self.opponents = self.opponent_benchmarker.benchmark()
-            self.best_timeslot_score = self.breaktime_benchmarker.benchmark()
-            self.save_benchmarks()
-
-    def _validate_data(self, data: BenchmarkSeedData) -> bool:
-        """Validate loaded benchmark data."""
-        if data.version != FITNESS_MODEL_VERSION:
-            logger.warning(
-                "Benchmark version mismatch: Expected %d, found %d. Recalculating benchmarks.",
-                FITNESS_MODEL_VERSION,
-                data.version,
-            )
-            return False
-        return True
-
-    def save_benchmarks(self) -> None:
-        """Save the current benchmarks via repository."""
-        data = BenchmarkSeedData(
-            version=FITNESS_MODEL_VERSION, opponents=self.opponents, best_timeslot_score=self.best_timeslot_score
-        )
-        self.repository.save(data)
-
-
 def generate_stable_config_hash(config: TournamentConfig, model: FitnessModel) -> int:
     """Generate a stable hash for a given tournament configuration."""
     representation = (
-        config.get_canonical_round_tuples(),
-        config.get_canonical_roundreqs_tuple(),
+        config.canonical_round_tuples,
+        config.canonical_roundreqs_tuple,
         model.penalties.minbreak_target,
         model.penalties.minbreak,
         model.penalties.zeros,
@@ -404,19 +349,11 @@ def generate_stable_config_hash(config: TournamentConfig, model: FitnessModel) -
 
 
 @dataclass(slots=True)
-class FitnessBenchmarkObjective(ABC):
-    """Abstract base class for fitness benchmark objective."""
+class FitnessBenchmarkOpponent:
+    """Benchmark for opponent variety fitness."""
 
     config: TournamentConfig
     event_factory: EventFactory
-
-    @abstractmethod
-    def benchmark(self) -> Any:
-        """Run the specific benchmark. To be implemented by subclasses."""
-
-
-class FitnessBenchmarkOpponent(FitnessBenchmarkObjective):
-    """Benchmark for opponent variety fitness."""
 
     def benchmark(self) -> np.ndarray:
         """Run the opponent variety fitness benchmarking."""
@@ -464,9 +401,11 @@ class FitnessBenchmarkOpponent(FitnessBenchmarkObjective):
 
 
 @dataclass(slots=True)
-class FitnessBenchmarkBreaktime(FitnessBenchmarkObjective):
+class FitnessBenchmarkBreaktime:
     """Benchmark for break time consistency fitness."""
 
+    config: TournamentConfig
+    event_factory: EventFactory
     model: FitnessModel
 
     def benchmark(self) -> float:
@@ -582,51 +521,3 @@ class FitnessBenchmarkBreaktime(FitnessBenchmarkObjective):
         final_scores = final_scores[non_overlap_mask]
         indices = indices[non_overlap_mask]
         return final_scores, indices
-
-
-@dataclass(slots=True)
-class BenchmarkSeedData:
-    """Seed data object for fitness benchmarks."""
-
-    version: int = FITNESS_MODEL_VERSION
-    opponents: np.ndarray = field(default_factory=lambda: np.array([]))
-    best_timeslot_score: float = 0.0
-
-
-class BenchmarkRepository(ABC):
-    """Abstract interface for storing and retrieving benchmark data."""
-
-    @abstractmethod
-    def load(self) -> BenchmarkSeedData | None: ...
-    @abstractmethod
-    def save(self, data: BenchmarkSeedData) -> None: ...
-
-
-@dataclass(slots=True)
-class PickleBenchmarkRepository(BenchmarkRepository):
-    """Concrete implementation using Pickle and local file system."""
-
-    path: Path
-
-    def load(self) -> BenchmarkSeedData | None:
-        """Load benchmark data from a pickle file."""
-        logger.debug("Loading fitness benchmarks from cache: %s", self.path)
-        if not self.path.exists():
-            return None
-        try:
-            with self.path.open("rb") as f:
-                seed_data = pickle.load(f)
-        except OSError, EOFError, AttributeError, ModuleNotFoundError, pickle.UnpicklingError:
-            logger.debug("Failed to load fitness benchmarks from cache: %s", self.path)
-            return None
-        return seed_data
-
-    def save(self, data: BenchmarkSeedData) -> None:
-        """Save benchmark data to a pickle file."""
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            with self.path.open("wb") as f:
-                pickle.dump(data, f)
-            logger.info("Fitness benchmarks saved to cache: %s", self.path)
-        except OSError, pickle.PicklingError, EOFError:
-            logger.exception("Failed to save fitness benchmarks to cache.")

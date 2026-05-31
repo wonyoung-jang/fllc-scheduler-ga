@@ -1,94 +1,18 @@
 """Seed data I/O for genetic algorithm."""
 
 import pickle
-from collections import defaultdict
-from dataclasses import dataclass, field
 from logging import getLogger
 from typing import TYPE_CHECKING
 
-import numpy as np
-
-from fll_scheduler_ga.constants import DATA_MODEL_VERSION, SeedIslandStrategy, SeedPopSort
+from fll_scheduler_ga.constants import DATA_MODEL_VERSION
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
     from pathlib import Path
 
-    from fll_scheduler_ga.domain.model import TournamentConfig
+    from fll_scheduler_ga.domain.model import BenchmarkSeedData, GASeedData, TournamentConfig
     from fll_scheduler_ga.domain.schedule import Schedule
 
 logger = getLogger(__name__)
-
-
-@dataclass(slots=True)
-class GASeedData:
-    """GA seed data object."""
-
-    config: TournamentConfig | None = None
-    population: list[Schedule] = field(default_factory=list)
-    version: int = DATA_MODEL_VERSION
-
-
-def distributed_seeding(seed_indices: Iterator[int], n_islands: int) -> dict[int, list[int]]:
-    """Get the seed indices for each island."""
-    island_to_seed: dict[int, list[int]] = defaultdict(list)
-    for idx in seed_indices:
-        island_to_seed[idx % n_islands].append(idx)
-    return island_to_seed
-
-
-def concentrated_seeding(seed_indices: Iterator[int], n_islands: int, n_pop: int) -> dict[int, list[int]]:
-    """Get the seed indices for each island."""
-    island_to_seed: dict[int, list[int]] = defaultdict(list)
-    for i in range(n_islands):
-        while len(island_to_seed[i]) < n_pop:
-            if (idx := next(seed_indices, None)) is None:
-                break
-            island_to_seed[i].append(idx)
-    return island_to_seed
-
-
-@dataclass(slots=True)
-class GASeeder:
-    """Seeding strategies for GA instances."""
-
-    rng: np.random.Generator
-    seed_pop_size: int
-    seed_island_strategy: str
-    seed_pop_sort: str
-    n_islands: int
-    n_pop: int
-
-    def is_valid(self) -> bool:
-        """Check if seeding is valid based on the provided seed population."""
-        if not self.seed_pop_size:
-            logger.debug("No seed population provided. Starting with a fresh population.")
-            return False
-        logger.debug("Seeding population with %d individuals from seed file.", self.seed_pop_size)
-        logger.debug("Seed pop sort: %s | Seed island strategy: %s", self.seed_pop_sort, self.seed_island_strategy)
-        return True
-
-    def get_island_seed_map(self) -> dict[int, list[int]]:
-        """Get the mapping of islands to seed indices based on the seeding strategy."""
-        if not self.is_valid():
-            return {}
-        match self.seed_island_strategy:
-            case SeedIslandStrategy.CONCENTRATED:
-                return concentrated_seeding(self.iter_seeds(), self.n_islands, self.n_pop)
-            case SeedIslandStrategy.DISTRIBUTED:
-                return distributed_seeding(self.iter_seeds(), self.n_islands)
-            case _:
-                return distributed_seeding(self.iter_seeds(), self.n_islands)
-
-    def iter_seeds(self) -> Iterator[int]:
-        """Yield indices for seeding strategies."""
-        match self.seed_pop_sort:
-            case SeedPopSort.BEST:
-                yield from np.arange(self.seed_pop_size)
-            case SeedPopSort.RANDOM:
-                yield from self.rng.permutation(self.seed_pop_size)
-            case _:
-                yield from self.rng.permutation(self.seed_pop_size)
 
 
 def load_ga(path: Path, config: TournamentConfig) -> list[Schedule]:
@@ -133,3 +57,27 @@ def save_ga(path: Path, data: GASeedData) -> None:
             pickle.dump(data, f)
     except OSError, pickle.PicklingError, EOFError:
         logger.exception("Error saving population to seed file: %s", path)
+
+
+def load_fitness_benchmark(path: Path) -> BenchmarkSeedData | None:
+    """Load benchmark data from a pickle file."""
+    logger.debug("Loading fitness benchmarks from cache: %s", path)
+    if not path.exists():
+        return None
+    try:
+        with path.open("rb") as f:
+            seed_data = pickle.load(f)
+    except OSError, EOFError, AttributeError, ModuleNotFoundError, pickle.UnpicklingError:
+        logger.debug("Failed to load fitness benchmarks from cache: %s", path)
+        return None
+    return seed_data
+
+
+def save_fitness_benchmark(path: Path, data: BenchmarkSeedData) -> None:
+    """Save benchmark data to a pickle file."""
+    try:
+        with path.open("wb") as f:
+            pickle.dump(data, f)
+        logger.info("Fitness benchmarks saved to cache: %s", path)
+    except OSError, pickle.PicklingError, EOFError:
+        logger.exception("Failed to save fitness benchmarks to cache.")

@@ -2,22 +2,23 @@
 
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
 
-from fll_scheduler_ga.domain.model import EventProperties
+if TYPE_CHECKING:
+    from fll_scheduler_ga.domain.model import EventProperties
 
 
 @dataclass(slots=True)
 class ScheduleContext:
     """Holds class-level context for Schedule instances."""
 
-    conflict_map: dict[int, set[int]] = field(default_factory=dict)
-    event_props: EventProperties = field(default_factory=EventProperties)
-    teams_list: np.ndarray = field(default_factory=lambda: np.array([]))
-    teams_roundreqs_arr: np.ndarray = field(default_factory=lambda: np.array([]))
-    empty_schedule: np.ndarray = field(default_factory=lambda: np.array([]))
+    conflict_map: dict[int, set[int]]
+    event_props: EventProperties
+    teams_list: np.ndarray
+    teams_roundreqs_arr: np.ndarray
+    empty_schedule: np.ndarray
 
 
 @dataclass(slots=True)

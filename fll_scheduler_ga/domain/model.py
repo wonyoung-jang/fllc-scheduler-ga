@@ -9,9 +9,13 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 import numpy as np
 
+from fll_scheduler_ga.constants import DATA_MODEL_VERSION, FITNESS_MODEL_VERSION
+
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from datetime import datetime, timedelta
+
+    from fll_scheduler_ga.domain.schedule import Schedule
 
 
 logger = logging.getLogger(__name__)
@@ -116,7 +120,8 @@ class TournamentRound:
     slots_empty: int
     unfilled_allowed: bool
 
-    def get_canonical_tuple(self) -> tuple[Any, ...]:
+    @property
+    def canonical_tuple(self) -> tuple[Any, ...]:
         """Return a canonical tuple representation of the configuration."""
         return (
             self.roundtype,
@@ -136,49 +141,6 @@ class TournamentRound:
             self.slots_empty,
             self.unfilled_allowed,
         )
-
-    def create_events(self, event_idx_iter: Iterator[int]) -> Iterator[Event]:
-        """Generate all possible Events for a given TournamentRound configuration.
-
-        Args:
-            event_idx_iter (Iterator[int]): An iterator to generate unique event IDs.
-
-        Yields:
-            Event: An event for the round with a time slot and a location.
-
-        """
-        for ts in self.timeslots:
-            if self.teams_per_round == 1:
-                for loc in self.locations:
-                    event = Event(
-                        idx=next(event_idx_iter),
-                        roundtype=self.roundtype,
-                        roundtype_idx=self.roundtype_idx,
-                        timeslot=ts,
-                        location=loc,
-                    )
-                    yield event
-            elif self.teams_per_round == 2:
-                event1 = Event()
-                for loc in self.locations:
-                    if loc.side == 1:
-                        event1 = Event(
-                            idx=next(event_idx_iter),
-                            roundtype=self.roundtype,
-                            roundtype_idx=self.roundtype_idx,
-                            timeslot=ts,
-                            location=loc,
-                        )
-                    elif loc.side == 2:
-                        event2 = Event(
-                            idx=next(event_idx_iter),
-                            roundtype=self.roundtype,
-                            roundtype_idx=self.roundtype_idx,
-                            timeslot=ts,
-                            location=loc,
-                        )
-                        event1.pair(event2)
-                        yield from (event1, event2)
 
 
 @dataclass(slots=True)
@@ -233,15 +195,18 @@ class TournamentConfig:
             )
         )
 
-    def get_canonical_round_tuples(self) -> tuple[tuple[Any, ...], ...]:
+    @property
+    def canonical_round_tuples(self) -> tuple[tuple[Any, ...], ...]:
         """Return canonical tuple representations of all rounds."""
-        return tuple(r.get_canonical_tuple() for r in self.rounds)
+        return tuple(r.canonical_tuple for r in self.rounds)
 
-    def get_canonical_roundreqs_tuple(self) -> tuple[tuple[str, int], ...]:
+    @property
+    def canonical_roundreqs_tuple(self) -> tuple[tuple[str, int], ...]:
         """Return canonical tuple representation of round requirements."""
         return tuple(sorted(self.roundreqs.items()))
 
-    def get_n_total_events(self) -> int:
+    @property
+    def n_total_events(self) -> int:
         """Return the total number of events possible in the tournament."""
         return sum(r.slots_total for r in self.rounds)
 
@@ -250,74 +215,157 @@ class TournamentConfig:
 class EventFactory:
     """Factory class to create Events based on TournamentRound configurations."""
 
-    config: TournamentConfig
-    events: tuple[Event, ...] = field(init=False)
-    events_idx: np.ndarray = field(init=False)
-    singles_or_side1_idx: np.ndarray = field(init=False)
-    conflict_map: dict[int, set[int]] = field(init=False)
-    mapping: dict[int, Event] = field(init=False)
-    roundtypes: dict[int, list[int]] = field(init=False)
-    timeslots: dict[tuple[int, int], list[int]] = field(init=False)
-    matches: dict[int, list[tuple[int, int]]] = field(init=False)
-
-    def __post_init__(self) -> None:
-        """Post-initialization to set up the initial state."""
-        event_idx_iter = itertools.count()
-        self.events = tuple(e for r in self.config.rounds for e in r.create_events(event_idx_iter))
-        self.events_idx = np.array([e.idx for e in self.events], dtype=int)
-        singles_or_side1 = tuple(e for e in self.events if e.paired == -1 or (e.paired != -1 and e.location.side == 1))
-        self.singles_or_side1_idx = np.array([e.idx for e in singles_or_side1], dtype=int)
-        self.timeslots = defaultdict(list)
-        self.matches = defaultdict(list)
-        self.roundtypes = defaultdict(list)
-        for e in self.events:
-            self.timeslots[(e.roundtype_idx, e.timeslot.idx)].append(e.idx)
-            self.roundtypes[e.roundtype_idx].append(e.idx)
-        for e in singles_or_side1:
-            if e.paired != -1:
-                self.matches[e.roundtype_idx].append((e.idx, e.paired))
-        n = len(self.events)
-        c_matrix = np.full((n, n), fill_value=False, dtype=bool)
-        for e1, e2 in itertools.combinations(self.events, 2):
-            if e1.timeslot.overlaps(e2.timeslot):
-                e1.conflicts.append(e2.idx)
-                e2.conflicts.append(e1.idx)
-                c_matrix[e1.idx, e2.idx] = True
-                c_matrix[e2.idx, e1.idx] = True
-        for e in self.events:
-            e.conflicts = sorted(set(e.conflicts))
-            logger.debug("%s has %d conflicts: %s", e, len(e.conflicts), e.conflicts)
-        for i in range(n):
-            c_matrix[i, i] = True  # An event conflicts with itself
-        self.mapping = {e.idx: e for e in self.events}
-        self.conflict_map = {e.idx: set(e.conflicts) for e in self.events}
+    events: tuple[Event, ...]
+    events_idx: np.ndarray
+    singles_or_side1_idx: np.ndarray
+    conflict_map: dict[int, set[int]]
+    mapping: dict[int, Event]
+    roundtypes: dict[int, list[int]]
+    timeslots: dict[tuple[int, int], list[int]]
+    matches: dict[int, list[tuple[int, int]]]
 
 
 @dataclass(slots=True)
 class EventProperties:
     """Holds properties of an event for fast access during evaluation."""
 
-    all_props: np.ndarray = field(default_factory=lambda: np.array([]))
-    roundtype: np.ndarray = field(default_factory=lambda: np.array([]))
-    roundtype_idx: np.ndarray = field(default_factory=lambda: np.array([]))
-    timeslot: np.ndarray = field(default_factory=lambda: np.array([]))
-    timeslot_idx: np.ndarray = field(default_factory=lambda: np.array([]))
-    start: np.ndarray = field(default_factory=lambda: np.array([]))
-    stop_active: np.ndarray = field(default_factory=lambda: np.array([]))
-    stop_cycle: np.ndarray = field(default_factory=lambda: np.array([]))
-    location: np.ndarray = field(default_factory=lambda: np.array([]))
-    loc_str: np.ndarray = field(default_factory=lambda: np.array([]))
-    loc_type: np.ndarray = field(default_factory=lambda: np.array([]))
-    loc_idx: np.ndarray = field(default_factory=lambda: np.array([]))
-    loc_name: np.ndarray = field(default_factory=lambda: np.array([]))
-    loc_side: np.ndarray = field(default_factory=lambda: np.array([]))
-    teams_per_round: np.ndarray = field(default_factory=lambda: np.array([]))
-    paired_idx: np.ndarray = field(default_factory=lambda: np.array([]))
+    roundtype: np.ndarray
+    roundtype_idx: np.ndarray
+    timeslot: np.ndarray
+    timeslot_idx: np.ndarray
+    start: np.ndarray
+    stop_active: np.ndarray
+    stop_cycle: np.ndarray
+    location: np.ndarray
+    loc_str: np.ndarray
+    loc_type: np.ndarray
+    loc_idx: np.ndarray
+    loc_name: np.ndarray
+    loc_side: np.ndarray
+    teams_per_round: np.ndarray
+    paired_idx: np.ndarray
 
 
-def build_event_props(n_total_events: int, event_map: dict[int, Event]) -> EventProperties:
+@dataclass(slots=True)
+class GASeedData:
+    """GA seed data object."""
+
+    config: TournamentConfig | None = None
+    population: list[Schedule] = field(default_factory=list)
+    version: int = DATA_MODEL_VERSION
+
+
+@dataclass(slots=True)
+class BenchmarkSeedData:
+    """Seed data object for fitness benchmarks."""
+
+    opponents: np.ndarray
+    best_timeslot_score: float
+    version: int = FITNESS_MODEL_VERSION
+
+    def __bool__(self) -> bool:
+        """Validate loaded benchmark data."""
+        if self.version != FITNESS_MODEL_VERSION:
+            logger.warning(
+                "Benchmark version mismatch: Expected %d, found %d. Recalculating benchmarks.",
+                FITNESS_MODEL_VERSION,
+                self.version,
+            )
+            return False
+        return True
+
+
+def generate_events_from_round(r: TournamentRound, event_idx_iter: Iterator[int]) -> Iterator[Event]:
+    """Generate all possible Events for a given TournamentRound configuration.
+
+    Args:
+        r (TournamentRound): The tournament round configuration to generate events for.
+        event_idx_iter (Iterator[int]): An iterator to generate unique event IDs.
+
+    Yields:
+        Event: An event for the round with a time slot and a location.
+
+    """
+    for ts in r.timeslots:
+        if r.teams_per_round == 1:
+            for loc in r.locations:
+                event = Event(
+                    idx=next(event_idx_iter),
+                    roundtype=r.roundtype,
+                    roundtype_idx=r.roundtype_idx,
+                    timeslot=ts,
+                    location=loc,
+                )
+                yield event
+        elif r.teams_per_round == 2:
+            event1 = Event()
+            for loc in r.locations:
+                if loc.side == 1:
+                    event1 = Event(
+                        idx=next(event_idx_iter),
+                        roundtype=r.roundtype,
+                        roundtype_idx=r.roundtype_idx,
+                        timeslot=ts,
+                        location=loc,
+                    )
+                elif loc.side == 2:
+                    event2 = Event(
+                        idx=next(event_idx_iter),
+                        roundtype=r.roundtype,
+                        roundtype_idx=r.roundtype_idx,
+                        timeslot=ts,
+                        location=loc,
+                    )
+                    event1.pair(event2)
+                    yield from (event1, event2)
+
+
+def build_event_factory(rounds: tuple[TournamentRound, ...]) -> EventFactory:
+    """Build an EventFactory from the tournament configuration."""
+    event_idx_iter = itertools.count()
+    events = tuple(e for r in rounds for e in generate_events_from_round(r, event_idx_iter))
+    events_idx = np.array([e.idx for e in events], dtype=int)
+    singles_or_side1 = tuple(e for e in events if e.paired == -1 or (e.paired != -1 and e.location.side == 1))
+    singles_or_side1_idx = np.array([e.idx for e in singles_or_side1], dtype=int)
+    timeslots = defaultdict(list)
+    matches = defaultdict(list)
+    roundtypes = defaultdict(list)
+    for e in events:
+        timeslots[(e.roundtype_idx, e.timeslot.idx)].append(e.idx)
+        roundtypes[e.roundtype_idx].append(e.idx)
+    for e in singles_or_side1:
+        if e.paired != -1:
+            matches[e.roundtype_idx].append((e.idx, e.paired))
+    n = len(events)
+    c_matrix = np.full((n, n), fill_value=False, dtype=bool)
+    for e1, e2 in itertools.combinations(events, 2):
+        if e1.timeslot.overlaps(e2.timeslot):
+            e1.conflicts.append(e2.idx)
+            e2.conflicts.append(e1.idx)
+            c_matrix[e1.idx, e2.idx] = True
+            c_matrix[e2.idx, e1.idx] = True
+    for e in events:
+        e.conflicts = sorted(set(e.conflicts))
+        logger.debug("%s has %d conflicts: %s", e, len(e.conflicts), e.conflicts)
+    for i in range(n):
+        c_matrix[i, i] = True  # An event conflicts with itself
+    mapping = {e.idx: e for e in events}
+    conflict_map = {e.idx: set(e.conflicts) for e in events}
+    return EventFactory(
+        events=events,
+        events_idx=events_idx,
+        singles_or_side1_idx=singles_or_side1_idx,
+        conflict_map=conflict_map,
+        mapping=mapping,
+        roundtypes=roundtypes,
+        timeslots=timeslots,
+        matches=matches,
+    )
+
+
+def build_event_props(event_map: dict[int, Event]) -> EventProperties:
     """Build EventProperties from an event mapping."""
-    event_prop_dtype = np.dtype(
+    ep_dtype = np.dtype(
         [
             ("roundtype", "U50"),
             ("roundtype_idx", int),
@@ -336,43 +384,37 @@ def build_event_props(n_total_events: int, event_map: dict[int, Event]) -> Event
             ("paired_idx", int),
         ]
     )
-    event_properties: np.ndarray = np.zeros(n_total_events, dtype=event_prop_dtype)
-    for i in range(n_total_events):
-        e = event_map[i]
-        event_properties[i]["roundtype"] = e.roundtype
-        event_properties[i]["roundtype_idx"] = e.roundtype_idx
-        event_properties[i]["timeslot"] = e.timeslot
-        event_properties[i]["timeslot_idx"] = e.timeslot.idx
-        event_properties[i]["start"] = int(e.timeslot.start.timestamp())
-        event_properties[i]["stop_active"] = int(e.timeslot.stop_active.timestamp())
-        event_properties[i]["stop_cycle"] = int(e.timeslot.stop_cycle.timestamp())
-        event_properties[i]["location"] = e.location
-        event_properties[i]["loc_str"] = str(e.location)
-        event_properties[i]["loc_type"] = e.location.locationtype
-        event_properties[i]["loc_idx"] = e.location.idx
-        event_properties[i]["loc_name"] = e.location.name
-        event_properties[i]["loc_side"] = e.location.side
-        event_properties[i]["teams_per_round"] = e.location.teams_per_round
-        event_properties[i]["paired_idx"] = e.paired
-    names = event_properties.dtype.names
-    names = names if isinstance(names, tuple) else ("",)
-    event_prop_labels = ", ".join(names)
-    logger.debug("\nEvent properties array:\n%s\n%s", event_prop_labels, event_properties)
+    ep: np.ndarray = np.zeros(len(event_map), dtype=ep_dtype)
+    for i, e in event_map.items():
+        ep[i]["roundtype"] = e.roundtype
+        ep[i]["roundtype_idx"] = e.roundtype_idx
+        ep[i]["timeslot"] = e.timeslot
+        ep[i]["timeslot_idx"] = e.timeslot.idx
+        ep[i]["start"] = int(e.timeslot.start.timestamp())
+        ep[i]["stop_active"] = int(e.timeslot.stop_active.timestamp())
+        ep[i]["stop_cycle"] = int(e.timeslot.stop_cycle.timestamp())
+        ep[i]["location"] = e.location
+        ep[i]["loc_str"] = str(e.location)
+        ep[i]["loc_type"] = e.location.locationtype
+        ep[i]["loc_idx"] = e.location.idx
+        ep[i]["loc_name"] = e.location.name
+        ep[i]["loc_side"] = e.location.side
+        ep[i]["teams_per_round"] = e.location.teams_per_round
+        ep[i]["paired_idx"] = e.paired
     return EventProperties(
-        all_props=event_properties,
-        roundtype=event_properties["roundtype"],
-        roundtype_idx=event_properties["roundtype_idx"],
-        timeslot=event_properties["timeslot"],
-        timeslot_idx=event_properties["timeslot_idx"],
-        start=event_properties["start"],
-        stop_active=event_properties["stop_active"],
-        stop_cycle=event_properties["stop_cycle"],
-        location=event_properties["location"],
-        loc_str=event_properties["loc_str"],
-        loc_type=event_properties["loc_type"],
-        loc_idx=event_properties["loc_idx"],
-        loc_name=event_properties["loc_name"],
-        loc_side=event_properties["loc_side"],
-        teams_per_round=event_properties["teams_per_round"],
-        paired_idx=event_properties["paired_idx"],
+        roundtype=ep["roundtype"],
+        roundtype_idx=ep["roundtype_idx"],
+        timeslot=ep["timeslot"],
+        timeslot_idx=ep["timeslot_idx"],
+        start=ep["start"],
+        stop_active=ep["stop_active"],
+        stop_cycle=ep["stop_cycle"],
+        location=ep["location"],
+        loc_str=ep["loc_str"],
+        loc_type=ep["loc_type"],
+        loc_idx=ep["loc_idx"],
+        loc_name=ep["loc_name"],
+        loc_side=ep["loc_side"],
+        teams_per_round=ep["teams_per_round"],
+        paired_idx=ep["paired_idx"],
     )
