@@ -17,9 +17,9 @@ if TYPE_CHECKING:
     from matplotlib.axes import Axes
     from matplotlib.figure import Figure
 
-    from fll_scheduler_ga.config.schemas import ExportModel
     from fll_scheduler_ga.constants import FitnessObjective
     from fll_scheduler_ga.domain.schedule import Schedule
+    from fll_scheduler_ga.domain.schema import ExportModel
 
 logger = logging.getLogger("visualize.plot")
 logging.getLogger("matplotlib").setLevel(logging.WARNING)

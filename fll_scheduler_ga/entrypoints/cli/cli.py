@@ -15,13 +15,15 @@ from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn
 from rich.table import Table
 
 from fll_scheduler_ga.adapter.exporter import generate_summary
+from fll_scheduler_ga.adapter.logger import GAFinalizer
+from fll_scheduler_ga.adapter.manager import ConfigManager
 from fll_scheduler_ga.adapter.observer import LoggingObserver, RichObserver
 from fll_scheduler_ga.adapter.plot import MatplotlibVisualizer
-from fll_scheduler_ga.config.app_config import build_app_config, log_appconfig_creation_info
-from fll_scheduler_ga.config.manager import ConfigManager
+from fll_scheduler_ga.adapter.seeder import GALoad, GASave, GASeedData, GASeeder, RuntimeStartup
 from fll_scheduler_ga.constants import LOGGING_CONFIG_PATH, FitnessObjective
+from fll_scheduler_ga.domain.schema import build_app_config, log_appconfig_creation_info
+from fll_scheduler_ga.genetic.context import build_ga_context
 from fll_scheduler_ga.genetic.ga import GA
-from fll_scheduler_ga.genetic.ga_context import build_ga_context
 from fll_scheduler_ga.genetic.stagnation import FitnessHistory, OperatorStats
 
 if TYPE_CHECKING:
@@ -182,6 +184,7 @@ def run_ga_engine(config_path: Path, progress: Progress | None = None, task_id: 
     app_config = build_app_config(config_path)
     log_appconfig_creation_info(app_config)
     context = build_ga_context(app_config)
+    RuntimeStartup(config=app_config, context=context).run()
     trackers = ("success", "total")
     crossover_counters = {str(c): 0 for c in context.crossovers}
     mutation_counters = {str(m): 0 for m in context.mutations}
@@ -206,22 +209,37 @@ def run_ga_engine(config_path: Path, progress: Progress | None = None, task_id: 
     if n_islands > 1 and migration_size > 0:
         migrate_generations[::migration_interval] = 1
     _exports = app_config.io.exports
+    seed_file = Path(app_config.runtime.seed_file)
+    tournament_config = context.tournament_config
+    pre_seed_data = GALoad(seed_file, tournament_config).load()
+    seed_pop = pre_seed_data.population if pre_seed_data else []
+    island_seed_map = GASeeder(
+        imports=context.import_model,
+        seed_pop=seed_pop,
+        rng=app_config.rng,
+        seed_island_strategy=context.seed_island_strategy,
+        n_islands=n_islands,
+        pop_size=app_config.genetic.parameters.population_size,
+    ).get_island_seed_map()
     ga = GA(
         context=context,
         genetic_model=app_config.genetic,
         rng=app_config.rng,
         observers=(LoggingObserver(),),
-        seed_file=Path(app_config.runtime.seed_file),
-        save_front_only=_exports.front_only,
         generation=generation,
         operator_stats=operator_stats,
         fitness_history=fitness_history,
         generations_array=generations_array,
         migrate_generations=migrate_generations,
+        seed_pop=seed_pop,
+        island_seed_map=island_seed_map,
     )
     if progress and task_id is not None:
         ga.observers = (*tuple(ga.observers), RichObserver(progress, task_id))
     ga.run()
+    GAFinalizer(ga).finalize()
+    post_seed_data = GASeedData(tournament_config, ga.pareto_front() if _exports.front_only else ga.total_population)
+    GASave(seed_file, post_seed_data).save()
     output_dir = Path(_exports.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     plot = MatplotlibVisualizer(

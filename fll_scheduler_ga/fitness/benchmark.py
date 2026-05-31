@@ -16,8 +16,8 @@ from fll_scheduler_ga.constants import EPSILON, FITNESS_MODEL_VERSION
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from fll_scheduler_ga.config.schemas import FitnessModel
     from fll_scheduler_ga.domain.model import EventFactory, TournamentConfig
+    from fll_scheduler_ga.domain.schema import FitnessModel
 
 logger = getLogger(__name__)
 
@@ -35,7 +35,7 @@ class FitnessBenchmark:
     opponents: np.ndarray = field(init=False)
     best_timeslot_score: float = field(init=False)
 
-    def run(self) -> None:
+    def __post_init__(self) -> None:
         """Run the fitness benchmarking process."""
         loaded_data = None
         if not self.flush_benchmarks:

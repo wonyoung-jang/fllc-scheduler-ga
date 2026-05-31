@@ -2,8 +2,8 @@
 
 import pytest
 
-from fll_scheduler_ga.config.app_config import _parse_locations
 from fll_scheduler_ga.domain.model import Location
+from fll_scheduler_ga.domain.schema import _parse_locations
 
 
 def test_location_str() -> None:

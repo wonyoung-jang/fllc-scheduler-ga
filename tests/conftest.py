@@ -6,9 +6,9 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pytest
 
-from fll_scheduler_ga.config.app_config import TIME_FORMAT_MAP, AppConfig, build_app_config, parse_time_str
 from fll_scheduler_ga.domain.model import EventFactory, EventProperties, TimeSlot, build_event_props
 from fll_scheduler_ga.domain.schedule import Schedule, ScheduleContext
+from fll_scheduler_ga.domain.schema import TIME_FORMAT_MAP, AppConfig, _parse_time_str, build_app_config
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -117,8 +117,8 @@ def empty_schedule(schedule_context: ScheduleContext) -> Schedule:
 @pytest.fixture
 def timeslot() -> TimeSlot:
     """Create a sample TimeSlot for testing."""
-    start = parse_time_str("09:00", FMT_24H)
-    stop_active = parse_time_str("09:15", FMT_24H)
-    stop_cycle = parse_time_str("10:00", FMT_24H)
+    start = _parse_time_str("09:00", FMT_24H)
+    stop_active = _parse_time_str("09:15", FMT_24H)
+    stop_cycle = _parse_time_str("10:00", FMT_24H)
     TimeSlot.time_fmt = FMT_24H
     return TimeSlot(idx=0, start=start, stop_active=stop_active, stop_cycle=stop_cycle)

@@ -3,13 +3,14 @@
 import pytest
 from pydantic import ValidationError
 
-from fll_scheduler_ga.config.app_config import _get_team_identities, _get_teams_list
-from fll_scheduler_ga.config.schemas import (
+from fll_scheduler_ga.domain.schema import (
     AggregationWeightsModel,
     FitnessModel,
     ImportModel,
     LocationWeightsModel,
     RoundModel,
+    _get_team_identities,
+    _get_teams_list,
 )
 
 

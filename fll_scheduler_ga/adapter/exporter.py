@@ -18,9 +18,9 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from fll_scheduler_ga.adapter.plot import Visualizer
-    from fll_scheduler_ga.config.schemas import ExportModel
     from fll_scheduler_ga.domain.model import EventProperties, Location, TimeSlot
     from fll_scheduler_ga.domain.schedule import Schedule
+    from fll_scheduler_ga.domain.schema import ExportModel
     from fll_scheduler_ga.genetic.ga import GA
 
 logger = getLogger(__name__)

@@ -14,8 +14,8 @@ from fll_scheduler_ga.domain.schedule import Schedule
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator
 
-    from fll_scheduler_ga.config.schemas import OperatorModel
     from fll_scheduler_ga.domain.model import EventFactory, EventProperties
+    from fll_scheduler_ga.domain.schema import OperatorModel
 
 logger = getLogger(__name__)
 

@@ -7,29 +7,14 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from fll_scheduler_ga.adapter.seed_ga import (
-    ConcentratedSeedingStrategy,
-    DistributedSeedingStrategy,
-    GALoad,
-    GASave,
-    GASeedData,
-    SeedingStrategy,
-)
-from fll_scheduler_ga.constants import SeedIslandStrategy, SeedPopSort
 from fll_scheduler_ga.genetic.island import Island, SchedulePopulation
 from fll_scheduler_ga.genetic.stagnation import FitnessHistory, OperatorStats, StagnationHandler
 
 if TYPE_CHECKING:
-    from collections import Counter
-    from collections.abc import Callable, Iterator
-    from pathlib import Path
-
     from fll_scheduler_ga.adapter.observer import GaObserver
-    from fll_scheduler_ga.config.schemas import GaParameterModel, GeneticModel, ImportModel
     from fll_scheduler_ga.domain.schedule import Schedule
-    from fll_scheduler_ga.genetic.ga_context import GaContext
-    from fll_scheduler_ga.operators.crossover import Crossover
-    from fll_scheduler_ga.operators.mutation import Mutation
+    from fll_scheduler_ga.domain.schema import GeneticModel
+    from fll_scheduler_ga.genetic.context import GaContext
 
 logger = logging.getLogger(__name__)
 
@@ -42,31 +27,23 @@ class GA:
     genetic_model: GeneticModel
     rng: np.random.Generator
     observers: tuple[GaObserver, ...]
-    seed_file: Path
-    save_front_only: bool
     generation: int
     operator_stats: OperatorStats
     fitness_history: FitnessHistory
     generations_array: np.ndarray
     migrate_generations: np.ndarray
+    seed_pop: list[Schedule] = field(default_factory=list)
+    island_seed_map: dict[int, list[int]] = field(default_factory=dict)
     total_population: list[Schedule] = field(default_factory=list)
     islands: list[Island] = field(default_factory=list)
+    start_time: float = 0.0
     _n_islands: int = field(init=False)
     _n_generations: int = field(init=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
-        params = self.genetic_model.parameters
-        self._n_islands = params.num_islands
-        self._n_generations = params.generations
-        self.initialize_islands()
-
-    def __len__(self) -> int:
-        """Return the number of individuals in the population."""
-        return sum(len(i) for i in self.islands)
-
-    def initialize_islands(self) -> None:
-        """Initialize all islands in the GA."""
+        self._n_islands = self.genetic_model.parameters.num_islands
+        self._n_generations = self.genetic_model.parameters.generations
         n_islands = self._n_islands
         for i in range(n_islands):
             island = Island(
@@ -88,16 +65,17 @@ class GA:
             )
             self.islands.append(island)
 
+    def __len__(self) -> int:
+        """Return the number of individuals in the population."""
+        return sum(len(i) for i in self.islands)
+
     def run(self) -> None:
         """Run the genetic algorithm and return the best schedule found."""
-        seed_file = self.seed_file
-        config = self.context.get_tournament_config()
         try:
-            start_time = time.time()
-            self._notify_on_start(self._n_generations)
-            seed_data = GALoad(seed_file, config).load()
-            if seed_data is not None:
-                self.seed_population(seed_data)
+            self.start_time = time.time()
+            self.notify_on_start(self._n_generations)
+            if self.seed_pop:
+                self.seed_population()
             self.initialize_population()
             if not any(i.selected for i in self.islands):
                 logger.critical("No valid schedule meeting all hard constraints was found.")
@@ -106,12 +84,8 @@ class GA:
         except KeyboardInterrupt:
             logger.exception("Genetic algorithm run interrupted by user. Saving...")
         finally:
-            GAFinalizer(self).finalize(start_time)
-            seed_ga_data = GASeedData(
-                config=config, population=self.pareto_front() if self.save_front_only else self.total_population
-            )
-            GASave(seed_file=seed_file, data=seed_ga_data).save()
-            self._notify_on_finish(self.total_population, self.pareto_front())
+            self._deduplicate_population()
+            self.notify_on_finish(self.total_population, self.pareto_front())
 
     def pareto_front(self) -> list[Schedule]:
         """Get the Pareto front for each island in the population."""
@@ -122,28 +96,13 @@ class GA:
         island_fitnesses = np.asarray([i.fitness_history.get_last_gen_fitness() for i in self.islands], dtype=float)
         return island_fitnesses.mean(axis=0)
 
-    def seed_population(self, seed_data: GASeedData) -> None:
+    def seed_population(self) -> None:
         """Seed the population for each island."""
-        seed_strategy_map: dict[str, type[SeedingStrategy]] = {
-            SeedIslandStrategy.DISTRIBUTED: DistributedSeedingStrategy,
-            SeedIslandStrategy.CONCENTRATED: ConcentratedSeedingStrategy,
-        }
-        seed_strategy = seed_strategy_map.get(self.context.get_seed_island_strategy(), DistributedSeedingStrategy)
-        seeder = GASeeder(
-            strategy=seed_strategy(),
-            imports=self.context.get_imports_model(),
-            ga_params=self.genetic_model.parameters,
-            seed_pop=seed_data.population,
-            rng=self.rng,
-        )
-        if not seeder.is_valid():
-            return
-        island_to_seed_idx = seeder.get_island_seeds()
-        for i, seed_indices in island_to_seed_idx.items():
-            island = self.islands[i]
-            for idx in seed_indices:
-                if island.add_to_population(seed_data.population[idx]):
-                    island.population.add(seed_data.population[idx].schedule)
+        for ii, s_idx in self.island_seed_map.items():
+            island = self.islands[ii]
+            for si in s_idx:
+                if island.add_to_population(self.seed_pop[si]):
+                    island.population.add(self.seed_pop[si].schedule)
 
     def initialize_population(self) -> None:
         """Initialize the population for each island."""
@@ -162,7 +121,7 @@ class GA:
             self.fitness_history.current = self.aggregate_island_fitness()
             self.fitness_history.update_fitness_history()
             self.generation += 1
-            self._notify_on_generation_end(
+            self.notify_on_generation_end(
                 generation=gen,
                 num_generations=self._n_generations,
                 best_fitness=self.fitness_history.get_last_gen_fitness(),
@@ -177,84 +136,12 @@ class GA:
             migrants = src.give_migrants()
             dest.receive_migrants(migrants)
 
-    def _notify_on_start(self, num_generations: int) -> None:
-        """Notify observers when the genetic algorithm run starts."""
-        for obs in self.observers:
-            obs.on_start(num_generations)
-
-    def _notify_on_generation_end(
-        self, generation: int, num_generations: int, best_fitness: np.ndarray, pop_size: int
-    ) -> None:
-        """Notify observers at the end of a generation."""
-        for obs in self.observers:
-            obs.on_generation_end(generation, num_generations, best_fitness, pop_size)
-
-    def _notify_on_finish(self, pop: list[Schedule], pareto_front: list[Schedule]) -> None:
-        """Notify observers when the genetic algorithm run is finished."""
-        for obs in self.observers:
-            obs.on_finish(pop, pareto_front)
-
-
-@dataclass(slots=True)
-class GASeeder:
-    """Seeding strategies for GA instances."""
-
-    strategy: SeedingStrategy
-    imports: ImportModel
-    ga_params: GaParameterModel
-    seed_pop: list[Schedule] | None
-    rng: np.random.Generator
-
-    def is_valid(self) -> bool:
-        """Check if seeding is valid based on the provided seed population."""
-        if not self.seed_pop or self.seed_pop is None:
-            logger.debug("No seed population provided. Starting with a fresh population.")
-            return False
-        logger.debug("Seeding population with %d individuals from seed file.", len(self.seed_pop))
-        logger.debug(
-            "Seed pop sort: %s | Seed island strategy: %s",
-            self.imports.seed_pop_sort,
-            self.imports.seed_island_strategy,
-        )
-        return True
-
-    def get_island_seeds(self) -> dict[int, list[int]]:
-        """Get seed indices for each island."""
-        seed_indices = self._iter_seeds()
-        n_islands = self.ga_params.num_islands
-        n_pop = self.ga_params.population_size
-        return self.strategy.get_indices(seed_indices, n_islands, n_pop)
-
-    def _iter_seeds(self) -> Iterator[int]:
-        """Yield indices for seeding strategies."""
-        iter_fn_map: dict[str, Callable] = {SeedPopSort.RANDOM: self.rng.permutation, SeedPopSort.BEST: np.arange}
-        iter_fn = iter_fn_map.get(self.imports.seed_pop_sort, self.rng.permutation)
-        if isinstance(self.seed_pop, list):
-            yield from iter_fn(len(self.seed_pop))
-
-
-@dataclass(slots=True)
-class GAFinalizer:
-    """Finalizer for GA instances."""
-
-    ga: GA
-
-    def finalize(self, start_time: float) -> None:
-        """Aggregate islands and run a final selection to produce the final population."""
-        self._deduplicate_population()
-        self._log_operators(name="crossover", ratios=self.ga.operator_stats.crossover, ops=self.ga.context.crossovers)
-        self._log_operators(name="mutation", ratios=self.ga.operator_stats.mutation, ops=self.ga.context.mutations)
-        self._log_aggregate_stats(self.ga.operator_stats)
-        for island in self.ga.islands:
-            logger.debug("Island %d Fitness: %.2f", island.identity, sum(island.fitness_history.get_last_gen_fitness()))
-        logger.debug("Total time taken: %.2f seconds", time.time() - start_time)
-
     def _deduplicate_population(self) -> None:
         """Remove duplicate individuals from the population."""
-        unique_pop = [ind for island in self.ga.islands for ind in island.selected]
-        pop_array = np.asarray([s.schedule for island in self.ga.islands for s in island.selected])
-        schedule_fitness, team_fitnesses = self.ga.context.evaluate(pop_array)
-        _, flat, ranks = self.ga.context.select_nsga3(schedule_fitness, len(unique_pop))
+        unique_pop = [ind for island in self.islands for ind in island.selected]
+        pop_array = np.asarray([s.schedule for island in self.islands for s in island.selected])
+        schedule_fitness, team_fitnesses = self.context.evaluate(pop_array)
+        _, flat, ranks = self.context.select_nsga3(schedule_fitness, len(unique_pop))
         selected = {}
         for rank, idx in zip(ranks, flat, strict=True):
             idx: int
@@ -263,36 +150,21 @@ class GAFinalizer:
             sch.team_fitnesses = team_fitnesses[idx]
             sch.rank = rank
             selected[hash(sch)] = sch
-        self.ga.total_population = sorted(selected.values(), key=lambda s: (s.rank, -s.fitness.sum()))
+        self.total_population = sorted(selected.values(), key=lambda s: (s.rank, -s.fitness.sum()))
 
-    @staticmethod
-    def _log_operators(name: str, ratios: dict[str, Counter], ops: tuple[Crossover | Mutation, ...]) -> None:
-        """Log statistics for crossover and mutation operators."""
-        if not (op_strings := [f"{op!s}" for op in ops]):
-            return
-        log = f"{name.capitalize()} statistics:"
-        max_len = max(len(s) for s in op_strings) + 1
-        for op in op_strings:
-            success = ratios.get("success", {}).get(op, 0)
-            total = ratios.get("total", {}).get(op, 0)
-            rate = success / total if total > 0 else 0.0
-            log += f"\n  {op:<{max_len}}: {success}/{total} ({rate:.2%})"
-        logger.debug(log)
+    def notify_on_start(self, num_generations: int) -> None:
+        """Notify observers when the genetic algorithm run starts."""
+        for obs in self.observers:
+            obs.on_start(num_generations)
 
-    def _log_aggregate_stats(self, operator_stats: OperatorStats) -> None:
-        """Log aggregate statistics across all islands."""
-        final_log = f"{'=' * 20}\nFinal statistics"
-        crs_suc, crs_tot, crs_rte = operator_stats.get_crossover_stats()
-        mut_suc, mut_tot, mut_rte = operator_stats.get_mutation_stats()
-        off_suc, off_tot, off_rte = operator_stats.get_offspring_stats()
-        unique_inds = len(self.ga.total_population)
-        total_inds = len(self.ga)
-        unique_rte = f"{unique_inds / total_inds if total_inds > 0 else 0.0:.2%}"
-        final_log += (
-            f"\n  Total islands          : {len(self.ga.islands)}"
-            f"\n  Unique individuals     : {unique_inds}/{total_inds} ({unique_rte})"
-            f"\n  Crossover success rate : {crs_suc}/{crs_tot} ({crs_rte})"
-            f"\n  Mutation success rate  : {mut_suc}/{mut_tot} ({mut_rte})"
-            f"\n  Offspring success rate : {off_suc}/{off_tot} ({off_rte})"
-        )
-        logger.debug(final_log)
+    def notify_on_generation_end(
+        self, generation: int, num_generations: int, best_fitness: np.ndarray, pop_size: int
+    ) -> None:
+        """Notify observers at the end of a generation."""
+        for obs in self.observers:
+            obs.on_generation_end(generation, num_generations, best_fitness, pop_size)
+
+    def notify_on_finish(self, pop: list[Schedule], pareto_front: list[Schedule]) -> None:
+        """Notify observers when the genetic algorithm run is finished."""
+        for obs in self.observers:
+            obs.on_finish(pop, pareto_front)
