@@ -38,12 +38,12 @@ class GA:
     islands: list[Island] = field(default_factory=list)
     start_time: float = 0.0
     _n_islands: int = field(init=False)
-    _n_generations: int = field(init=False)
+    _ngen: int = field(init=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
         self._n_islands = self.genetic_model.parameters.num_islands
-        self._n_generations = self.genetic_model.parameters.generations
+        self._ngen = self.genetic_model.parameters.generations
         n_islands = self._n_islands
         for i in range(n_islands):
             island = Island(
@@ -69,44 +69,46 @@ class GA:
         """Return the number of individuals in the population."""
         return sum(len(i) for i in self.islands)
 
+    @property
+    def pareto_front(self) -> list[Schedule]:
+        """Get the Pareto front for each island in the population."""
+        return [p for p in self.total_population if p.rank == 0]
+
+    @property
+    def avg_island_fit(self) -> np.ndarray:
+        """Calculate the average fitness of the current generation."""
+        return np.asarray([i.fitness_history.get_last_gen_fitness() for i in self.islands], dtype=float).mean(axis=0)
+
     def run(self) -> None:
         """Run the genetic algorithm and return the best schedule found."""
         try:
             self.start_time = time.time()
-            self.notify_on_start(self._n_generations)
-            if self.seed_pop:
-                self.seed_population()
+            self.notify_on_start(self._ngen)
+            logger.debug("Seeding population...")
+            self.seed_population()
+            logger.debug("Initializing population...")
             self.initialize_population()
             if not any(i.selected for i in self.islands):
-                logger.critical("No valid schedule meeting all hard constraints was found.")
-                return
+                msg = "No valid schedule meeting all hard constraints was found."
+                raise ValueError(msg)
             self.run_epochs()
         except KeyboardInterrupt:
             logger.exception("Genetic algorithm run interrupted by user. Saving...")
         finally:
             self._deduplicate_population()
-            self.notify_on_finish(self.total_population, self.pareto_front())
-
-    def pareto_front(self) -> list[Schedule]:
-        """Get the Pareto front for each island in the population."""
-        return [p for p in self.total_population if p.rank == 0]
-
-    def aggregate_island_fitness(self) -> np.ndarray:
-        """Calculate the average fitness of the current generation."""
-        island_fitnesses = np.asarray([i.fitness_history.get_last_gen_fitness() for i in self.islands], dtype=float)
-        return island_fitnesses.mean(axis=0)
+            self.notify_on_finish(self.total_population, self.pareto_front)
 
     def seed_population(self) -> None:
         """Seed the population for each island."""
-        for ii, s_idx in self.island_seed_map.items():
-            island = self.islands[ii]
-            for si in s_idx:
-                if island.add_to_population(self.seed_pop[si]):
-                    island.population.add(self.seed_pop[si].schedule)
+        if self.seed_pop:
+            for ii, s_idx in self.island_seed_map.items():
+                island = self.islands[ii]
+                for si in s_idx:
+                    if island.add_to_population(self.seed_pop[si]):
+                        island.population.add(self.seed_pop[si].schedule)
 
     def initialize_population(self) -> None:
         """Initialize the population for each island."""
-        logger.debug("Initializing %d islands...", self._n_islands)
         for island in self.islands:
             island.initialize()
 
@@ -118,14 +120,11 @@ class GA:
             # Run the generations
             for island in self.islands:
                 island.run_epoch()
-            self.fitness_history.current = self.aggregate_island_fitness()
+            self.fitness_history.current = self.avg_island_fit
             self.fitness_history.update_fitness_history()
             self.generation += 1
             self.notify_on_generation_end(
-                generation=gen,
-                num_generations=self._n_generations,
-                best_fitness=self.fitness_history.get_last_gen_fitness(),
-                pop_size=len(self),
+                gen=gen, ngen=self._ngen, best_fit=self.fitness_history.get_last_gen_fitness(), npop=len(self)
             )
 
     def migrate(self) -> None:
@@ -152,17 +151,15 @@ class GA:
             selected[hash(sch)] = sch
         self.total_population = sorted(selected.values(), key=lambda s: (s.rank, -s.fitness.sum()))
 
-    def notify_on_start(self, num_generations: int) -> None:
+    def notify_on_start(self, ngen: int) -> None:
         """Notify observers when the genetic algorithm run starts."""
         for obs in self.observers:
-            obs.on_start(num_generations)
+            obs.on_start(ngen)
 
-    def notify_on_generation_end(
-        self, generation: int, num_generations: int, best_fitness: np.ndarray, pop_size: int
-    ) -> None:
+    def notify_on_generation_end(self, gen: int, ngen: int, best_fit: np.ndarray, npop: int) -> None:
         """Notify observers at the end of a generation."""
         for obs in self.observers:
-            obs.on_generation_end(generation, num_generations, best_fitness, pop_size)
+            obs.on_generation_end(gen, ngen, best_fit, npop)
 
     def notify_on_finish(self, pop: list[Schedule], pareto_front: list[Schedule]) -> None:
         """Notify observers when the genetic algorithm run is finished."""

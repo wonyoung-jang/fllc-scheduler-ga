@@ -116,7 +116,7 @@ def run() -> None:
             ga = run_ga_engine(active_config_path, progress=progress, task_id=task)
             duration = time.perf_counter() - start_time
             best_fitness = sum(ga.fitness_history.get_last_gen_fitness())
-            pareto_size = len(ga.pareto_front())
+            pareto_size = len(ga.pareto_front)
             console.print("[bold green]Run Complete![/bold green]")
             console.print(f"Duration: {duration:.2f}s")
             console.print(f"Best Fitness: {best_fitness:.4f}")
@@ -154,7 +154,7 @@ def batch(count: int = typer.Argument(..., min=1, help="Number of times to run t
                 ga = run_ga_engine(path, progress=progress, task_id=run_task)
                 duration = time.perf_counter() - start_t
                 best_fitness = sum(ga.fitness_history.get_last_gen_fitness())
-                pareto_size = len(ga.pareto_front())
+                pareto_size = len(ga.pareto_front)
                 results.append({"run": i + 1, "fitness": best_fitness, "pareto": pareto_size, "time": duration})
             except (OSError, ValueError, RuntimeError) as e:
                 console.print(f"[red]Run {i + 1} failed: {e}[/red]")
@@ -238,7 +238,7 @@ def run_ga_engine(config_path: Path, progress: Progress | None = None, task_id: 
         ga.observers = (*tuple(ga.observers), RichObserver(progress, task_id))
     ga.run()
     GAFinalizer(ga).finalize()
-    post_seed_data = GASeedData(tournament_config, ga.pareto_front() if _exports.front_only else ga.total_population)
+    post_seed_data = GASeedData(tournament_config, ga.pareto_front if _exports.front_only else ga.total_population)
     GASave(seed_file, post_seed_data).save()
     output_dir = Path(_exports.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)

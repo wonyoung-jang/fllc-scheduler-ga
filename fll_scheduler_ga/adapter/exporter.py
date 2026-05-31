@@ -226,7 +226,7 @@ def generate_summary(ga: GA, output_dir: Path, export_model: ExportModel, plot: 
     total_pop = ga.total_population
     if not export_model.no_plotting and total_pop:
         plot.plot()
-    schedules = ga.pareto_front() if export_model.front_only else total_pop
+    schedules = ga.pareto_front if export_model.front_only else total_pop
     schedules.sort(key=lambda s: (s.rank, -sum(s.fitness)))
     time_fmt = ga.context.app_config.tournament.time_fmt
     event_properties = ga.context.event_properties

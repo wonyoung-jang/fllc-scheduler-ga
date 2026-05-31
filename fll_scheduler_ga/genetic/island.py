@@ -63,15 +63,13 @@ class Island:
 
     def __post_init__(self) -> None:
         """Post-initialization to set up stagnation handler and mutation count."""
-        ctx = self.context
-        self._n_mutations = len(ctx.mutations)
-        self._n_crossovers = len(ctx.crossovers)
-        params = self.genetic_model.parameters
-        self._n_pop = params.population_size
-        self._n_offspring = params.offspring_size
-        self._n_migration = params.migration_size
-        self._chance_crossover = params.crossover_chance
-        self._chance_mutation = params.mutation_chance
+        self._n_mutations = len(self.context.mutations)
+        self._n_crossovers = len(self.context.crossovers)
+        self._n_pop = self.genetic_model.parameters.population_size
+        self._n_offspring = self.genetic_model.parameters.offspring_size
+        self._n_migration = self.genetic_model.parameters.migration_size
+        self._chance_crossover = self.genetic_model.parameters.crossover_chance
+        self._chance_mutation = self.genetic_model.parameters.mutation_chance
 
     def __len__(self) -> int:
         """Return the number of individuals in the island's population."""
