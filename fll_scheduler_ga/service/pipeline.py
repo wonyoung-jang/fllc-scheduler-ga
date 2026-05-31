@@ -15,8 +15,7 @@ from fll_scheduler_ga.adapter.plot import MatplotlibVisualizer
 from fll_scheduler_ga.adapter.schema import GaParameterModel, build_app_config, log_appconfig_creation_info
 from fll_scheduler_ga.adapter.seeder import GASeedData, GASeeder, load_ga, save_ga
 from fll_scheduler_ga.genetic.context import build_ga_context
-from fll_scheduler_ga.genetic.ga import GA
-from fll_scheduler_ga.genetic.stagnation import FitnessHistory, OperatorStats
+from fll_scheduler_ga.genetic.ga import GA, FitnessHistory, OperatorStats
 
 if TYPE_CHECKING:
     from rich.progress import Progress, TaskID
