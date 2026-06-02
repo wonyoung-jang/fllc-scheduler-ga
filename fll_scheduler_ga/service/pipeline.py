@@ -7,6 +7,7 @@ import logging
 import math
 import pprint as pp
 import shutil
+import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -55,7 +56,7 @@ from fll_scheduler_ga.domain.model import (
 )
 from fll_scheduler_ga.genetic.context import GaContext, ScheduleBuilderRandom
 from fll_scheduler_ga.genetic.fitness import FitnessBenchmarkBreaktime, FitnessBenchmarkOpponent, FitnessEvaluator
-from fll_scheduler_ga.genetic.ga import GA, FitnessHistory, OperatorStats
+from fll_scheduler_ga.genetic.ga import GA, FitnessHistory, Island, OperatorStats, StagnationHandler
 from fll_scheduler_ga.genetic.operator import (
     NSGA3,
     NonDominatedSorting,
@@ -719,19 +720,40 @@ def run_ga_engine(config_path: Path, progress: Progress | None = None, task_id: 
     _import_schedule(cfg, ctx)
     seed_file = Path(cfg.runtime.seed_file).resolve()
     seed_pop = load_ga(seed_file, cfg.tournament)
+    operator_stats = OperatorStats(Counter(), _get_tracker(ctx.crossovers), _get_tracker(ctx.mutations))
+    fitness_history = FitnessHistory(
+        generation=0,
+        current=np.zeros((1, ctx.evaluator.n_objectives), dtype=float),
+        history=np.full((cfg.genetic.parameters.generations, ctx.evaluator.n_objectives), fill_value=-1, dtype=float),
+    )
+    islands = [
+        Island(
+            identity=i,
+            context=ctx,
+            n_pop=cfg.genetic.parameters.population_size,
+            n_offspring=cfg.genetic.parameters.offspring_size,
+            n_migration=cfg.genetic.parameters.migration_size,
+            chance_crossover=cfg.genetic.parameters.crossover_chance,
+            chance_mutation=cfg.genetic.parameters.mutation_chance,
+            rng=cfg.rng,
+            operator_stats=operator_stats,
+            fitness_history=fitness_history.copy(),
+            stagnation=StagnationHandler(
+                enabled=cfg.genetic.stagnation.enable,
+                threshold=cfg.genetic.stagnation.threshold,
+                proportion=cfg.genetic.stagnation.proportion,
+                cooldown=cfg.genetic.stagnation.cooldown,
+            ),
+        )
+        for i in range(cfg.genetic.parameters.num_islands)
+    ]
     ga = GA(
         context=ctx,
-        genetic_model=cfg.genetic,
-        rng=cfg.rng,
+        n_island=cfg.genetic.parameters.num_islands,
+        n_generation=cfg.genetic.parameters.generations,
         observers=_get_observers(progress, task_id),
-        operator_stats=OperatorStats(Counter(), _get_tracker(ctx.crossovers), _get_tracker(ctx.mutations)),
-        fitness_history=FitnessHistory(
-            generation=0,
-            current=np.zeros((1, ctx.evaluator.n_objectives), dtype=float),
-            history=np.full(
-                (cfg.genetic.parameters.generations, ctx.evaluator.n_objectives), fill_value=-1, dtype=float
-            ),
-        ),
+        operator_stats=operator_stats,
+        fitness_history=fitness_history,
         generations_array=np.arange(1, cfg.genetic.parameters.generations + 1),
         migrate_generations=_get_migration_generations(cfg.genetic.parameters),
         seed_pop=seed_pop,
@@ -743,6 +765,8 @@ def run_ga_engine(config_path: Path, progress: Progress | None = None, task_id: 
             cfg.genetic.parameters.num_islands,
             cfg.genetic.parameters.population_size,
         ).get_island_seed_map(),
+        islands=islands,
+        start_time=time.perf_counter(),
     )
     ga.run()
     _finalize_ga_results(cfg, ctx, seed_file, ga)

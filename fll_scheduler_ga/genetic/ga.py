@@ -1,7 +1,6 @@
 """Genetic algorithm for FLL Scheduler GA."""
 
 import logging
-import time
 from collections import Counter
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -12,7 +11,6 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from fll_scheduler_ga.adapter.monitoring import GaObserver
-    from fll_scheduler_ga.adapter.schema import GaParameterModel, GeneticModel
     from fll_scheduler_ga.domain.model import Schedule
     from fll_scheduler_ga.genetic.context import GaContext
     from fll_scheduler_ga.genetic.operator import Crossover, Mutation
@@ -25,38 +23,18 @@ class GA:
     """Genetic algorithm for the FLL Scheduler GA."""
 
     context: GaContext
-    genetic_model: GeneticModel
-    rng: np.random.Generator
+    n_island: int
+    n_generation: int
     observers: tuple[GaObserver, ...]
     operator_stats: OperatorStats
     fitness_history: FitnessHistory
     generations_array: np.ndarray
     migrate_generations: np.ndarray
-    seed_pop: list[Schedule] = field(default_factory=list)
-    island_seed_map: dict[int, list[int]] = field(default_factory=dict)
+    seed_pop: list[Schedule]
+    island_seed_map: dict[int, list[int]]
+    islands: list[Island]
+    start_time: float
     total_population: list[Schedule] = field(default_factory=list)
-    islands: list[Island] = field(default_factory=list)
-    start_time: float = 0.0
-
-    def __post_init__(self) -> None:
-        """Post-initialization to set up the initial state."""
-        for i in range(self.genetic_model.parameters.num_islands):
-            self.islands.append(
-                Island(
-                    identity=i,
-                    context=self.context,
-                    ga_param=self.genetic_model.parameters,
-                    rng=self.rng,
-                    operator_stats=self.operator_stats,
-                    fitness_history=self.fitness_history.copy(),
-                    stagnation=StagnationHandler(
-                        enabled=self.genetic_model.stagnation.enable,
-                        threshold=self.genetic_model.stagnation.threshold,
-                        proportion=self.genetic_model.stagnation.proportion,
-                        cooldown=self.genetic_model.stagnation.cooldown,
-                    ),
-                )
-            )
 
     def __len__(self) -> int:
         """Return the number of individuals in the population."""
@@ -75,7 +53,6 @@ class GA:
     def run(self) -> None:
         """Run the genetic algorithm and return the best schedule found."""
         try:
-            self.start_time = time.perf_counter()
             self.notify_on_start()
             logger.debug("Seeding population...")
             self.seed_population()
@@ -119,9 +96,8 @@ class GA:
 
     def migrate(self) -> None:
         """Migrate the best individuals between islands using a ring topology."""
-        n = self.genetic_model.parameters.num_islands
         for i, dest in enumerate(self.islands):
-            src = self.islands[(i + 1) % n]
+            src = self.islands[(i + 1) % self.n_island]
             migrants = src.give_migrants()
             dest.receive_migrants(migrants)
 
@@ -144,14 +120,12 @@ class GA:
     def notify_on_start(self) -> None:
         """Notify observers when the genetic algorithm run starts."""
         for obs in self.observers:
-            obs.on_start(self.genetic_model.parameters.generations)
+            obs.on_start(self.n_generation)
 
     def notify_on_generation_end(self, gen: int) -> None:
         """Notify observers at the end of a generation."""
         for obs in self.observers:
-            obs.on_generation_end(
-                gen, self.genetic_model.parameters.generations, self.fitness_history.get_last_gen_fitness(), len(self)
-            )
+            obs.on_generation_end(gen, self.n_generation, self.fitness_history.get_last_gen_fitness(), len(self))
 
     def notify_on_finish(self) -> None:
         """Notify observers when the genetic algorithm run is finished."""
@@ -166,7 +140,11 @@ class Island:
     identity: int
     context: GaContext
     rng: np.random.Generator
-    ga_param: GaParameterModel
+    n_pop: int
+    n_offspring: int
+    n_migration: int
+    chance_crossover: float
+    chance_mutation: float
     operator_stats: OperatorStats
     fitness_history: FitnessHistory
     stagnation: StagnationHandler
@@ -182,7 +160,7 @@ class Island:
     @property
     def n_needed(self) -> int:
         """Return the number of individuals needed to fill the population."""
-        return self.ga_param.population_size - len(self)
+        return self.n_pop - len(self)
 
     def initialize(self) -> None:
         """Initialize the population for each island."""
@@ -286,19 +264,19 @@ class Island:
         if not (pop := self.selected):
             return
         created_cycle = 0
-        while created_cycle < self.ga_param.offspring_size:
+        while created_cycle < self.n_offspring:
             parents_indices = self.context.select_parents(n=len(pop), k=2)
             parents: Iterator[Schedule] = (pop[i] for i in parents_indices)
-            c_roll = self.ga_param.crossover_chance > self.rng.random()
+            c_roll = self.chance_crossover > self.rng.random()
             if c_roll and len(self.context.crossovers) > 0:
                 offspring = self._crossover_parents(parents)
             else:
                 offspring = (p.clone() for p in parents)
             for child in offspring:
-                if created_cycle >= self.ga_param.offspring_size:
+                if created_cycle >= self.n_offspring:
                     break
                 if len(self.context.mutations) > 0:
-                    m_roll = not c_roll or self.ga_param.mutation_chance > self.rng.random()
+                    m_roll = not c_roll or self.chance_mutation > self.rng.random()
                     if m_roll:
                         self._mutate_child(child)
                 if self.add_to_population(child):
@@ -310,12 +288,11 @@ class Island:
 
     def _select_next_generation(self) -> None:
         """Select the next generation using NSGA-III principles."""
-        n_pop = self.ga_param.population_size
         schedule_fits, _ = self.context.evaluate(self.population)
-        if schedule_fits.shape[0] != n_pop:
-            _, flat, _ = self.context.select_nsga3(schedule_fits, n_pop)
+        if schedule_fits.shape[0] != self.n_pop:
+            _, flat, _ = self.context.select_nsga3(schedule_fits, self.n_pop)
         else:
-            flat = np.arange(n_pop)
+            flat = np.arange(self.n_pop)
         self.fitness_history.current = schedule_fits[flat].mean(axis=0)
         total_pop: list[Schedule] = self.selected
         self.selected = []
@@ -326,7 +303,7 @@ class Island:
 
     def give_migrants(self) -> Iterator[Schedule]:
         """Randomly yield migrants from population."""
-        for _ in range(self.ga_param.migration_size):
+        for _ in range(self.n_migration):
             i = self.rng.integers(low=0, high=len(self.selected))
             self.population = np.delete(self.population, i, axis=0)
             yield self.selected.pop(i)
