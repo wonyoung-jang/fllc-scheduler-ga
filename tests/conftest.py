@@ -6,15 +6,15 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pytest
 
-from fll_scheduler_ga.adapter.schema import TIME_FORMAT_MAP, AppConfig, _parse_time_str, build_app_config
-from fll_scheduler_ga.domain.model import (
-    EventFactory,
-    EventProperties,
-    TimeSlot,
-    build_event_factory,
-    build_event_props,
+from fll_scheduler_ga.adapter.schema import (
+    TIME_FORMAT_MAP,
+    AppConfig,
+    _parse_time_str,
+    build_app_config,
+    build_app_config_model,
 )
-from fll_scheduler_ga.domain.schedule import Schedule, ScheduleContext
+from fll_scheduler_ga.domain.model import EventProperties, EventRepository, Schedule, ScheduleContext, TimeSlot
+from fll_scheduler_ga.service.pipeline import build_evt_prop, build_evt_repo
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -75,7 +75,8 @@ def app_config(minimal_config_dict: dict[str, Any], tmp_path: Path) -> AppConfig
     config_file = tmp_path / "config.json"
     with config_file.open("w") as f:
         json.dump(minimal_config_dict, f)
-    return build_app_config(config_file)
+    m = build_app_config_model(config_file)
+    return build_app_config(m)
 
 
 @pytest.fixture
@@ -85,28 +86,28 @@ def tournament_config(app_config: AppConfig) -> TournamentConfig:
 
 
 @pytest.fixture
-def event_factory(tournament_config: TournamentConfig) -> EventFactory:
-    """Return an EventFactory."""
-    return build_event_factory(tournament_config.rounds)
+def evt_repo(tournament_config: TournamentConfig) -> EventRepository:
+    """Return an EventRepository."""
+    return build_evt_repo(tournament_config.rounds)
 
 
 @pytest.fixture
-def event_properties(event_factory: EventFactory) -> EventProperties:
+def evt_prop(evt_repo: EventRepository) -> EventProperties:
     """Return EventProperties."""
-    return build_event_props(event_factory.mapping)
+    return build_evt_prop(evt_repo.mapping)
 
 
 @pytest.fixture
 def schedule_context(
-    tournament_config: TournamentConfig, event_factory: EventFactory, event_properties: EventProperties
+    tournament_config: TournamentConfig, evt_repo: EventRepository, evt_prop: EventProperties
 ) -> ScheduleContext:
     """Initialize ScheduleContext."""
     n_total = tournament_config.n_total_events
     roundreqs_array = np.tile(tuple(tournament_config.roundreqs.values()), (tournament_config.num_teams, 1))
     empty_schedule = np.full(n_total, -1, dtype=int)
     return ScheduleContext(
-        conflict_map=event_factory.conflict_map,
-        event_props=event_properties,
+        conflict_map=evt_repo.conflict_map,
+        event_props=evt_prop,
         teams_list=np.arange(tournament_config.num_teams, dtype=int),
         teams_roundreqs_arr=roundreqs_array,
         empty_schedule=empty_schedule,

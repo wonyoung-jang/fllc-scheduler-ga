@@ -1,6 +1,5 @@
 """Base class for fitness evaluators."""
 
-import hashlib
 import itertools
 from collections import Counter
 from dataclasses import dataclass, field
@@ -12,8 +11,7 @@ import numpy as np
 from fll_scheduler_ga.constants import EPSILON, FitnessObjective
 
 if TYPE_CHECKING:
-    from fll_scheduler_ga.adapter.schema import FitnessModel
-    from fll_scheduler_ga.domain.model import EventFactory, EventProperties, TournamentConfig
+    from fll_scheduler_ga.domain.model import EventProperties, EventRepository, TournamentConfig
 
 
 logger = getLogger(__name__)
@@ -26,9 +24,16 @@ class FitnessEvaluator:
     # Configurations
     config: TournamentConfig
     event_properties: EventProperties
-    model: FitnessModel
     benchmark_opponents: np.ndarray
     benchmark_best_timeslot_score: float
+    loc_weight_rounds_inter: float
+    loc_weight_rounds_intra: float
+    agg_weights: tuple[float, ...]
+    min_fitness_weight: float
+    obj_weights: np.ndarray
+    minbreak_target: int
+    minbreak_penalty: float
+    zeros_penalty: float
     # Globals
     max_int: int = np.iinfo(np.int64).max
     n_objectives: int = len(tuple(FitnessObjective))
@@ -41,22 +46,6 @@ class FitnessEvaluator:
     single_roundtypes: np.ndarray = field(init=False)
     match_roundtypes: np.ndarray = field(init=False)
     rt_array: np.ndarray = field(init=False)
-    # EventProperties
-    _start: np.ndarray = field(init=False)
-    _stop_active: np.ndarray = field(init=False)
-    _stop_cycle: np.ndarray = field(init=False)
-    _loc_idx: np.ndarray = field(init=False)
-    _paired_idx: np.ndarray = field(init=False)
-    _roundtype_idx: np.ndarray = field(init=False)
-    # FitnessModel
-    loc_weight_rounds_inter: float = field(init=False)
-    loc_weight_rounds_intra: float = field(init=False)
-    agg_weights: tuple[float, ...] = field(init=False)
-    obj_weights: np.ndarray = field(init=False)
-    min_fitness_weight: float = field(init=False)
-    minbreak_target: int = field(init=False)
-    minbreak_penalty: float = field(init=False)
-    zeros_penalty: float = field(init=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the configuration."""
@@ -72,24 +61,6 @@ class FitnessEvaluator:
         self.rt_array = np.full(max_rt_idx + 1, -1, dtype=int)
         for i, rt in enumerate(self.match_roundtypes):
             self.rt_array[rt] = i
-        # Initialize from EventProperties
-        _ep = self.event_properties
-        self._start = _ep.start
-        self._stop_active = _ep.stop_active
-        self._stop_cycle = _ep.stop_cycle
-        self._loc_idx = _ep.loc_idx
-        self._paired_idx = _ep.paired_idx
-        self._roundtype_idx = _ep.roundtype_idx
-        # Initialize from FitnessModel
-        inter, intra = self.model.location_weights.get_weights_tuple()
-        self.loc_weight_rounds_inter = inter
-        self.loc_weight_rounds_intra = intra
-        self.agg_weights = self.model.aggregation.get_weights_tuple()
-        self.min_fitness_weight = self.model.aggregation.min_fit
-        self.obj_weights = np.array(self.model.objectives.get_weights_tuple(), dtype=float)
-        self.minbreak_target = self.model.penalties.minbreak_target
-        self.minbreak_penalty = self.model.penalties.minbreak
-        self.zeros_penalty = self.model.penalties.zeros
 
     def evaluate(self, arr: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Evaluate an entire population of schedules.
@@ -299,12 +270,12 @@ class FitnessEvaluator:
 
         """
         return (
-            self._start[team_events],
-            self._stop_active[team_events],
-            self._stop_cycle[team_events],
-            self._loc_idx[team_events],
-            self._paired_idx[team_events],
-            self._roundtype_idx[team_events],
+            self.event_properties.start[team_events],
+            self.event_properties.stop_active[team_events],
+            self.event_properties.stop_cycle[team_events],
+            self.event_properties.loc_idx[team_events],
+            self.event_properties.paired_idx[team_events],
+            self.event_properties.roundtype_idx[team_events],
         )
 
     def _aggregate_team_scores(self, team_fitnesses: np.ndarray, team_axis: int) -> np.ndarray:
@@ -334,26 +305,12 @@ class FitnessEvaluator:
         return schedule_fitnesses * self.obj_weights
 
 
-def generate_stable_config_hash(config: TournamentConfig, model: FitnessModel) -> int:
-    """Generate a stable hash for a given tournament configuration."""
-    representation = (
-        config.canonical_round_tuples,
-        config.canonical_roundreqs_tuple,
-        model.penalties.minbreak_target,
-        model.penalties.minbreak,
-        model.penalties.zeros,
-        config.num_teams,
-    )
-    # Using hashlib over built-in hash for stability
-    return int(hashlib.sha256(str(representation).encode()).hexdigest(), 16)
-
-
 @dataclass(slots=True)
 class FitnessBenchmarkOpponent:
     """Benchmark for opponent variety fitness."""
 
     config: TournamentConfig
-    event_factory: EventFactory
+    event_repo: EventRepository
 
     def benchmark(self) -> np.ndarray:
         """Run the opponent variety fitness benchmarking."""
@@ -364,7 +321,7 @@ class FitnessBenchmarkOpponent:
         non_matches_required = 0
         round_str_to_idx = {r.roundtype: r.roundtype_idx for r in self.config.rounds}
         round_idx_to_rt = {v: k for k, v in round_str_to_idx.items()}
-        for rt, events in self.event_factory.roundtypes.items():
+        for rt, events in self.event_repo.roundtypes.items():
             rti_to_rt = round_idx_to_rt[rt]
             roundreq = self.config.roundreqs[rti_to_rt]
             round_to_tpr = self.config.round_idx_to_tpr[rt]
@@ -405,8 +362,9 @@ class FitnessBenchmarkBreaktime:
     """Benchmark for break time consistency fitness."""
 
     config: TournamentConfig
-    event_factory: EventFactory
-    model: FitnessModel
+    minbreak_target: int
+    minbreak: float
+    zeros: float
 
     def benchmark(self) -> float:
         """Run the break time consistency fitness benchmarking."""
@@ -502,19 +460,17 @@ class FitnessBenchmarkBreaktime:
         std_dev: np.ndarray = np.sqrt(variance)
         coeff = std_dev / mean_break
         ratio = 1 / (1 + coeff)
-        minbreak_count = (breaks_active_minutes < self.model.penalties.minbreak_target).sum(axis=1)
-        where_breaks_lt_target = (breaks_active_minutes < self.model.penalties.minbreak_target) & (
-            breaks_active_minutes > 0
-        )
+        minbreak_count = (breaks_active_minutes < self.minbreak_target).sum(axis=1)
+        where_breaks_lt_target = (breaks_active_minutes < self.minbreak_target) & (breaks_active_minutes > 0)
         max_diff_breaktimes = np.zeros_like(minbreak_count)
         if where_breaks_lt_target.any():
-            diffs = self.model.penalties.minbreak_target - breaks_active_minutes
+            diffs = self.minbreak_target - breaks_active_minutes
             diffs[~where_breaks_lt_target] = 0.0
-            max_diff_breaktimes = diffs.max(axis=1) / self.model.penalties.minbreak_target
+            max_diff_breaktimes = diffs.max(axis=1) / self.minbreak_target
         minbreak_exp = minbreak_count + max_diff_breaktimes
-        minbreak_penalty = self.model.penalties.minbreak**minbreak_exp
+        minbreak_penalty = self.minbreak**minbreak_exp
         zeros_count = (breaks_cycle_minutes == 0).sum(axis=1)
-        zeros_penalty = self.model.penalties.zeros**zeros_count
+        zeros_penalty = self.zeros**zeros_count
         final_scores = ratio * zeros_penalty * minbreak_penalty
         final_scores[mean_break_zero_mask] = 0.0
         final_scores[overlap_mask] = 0.0

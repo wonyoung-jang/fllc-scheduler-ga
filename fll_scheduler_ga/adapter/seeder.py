@@ -9,8 +9,7 @@ from fll_scheduler_ga.constants import DATA_MODEL_VERSION
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from fll_scheduler_ga.domain.model import BenchmarkSeedData, GASeedData, TournamentConfig
-    from fll_scheduler_ga.domain.schedule import Schedule
+    from fll_scheduler_ga.domain.model import BenchmarkSeedData, GASeedData, Schedule, TournamentConfig
 
 logger = getLogger(__name__)
 

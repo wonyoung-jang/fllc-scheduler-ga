@@ -4,15 +4,14 @@ from dataclasses import dataclass
 from logging import getLogger
 from typing import TYPE_CHECKING
 
-from fll_scheduler_ga.domain.schedule import Schedule
+from fll_scheduler_ga.domain.model import Schedule
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     import numpy as np
 
-    from fll_scheduler_ga.adapter.schema import AppConfig
-    from fll_scheduler_ga.domain.model import EventFactory, EventProperties, TournamentConfig
+    from fll_scheduler_ga.domain.model import EventProperties, EventRepository
     from fll_scheduler_ga.genetic.fitness import FitnessEvaluator
     from fll_scheduler_ga.genetic.operator import NSGA3, Crossover, Mutation, Repairer, Selection
 
@@ -64,8 +63,7 @@ class ScheduleBuilderRandom:
 class GaContext:
     """Hold static context for the genetic algorithm."""
 
-    app_config: AppConfig
-    event_factory: EventFactory
+    event_repo: EventRepository
     event_properties: EventProperties
     evaluator: FitnessEvaluator
     checker: Callable[[Schedule], bool]
@@ -99,18 +97,3 @@ class GaContext:
     def select_nsga3(self, fits: np.ndarray, n_select: int) -> tuple[tuple[np.ndarray, ...], np.ndarray, np.ndarray]:
         """Select individuals using NSGA-III."""
         return self.nsga3.select(fits, n_select)
-
-    @property
-    def tournament_config(self) -> TournamentConfig:
-        """Get the tournament configuration from the app config."""
-        return self.app_config.tournament
-
-    @property
-    def seed_pop_sort(self) -> str:
-        """Get the seed population sort strategy from the app config."""
-        return self.app_config.io.imports.seed_pop_sort
-
-    @property
-    def seed_island_strategy(self) -> str:
-        """Get the seed island strategy from the app config."""
-        return self.app_config.io.imports.seed_island_strategy

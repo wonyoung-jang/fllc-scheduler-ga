@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
     from fll_scheduler_ga.adapter.monitoring import GaObserver
     from fll_scheduler_ga.adapter.schema import GaParameterModel, GeneticModel
-    from fll_scheduler_ga.domain.schedule import Schedule
+    from fll_scheduler_ga.domain.model import Schedule
     from fll_scheduler_ga.genetic.context import GaContext
     from fll_scheduler_ga.genetic.operator import Crossover, Mutation
 
@@ -156,7 +156,7 @@ class GA:
     def notify_on_finish(self) -> None:
         """Notify observers when the genetic algorithm run is finished."""
         for obs in self.observers:
-            obs.on_finish(self.total_population, self.pareto_front)
+            obs.on_finish(len(self.total_population), len(self.pareto_front))
 
 
 @dataclass(slots=True)

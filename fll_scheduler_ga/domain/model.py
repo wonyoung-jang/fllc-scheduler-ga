@@ -1,7 +1,6 @@
 """Dataclass models for application configuration."""
 
 import datetime as dt
-import itertools
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -12,16 +11,150 @@ import numpy as np
 from fll_scheduler_ga.constants import DATA_MODEL_VERSION, FITNESS_MODEL_VERSION
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
     from datetime import datetime, timedelta
-
-    from fll_scheduler_ga.domain.schedule import Schedule
 
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_DT = dt.datetime.min.replace(tzinfo=dt.UTC)
 ASCII_OFFSET = 64
+
+
+@dataclass(slots=True)
+class ScheduleContext:
+    """Holds class-level context for Schedule instances."""
+
+    conflict_map: dict[int, set[int]]
+    event_props: EventProperties
+    teams_list: np.ndarray
+    teams_roundreqs_arr: np.ndarray
+    empty_schedule: np.ndarray
+
+
+@dataclass(slots=True)
+class Schedule:
+    """Represents a schedule (individual) with its associated fitness score."""
+
+    schedule: np.ndarray = field(default_factory=lambda: np.array([]))
+    fitness: np.ndarray = field(default_factory=lambda: np.array([]))
+    team_fitnesses: np.ndarray = field(default_factory=lambda: np.array([]))
+    rank: int = -1
+    origin: str = "Builder"
+    mutations: int = 0
+    clones: int = 0
+    _hash: int | None = None
+    team_events: dict[int, set[int]] = field(default_factory=lambda: defaultdict(set))
+    team_rounds: np.ndarray = field(default_factory=lambda: np.array([]))
+    # Class variables
+    ctx: ClassVar[ScheduleContext]
+
+    def __post_init__(self) -> None:
+        """Post-initialization to set up fitness array."""
+        if self.schedule.size == 0:
+            self.schedule = Schedule.ctx.empty_schedule.copy()
+        if self.team_rounds.size == 0:
+            self.team_rounds = Schedule.ctx.teams_roundreqs_arr.copy()
+
+    def __len__(self) -> int | np.signedinteger:
+        """Return the number of scheduled events."""
+        return np.count_nonzero(self.schedule >= 0)
+
+    def get_size(self) -> int | np.signedinteger:
+        """Return the number of scheduled events."""
+        return self.__len__()
+
+    def __eq__(self, other: object) -> bool:
+        """Two Schedules are equal if they assign the same teams to the same events."""
+        return hash(self) == hash(other)
+
+    def __hash__(self) -> int:
+        """Hash is based on the frozenset of (event_id, team_id) pairs."""
+        if self._hash is None:
+            self._hash = hash(frozenset(frozenset(events) for events in self.team_events.values()))
+        return self._hash
+
+    def clone(self) -> Schedule:
+        """Create a deep copy of the schedule."""
+        return Schedule(
+            schedule=self.schedule.copy(),
+            fitness=self.fitness.copy(),
+            team_fitnesses=self.team_fitnesses.copy(),
+            rank=self.rank,
+            origin=self.origin,
+            mutations=self.mutations,
+            clones=self.clones + 1,
+            _hash=self._hash,
+            team_events={k: v.copy() for k, v in self.team_events.items()},
+            team_rounds=self.team_rounds.copy(),
+        )
+
+    def swap_assignment(self, team: int, old_event: int, new_event: int) -> None:
+        """Switch an event for a team in the schedule."""
+        if team == -1:
+            return
+        self.unassign(team, old_event)
+        self.assign(team, new_event)
+
+    def assign(self, team: int, event: int) -> None:
+        """Add an event to a team's scheduled events."""
+        if team == -1:
+            return
+        roundtype = Schedule.ctx.event_props.roundtype_idx[event]
+        self.team_events[team].add(event)
+        self.team_rounds[team, roundtype] -= 1
+        self.schedule[event] = team
+        self._hash = None
+
+    def unassign(self, team: int, event: int) -> None:
+        """Remove an event from a team's scheduled events."""
+        if team == -1:
+            return
+        roundtype = Schedule.ctx.event_props.roundtype_idx[event]
+        self.team_events[team].remove(event)
+        self.team_rounds[team, roundtype] += 1
+        self.schedule[event] = -1
+        self._hash = None
+
+    def needs_round(self, team: int, roundtype: int) -> bool:
+        """Check if a team still needs to participate in a given round type."""
+        return self.team_rounds[team, roundtype] > 0
+
+    def all_rounds_needed(self, roundtype: int) -> np.ndarray:
+        """Return all teams that still need roundtype."""
+        return (self.team_rounds[:, roundtype] > 0).nonzero()[0]
+
+    def any_rounds_needed(self) -> bool:
+        """Check if any team still needs rounds."""
+        return self.team_rounds.sum() > 0
+
+    def conflicts(self, team: int, new_event: int, *, ignore: int | None = None) -> bool:
+        """Check if adding a new event would cause a time conflict.
+
+        Args:
+            team (int): The team to check for conflicts.
+            new_event (int): The new event to check for conflicts.
+            ignore (int): An event to ignore when checking for conflicts.
+
+        Returns:
+            bool: True if there is a conflict, False otherwise.
+
+        """
+        if team == -1:
+            return False
+        events_to_check = self.team_events[team]
+        if ignore is not None and ignore in events_to_check:
+            events_to_check = events_to_check - {ignore}
+        if new_event in events_to_check:
+            return True
+        return not events_to_check.isdisjoint(Schedule.ctx.conflict_map[new_event])
+
+    def scheduled_events(self) -> np.ndarray:
+        """Return the indices of scheduled events."""
+        return (self.schedule >= 0).nonzero()[0]
+
+    def unscheduled_events(self) -> np.ndarray:
+        """Return the indices of unscheduled events."""
+        return (self.schedule == -1).nonzero()[0]
 
 
 @dataclass(slots=True, frozen=True)
@@ -123,23 +256,9 @@ class TournamentRound:
     @property
     def canonical_tuple(self) -> tuple[Any, ...]:
         """Return a canonical tuple representation of the configuration."""
-        return (
-            self.roundtype,
-            self.roundtype_idx,
-            self.rounds_per_team,
-            self.teams_per_round,
-            frozenset(self.times),
-            self.start_time,
-            self.stop_time,
-            self.duration_minutes,
-            self.location_type,
-            frozenset(self.locations),
-            self.num_timeslots,
-            frozenset(self.timeslots),
-            self.slots_total,
-            self.slots_required,
-            self.slots_empty,
-            self.unfilled_allowed,
+        return tuple(
+            getattr(self, s) if not isinstance(getattr(self, s), tuple) else frozenset(getattr(self, s))
+            for s in self.__slots__
         )
 
 
@@ -159,40 +278,11 @@ class TournamentConfig:
     all_timeslots: tuple[TimeSlot, ...]
     is_interleaved: bool
 
-    def __eq__(self, other: object) -> bool:
-        """Check equality between two TournamentConfig instances."""
-        if not isinstance(other, TournamentConfig):
-            return NotImplemented
-        return (
-            self.num_teams == other.num_teams
-            and self.time_fmt == other.time_fmt
-            and self.rounds == other.rounds
-            and self.roundreqs == other.roundreqs
-            and self.round_idx_to_tpr == other.round_idx_to_tpr
-            and self.total_slots_required == other.total_slots_required
-            and self.unique_opponents_possible == other.unique_opponents_possible
-            and self.all_locations == other.all_locations
-            and self.all_timeslots == other.all_timeslots
-            and self.max_events_per_team == other.max_events_per_team
-            and self.is_interleaved == other.is_interleaved
-        )
-
     def __hash__(self) -> int:
         """Return hash of TournamentConfig."""
         return hash(
-            (
-                self.num_teams,
-                self.time_fmt,
-                self.rounds,
-                tuple(sorted(self.roundreqs.items())),
-                tuple(sorted(self.round_idx_to_tpr.items())),
-                self.total_slots_required,
-                self.unique_opponents_possible,
-                self.max_events_per_team,
-                self.all_locations,
-                self.all_timeslots,
-                self.is_interleaved,
-            )
+            getattr(self, s) if not isinstance(getattr(self, s), dict) else tuple(sorted(getattr(self, s).items()))
+            for s in self.__slots__
         )
 
     @property
@@ -212,8 +302,8 @@ class TournamentConfig:
 
 
 @dataclass(slots=True)
-class EventFactory:
-    """Factory class to create Events based on TournamentRound configurations."""
+class EventRepository:
+    """Class to hold event-related data."""
 
     events: tuple[Event, ...]
     events_idx: np.ndarray
@@ -273,148 +363,3 @@ class BenchmarkSeedData:
             )
             return False
         return True
-
-
-def generate_events_from_round(r: TournamentRound, event_idx_iter: Iterator[int]) -> Iterator[Event]:
-    """Generate all possible Events for a given TournamentRound configuration.
-
-    Args:
-        r (TournamentRound): The tournament round configuration to generate events for.
-        event_idx_iter (Iterator[int]): An iterator to generate unique event IDs.
-
-    Yields:
-        Event: An event for the round with a time slot and a location.
-
-    """
-    for ts in r.timeslots:
-        if r.teams_per_round == 1:
-            for loc in r.locations:
-                event = Event(
-                    idx=next(event_idx_iter),
-                    roundtype=r.roundtype,
-                    roundtype_idx=r.roundtype_idx,
-                    timeslot=ts,
-                    location=loc,
-                )
-                yield event
-        elif r.teams_per_round == 2:
-            event1 = Event()
-            for loc in r.locations:
-                if loc.side == 1:
-                    event1 = Event(
-                        idx=next(event_idx_iter),
-                        roundtype=r.roundtype,
-                        roundtype_idx=r.roundtype_idx,
-                        timeslot=ts,
-                        location=loc,
-                    )
-                elif loc.side == 2:
-                    event2 = Event(
-                        idx=next(event_idx_iter),
-                        roundtype=r.roundtype,
-                        roundtype_idx=r.roundtype_idx,
-                        timeslot=ts,
-                        location=loc,
-                    )
-                    event1.pair(event2)
-                    yield from (event1, event2)
-
-
-def build_event_factory(rounds: tuple[TournamentRound, ...]) -> EventFactory:
-    """Build an EventFactory from the tournament configuration."""
-    event_idx_iter = itertools.count()
-    events = tuple(e for r in rounds for e in generate_events_from_round(r, event_idx_iter))
-    events_idx = np.array([e.idx for e in events], dtype=int)
-    singles_or_side1 = tuple(e for e in events if e.paired == -1 or (e.paired != -1 and e.location.side == 1))
-    singles_or_side1_idx = np.array([e.idx for e in singles_or_side1], dtype=int)
-    timeslots = defaultdict(list)
-    matches = defaultdict(list)
-    roundtypes = defaultdict(list)
-    for e in events:
-        timeslots[(e.roundtype_idx, e.timeslot.idx)].append(e.idx)
-        roundtypes[e.roundtype_idx].append(e.idx)
-    for e in singles_or_side1:
-        if e.paired != -1:
-            matches[e.roundtype_idx].append((e.idx, e.paired))
-    n = len(events)
-    c_matrix = np.full((n, n), fill_value=False, dtype=bool)
-    for e1, e2 in itertools.combinations(events, 2):
-        if e1.timeslot.overlaps(e2.timeslot):
-            e1.conflicts.append(e2.idx)
-            e2.conflicts.append(e1.idx)
-            c_matrix[e1.idx, e2.idx] = True
-            c_matrix[e2.idx, e1.idx] = True
-    for e in events:
-        e.conflicts = sorted(set(e.conflicts))
-        logger.debug("%s has %d conflicts: %s", e, len(e.conflicts), e.conflicts)
-    for i in range(n):
-        c_matrix[i, i] = True  # An event conflicts with itself
-    mapping = {e.idx: e for e in events}
-    conflict_map = {e.idx: set(e.conflicts) for e in events}
-    return EventFactory(
-        events=events,
-        events_idx=events_idx,
-        singles_or_side1_idx=singles_or_side1_idx,
-        conflict_map=conflict_map,
-        mapping=mapping,
-        roundtypes=roundtypes,
-        timeslots=timeslots,
-        matches=matches,
-    )
-
-
-def build_event_props(event_map: dict[int, Event]) -> EventProperties:
-    """Build EventProperties from an event mapping."""
-    ep_dtype = np.dtype(
-        [
-            ("roundtype", "U50"),
-            ("roundtype_idx", int),
-            ("timeslot", object),
-            ("timeslot_idx", int),
-            ("start", int),
-            ("stop_active", int),
-            ("stop_cycle", int),
-            ("location", object),
-            ("loc_str", "U50"),
-            ("loc_type", "U50"),
-            ("loc_idx", int),
-            ("loc_name", int),
-            ("loc_side", int),
-            ("teams_per_round", int),
-            ("paired_idx", int),
-        ]
-    )
-    ep: np.ndarray = np.zeros(len(event_map), dtype=ep_dtype)
-    for i, e in event_map.items():
-        ep[i]["roundtype"] = e.roundtype
-        ep[i]["roundtype_idx"] = e.roundtype_idx
-        ep[i]["timeslot"] = e.timeslot
-        ep[i]["timeslot_idx"] = e.timeslot.idx
-        ep[i]["start"] = int(e.timeslot.start.timestamp())
-        ep[i]["stop_active"] = int(e.timeslot.stop_active.timestamp())
-        ep[i]["stop_cycle"] = int(e.timeslot.stop_cycle.timestamp())
-        ep[i]["location"] = e.location
-        ep[i]["loc_str"] = str(e.location)
-        ep[i]["loc_type"] = e.location.locationtype
-        ep[i]["loc_idx"] = e.location.idx
-        ep[i]["loc_name"] = e.location.name
-        ep[i]["loc_side"] = e.location.side
-        ep[i]["teams_per_round"] = e.location.teams_per_round
-        ep[i]["paired_idx"] = e.paired
-    return EventProperties(
-        roundtype=ep["roundtype"],
-        roundtype_idx=ep["roundtype_idx"],
-        timeslot=ep["timeslot"],
-        timeslot_idx=ep["timeslot_idx"],
-        start=ep["start"],
-        stop_active=ep["stop_active"],
-        stop_cycle=ep["stop_cycle"],
-        location=ep["location"],
-        loc_str=ep["loc_str"],
-        loc_type=ep["loc_type"],
-        loc_idx=ep["loc_idx"],
-        loc_name=ep["loc_name"],
-        loc_side=ep["loc_side"],
-        teams_per_round=ep["teams_per_round"],
-        paired_idx=ep["paired_idx"],
-    )

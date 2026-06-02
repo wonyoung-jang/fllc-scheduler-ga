@@ -12,7 +12,6 @@ if TYPE_CHECKING:
     import numpy as np
     from rich.progress import Progress, TaskID
 
-    from fll_scheduler_ga.domain.schedule import Schedule
     from fll_scheduler_ga.genetic.ga import GA
     from fll_scheduler_ga.genetic.operator import Crossover, Mutation
 
@@ -23,40 +22,37 @@ class GaObserver(ABC):
     """Abstract base class for observers in the FLL Scheduler GA."""
 
     @abstractmethod
-    def on_start(self, num_generations: int) -> None: ...
+    def on_start(self, n_generations: int) -> None: ...
     @abstractmethod
-    def on_generation_end(
-        self, generation: int, num_generations: int, best_fitness: np.ndarray, pop_size: int
-    ) -> None: ...
+    def on_generation_end(self, generation: int, n_generations: int, best_fitness: np.ndarray, npop: int) -> None: ...
     @abstractmethod
-    def on_finish(self, pop: list[Schedule], front: list[Schedule]) -> None: ...
+    def on_finish(self, npop: int, nfront: int) -> None: ...
 
 
 class LoggingObserver(GaObserver):
     """Observer that logs generation and best fitness information."""
 
-    def on_start(self, num_generations: int) -> None:
+    def on_start(self, n_generations: int) -> None:
         """Log the start of the genetic algorithm run."""
-        logger.debug("Starting genetic algorithm run for %d generations.", num_generations)
+        logger.debug("Starting genetic algorithm run for %d generations.", n_generations)
 
-    def on_generation_end(self, generation: int, num_generations: int, best_fitness: np.ndarray, pop_size: int) -> None:
+    def on_generation_end(self, generation: int, n_generations: int, best_fitness: np.ndarray, npop: int) -> None:
         """Log the end of a generation with population size and best fitness."""
-        fitness_str = "N/A"
+        fit_str = "N/A"
         if best_fitness.any():
-            fitness_str = ", ".join([f"{s:.2f}" for s in best_fitness])
-            fitness_str += f" | Σ={sum(best_fitness):.2f} ({sum(best_fitness) / len(best_fitness):.1%})"
-        logger.debug("Fitness %s | Pop: %d | Generation %d/%d", fitness_str, pop_size, generation, num_generations)
+            sum_best_fit = best_fitness.sum()
+            fit_str = ", ".join([f"{s:.2f}" for s in best_fitness])
+            fit_str += f" | Σ={sum_best_fit:.2f} ({sum_best_fit / best_fitness.shape[0]:.1%})"
+        logger.debug("Fitness %s | Pop: %d | Generation %d/%d", fit_str, npop, generation, n_generations)
 
-    def on_finish(self, pop: list[Schedule], front: list[Schedule]) -> None:
+    def on_finish(self, npop: int, nfront: int) -> None:
         """Log the completion of the genetic algorithm run."""
         logger.debug("Genetic algorithm run completed.")
-        if not pop:
+        if not npop:
             logger.warning("No valid schedule was found after all generations.")
             return
-        len_front = len(front)
-        len_pop = len(pop)
-        front_portion = len_front / len_pop * 100 if len_pop > 0 else 0.0
-        logger.debug("Final pareto front size: %d/%d (%.2f%%)", len_front, len_pop, front_portion)
+        front_portion = nfront / npop * 100 if npop > 0 else 0.0
+        logger.debug("Final pareto front size: %d/%d (%.2f%%)", nfront, npop, front_portion)
 
 
 @dataclass(slots=True)
@@ -66,26 +62,25 @@ class RichObserver(GaObserver):
     progress: Progress
     task_id: TaskID
 
-    def on_start(self, num_generations: int) -> None:
+    def on_start(self, n_generations: int) -> None:
         """Initialize progress task."""
-        self.progress.update(task_id=self.task_id, total=num_generations, description="[cyan]Starting...[/cyan]")
+        self.progress.update(task_id=self.task_id, total=n_generations, description="[cyan]Starting...[/cyan]")
 
-    def on_generation_end(self, generation: int, num_generations: int, best_fitness: np.ndarray, pop_size: int) -> None:
+    def on_generation_end(self, generation: int, n_generations: int, best_fitness: np.ndarray, npop: int) -> None:
         """Update progress task at generation end."""
+        fit_str = "N/A"
         if best_fitness.any():
             sum_best_fit = best_fitness.sum()
             fit_str = ", ".join([f"{s:.3f}" for s in best_fitness])
             fit_str += f" | Σ={sum_best_fit:.3f} ({sum_best_fit / best_fitness.shape[0]:.2%})"
-        else:
-            fit_str = "N/A"
         self.progress.update(
             self.task_id,
-            total=num_generations,
+            total=n_generations,
             completed=generation,
-            description=f"[cyan]Pop: {pop_size}[/cyan] | [green]Fitness: {fit_str}[/green]",
+            description=f"[cyan]Pop: {npop}[/cyan] | [green]Fitness: {fit_str}[/green]",
         )
 
-    def on_finish(self, pop: list[Schedule], front: list[Schedule]) -> None:
+    def on_finish(self, npop: int, nfront: int) -> None:
         """Finalize progress task."""
 
 

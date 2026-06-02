@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from fll_scheduler_ga.domain.model import Event
 
 if TYPE_CHECKING:
-    from fll_scheduler_ga.domain.model import EventFactory, EventProperties, TimeSlot
+    from fll_scheduler_ga.domain.model import EventProperties, EventRepository, TimeSlot
 
 
 def test_event_str(timeslot: TimeSlot) -> None:
@@ -14,14 +14,14 @@ def test_event_str(timeslot: TimeSlot) -> None:
     assert str(event) == f"0, Null, {event.location!s}, {event.timeslot!s}"
 
 
-def test_event_factory_and_properties(event_factory: EventFactory, event_properties: EventProperties) -> None:
-    """Test EventFactory and EventProperties."""
-    events = event_factory.events
+def test_event_factory_and_properties(evt_repo: EventRepository, evt_prop: EventProperties) -> None:
+    """Test EventRepository and EventProperties."""
+    events = evt_repo.events
     assert len(events) > 0
-    assert event_factory.events_idx.size == len(events)
+    assert evt_repo.events_idx.size == len(events)
     # Check conflicts
-    conf_map = event_factory.conflict_map
+    conf_map = evt_repo.conflict_map
     assert isinstance(conf_map, dict)
     # Properties
-    ep = event_properties
+    ep = evt_prop
     assert ep.timeslot_idx[0] == events[0].timeslot.idx

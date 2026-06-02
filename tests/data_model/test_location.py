@@ -1,8 +1,6 @@
 """Unit tests for Location."""
 
-import pytest
-
-from fll_scheduler_ga.adapter.schema import _parse_locations
+from fll_scheduler_ga.adapter.schema import parse_locations
 from fll_scheduler_ga.domain.model import Location
 
 
@@ -38,5 +36,4 @@ def test_null_location() -> None:
 
 def test_location_models_parser_empty() -> None:
     """Test LocationModelsParser with no location models."""
-    with pytest.raises(ValueError, match=r"No locations defined in the configuration file."):
-        _parse_locations(models=())
+    assert parse_locations(location_model=()) == ()

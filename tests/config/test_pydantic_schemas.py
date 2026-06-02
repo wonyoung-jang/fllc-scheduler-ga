@@ -10,7 +10,7 @@ from fll_scheduler_ga.adapter.schema import (
     LocationWeightsModel,
     RoundModel,
     _get_team_identities,
-    _get_teams_list,
+    parse_teams,
 )
 
 
@@ -36,7 +36,7 @@ def test_schemas_validation() -> None:
         )  # Active > Cycle
     # Teams
     teams = 5
-    teams_list = _get_teams_list(teams)
+    teams_list = parse_teams(teams)
     assert len(teams_list) == 5
     ids = _get_team_identities(teams_list)
     assert ids[1] == "1"

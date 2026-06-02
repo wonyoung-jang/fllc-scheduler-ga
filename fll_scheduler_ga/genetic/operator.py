@@ -12,13 +12,12 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from fll_scheduler_ga.constants import EPSILON, CrossoverOp, MutationOp, SelectionOp
-from fll_scheduler_ga.domain.schedule import Schedule
+from fll_scheduler_ga.domain.model import Schedule
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator
 
-    from fll_scheduler_ga.adapter.schema import OperatorModel
-    from fll_scheduler_ga.domain.model import EventFactory, EventProperties, TournamentConfig
+    from fll_scheduler_ga.domain.model import EventProperties, EventRepository, TournamentConfig
 
 logger = getLogger(__name__)
 
@@ -265,10 +264,14 @@ class RandomSelect(Selection):
 ###  Crossover
 ########################################################################
 def build_crossovers(
-    rng: np.random.Generator, operators: OperatorModel, event_factory: EventFactory, event_properties: EventProperties
+    rng: np.random.Generator,
+    crossover_types: tuple[str, ...],
+    crossover_ks: tuple[int, ...],
+    evt_repo: EventRepository,
+    evt_prop: EventProperties,
 ) -> tuple[Crossover, ...]:
     """Build and return a tuple of crossover operators based on the configuration."""
-    if not (crossover_types := operators.crossover.types):
+    if not crossover_types:
         logger.warning("No crossover types enabled in the configuration. Crossover will not occur.")
         return ()
     crossover_factory: dict[str, Callable] = {
@@ -279,7 +282,7 @@ def build_crossovers(
         CrossoverOp.TIMESLOT_CROSSOVER: TimeSlotCrossover,
         CrossoverOp.LOCATION_CROSSOVER: LocationCrossover,
     }
-    params = {"event_factory": event_factory, "event_properties": event_properties, "rng": rng}
+    params = {"evt_repo": evt_repo, "evt_prop": evt_prop, "rng": rng}
 
     def _generate_crossovers() -> Iterator[Crossover]:
         for crossover_name in crossover_types:
@@ -287,7 +290,7 @@ def build_crossovers(
                 msg = f"Unknown crossover type in config: {crossover_name}"
                 raise ValueError(msg)
             if crossover_name == CrossoverOp.K_POINT:
-                if crossover_ks := operators.crossover.k_vals:
+                if crossover_ks:
                     for k in crossover_ks:
                         if k <= 0:
                             msg = f"Invalid crossover k value: {k}. Must be greater than 0."
@@ -303,15 +306,15 @@ def build_crossovers(
 class Crossover(ABC):
     """Abstract base class for crossover operators in the FLL Scheduler GA."""
 
-    event_factory: EventFactory
-    event_properties: EventProperties
+    evt_repo: EventRepository
+    evt_prop: EventProperties
     rng: np.random.Generator
     events: np.ndarray = field(init=False)
     n_evts: int = field(init=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the crossover operator."""
-        self.events = self.event_factory.singles_or_side1_idx
+        self.events = self.evt_repo.singles_or_side1_idx
         self.n_evts = self.events.shape[0]
 
     @abstractmethod
@@ -326,7 +329,7 @@ class Crossover(ABC):
 
     def assign_from_p1(self, child: Schedule, p1: np.ndarray, p1_genes: np.ndarray) -> None:
         """Assign genes."""
-        p1_gene_pairs = self.event_properties.paired_idx[p1_genes]
+        p1_gene_pairs = self.evt_prop.paired_idx[p1_genes]
         for e1, e2 in zip(p1_genes, p1_gene_pairs, strict=True):
             t1 = p1[e1]
             if e2 == -1:
@@ -338,8 +341,8 @@ class Crossover(ABC):
 
     def assign_from_p2(self, child: Schedule, p2: np.ndarray, p2_genes: np.ndarray) -> None:
         """Assign genes."""
-        p2_genes_pairs = self.event_properties.paired_idx[p2_genes]
-        p2_genes_rt = self.event_properties.roundtype_idx[p2_genes]
+        p2_genes_pairs = self.evt_prop.paired_idx[p2_genes]
+        p2_genes_rt = self.evt_prop.roundtype_idx[p2_genes]
         for e1, e2, rt in zip(p2_genes, p2_genes_pairs, p2_genes_rt, strict=True):
             t1 = p2[e1]
             if t1 == -1 or not child.needs_round(t1, rt) or child.conflicts(t1, e1):
@@ -480,7 +483,7 @@ class RoundTypeCrossover(StructureCrossover):
 
     def _get_group_keys(self) -> np.ndarray:
         """Get all group keys for the events."""
-        return self.event_properties.roundtype_idx[self.events]
+        return self.evt_prop.roundtype_idx[self.events]
 
 
 class TimeSlotCrossover(StructureCrossover):
@@ -491,7 +494,7 @@ class TimeSlotCrossover(StructureCrossover):
 
     def _get_group_keys(self) -> np.ndarray:
         """Get all group keys for the events."""
-        return self.event_properties.timeslot_idx[self.events]
+        return self.evt_prop.timeslot_idx[self.events]
 
 
 class LocationCrossover(StructureCrossover):
@@ -502,7 +505,7 @@ class LocationCrossover(StructureCrossover):
 
     def _get_group_keys(self) -> np.ndarray:
         """Get all group keys for the events."""
-        return self.event_properties.loc_idx[self.events]
+        return self.evt_prop.loc_idx[self.events]
 
 
 ########################################################################
@@ -512,10 +515,10 @@ type Match = tuple[int, int, int, int]
 
 
 def build_mutations(
-    rng: np.random.Generator, operators: OperatorModel, event_factory: EventFactory, event_properties: EventProperties
+    rng: np.random.Generator, mutation_types: tuple[str, ...], evt_repo: EventRepository, evt_prop: EventProperties
 ) -> tuple[Mutation, ...]:
     """Build and return a tuple of mutation operators based on the configuration."""
-    if not (mutation_types := operators.mutation.types):
+    if not mutation_types:
         logger.warning("No mutation types enabled in the configuration. Mutation will not occur.")
         return ()
     mutation_factory: dict[str, Callable[[dict], Mutation]] = {
@@ -537,7 +540,7 @@ def build_mutations(
         MutationOp.INVERSION: lambda p: InversionMutation(**p),
         MutationOp.SCRAMBLE: lambda p: ScrambleMutation(**p),
     }
-    params = {"rng": rng, "event_factory": event_factory, "event_properties": event_properties}
+    params = {"rng": rng, "evt_repo": evt_repo, "evt_prop": evt_prop}
 
     def _generate_mutations() -> Iterator[Mutation]:
         for mutation_name in mutation_types:
@@ -554,8 +557,8 @@ class Mutation(ABC):
     """Abstract base class for mutation operators in the FLL Scheduler GA."""
 
     rng: np.random.Generator
-    event_factory: EventFactory
-    event_properties: EventProperties
+    evt_repo: EventRepository
+    evt_prop: EventProperties
 
     @abstractmethod
     def mutate(self, schedule: Schedule) -> bool: ...
@@ -578,22 +581,16 @@ class SwapMutation(Mutation):
 
     def init_swap_candidates(self) -> Iterator[tuple[tuple[int, ...], ...]]:
         """Precompute any necessary data before mutation."""
-        _ts_idx = self.event_properties.timeslot_idx
-        _loc_idx = self.event_properties.loc_idx
-        _as_matches = self.event_factory.matches
-        _same_ts = self.same_timeslot
-        _same_loc = self.same_location
-        _is_same_ts_and_loc = _same_ts and _same_loc
-        for match_list in _as_matches.values():
+        _is_same_ts_and_loc = self.same_timeslot and self.same_location
+        for match_list in self.evt_repo.matches.values():
             for match1, match2 in itertools.combinations(match_list, 2):
                 e1a, _ = match1
                 e2a, _ = match2
-                _ts_cond = (_ts_idx[e1a] == _ts_idx[e2a]) == _same_ts
-                _loc_cond = (_loc_idx[e1a] == _loc_idx[e2a]) == _same_loc
+                _ts_cond = (self.evt_prop.timeslot_idx[e1a] == self.evt_prop.timeslot_idx[e2a]) == self.same_timeslot
+                _loc_cond = (self.evt_prop.loc_idx[e1a] == self.evt_prop.loc_idx[e2a]) == self.same_location
                 _is_swap_valid = _ts_cond and _loc_cond
-                if not (_is_same_ts_and_loc or _is_swap_valid):
-                    continue
-                yield (match1, match2)
+                if _is_same_ts_and_loc or _is_swap_valid:
+                    yield (match1, match2)
 
     @abstractmethod
     def get_swap_candidates(self, schedule: Schedule) -> tuple[Match, ...] | tuple[None, ...]: ...
@@ -746,14 +743,12 @@ class TimeSlotSequenceMutation(Mutation):
 
     def init_candidates(self) -> tuple[dict[tuple[int, int], list[tuple[int, ...]]], dict[tuple[int, int], int]]:
         """Precompute candidate events for each timeslot."""
-        ep = self.event_properties
         timeslot_data: dict[tuple[int, int], list[tuple[int, ...]]] = {}
         keys_to_tpr: dict[tuple[int, int], int] = {}
-        timeslot_event_map = self.event_factory.timeslots
-        for key, events in timeslot_event_map.items():
-            candidates = [e for e in events if ep.loc_side[e] == 1 or ep.paired_idx[e] == -1]
-            timeslot_data[key] = [(e, ep.paired_idx[e]) for e in candidates]
-            keys_to_tpr[key] = ep.teams_per_round[events[0]]
+        for key, events in self.evt_repo.timeslots.items():
+            candidates = [e for e in events if self.evt_prop.loc_side[e] == 1 or self.evt_prop.paired_idx[e] == -1]
+            timeslot_data[key] = [(e, self.evt_prop.paired_idx[e]) for e in candidates]
+            keys_to_tpr[key] = self.evt_prop.teams_per_round[events[0]]
         return timeslot_data, keys_to_tpr
 
     def get_candidates(self) -> tuple[list[tuple[int, ...]], int]:
@@ -857,10 +852,8 @@ class Repairer:
     """Class to handle the repair of schedules with missing event assignments."""
 
     config: TournamentConfig
-    event_factory: EventFactory
     event_properties: EventProperties
     rng: np.random.Generator
-    checker: Callable[[Schedule], bool]
     repair_map: dict[int, Any] = field(init=False)
     _rt_to_tpr: np.ndarray = field(init=False)
 
