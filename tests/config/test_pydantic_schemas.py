@@ -9,9 +9,8 @@ from fll_scheduler_ga.adapter.schema import (
     ImportModel,
     LocationWeightsModel,
     RoundModel,
-    _get_team_identities,
-    parse_teams,
 )
+from fll_scheduler_ga.service.config_builder import parse_teams
 
 
 def test_schemas_validation() -> None:
@@ -38,7 +37,7 @@ def test_schemas_validation() -> None:
     teams = 5
     teams_list = parse_teams(teams)
     assert len(teams_list) == 5
-    ids = _get_team_identities(teams_list)
+    ids = dict(enumerate(teams_list, start=1))
     assert ids[1] == "1"
 
 

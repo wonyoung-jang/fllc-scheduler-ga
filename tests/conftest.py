@@ -6,15 +6,10 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pytest
 
-from fll_scheduler_ga.adapter.schema import (
-    TIME_FORMAT_MAP,
-    AppConfig,
-    _parse_time_str,
-    build_app_config,
-    build_app_config_model,
-)
+from fll_scheduler_ga.adapter.schema import build_app_config_model
 from fll_scheduler_ga.domain.model import EventProperties, EventRepository, Schedule, ScheduleContext, TimeSlot
-from fll_scheduler_ga.service.pipeline import build_evt_prop, build_evt_repo
+from fll_scheduler_ga.service.config_builder import TIME_FORMAT_MAP, AppConfig, _parse_time_str, build_app_config
+from fll_scheduler_ga.service.context_builder import build_evt_prop, build_evt_repo
 
 if TYPE_CHECKING:
     from pathlib import Path

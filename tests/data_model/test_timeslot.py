@@ -4,7 +4,8 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from fll_scheduler_ga.adapter.schema import (
+from fll_scheduler_ga.domain.model import DEFAULT_DT, TimeSlot
+from fll_scheduler_ga.service.config_builder import (
     TIME_FORMAT_MAP,
     _calc_num_timeslots,
     _infer_time_format,
@@ -12,7 +13,6 @@ from fll_scheduler_ga.adapter.schema import (
     _parse_time_str,
     _validate_duration,
 )
-from fll_scheduler_ga.domain.model import DEFAULT_DT, TimeSlot
 
 FMT_24H = TIME_FORMAT_MAP[24]
 FMT_12H = TIME_FORMAT_MAP[12]
@@ -118,22 +118,20 @@ def test_overlaps_timeslot(timeslot: TimeSlot, start_offset_min: int, stop_offse
 @pytest.mark.parametrize(
     ("n_times", "n_locs", "n_teams", "rounds_per_team", "expected"),
     [
-        (5, 0, 10, 2, 5),  # enough times
-        (0, 4, 10, 2, 5),  # enough locations
-        (0, 0, 10, 2, None),  # cannot calculate
+        (0, 10, 2, 5),  # enough times
+        (4, 10, 2, 5),  # enough locations
+        (0, 10, 2, None),  # cannot calculate
     ],
     ids=["enough_times", "enough_locations", "cannot_calculate"],
 )
-def test_calc_num_timeslots(
-    n_times: int, n_locs: int, n_teams: int, rounds_per_team: int, expected: int | None
-) -> None:
+def test_calc_num_timeslots(n_locs: int, n_teams: int, rounds_per_team: int, expected: int | None) -> None:
     """Parametrized tests for _calc_num_timeslots function."""
     if expected is not None:
-        result = _calc_num_timeslots(n_times, n_locs, n_teams, rounds_per_team)
+        result = _calc_num_timeslots(n_locs, n_teams, rounds_per_team)
         assert result == expected
     else:
         with pytest.raises(ValueError, match=r"Cannot calculate number of timeslots without times or locations."):
-            _calc_num_timeslots(n_times, n_locs, n_teams, rounds_per_team)
+            _calc_num_timeslots(n_locs, n_teams, rounds_per_team)
 
 
 @pytest.mark.parametrize(

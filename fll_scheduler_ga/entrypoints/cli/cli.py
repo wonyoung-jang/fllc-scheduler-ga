@@ -13,7 +13,7 @@ from rich.table import Table
 
 from fll_scheduler_ga.adapter.manager import ConfigManager
 from fll_scheduler_ga.constants import LOGGING_CONFIG_PATH
-from fll_scheduler_ga.service.pipeline import run_ga_engine
+from fll_scheduler_ga.service.pipeline import run_pipeline
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -29,13 +29,10 @@ manager = ConfigManager()
 logger = logging.getLogger(__name__)
 
 
-def initialize_logging(path: Path | None = None) -> None:
+def initialize_logging(path: Path = LOGGING_CONFIG_PATH) -> None:
     """Initialize logging for the application."""
-    if path is None:
-        path = LOGGING_CONFIG_PATH
     with path.open("r", encoding="utf-8") as f:
-        logging_config_dict = json.load(f)
-        logging.config.dictConfig(logging_config_dict)
+        logging.config.dictConfig(json.load(f))
 
 
 @app.command(name="list")
@@ -101,7 +98,7 @@ def run() -> None:
     ) as progress:
         task = progress.add_task("Initializing...", total=None)
         try:
-            ga = run_ga_engine(active_config_path, progress=progress, task_id=task)
+            ga = run_pipeline(active_config_path, progress=progress, task_id=task)
             duration = time.perf_counter() - start_time
             best_fitness = sum(ga.fitness_history.get_last_gen_fitness())
             pareto_size = len(ga.pareto_front)
@@ -139,7 +136,7 @@ def batch(count: int = typer.Argument(..., min=1, help="Number of times to run t
             logging.getLogger().setLevel(logging.CRITICAL)
             run_task = progress.add_task(f"Run {i + 1}/{count}", total=None)
             try:
-                ga = run_ga_engine(path, progress=progress, task_id=run_task)
+                ga = run_pipeline(path, progress=progress, task_id=run_task)
                 duration = time.perf_counter() - start_t
                 best_fitness = sum(ga.fitness_history.get_last_gen_fitness())
                 pareto_size = len(ga.pareto_front)

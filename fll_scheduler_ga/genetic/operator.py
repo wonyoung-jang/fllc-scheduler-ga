@@ -58,20 +58,15 @@ def calc_norm_sq_of_refs(points: np.ndarray) -> np.ndarray:
 
 
 @dataclass(slots=True)
-class ReferenceDirections:
-    """Structured reference points for NSGA-III."""
+class NSGA3:
+    """Non-dominated Sorting Genetic Algorithm III (NSGA-III)."""
 
+    rng: np.random.Generator
     n_refs: int
     points: np.ndarray
     norm_sq: np.ndarray
 
-
-@dataclass(slots=True)
-class NonDominatedSorting:
-    """Non-dominated sorting utility."""
-
-    @staticmethod
-    def get_fronts(fits: np.ndarray, n_pop: int) -> list[np.ndarray]:
+    def get_fronts(self, fits: np.ndarray, n_pop: int) -> list[np.ndarray]:
         """Perform non-dominated sorting on the population."""
         n_fit = fits.shape[0]
         if n_fit == 0:
@@ -106,18 +101,9 @@ class NonDominatedSorting:
             current_front = next_front
         return fronts
 
-
-@dataclass(slots=True)
-class NSGA3:
-    """Non-dominated Sorting Genetic Algorithm III (NSGA-III)."""
-
-    rng: np.random.Generator
-    refs: ReferenceDirections
-    sorting: NonDominatedSorting
-
     def select(self, fits: np.ndarray, n_pop: int) -> tuple[tuple[np.ndarray, ...], np.ndarray, np.ndarray]:
         """Select the next generation using NSGA-III principles."""
-        fronts = self.sorting.get_fronts(fits, n_pop)
+        fronts = self.get_fronts(fits, n_pop)
         last_idx = len(fronts) - 1
         selected_indices = np.array([i for f in fronts for i in f], dtype=int)
         selected_fits = fits[selected_indices]
@@ -193,9 +179,9 @@ class NSGA3:
         span = ideal - nadir
         span[span == 0.0] = EPSILON
         norm = (ideal - fits) / span
-        coeffs = (norm @ self.refs.points.T) / self.refs.norm_sq
+        coeffs = (norm @ self.points.T) / self.norm_sq
         coeffs[coeffs < 0.0] = 0.0
-        proj = coeffs[:, :, None] * self.refs.points[None, :, :]
+        proj = coeffs[:, :, None] * self.points[None, :, :]
         residuals = norm[:, None, :] - proj
         dists: np.ndarray = np.linalg.norm(residuals, axis=2)
         min_dists = dists.min(axis=1)
@@ -208,7 +194,7 @@ class NSGA3:
 
     def count(self, niche_selected: np.ndarray) -> np.ndarray:
         """Count how many individuals are associated with each reference point."""
-        counts = np.zeros(self.refs.n_refs, dtype=int)
+        counts = np.zeros(self.n_refs, dtype=int)
         indices, count = np.unique(niche_selected, return_counts=True)
         counts[indices] = count
         return counts
@@ -309,13 +295,13 @@ class Crossover(ABC):
     evt_repo: EventRepository
     evt_prop: EventProperties
     rng: np.random.Generator
-    events: np.ndarray = field(init=False)
-    n_evts: int = field(init=False)
+    _evts: np.ndarray = field(init=False)
+    _n_evts: int = field(init=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to validate the crossover operator."""
-        self.events = self.evt_repo.singles_or_side1_idx
-        self.n_evts = self.events.shape[0]
+        self._evts = self.evt_repo.singles_or_side1_idx
+        self._n_evts = self._evts.shape[0]
 
     @abstractmethod
     def cross(self, parents: Iterator[Schedule]) -> Iterator[Schedule]: ...
@@ -388,7 +374,7 @@ class KPoint(EventCrossover):
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
         super().__post_init__()
-        if not 1 <= self.k < self.n_evts:
+        if not 1 <= self.k < self._n_evts:
             logger.warning("Invalid k value for KPoint crossover: %d. Setting k to 1.", self.k)
             self.k = 1
 
@@ -396,14 +382,14 @@ class KPoint(EventCrossover):
         """Get the genes for KPoint crossover."""
         # Single-point crossover
         if self.k == 1:
-            split = self.rng.integers(1, self.n_evts)
-            return self.events[:split], self.events[split:]
+            split = self.rng.integers(1, self._n_evts)
+            return self._evts[:split], self._evts[split:]
         # Multi-point crossover
-        splits = self.rng.choice(self.n_evts - 1, size=self.k, replace=False) + 1
-        mask = np.zeros(self.n_evts, dtype=bool)
+        splits = self.rng.choice(self._n_evts - 1, size=self.k, replace=False) + 1
+        mask = np.zeros(self._n_evts, dtype=bool)
         mask[splits] = True
         np.bitwise_xor.accumulate(mask, out=mask)
-        return self.events[mask], self.events[~mask]
+        return self._evts[mask], self._evts[~mask]
 
 
 class Scattered(EventCrossover):
@@ -414,7 +400,7 @@ class Scattered(EventCrossover):
 
     def get_genes(self) -> Iterable[np.ndarray]:
         """Get the genes for Scattered crossover."""
-        permuted_indices = self.rng.permutation(self.events)
+        permuted_indices = self.rng.permutation(self._evts)
         return np.array_split(permuted_indices, 2)
 
 
@@ -428,8 +414,8 @@ class Uniform(EventCrossover):
 
     def get_genes(self) -> Iterable[np.ndarray]:
         """Get the genes for Uniform crossover."""
-        mask = self.rng.random(self.n_evts) < 0.5
-        return self.events[mask], self.events[~mask]
+        mask = self.rng.random(self._n_evts) < 0.5
+        return self._evts[mask], self._evts[~mask]
 
 
 @dataclass(slots=True)
@@ -439,40 +425,34 @@ class StructureCrossover(EventCrossover):
     Each gene is chosen based on a specific structure of the event.
     """
 
-    lookup: np.ndarray = field(init=False)
-    structure: np.ndarray = field(init=False)
+    _lookup: np.ndarray = field(init=False)
+    _structure: np.ndarray = field(init=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
         super().__post_init__()
-        self._initialize_attributes()
-
-    @abstractmethod
-    def _get_group_keys(self) -> np.ndarray: ...
-
-    def _initialize_attributes(self) -> None:
-        """Initialize attributes specific to the structure crossover."""
         eventmap = defaultdict(list)
-        keys = self._get_group_keys()
-        for key, e in zip(keys, self.events, strict=True):
+        for key, e in zip(self._get_group_keys(), self._evts, strict=True):
             eventmap[key].append(e)
-        sorted_keys = sorted(eventmap.keys())
-        unique_ids = np.array(sorted_keys)
+        unique_ids = np.array(sorted(eventmap.keys()))
         n_ids = unique_ids.shape[0]
         max_len = max(len(evts) for evts in eventmap.values())
-        self.lookup = np.full((n_ids, max_len), -1, dtype=int)
+        self._lookup = np.full((n_ids, max_len), -1, dtype=int)
         for i, uid in enumerate(unique_ids):
             evts = eventmap[uid]
-            self.lookup[i, : len(evts)] = evts
-        self.structure = np.arange(n_ids)
+            self._lookup[i, : len(evts)] = evts
+        self._structure = np.arange(n_ids)
 
     def get_genes(self) -> Iterable[np.ndarray]:
         """Get the genes for Structure-based crossover."""
-        self.rng.shuffle(self.structure)
-        p1, p2 = np.array_split(self.structure, indices_or_sections=2, axis=0)
-        p1_indices = self.lookup[p1]
-        p2_indices = self.lookup[p2]
+        self.rng.shuffle(self._structure)
+        p1, p2 = np.array_split(self._structure, indices_or_sections=2, axis=0)
+        p1_indices = self._lookup[p1]
+        p2_indices = self._lookup[p2]
         return p1_indices[p1_indices >= 0], p2_indices[p2_indices >= 0]
+
+    @abstractmethod
+    def _get_group_keys(self) -> np.ndarray: ...
 
 
 class RoundTypeCrossover(StructureCrossover):
@@ -483,7 +463,7 @@ class RoundTypeCrossover(StructureCrossover):
 
     def _get_group_keys(self) -> np.ndarray:
         """Get all group keys for the events."""
-        return self.evt_prop.roundtype_idx[self.events]
+        return self.evt_prop.roundtype_idx[self._evts]
 
 
 class TimeSlotCrossover(StructureCrossover):
@@ -494,7 +474,7 @@ class TimeSlotCrossover(StructureCrossover):
 
     def _get_group_keys(self) -> np.ndarray:
         """Get all group keys for the events."""
-        return self.evt_prop.timeslot_idx[self.events]
+        return self.evt_prop.timeslot_idx[self._evts]
 
 
 class LocationCrossover(StructureCrossover):
@@ -505,7 +485,7 @@ class LocationCrossover(StructureCrossover):
 
     def _get_group_keys(self) -> np.ndarray:
         """Get all group keys for the events."""
-        return self.evt_prop.loc_idx[self.events]
+        return self.evt_prop.loc_idx[self._evts]
 
 
 ########################################################################
@@ -775,10 +755,9 @@ class TimeSlotSequenceMutation(Mutation):
         old_ids = [schedule.schedule[e] for e, _ in candidates]
         new_ids = self.permute_singles(old_ids)
         for (event, _), old_team, new_team in zip(candidates, old_ids, new_ids, strict=True):
-            if old_team == new_team:
-                continue
-            schedule.unassign(old_team, event)
-            schedule.assign(new_team, event)
+            if old_team != new_team:
+                schedule.unassign(old_team, event)
+                schedule.assign(new_team, event)
         return True
 
     def mutate_matches(self, schedule: Schedule, candidates: list[tuple[int, ...]]) -> bool:
@@ -791,14 +770,13 @@ class TimeSlotSequenceMutation(Mutation):
             old_ids.append((t1, t2))
         new_ids = self.permute_matches(old_ids)
         for (e1, e2), old_id_pair, new_id_pair in zip(matches, old_ids, new_ids, strict=True):
-            if old_id_pair == new_id_pair:
-                continue
-            old_t1, old_t2 = old_id_pair
-            schedule.unassign(old_t1, e1)
-            schedule.unassign(old_t2, e2)
-            new_t1, new_t2 = new_id_pair
-            schedule.assign(new_t1, e1)
-            schedule.assign(new_t2, e2)
+            if old_id_pair != new_id_pair:
+                old_t1, old_t2 = old_id_pair
+                schedule.unassign(old_t1, e1)
+                schedule.unassign(old_t2, e2)
+                new_t1, new_t2 = new_id_pair
+                schedule.assign(new_t1, e1)
+                schedule.assign(new_t2, e2)
         return True
 
 
@@ -854,12 +832,12 @@ class Repairer:
     config: TournamentConfig
     event_properties: EventProperties
     rng: np.random.Generator
-    repair_map: dict[int, Any] = field(init=False)
+    _repair_map: dict[int, Any] = field(init=False)
     _rt_to_tpr: np.ndarray = field(init=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
-        self.repair_map = {1: self.repair_singles, 2: self.repair_matches}
+        self._repair_map = {1: self.repair_singles, 2: self.repair_matches}
         max_rt = max(self.config.round_idx_to_tpr.keys())
         self._rt_to_tpr = np.zeros(max_rt + 1, dtype=int)
         for rt, tpr in self.config.round_idx_to_tpr.items():
@@ -896,7 +874,7 @@ class Repairer:
             _, tpr = key
             if not (events_for_rt := events.get(key)):
                 return True
-            if not (repair_fn := self.repair_map.get(tpr)):
+            if not (repair_fn := self._repair_map.get(tpr)):
                 msg = f"No assignment function for teams per round: {tpr}"
                 raise ValueError(msg)
             _teams, _events = repair_fn(
@@ -1004,9 +982,7 @@ class Repairer:
             tkey = team_keys[0]
             t1 = teams.pop(tkey)
             for i, t2 in teams.items():
-                if t1 == t2:
-                    continue
-                if self.find_and_repair_match(t1, t2, events, schedule):
+                if t1 != t2 and self.find_and_repair_match(t1, t2, events, schedule):
                     teams.pop(i)
                     break
             else:
@@ -1020,27 +996,24 @@ class Repairer:
             self.rng.shuffle(event_keys)
             for ekey in event_keys:
                 e1 = events[ekey]
-                if schedule.conflicts(t_solo, e1):
-                    continue
-                schedule.assign(t_solo, e1)
-                events.pop(ekey)
-                break
+                if not schedule.conflicts(t_solo, e1):
+                    schedule.assign(t_solo, e1)
+                    events.pop(ekey)
+                    break
             else:
                 teams[tkey] = t_solo
         return list(teams.values()), list(events.values())
 
     def find_and_repair_match(self, t1: int, t2: int, events: dict[int, int], schedule: Schedule) -> bool:
         """Find an open match slot for two teams and populate it."""
-        _paired_idx = self.event_properties.paired_idx
         event_keys = list(events.keys())
         self.rng.shuffle(event_keys)
         for ekey in event_keys:
             e1 = events[ekey]
-            e2 = _paired_idx[e1]
-            if schedule.conflicts(t1, e1) or schedule.conflicts(t2, e2):
-                continue
-            schedule.assign(t1, e1)
-            schedule.assign(t2, e2)
-            events.pop(ekey)
-            return True
+            e2 = self.event_properties.paired_idx[e1]
+            if not (schedule.conflicts(t1, e1) or schedule.conflicts(t2, e2)):
+                schedule.assign(t1, e1)
+                schedule.assign(t2, e2)
+                events.pop(ekey)
+                return True
         return False

@@ -5,7 +5,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from fll_scheduler_ga.adapter.schema import build_app_config, build_app_config_model
+from fll_scheduler_ga.adapter.schema import build_app_config_model
+from fll_scheduler_ga.service.config_builder import build_app_config
 
 if TYPE_CHECKING:
     from pathlib import Path
