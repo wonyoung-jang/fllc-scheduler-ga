@@ -241,7 +241,7 @@ def build_app_config(m: AppConfigModel) -> AppConfig:
         msg = "No locations defined in the configuration file."
         raise ValueError(msg)
     time_fmt = parse_time_fmt(m.tournament.rounds)
-    TimeSlot.time_fmt = time_fmt
+    TimeSlot._fmt = time_fmt
     if not (rounds := parse_rounds(m.tournament.rounds, len(teams), time_fmt, locations)):
         msg = "No rounds defined in the configuration file."
         raise ValueError(msg)

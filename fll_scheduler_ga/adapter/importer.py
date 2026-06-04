@@ -119,7 +119,7 @@ class CsvImporter:
             start = datetime.strptime(time_str, self.config.time_fmt).replace(tzinfo=UTC)
             si = rc.times.index(start)
             stop = rc.times[si + 1] if si + 1 < len(rc.times) else start + rc.duration_minutes
-        TimeSlot.time_fmt = self.config.time_fmt
+        TimeSlot._fmt = self.config.time_fmt
         timeslot_t = (start, stop)
         for i, team_id_str in enumerate(row[1:]):
             if not (team_id_str := team_id_str.strip()):

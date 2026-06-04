@@ -22,7 +22,14 @@ from fll_scheduler_ga.domain.model import (
     TournamentRound,
 )
 from fll_scheduler_ga.genetic.context import GaContext, ScheduleBuilderRandom
-from fll_scheduler_ga.genetic.fitness import FitnessBenchmarkBreaktime, FitnessBenchmarkOpponent, FitnessEvaluator
+from fll_scheduler_ga.genetic.fitness import (
+    BreakTimeFitnessEvaluator,
+    FitnessBenchmarkBreaktime,
+    FitnessBenchmarkOpponent,
+    FitnessEvaluator,
+    LocationConsistencyFitnessEvaluator,
+    OpponentVarietyFitnessEvaluator,
+)
 from fll_scheduler_ga.genetic.operator import (
     NSGA3,
     RandomSelect,
@@ -208,6 +215,44 @@ def generate_stable_config_hash(config: TournamentConfig, model: FitnessModel) -
     return int(hashlib.sha256(str(representation).encode()).hexdigest(), 16)
 
 
+def build_evaluator(
+    cfg: AppConfig, evt_prop: EventProperties, opponents: np.ndarray, best_timeslot_score: float
+) -> FitnessEvaluator:
+    """Build and return a FitnessEvaluator based on the configuration and benchmarks."""
+    single_roundtypes = np.array([rti for rti, tpr in cfg.tournament.round_idx_to_tpr.items() if tpr == 1])
+    match_roundtypes = np.array([rti for rti, tpr in cfg.tournament.round_idx_to_tpr.items() if tpr == 2])
+    max_rt_idx = match_roundtypes.max() if match_roundtypes.size > 0 else -1
+    rt_array = np.full(max_rt_idx + 1, -1, dtype=int)
+    for i, rt in enumerate(match_roundtypes):
+        rt_array[rt] = i
+    breaktime_evaluator = BreakTimeFitnessEvaluator(
+        benchmark_best_timeslot_score=best_timeslot_score,
+        minbreak_target=cfg.fitness.penalties.minbreak_target,
+        minbreak_penalty=cfg.fitness.penalties.minbreak,
+        zeros_penalty=cfg.fitness.penalties.zeros,
+    )
+    locationconsistency_evaluator = LocationConsistencyFitnessEvaluator(
+        loc_weight_round_inter=cfg.fitness.location_weights.get_weights_tuple()[0],
+        loc_weight_round_intra=cfg.fitness.location_weights.get_weights_tuple()[1],
+        match_rt=match_roundtypes,
+        rt_array=rt_array,
+    )
+    opponentvariety_evaluator = OpponentVarietyFitnessEvaluator(
+        benchmark_opponents=opponents, single_roundtypes=single_roundtypes
+    )
+    return FitnessEvaluator(
+        n_team=cfg.tournament.num_teams,
+        n_max_evt_per_team=cfg.tournament.max_events_per_team,
+        evt_prop=evt_prop,
+        agg_weights=cfg.fitness.aggregation.get_weights_tuple(),
+        min_fitness_weight=cfg.fitness.aggregation.min_fit,
+        obj_weights=np.array(cfg.fitness.objectives.get_weights_tuple(), dtype=float),
+        breaktime_evaluator=breaktime_evaluator,
+        locationconsistency_evaluator=locationconsistency_evaluator,
+        opponentvariety_evaluator=opponentvariety_evaluator,
+    )
+
+
 def build_ga_context(cfg: AppConfig) -> GaContext:
     """Build and return a GA context."""
     evt_repo = build_evt_repo(cfg.tournament.rounds)
@@ -215,18 +260,11 @@ def build_ga_context(cfg: AppConfig) -> GaContext:
     preflight(evt_prop, evt_repo)
     Schedule.ctx = ScheduleContext(
         conflict_map=evt_repo.conflict_map,
-        event_props=evt_prop,
+        roundtype_idx=evt_prop.roundtype_idx,
         teams_list=np.arange(cfg.tournament.num_teams, dtype=int),
         teams_roundreqs_arr=np.tile(A=tuple(cfg.tournament.roundreqs.values()), reps=(cfg.tournament.num_teams, 1)),
         empty_schedule=np.full(cfg.tournament.n_total_events, -1, dtype=int),
     )
-    constraints = (
-        lambda s: not s,
-        lambda s: s.get_size() != cfg.tournament.total_slots_required,
-        lambda s: s.any_rounds_needed(),
-    )
-    checker = _hard_constraint_checker(constraints)
-
     config_hash = generate_stable_config_hash(config=cfg.tournament, model=cfg.fitness)
     BENCHMARKS_CACHE.mkdir(parents=True, exist_ok=True)
     benchmark_path = BENCHMARKS_CACHE / f"benchmark_cache_{config_hash}.pkl"
@@ -244,28 +282,20 @@ def build_ga_context(cfg: AppConfig) -> GaContext:
             cfg.fitness.penalties.zeros,
         ).benchmark()
         save_fitness_benchmark(benchmark_path, BenchmarkSeedData(opponents, best_timeslot_score))
-
+    constraints = (
+        lambda s: not s,
+        lambda s: s.get_size() != cfg.tournament.total_slots_required,
+        lambda s: s.any_rounds_needed(),
+    )
+    checker = _hard_constraint_checker(constraints)
     points = calc_ref_points(len(FitnessObjective), cfg.genetic.parameters.population_size)
-
+    evaluator = build_evaluator(cfg, evt_prop, opponents, best_timeslot_score)
     return GaContext(
         event_repo=evt_repo,
         event_properties=evt_prop,
         builder=ScheduleBuilderRandom(evt_prop, cfg.rng, cfg.tournament.round_idx_to_tpr, evt_repo.roundtypes),
         repairer=Repairer(cfg.tournament, evt_prop, cfg.rng),
-        evaluator=FitnessEvaluator(
-            cfg.tournament,
-            evt_prop,
-            opponents,
-            best_timeslot_score,
-            loc_weight_rounds_inter=cfg.fitness.location_weights.get_weights_tuple()[0],
-            loc_weight_rounds_intra=cfg.fitness.location_weights.get_weights_tuple()[1],
-            agg_weights=cfg.fitness.aggregation.get_weights_tuple(),
-            min_fitness_weight=cfg.fitness.aggregation.min_fit,
-            obj_weights=np.array(cfg.fitness.objectives.get_weights_tuple(), dtype=float),
-            minbreak_target=cfg.fitness.penalties.minbreak_target,
-            minbreak_penalty=cfg.fitness.penalties.minbreak,
-            zeros_penalty=cfg.fitness.penalties.zeros,
-        ),
+        evaluator=evaluator,
         checker=checker,
         nsga3=NSGA3(cfg.rng, points.shape[0], points, calc_norm_sq_of_refs(points)),
         selection=RandomSelect(cfg.rng),

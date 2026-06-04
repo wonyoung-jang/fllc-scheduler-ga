@@ -102,7 +102,7 @@ def schedule_context(
     empty_schedule = np.full(n_total, -1, dtype=int)
     return ScheduleContext(
         conflict_map=evt_repo.conflict_map,
-        event_props=evt_prop,
+        roundtype_idx=evt_prop.roundtype_idx,
         teams_list=np.arange(tournament_config.num_teams, dtype=int),
         teams_roundreqs_arr=roundreqs_array,
         empty_schedule=empty_schedule,
@@ -122,5 +122,5 @@ def timeslot() -> TimeSlot:
     start = _parse_time_str("09:00", FMT_24H)
     stop_active = _parse_time_str("09:15", FMT_24H)
     stop_cycle = _parse_time_str("10:00", FMT_24H)
-    TimeSlot.time_fmt = FMT_24H
+    TimeSlot._fmt = FMT_24H
     return TimeSlot(idx=0, start=start, stop_active=stop_active, stop_cycle=stop_cycle)

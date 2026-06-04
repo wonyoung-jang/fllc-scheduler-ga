@@ -25,7 +25,7 @@ class ScheduleContext:
     """Holds class-level context for Schedule instances."""
 
     conflict_map: dict[int, set[int]]
-    event_props: EventProperties
+    roundtype_idx: np.ndarray
     teams_list: np.ndarray
     teams_roundreqs_arr: np.ndarray
     empty_schedule: np.ndarray
@@ -99,7 +99,7 @@ class Schedule:
         """Add an event to a team's scheduled events."""
         if team == -1:
             return
-        roundtype = Schedule.ctx.event_props.roundtype_idx[event]
+        roundtype = Schedule.ctx.roundtype_idx[event]
         self.team_events[team].add(event)
         self.team_rounds[team, roundtype] -= 1
         self.schedule[event] = team
@@ -109,7 +109,7 @@ class Schedule:
         """Remove an event from a team's scheduled events."""
         if team == -1:
             return
-        roundtype = Schedule.ctx.event_props.roundtype_idx[event]
+        roundtype = Schedule.ctx.roundtype_idx[event]
         self.team_events[team].remove(event)
         self.team_rounds[team, roundtype] += 1
         self.schedule[event] = -1
@@ -165,11 +165,11 @@ class TimeSlot:
     start: dt.datetime = DEFAULT_DT
     stop_active: dt.datetime = DEFAULT_DT
     stop_cycle: dt.datetime = DEFAULT_DT
-    time_fmt: ClassVar[str]
+    _fmt: ClassVar[str]
 
     def __str__(self) -> str:
         """Get a string representation of the time slot."""
-        return f"{self.start.strftime(TimeSlot.time_fmt)}-{self.stop_cycle.strftime(TimeSlot.time_fmt)}"
+        return f"{self.start.strftime(TimeSlot._fmt)}-{self.stop_cycle.strftime(TimeSlot._fmt)}"
 
     def __lt__(self, other: TimeSlot) -> bool:
         """Less-than comparison based on start time."""
@@ -195,10 +195,7 @@ class Location:
     def __post_init__(self) -> None:
         """Post-initialization to set private attributes."""
         ltr_id = chr(ASCII_OFFSET + self.name)
-        if self.side > 0:
-            self._str = f"{self.locationtype} {ltr_id}{self.side}"
-        else:
-            self._str = f"{self.locationtype} {ltr_id}"
+        self._str = f"{self.locationtype} {ltr_id}{self.side if self.side > 0 else ''}"
         self._hash = hash((self.name, self.side))
 
     def __str__(self) -> str:
