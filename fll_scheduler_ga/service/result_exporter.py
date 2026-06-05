@@ -34,14 +34,14 @@ class ResultExporter:
         """Finalize the GA results by exporting schedules and generating summaries."""
         log_ga(self.ga)
         data = GASeedData(
-            self.cfg.tournament, self.ga.pareto_front if self.cfg.io.exports.front_only else self.ga.total_population
+            self.cfg.tournament, self.ga.pareto_front if self.cfg.io.exports.front_only else self.ga.total_pop
         )
         save_pkl(self.seed_file, data)
         summarizer = SummaryManager(
             self.outdir,
             plot=(
                 MatplotlibVisualizer(
-                    total_population=self.ga.total_population,
+                    total_population=self.ga.total_pop,
                     fitness_history=self.ga.fitness_history.history,
                     save_dir=self.outdir,
                     ref_points=self.ctx.nsga3.points,
@@ -50,7 +50,7 @@ class ResultExporter:
                     is_plot_parallel=self.cfg.io.exports.plot_parallel,
                     is_plot_scatter=self.cfg.io.exports.plot_scatter,
                 )
-                if not self.cfg.io.exports.no_plotting and self.ga.total_population
+                if not self.cfg.io.exports.no_plotting and self.ga.total_pop
                 else None
             ),
             export_pareto_summary=self.cfg.io.exports.pareto_summary,
@@ -60,7 +60,7 @@ class ResultExporter:
             export_schedules_team_csv=self.cfg.io.exports.schedules_team_csv,
             export_front_only=self.cfg.io.exports.front_only,
             pareto_front=self.ga.pareto_front,
-            total_population=self.ga.total_population,
+            total_population=self.ga.total_pop,
             roundreqs=self.cfg.tournament.roundreqs,
             time_fmt=self.cfg.tournament.time_fmt,
             team_ids=self.cfg.team_identities,

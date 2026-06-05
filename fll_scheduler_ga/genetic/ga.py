@@ -24,17 +24,17 @@ class GA:
 
     context: GaContext
     n_island: int
-    n_generation: int
-    observers: tuple[GaObserver, ...]
-    operator_stats: OperatorStats
+    n_gen: int
+    obs: tuple[GaObserver, ...]
+    opstat: OperatorStats
     fitness_history: FitnessHistory
-    generations_array: np.ndarray
-    migrate_generations: np.ndarray
+    gen_arr: np.ndarray
+    migrate_gen: np.ndarray
     seed_pop: list[Schedule]
     island_seed_map: dict[int, list[int]]
     islands: list[Island]
     start_time: float
-    total_population: list[Schedule] = field(default_factory=list)
+    total_pop: list[Schedule] = field(default_factory=list)
 
     def __len__(self) -> int:
         """Return the number of individuals in the population."""
@@ -43,7 +43,7 @@ class GA:
     @property
     def pareto_front(self) -> list[Schedule]:
         """Get the Pareto front for each island in the population."""
-        return [p for p in self.total_population if p.rank == 0]
+        return [p for p in self.total_pop if p.rank == 0]
 
     @property
     def avg_island_fit(self) -> np.ndarray:
@@ -84,8 +84,8 @@ class GA:
 
     def run_epochs(self) -> None:
         """Perform main evolution loop: generations and migrations."""
-        for gen in self.generations_array:
-            if self.migrate_generations[gen]:
+        for gen in self.gen_arr:
+            if self.migrate_gen[gen]:
                 self.migrate()
             # Run the generations
             for island in self.islands:
@@ -115,22 +115,22 @@ class GA:
             sch.team_fitnesses = team_fitnesses[idx]
             sch.rank = rank
             selected.add(sch)
-        self.total_population = sorted(selected, key=lambda s: (s.rank, -s.fitness.sum()))
+        self.total_pop = sorted(selected, key=lambda s: (s.rank, -s.fitness.sum()))
 
     def notify_on_start(self) -> None:
         """Notify observers when the genetic algorithm run starts."""
-        for obs in self.observers:
-            obs.on_start(self.n_generation)
+        for obs in self.obs:
+            obs.on_start(self.n_gen)
 
     def notify_on_generation_end(self, gen: int) -> None:
         """Notify observers at the end of a generation."""
-        for obs in self.observers:
-            obs.on_generation_end(gen, self.n_generation, self.fitness_history.get_last_gen_fitness(), len(self))
+        for obs in self.obs:
+            obs.on_generation_end(gen, self.n_gen, self.fitness_history.get_last_gen_fitness(), len(self))
 
     def notify_on_finish(self) -> None:
         """Notify observers when the genetic algorithm run is finished."""
-        for obs in self.observers:
-            obs.on_finish(len(self.total_population), len(self.pareto_front))
+        for obs in self.obs:
+            obs.on_finish(len(self.total_pop), len(self.pareto_front))
 
 
 @dataclass(slots=True)

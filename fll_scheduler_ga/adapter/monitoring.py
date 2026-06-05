@@ -86,8 +86,8 @@ class RichObserver(GaObserver):
 
 def log_ga(ga: GA) -> None:
     """Aggregate islands and run a final selection to produce the final population."""
-    _log_operators(name="crossover", ratios=ga.operator_stats.crossover, ops=ga.context.crossovers)
-    _log_operators(name="mutation", ratios=ga.operator_stats.mutation, ops=ga.context.mutations)
+    _log_operators(name="crossover", ratios=ga.opstat.crossover, ops=ga.context.crossovers)
+    _log_operators(name="mutation", ratios=ga.opstat.mutation, ops=ga.context.mutations)
     _log_aggregate_stats(ga)
     for island in ga.islands:
         logger.debug("Island %d Fitness: %.2f", island.identity, sum(island.fitness_history.get_last_gen_fitness()))
@@ -111,10 +111,10 @@ def _log_operators(name: str, ratios: dict[str, Counter], ops: tuple[Crossover |
 def _log_aggregate_stats(ga: GA) -> None:
     """Log aggregate statistics across all islands."""
     final_log = f"{'=' * 20}\nFinal statistics"
-    crs_suc, crs_tot, crs_rte = ga.operator_stats.get_crossover_stats()
-    mut_suc, mut_tot, mut_rte = ga.operator_stats.get_mutation_stats()
-    off_suc, off_tot, off_rte = ga.operator_stats.get_offspring_stats()
-    unique_inds = len(ga.total_population)
+    crs_suc, crs_tot, crs_rte = ga.opstat.get_crossover_stats()
+    mut_suc, mut_tot, mut_rte = ga.opstat.get_mutation_stats()
+    off_suc, off_tot, off_rte = ga.opstat.get_offspring_stats()
+    unique_inds = len(ga.total_pop)
     total_inds = len(ga)
     unique_rte = f"{unique_inds / total_inds if total_inds > 0 else 0.0:.2%}"
     final_log += (

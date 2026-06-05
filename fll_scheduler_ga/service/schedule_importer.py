@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from fll_scheduler_ga.adapter.exporter import CsvScheduleExporter, ScheduleSummaryGenerator
+from fll_scheduler_ga.adapter.exporter import ScheduleSummaryGenerator
 from fll_scheduler_ga.adapter.importer import CsvImporter
 
 if TYPE_CHECKING:
@@ -40,9 +40,5 @@ class ScheduleImporter:
             sched.team_fitnesses = team_fit[0]
             parent = self.path.parent
             parent.mkdir(parents=True, exist_ok=True)
-            report_path = parent / "report.txt"
-            ScheduleSummaryGenerator(self.team_ids).export(sched, report_path)
-            CsvScheduleExporter(self.tournament.time_fmt, self.team_ids, self.ctx.evt_prop).export(
-                sched, parent / "schedule.csv"
-            )
+            ScheduleSummaryGenerator(self.team_ids).export(sched, parent / "report.txt")
         return sched
