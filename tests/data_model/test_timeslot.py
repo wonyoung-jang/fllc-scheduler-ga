@@ -46,7 +46,7 @@ def test_timeslot_str(start_str: str, stop_active_str: str, stop_cycle_str: str,
     start = _parse_time_str(start_str, fmt)
     stop_active = _parse_time_str(stop_active_str, fmt)
     stop_cycle = _parse_time_str(stop_cycle_str, fmt)
-    TimeSlot._fmt = fmt
+    TimeSlot.fmt = fmt
     timeslot = TimeSlot(idx=0, start=start, stop_active=stop_active, stop_cycle=stop_cycle)
     assert str(timeslot) == expected
 

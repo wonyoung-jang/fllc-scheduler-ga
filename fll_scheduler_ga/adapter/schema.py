@@ -47,11 +47,33 @@ class CrossoverModel(BaseModel):
     types: tuple[CrossoverOp | str, ...] = ()
     k_vals: tuple[int, ...] = ()
 
+    @model_validator(mode="after")
+    def validate(self) -> CrossoverModel:
+        """Validate crossover configuration."""
+        if any(t not in tuple(CrossoverOp) for t in self.types):
+            msg = f"Invalid crossover type in types: {self.types}. Must be one of {[e.value for e in CrossoverOp]}."
+            raise ValueError(msg)
+        if not self.k_vals and CrossoverOp.K_POINT in self.types:
+            msg = "k_vals not provided but K_POINT crossover is enabled in types."
+            raise ValueError(msg)
+        if any(k <= 0 for k in self.k_vals):
+            msg = "All k_vals must be positive integers."
+            raise ValueError(msg)
+        return self
+
 
 class MutationModel(BaseModel):
     """Configuration for mutation operators."""
 
     types: tuple[MutationOp | str, ...] = ()
+
+    @model_validator(mode="after")
+    def validate(self) -> MutationModel:
+        """Validate mutation configuration."""
+        if any(t not in tuple(MutationOp) for t in self.types):
+            msg = f"Invalid mutation type in types: {self.types}. Must be one of {[e.value for e in MutationOp]}."
+            raise ValueError(msg)
+        return self
 
 
 class OperatorModel(BaseModel):
@@ -278,3 +300,6 @@ class AppConfig:
     tournament: TournamentConfig
     team_identities: dict[int, str]
     rng: np.random.Generator
+    min_fitness_weight: float
+    objweight: tuple[float, ...]
+    aggweight: tuple[float, ...]

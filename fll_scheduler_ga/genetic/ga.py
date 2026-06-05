@@ -391,15 +391,13 @@ class OperatorStats:
         """Get the offspring statistics."""
         s_sum = self.offspring.get("success", 0)
         t_sum = self.offspring.get("total", 0)
-        rate = f"{s_sum / t_sum if t_sum > 0 else 0.0:.2%}"
-        return s_sum, t_sum, rate
+        return s_sum, t_sum, f"{s_sum / t_sum if t_sum > 0 else 0.0:.2%}"
 
     def _get_operator_stats(self, operators: dict[str, Counter]) -> tuple[int, int, str]:
         """Get the statistics for a specific set of operators."""
         s_sum = sum(operators.get("success", Counter()).values())
         t_sum = sum(operators.get("total", Counter()).values())
-        rate = f"{s_sum / t_sum if t_sum > 0 else 0.0:.2%}"
-        return s_sum, t_sum, rate
+        return s_sum, t_sum, f"{s_sum / t_sum if t_sum > 0 else 0.0:.2%}"
 
     def get_crossover_stats(self) -> tuple[int, int, str]:
         """Get the crossover statistics for a specific operator."""

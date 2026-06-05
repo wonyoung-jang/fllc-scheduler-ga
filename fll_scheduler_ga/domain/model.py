@@ -165,11 +165,11 @@ class TimeSlot:
     start: dt.datetime = DEFAULT_DT
     stop_active: dt.datetime = DEFAULT_DT
     stop_cycle: dt.datetime = DEFAULT_DT
-    _fmt: ClassVar[str]
+    fmt: ClassVar[str]
 
     def __str__(self) -> str:
         """Get a string representation of the time slot."""
-        return f"{self.start.strftime(TimeSlot._fmt)}-{self.stop_cycle.strftime(TimeSlot._fmt)}"
+        return f"{self.start.strftime(TimeSlot.fmt)}-{self.stop_cycle.strftime(TimeSlot.fmt)}"
 
     def __lt__(self, other: TimeSlot) -> bool:
         """Less-than comparison based on start time."""
@@ -337,9 +337,20 @@ class EventProperties:
 class GASeedData:
     """GA seed data object."""
 
-    config: TournamentConfig | None = None
-    population: list[Schedule] = field(default_factory=list)
+    config: TournamentConfig
+    population: list[Schedule]
     version: int = DATA_MODEL_VERSION
+
+    def __bool__(self) -> bool:
+        """Validate loaded seed data."""
+        if self.version != DATA_MODEL_VERSION:
+            logger.warning(
+                "Seed version mismatch: Expected %d, found %d. Starting with fresh population.",
+                DATA_MODEL_VERSION,
+                self.version,
+            )
+            return False
+        return True
 
 
 @dataclass(slots=True)

@@ -4,11 +4,12 @@ import hashlib
 import itertools
 import logging
 from collections import defaultdict
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import numpy as np
 
-from fll_scheduler_ga.adapter.seeder import load_fitness_benchmark, save_fitness_benchmark
+from fll_scheduler_ga.adapter.seeder import load_pkl, save_pkl
 from fll_scheduler_ga.constants import BENCHMARKS_CACHE, FitnessObjective
 from fll_scheduler_ga.domain.model import (
     BenchmarkSeedData,
@@ -244,63 +245,77 @@ def build_evaluator(
         n_team=cfg.tournament.num_teams,
         n_max_evt_per_team=cfg.tournament.max_events_per_team,
         evt_prop=evt_prop,
-        agg_weights=cfg.fitness.aggregation.get_weights_tuple(),
-        min_fitness_weight=cfg.fitness.aggregation.min_fit,
-        obj_weights=np.array(cfg.fitness.objectives.get_weights_tuple(), dtype=float),
+        agg_weights=cfg.aggweight,
+        min_fitness_weight=cfg.min_fitness_weight,
+        obj_weights=np.array(cfg.objweight, dtype=float),
         breaktime_evaluator=breaktime_evaluator,
         locationconsistency_evaluator=locationconsistency_evaluator,
         opponentvariety_evaluator=opponentvariety_evaluator,
     )
 
 
-def build_ga_context(cfg: AppConfig) -> GaContext:
-    """Build and return a GA context."""
-    evt_repo = build_evt_repo(cfg.tournament.rounds)
-    evt_prop = build_evt_prop(evt_repo.mapping)
-    preflight(evt_prop, evt_repo)
-    Schedule.ctx = ScheduleContext(
-        conflict_map=evt_repo.conflict_map,
-        roundtype_idx=evt_prop.roundtype_idx,
-        teams_list=np.arange(cfg.tournament.num_teams, dtype=int),
-        teams_roundreqs_arr=np.tile(A=tuple(cfg.tournament.roundreqs.values()), reps=(cfg.tournament.num_teams, 1)),
-        empty_schedule=np.full(cfg.tournament.n_total_events, -1, dtype=int),
-    )
-    config_hash = generate_stable_config_hash(config=cfg.tournament, model=cfg.fitness)
-    BENCHMARKS_CACHE.mkdir(parents=True, exist_ok=True)
-    benchmark_path = BENCHMARKS_CACHE / f"benchmark_cache_{config_hash}.pkl"
-    benchmark_data = load_fitness_benchmark(benchmark_path)
-    if not cfg.runtime.flush_benchmarks and benchmark_data:
-        opponents = benchmark_data.opponents
-        best_timeslot_score = benchmark_data.best_timeslot_score
-    else:
-        logger.info("Calculating new benchmarks...")
-        opponents = FitnessBenchmarkOpponent(cfg.tournament, evt_repo).benchmark()
-        best_timeslot_score = FitnessBenchmarkBreaktime(
-            cfg.tournament,
-            cfg.fitness.penalties.minbreak_target,
-            cfg.fitness.penalties.minbreak,
-            cfg.fitness.penalties.zeros,
-        ).benchmark()
-        save_fitness_benchmark(benchmark_path, BenchmarkSeedData(opponents, best_timeslot_score))
-    constraints = (
-        lambda s: not s,
-        lambda s: s.get_size() != cfg.tournament.total_slots_required,
-        lambda s: s.any_rounds_needed(),
-    )
-    checker = _hard_constraint_checker(constraints)
-    points = calc_ref_points(len(FitnessObjective), cfg.genetic.parameters.population_size)
-    evaluator = build_evaluator(cfg, evt_prop, opponents, best_timeslot_score)
-    return GaContext(
-        event_repo=evt_repo,
-        event_properties=evt_prop,
-        builder=ScheduleBuilderRandom(evt_prop, cfg.rng, cfg.tournament.round_idx_to_tpr, evt_repo.roundtypes),
-        repairer=Repairer(cfg.tournament, evt_prop, cfg.rng),
-        evaluator=evaluator,
-        checker=checker,
-        nsga3=NSGA3(cfg.rng, points.shape[0], points, calc_norm_sq_of_refs(points)),
-        selection=RandomSelect(cfg.rng),
-        crossovers=build_crossovers(
-            cfg.rng, cfg.genetic.operator.crossover.types, cfg.genetic.operator.crossover.k_vals, evt_repo, evt_prop
-        ),
-        mutations=build_mutations(cfg.rng, cfg.genetic.operator.mutation.types, evt_repo, evt_prop),
-    )
+@dataclass(slots=True)
+class GaContextBuilder:
+    """Builder for the GA context based on the provided configuration."""
+
+    cfg: AppConfig
+
+    def build(self) -> GaContext:
+        """Build and return a GA context."""
+        evt_repo = build_evt_repo(self.cfg.tournament.rounds)
+        evt_prop = build_evt_prop(evt_repo.mapping)
+        preflight(evt_prop, evt_repo)
+        Schedule.ctx = ScheduleContext(
+            conflict_map=evt_repo.conflict_map,
+            roundtype_idx=evt_prop.roundtype_idx,
+            teams_list=np.arange(self.cfg.tournament.num_teams, dtype=int),
+            teams_roundreqs_arr=np.tile(
+                A=tuple(self.cfg.tournament.roundreqs.values()), reps=(self.cfg.tournament.num_teams, 1)
+            ),
+            empty_schedule=np.full(self.cfg.tournament.n_total_events, -1, dtype=int),
+        )
+        config_hash = generate_stable_config_hash(self.cfg.tournament, self.cfg.fitness)
+        BENCHMARKS_CACHE.mkdir(parents=True, exist_ok=True)
+        benchmark_path = BENCHMARKS_CACHE / f"benchmark_cache_{config_hash}.pkl"
+        benchmark_data: BenchmarkSeedData | None = load_pkl(benchmark_path)
+        if not self.cfg.runtime.flush_benchmarks and benchmark_data:
+            opponents = benchmark_data.opponents
+            best_timeslot_score = benchmark_data.best_timeslot_score
+        else:
+            logger.info("Calculating new benchmarks...")
+            opponents = FitnessBenchmarkOpponent(self.cfg.tournament, evt_repo).benchmark()
+            best_timeslot_score = FitnessBenchmarkBreaktime(
+                self.cfg.tournament,
+                self.cfg.fitness.penalties.minbreak_target,
+                self.cfg.fitness.penalties.minbreak,
+                self.cfg.fitness.penalties.zeros,
+            ).benchmark()
+            save_pkl(benchmark_path, BenchmarkSeedData(opponents, best_timeslot_score))
+        constraints = (
+            lambda s: not s,
+            lambda s: s.get_size() != self.cfg.tournament.total_slots_required,
+            lambda s: s.any_rounds_needed(),
+        )
+        checker = _hard_constraint_checker(constraints)
+        points = calc_ref_points(len(FitnessObjective), self.cfg.genetic.parameters.population_size)
+        evaluator = build_evaluator(self.cfg, evt_prop, opponents, best_timeslot_score)
+        return GaContext(
+            evt_repo=evt_repo,
+            evt_prop=evt_prop,
+            builder=ScheduleBuilderRandom(
+                evt_prop, self.cfg.rng, self.cfg.tournament.round_idx_to_tpr, evt_repo.roundtypes
+            ),
+            repairer=Repairer(self.cfg.tournament, evt_prop, self.cfg.rng),
+            evaluator=evaluator,
+            checker=checker,
+            nsga3=NSGA3(self.cfg.rng, points.shape[0], points, calc_norm_sq_of_refs(points)),
+            selection=RandomSelect(self.cfg.rng),
+            crossovers=build_crossovers(
+                self.cfg.rng,
+                self.cfg.genetic.operator.crossover.types,
+                self.cfg.genetic.operator.crossover.k_vals,
+                evt_repo,
+                evt_prop,
+            ),
+            mutations=build_mutations(self.cfg.rng, self.cfg.genetic.operator.mutation.types, evt_repo, evt_prop),
+        )

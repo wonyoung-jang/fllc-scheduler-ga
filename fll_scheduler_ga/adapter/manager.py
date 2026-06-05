@@ -23,7 +23,6 @@ class ConfigManager:
         """Ensure directory structure exists and is populated."""
         self.directory.mkdir(parents=True, exist_ok=True)
         self.refresh_list()
-        # If directory is empty, add default template
         if not self.available:
             if not self.default_template.exists():
                 msg = f"Critical: Default template not found at {self.default_template}"

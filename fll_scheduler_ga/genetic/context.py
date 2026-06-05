@@ -22,7 +22,7 @@ logger = getLogger(__name__)
 class ScheduleBuilderRandom:
     """Builder for building a valid random schedule."""
 
-    event_properties: EventProperties
+    evt_prop: EventProperties
     rng: np.random.Generator
     round_idx_to_tpr: dict[int, int]
     roundtype_events: dict[int, list[int]]
@@ -47,9 +47,9 @@ class ScheduleBuilderRandom:
 
     def build_matches(self, schedule: Schedule, events: np.ndarray, roundtype: int) -> None:
         """Book all events for a specific round type."""
-        loc_sides_where_1 = self.event_properties.loc_side[events] == 1
+        loc_sides_where_1 = self.evt_prop.loc_side[events] == 1
         side1s = events[loc_sides_where_1.nonzero()[0]]
-        side2s = self.event_properties.paired_idx[side1s]
+        side2s = self.evt_prop.paired_idx[side1s]
         for e1, e2 in zip(side1s, side2s, strict=True):
             shuffled_teams = self.rng.permutation(schedule.all_rounds_needed(roundtype))
             available = (t for t in shuffled_teams if not schedule.conflicts(t, e1))
@@ -63,8 +63,8 @@ class ScheduleBuilderRandom:
 class GaContext:
     """Hold static context for the genetic algorithm."""
 
-    event_repo: EventRepository
-    event_properties: EventProperties
+    evt_repo: EventRepository
+    evt_prop: EventProperties
     evaluator: FitnessEvaluator
     checker: Callable[[Schedule], bool]
     builder: ScheduleBuilderRandom

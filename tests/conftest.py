@@ -8,7 +8,7 @@ import pytest
 
 from fll_scheduler_ga.adapter.schema import build_app_config_model
 from fll_scheduler_ga.domain.model import EventProperties, EventRepository, Schedule, ScheduleContext, TimeSlot
-from fll_scheduler_ga.service.config_builder import TIME_FORMAT_MAP, AppConfig, _parse_time_str, build_app_config
+from fll_scheduler_ga.service.config_builder import TIME_FORMAT_MAP, AppConfig, AppConfigBuilder, _parse_time_str
 from fll_scheduler_ga.service.context_builder import build_evt_prop, build_evt_repo
 
 if TYPE_CHECKING:
@@ -71,7 +71,7 @@ def app_config(minimal_config_dict: dict[str, Any], tmp_path: Path) -> AppConfig
     with config_file.open("w") as f:
         json.dump(minimal_config_dict, f)
     m = build_app_config_model(config_file)
-    return build_app_config(m)
+    return AppConfigBuilder(m).build()
 
 
 @pytest.fixture
@@ -122,5 +122,5 @@ def timeslot() -> TimeSlot:
     start = _parse_time_str("09:00", FMT_24H)
     stop_active = _parse_time_str("09:15", FMT_24H)
     stop_cycle = _parse_time_str("10:00", FMT_24H)
-    TimeSlot._fmt = FMT_24H
+    TimeSlot.fmt = FMT_24H
     return TimeSlot(idx=0, start=start, stop_active=stop_active, stop_cycle=stop_cycle)

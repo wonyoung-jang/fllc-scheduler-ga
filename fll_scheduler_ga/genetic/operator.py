@@ -106,8 +106,7 @@ class NSGA3:
         fronts = self.get_fronts(fits, n_pop)
         last_idx = len(fronts) - 1
         selected_indices = np.array([i for f in fronts for i in f], dtype=int)
-        selected_fits = fits[selected_indices]
-        refs, distances = self.norm_and_associate(selected_fits)
+        refs, distances = self.norm_and_associate(fits[selected_indices])
         if len(fronts) == 1:
             fronts[0] = self.rng.permutation(selected_indices)[:n_pop]
             fronts = tuple(fronts)
@@ -251,39 +250,31 @@ class RandomSelect(Selection):
 ########################################################################
 def build_crossovers(
     rng: np.random.Generator,
-    crossover_types: tuple[str, ...],
+    types: tuple[str, ...],
     crossover_ks: tuple[int, ...],
     evt_repo: EventRepository,
     evt_prop: EventProperties,
 ) -> tuple[Crossover, ...]:
     """Build and return a tuple of crossover operators based on the configuration."""
-    if not crossover_types:
+    if not types:
         logger.warning("No crossover types enabled in the configuration. Crossover will not occur.")
         return ()
-    crossover_factory: dict[str, Callable] = {
-        CrossoverOp.K_POINT: lambda p, k: KPoint(**p, k=k),
+    params = {"evt_repo": evt_repo, "evt_prop": evt_prop, "rng": rng}
+    factory: dict[str, Callable] = {
+        CrossoverOp.K_POINT: KPoint,
         CrossoverOp.SCATTERED: Scattered,
         CrossoverOp.UNIFORM: Uniform,
         CrossoverOp.ROUND_TYPE_CROSSOVER: RoundTypeCrossover,
         CrossoverOp.TIMESLOT_CROSSOVER: TimeSlotCrossover,
         CrossoverOp.LOCATION_CROSSOVER: LocationCrossover,
     }
-    params = {"evt_repo": evt_repo, "evt_prop": evt_prop, "rng": rng}
 
     def _generate_crossovers() -> Iterator[Crossover]:
-        for crossover_name in crossover_types:
-            if crossover_name not in crossover_factory:
-                msg = f"Unknown crossover type in config: {crossover_name}"
-                raise ValueError(msg)
-            if crossover_name == CrossoverOp.K_POINT:
-                if crossover_ks:
-                    for k in crossover_ks:
-                        if k <= 0:
-                            msg = f"Invalid crossover k value: {k}. Must be greater than 0."
-                            raise ValueError(msg)
-                        yield crossover_factory[crossover_name](params, k)
+        for name in types:
+            if name == CrossoverOp.K_POINT:
+                yield from (factory[name](**params, k=k) for k in crossover_ks)
             else:
-                yield crossover_factory[crossover_name](**params)
+                yield factory[name](**params)
 
     return tuple(_generate_crossovers())
 
@@ -495,13 +486,14 @@ type Match = tuple[int, int, int, int]
 
 
 def build_mutations(
-    rng: np.random.Generator, mutation_types: tuple[str, ...], evt_repo: EventRepository, evt_prop: EventProperties
+    rng: np.random.Generator, types: tuple[str, ...], evt_repo: EventRepository, evt_prop: EventProperties
 ) -> tuple[Mutation, ...]:
     """Build and return a tuple of mutation operators based on the configuration."""
-    if not mutation_types:
+    if not types:
         logger.warning("No mutation types enabled in the configuration. Mutation will not occur.")
         return ()
-    mutation_factory: dict[str, Callable[[dict], Mutation]] = {
+    params = {"rng": rng, "evt_repo": evt_repo, "evt_prop": evt_prop}
+    factory: dict[str, Callable[[dict], Mutation]] = {
         # SwapMatchMutation variants
         MutationOp.SWAP_MATCH_CROSS_TIME_LOCATION: lambda p: SwapMatchMutation(
             **p, same_timeslot=False, same_location=False
@@ -520,16 +512,7 @@ def build_mutations(
         MutationOp.INVERSION: lambda p: InversionMutation(**p),
         MutationOp.SCRAMBLE: lambda p: ScrambleMutation(**p),
     }
-    params = {"rng": rng, "evt_repo": evt_repo, "evt_prop": evt_prop}
-
-    def _generate_mutations() -> Iterator[Mutation]:
-        for mutation_name in mutation_types:
-            if mutation_name not in mutation_factory:
-                msg = f"Unknown mutation type in config: '{mutation_name}'"
-                raise ValueError(msg)
-            yield mutation_factory[mutation_name](params)
-
-    return tuple(_generate_mutations())
+    return tuple(factory[name](params) for name in types)
 
 
 @dataclass(slots=True)
@@ -707,14 +690,16 @@ class SwapTableSideMutation(SwapMutation):
 class TimeSlotSequenceMutation(Mutation):
     """Abstract base class for mutations that permute assignments within a single timeslot."""
 
-    timeslot_candidates: dict[tuple[int, int], list[tuple[int, ...]]] = field(init=False)
-    timeslot_keys: tuple[tuple[int, int], ...] = field(init=False)
+    ts_candidate: dict[tuple[int, int], list[tuple[int, ...]]] = field(init=False)
+    ts_key: tuple[tuple[int, int], ...] = field(init=False)
+    ts_idx: np.ndarray = field(init=False)
     key_to_tpr: dict[tuple[int, int], int] = field(init=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
-        self.timeslot_candidates, self.key_to_tpr = self.init_candidates()
-        self.timeslot_keys = tuple(self.timeslot_candidates.keys())
+        self.ts_candidate, self.key_to_tpr = self.init_candidates()
+        self.ts_key = tuple(self.ts_candidate.keys())
+        self.ts_idx = np.arange(len(self.ts_key))
 
     @abstractmethod
     def permute_singles(self, items: list[int]) -> Iterator[int]: ...
@@ -723,27 +708,23 @@ class TimeSlotSequenceMutation(Mutation):
 
     def init_candidates(self) -> tuple[dict[tuple[int, int], list[tuple[int, ...]]], dict[tuple[int, int], int]]:
         """Precompute candidate events for each timeslot."""
-        timeslot_data: dict[tuple[int, int], list[tuple[int, ...]]] = {}
-        keys_to_tpr: dict[tuple[int, int], int] = {}
+        ts_candidate: dict[tuple[int, int], list[tuple[int, ...]]] = {}
+        key_to_tpr: dict[tuple[int, int], int] = {}
         for key, events in self.evt_repo.timeslots.items():
-            candidates = [e for e in events if self.evt_prop.loc_side[e] == 1 or self.evt_prop.paired_idx[e] == -1]
-            timeslot_data[key] = [(e, self.evt_prop.paired_idx[e]) for e in candidates]
-            keys_to_tpr[key] = self.evt_prop.teams_per_round[events[0]]
-        return timeslot_data, keys_to_tpr
+            candidate = [e for e in events if self.evt_prop.loc_side[e] == 1 or self.evt_prop.paired_idx[e] == -1]
+            ts_candidate[key] = [(e, self.evt_prop.paired_idx[e]) for e in candidate]
+            key_to_tpr[key] = self.evt_prop.teams_per_round[events[0]]
+        return ts_candidate, key_to_tpr
 
-    def get_candidates(self) -> tuple[list[tuple[int, ...]], int]:
+    def _get_candidates(self) -> tuple[list[tuple[int, ...]], int]:
         """Get a list of candidate events for mutation within a specific timeslot."""
-        indices = np.arange(len(self.timeslot_keys))
-        self.rng.shuffle(indices)
-        idx = indices[0]
-        key = self.timeslot_keys[idx]
-        candidates = self.timeslot_candidates[key]
-        tpr = self.key_to_tpr[key]
-        return candidates, tpr
+        self.rng.shuffle(self.ts_idx)
+        key = self.ts_key[self.ts_idx[0]]
+        return self.ts_candidate[key], self.key_to_tpr[key]
 
     def mutate(self, schedule: Schedule) -> bool:
         """Find a suitable timeslot and round type, then permute assignments."""
-        candidates, tpr = self.get_candidates()
+        candidates, tpr = self._get_candidates()
         if tpr == 1:
             return self.mutate_singles(schedule, candidates)
         if tpr == 2:

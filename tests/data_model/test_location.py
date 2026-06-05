@@ -1,7 +1,7 @@
 """Unit tests for Location."""
 
-from fll_scheduler_ga.adapter.schema import parse_locations
 from fll_scheduler_ga.domain.model import Location
+from fll_scheduler_ga.service.config_builder import parse_locations
 
 
 def test_location_str() -> None:

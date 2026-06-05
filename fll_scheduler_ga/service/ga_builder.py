@@ -9,13 +9,11 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from fll_scheduler_ga.adapter.monitoring import GaObserver, LoggingObserver, RichObserver
-from fll_scheduler_ga.adapter.seeder import load_ga
 from fll_scheduler_ga.constants import SeedIslandStrategy, SeedPopSort
 from fll_scheduler_ga.genetic.ga import GA, FitnessHistory, Island, OperatorStats, StagnationHandler
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
-    from pathlib import Path
 
     from rich.progress import Progress, TaskID
 
@@ -107,55 +105,66 @@ class GASeeder:
                 yield from self.rng.permutation(self.seed_pop_size)
 
 
-def build_ga(progress: Progress | None, task_id: TaskID | None, cfg: AppConfig, ctx: GaContext, seed_file: Path) -> GA:
-    """Build the GA instance with the provided configuration and context."""
-    seed_pop = load_ga(seed_file, cfg.tournament)
-    seeder = GASeeder(
-        cfg.rng,
-        len(seed_pop),
-        cfg.io.imports.seed_island_strategy,
-        cfg.io.imports.seed_pop_sort,
-        cfg.genetic.parameters.num_islands,
-        cfg.genetic.parameters.population_size,
-    )
-    operator_stats = OperatorStats(Counter(), _get_tracker(ctx.crossovers), _get_tracker(ctx.mutations))
-    fitness_history = FitnessHistory(
-        generation=0,
-        current=np.zeros((1, ctx.evaluator.n_objectives), dtype=float),
-        history=np.full((cfg.genetic.parameters.generations, ctx.evaluator.n_objectives), fill_value=-1, dtype=float),
-    )
-    islands = [
-        Island(
-            identity=i,
-            context=ctx,
-            n_pop=cfg.genetic.parameters.population_size,
-            n_offspring=cfg.genetic.parameters.offspring_size,
-            n_migration=cfg.genetic.parameters.migration_size,
-            chance_crossover=cfg.genetic.parameters.crossover_chance,
-            chance_mutation=cfg.genetic.parameters.mutation_chance,
-            rng=cfg.rng,
-            operator_stats=operator_stats,
-            fitness_history=fitness_history.copy(),
-            stagnation=StagnationHandler(
-                enabled=cfg.genetic.stagnation.enable,
-                threshold=cfg.genetic.stagnation.threshold,
-                proportion=cfg.genetic.stagnation.proportion,
-                cooldown=cfg.genetic.stagnation.cooldown,
+@dataclass(slots=True)
+class GaBuilder:
+    """Builder for the GA instance based on the provided configuration and context."""
+
+    progress: Progress | None
+    task_id: TaskID | None
+    cfg: AppConfig
+    ctx: GaContext
+    seed_pop: list
+
+    def build(self) -> GA:
+        """Build the GA instance."""
+        seeder = GASeeder(
+            self.cfg.rng,
+            len(self.seed_pop),
+            self.cfg.io.imports.seed_island_strategy,
+            self.cfg.io.imports.seed_pop_sort,
+            self.cfg.genetic.parameters.num_islands,
+            self.cfg.genetic.parameters.population_size,
+        )
+        operator_stats = OperatorStats(Counter(), _get_tracker(self.ctx.crossovers), _get_tracker(self.ctx.mutations))
+        fitness_history = FitnessHistory(
+            generation=0,
+            current=np.zeros((1, self.ctx.evaluator.n_objectives), dtype=float),
+            history=np.full(
+                (self.cfg.genetic.parameters.generations, self.ctx.evaluator.n_objectives), fill_value=-1, dtype=float
             ),
         )
-        for i in range(cfg.genetic.parameters.num_islands)
-    ]
-    return GA(
-        context=ctx,
-        n_island=cfg.genetic.parameters.num_islands,
-        n_generation=cfg.genetic.parameters.generations,
-        observers=_get_observers(progress, task_id),
-        operator_stats=operator_stats,
-        fitness_history=fitness_history,
-        generations_array=np.arange(1, cfg.genetic.parameters.generations + 1),
-        migrate_generations=_get_migration_generations(cfg.genetic.parameters),
-        seed_pop=seed_pop,
-        island_seed_map=seeder.get_island_seed_map(),
-        islands=islands,
-        start_time=time.perf_counter(),
-    )
+        islands = [
+            Island(
+                identity=i,
+                context=self.ctx,
+                n_pop=self.cfg.genetic.parameters.population_size,
+                n_offspring=self.cfg.genetic.parameters.offspring_size,
+                n_migration=self.cfg.genetic.parameters.migration_size,
+                chance_crossover=self.cfg.genetic.parameters.crossover_chance,
+                chance_mutation=self.cfg.genetic.parameters.mutation_chance,
+                rng=self.cfg.rng,
+                operator_stats=operator_stats,
+                fitness_history=fitness_history.copy(),
+                stagnation=StagnationHandler(
+                    enabled=self.cfg.genetic.stagnation.enable,
+                    threshold=self.cfg.genetic.stagnation.threshold,
+                    proportion=self.cfg.genetic.stagnation.proportion,
+                    cooldown=self.cfg.genetic.stagnation.cooldown,
+                ),
+            )
+            for i in range(self.cfg.genetic.parameters.num_islands)
+        ]
+        return GA(
+            context=self.ctx,
+            n_island=self.cfg.genetic.parameters.num_islands,
+            n_generation=self.cfg.genetic.parameters.generations,
+            observers=_get_observers(self.progress, self.task_id),
+            operator_stats=operator_stats,
+            fitness_history=fitness_history,
+            generations_array=np.arange(1, self.cfg.genetic.parameters.generations + 1),
+            migrate_generations=_get_migration_generations(self.cfg.genetic.parameters),
+            seed_pop=self.seed_pop,
+            island_seed_map=seeder.get_island_seed_map(),
+            islands=islands,
+            start_time=time.perf_counter(),
+        )

@@ -4,8 +4,8 @@ import datetime as dt
 import itertools
 import logging
 import math
-import pprint as pp
 from collections import Counter
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -233,20 +233,35 @@ def parse_rounds(
     return tuple(sorted(_generate_rounds(timeslot_idx_iter), key=lambda r: r.start_time))
 
 
-def build_app_config(m: AppConfigModel) -> AppConfig:
-    """Build and return the application configuration."""
-    teams = parse_teams(m.tournament.teams)
-    team_identities = dict(enumerate(teams, start=1))
-    if not (locations := parse_locations(m.tournament.locations)):
-        msg = "No locations defined in the configuration file."
-        raise ValueError(msg)
-    time_fmt = parse_time_fmt(m.tournament.rounds)
-    TimeSlot._fmt = time_fmt
-    if not (rounds := parse_rounds(m.tournament.rounds, len(teams), time_fmt, locations)):
-        msg = "No rounds defined in the configuration file."
-        raise ValueError(msg)
-    tournament_config = get_tournament_config(len(teams), time_fmt, rounds)
-    rng = get_rng(m.genetic.rng_seed)
-    cfg = AppConfig(m.genetic, m.runtime, m.io, m.fitness, tournament_config, team_identities, rng)
-    logger.debug("Initialized AppConfig: %s", pp.pformat(cfg))
-    return cfg
+@dataclass(slots=True)
+class AppConfigBuilder:
+    """Builder for the application configuration from the validated model."""
+
+    m: AppConfigModel
+
+    def build(self) -> AppConfig:
+        """Build and return the application configuration."""
+        teams = parse_teams(self.m.tournament.teams)
+        team_identities = dict(enumerate(teams, start=1))
+        if not (locations := parse_locations(self.m.tournament.locations)):
+            msg = "No locations defined in the configuration file."
+            raise ValueError(msg)
+        time_fmt = parse_time_fmt(self.m.tournament.rounds)
+        TimeSlot.fmt = time_fmt
+        if not (rounds := parse_rounds(self.m.tournament.rounds, len(teams), time_fmt, locations)):
+            msg = "No rounds defined in the configuration file."
+            raise ValueError(msg)
+        tournament_config = get_tournament_config(len(teams), time_fmt, rounds)
+        rng = get_rng(self.m.genetic.rng_seed)
+        return AppConfig(
+            self.m.genetic,
+            self.m.runtime,
+            self.m.io,
+            self.m.fitness,
+            tournament_config,
+            team_identities,
+            rng,
+            self.m.fitness.aggregation.min_fit,
+            self.m.fitness.objectives.get_weights_tuple(),
+            self.m.fitness.aggregation.get_weights_tuple(),
+        )
