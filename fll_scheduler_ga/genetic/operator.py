@@ -28,19 +28,18 @@ logger = getLogger(__name__)
 
 def calc_ref_points(n_obj: int, n_pop: int) -> np.ndarray:
     """Generate a set of structured reference points."""
-    m = n_obj
     p = 1
-    while comb(m + p - 1, m - 1) < n_pop:
+    while comb(n_obj + p - 1, n_obj - 1) < n_pop:
         p += 1
 
     def _generate_coordinates() -> Iterator[np.ndarray]:
-        for dividers in combinations(range(m + p - 1), m - 1):
-            coords = np.zeros(m, dtype=float)
+        for dividers in combinations(range(n_obj + p - 1), n_obj - 1):
+            coords = np.zeros(n_obj, dtype=float)
             prev = -1
             for i, divider in enumerate(dividers):
                 coords[i] = divider - prev - 1
                 prev = divider
-            coords[-1] = m + p - 1 - dividers[-1] - 1
+            coords[-1] = n_obj + p - 1 - dividers[-1] - 1
             yield (coords / p)
 
     coordinates = tuple(_generate_coordinates())

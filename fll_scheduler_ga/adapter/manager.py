@@ -14,35 +14,35 @@ CONFIG_FILE_ACTIVE = Path(".configs/_active_config.txt").resolve()
 class ConfigManager:
     """Manages selection and maintenance of configuration files."""
 
-    directory: Path = CONFIG_DIR
-    default_template: Path = CONFIG_FILE_DEFAULT
-    active_config: Path = CONFIG_FILE_ACTIVE
+    dirpth: Path = CONFIG_DIR
+    default: Path = CONFIG_FILE_DEFAULT
+    active: Path = CONFIG_FILE_ACTIVE
     available: list[Path] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         """Ensure directory structure exists and is populated."""
-        self.directory.mkdir(parents=True, exist_ok=True)
+        self.dirpth.mkdir(parents=True, exist_ok=True)
         self.refresh_list()
         if not self.available:
-            if not self.default_template.exists():
-                msg = f"Critical: Default template not found at {self.default_template}"
+            if not self.default.exists():
+                msg = f"Critical: Default template not found at {self.default}"
                 raise FileNotFoundError(msg)
-            dest = self.directory / "default.json"
-            shutil.copy(self.default_template, dest)
+            dest = self.dirpth / "default.json"
+            shutil.copy(self.default, dest)
             print(f"Initialized configuration directory with {dest.name}")
             self.refresh_list()
             self.set_active_config("0")
 
     def refresh_list(self) -> None:
         """Refresh the internal list of JSON files."""
-        self.available = sorted((f for f in self.directory.iterdir() if f.suffix == ".json"), key=lambda f: f.name)
+        self.available = sorted((f for f in self.dirpth.iterdir() if f.suffix == ".json"), key=lambda f: f.name)
 
     def get_active_config(self) -> Path:
         """Retrieve the last used configuration if it still exists."""
-        if not self.active_config.exists():
+        if not self.active.exists():
             return Path()
         try:
-            active = self.active_config.read_text(encoding="utf-8").strip()
+            active = self.active.read_text(encoding="utf-8").strip()
             active_path = Path(active)
             for path in self.available:
                 if path.name == active_path.name:
@@ -54,7 +54,7 @@ class ConfigManager:
     def list_configs(self) -> None:
         """Print available configurations with indices."""
         active = self.get_active_config()
-        print(f"\nAvailable Configurations in '{self.directory}':")
+        print(f"\nAvailable Configurations in '{self.dirpth}':")
         print("-" * 50)
         for idx, path in enumerate(self.available):
             marker = "*" if active and path.name == active.name else " "
@@ -100,7 +100,7 @@ class ConfigManager:
     def set_active_config(self, identifier: str) -> None:
         """Set the active configuration file."""
         selected = self.get_config(identifier)
-        with self.active_config.open("w") as f:
+        with self.active.open("w") as f:
             f.write(str(selected.resolve()))
 
     def add_config(self, source_path: Path | str, dest_name: str = "") -> None:
@@ -116,7 +116,7 @@ class ConfigManager:
                 new_filename += ".json"
         else:
             new_filename = src.name
-        dest = self.directory / new_filename
+        dest = self.dirpth / new_filename
         if dest.exists():
             user_input = input(f"File {dest.name} already exists. Overwrite? (y/n): ")
             if user_input.lower() not in ("y", "yes"):

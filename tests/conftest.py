@@ -98,12 +98,12 @@ def schedule_context(
 ) -> ScheduleContext:
     """Initialize ScheduleContext."""
     n_total = tournament_config.n_total_events
-    roundreqs_array = np.tile(tuple(tournament_config.roundreqs.values()), (tournament_config.num_teams, 1))
+    roundreqs_array = np.tile(tuple(tournament_config.roundreqs.values()), (tournament_config.nteam, 1))
     empty_schedule = np.full(n_total, -1, dtype=int)
     return ScheduleContext(
         conflict_map=evt_repo.conflict_map,
         roundtype_idx=evt_prop.roundtype_idx,
-        teams_list=np.arange(tournament_config.num_teams, dtype=int),
+        teams_list=np.arange(tournament_config.nteam, dtype=int),
         teams_roundreqs_arr=roundreqs_array,
         empty_schedule=empty_schedule,
     )

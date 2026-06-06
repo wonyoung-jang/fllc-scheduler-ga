@@ -26,7 +26,7 @@ class ResultExporter:
 
     cfg: AppConfig
     ctx: GaContext
-    seed_file: Path
+    seedpth: Path
     ga: GA
     outdir: Path
 
@@ -36,7 +36,7 @@ class ResultExporter:
         data = GASeedData(
             self.cfg.tournament, self.ga.pareto_front if self.cfg.io.exports.front_only else self.ga.total_pop
         )
-        save_pkl(self.seed_file, data)
+        save_pkl(self.seedpth, data)
         summarizer = SummaryManager(
             self.outdir,
             plot=(

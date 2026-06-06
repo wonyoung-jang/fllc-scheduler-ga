@@ -1,10 +1,11 @@
 """Observers for the FLL Scheduler GA."""
 
 import time
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from logging import getLogger
 from typing import TYPE_CHECKING
+
+from fll_scheduler_ga.domain.model import GaObserver
 
 if TYPE_CHECKING:
     from collections import Counter
@@ -16,17 +17,6 @@ if TYPE_CHECKING:
     from fll_scheduler_ga.genetic.operator import Crossover, Mutation
 
 logger = getLogger(__name__)
-
-
-class GaObserver(ABC):
-    """Abstract base class for observers in the FLL Scheduler GA."""
-
-    @abstractmethod
-    def on_start(self, n_generations: int) -> None: ...
-    @abstractmethod
-    def on_generation_end(self, generation: int, n_generations: int, best_fitness: np.ndarray, npop: int) -> None: ...
-    @abstractmethod
-    def on_finish(self, npop: int, nfront: int) -> None: ...
 
 
 class LoggingObserver(GaObserver):
@@ -86,8 +76,8 @@ class RichObserver(GaObserver):
 
 def log_ga(ga: GA) -> None:
     """Aggregate islands and run a final selection to produce the final population."""
-    _log_operators(name="crossover", ratios=ga.opstat.crossover, ops=ga.context.crossovers)
-    _log_operators(name="mutation", ratios=ga.opstat.mutation, ops=ga.context.mutations)
+    _log_operators(name="crossover", ratios=ga.opstat.crossover, ops=ga.ctx.crossovers)
+    _log_operators(name="mutation", ratios=ga.opstat.mutation, ops=ga.ctx.mutations)
     _log_aggregate_stats(ga)
     for island in ga.islands:
         logger.debug("Island %d Fitness: %.2f", island.identity, sum(island.fitness_history.get_last_gen_fitness()))

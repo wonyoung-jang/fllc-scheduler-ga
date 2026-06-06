@@ -2,6 +2,7 @@
 
 import datetime as dt
 import logging
+from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -241,14 +242,11 @@ class TournamentRound:
     start_time: datetime
     stop_time: datetime
     duration_minutes: timedelta
-    location_type: str
     locations: tuple[Location, ...]
-    num_timeslots: int
     timeslots: tuple[TimeSlot, ...]
     slots_total: int
     slots_required: int
     slots_empty: int
-    unfilled_allowed: bool
 
     @property
     def canonical_tuple(self) -> tuple[Any, ...]:
@@ -263,17 +261,15 @@ class TournamentRound:
 class TournamentConfig:
     """Configuration for the tournament."""
 
-    num_teams: int
+    nteam: int
     time_fmt: str
     rounds: tuple[TournamentRound, ...]
     roundreqs: dict[str, int]
     round_idx_to_tpr: dict[int, int]
     total_slots_required: int
-    unique_opponents_possible: bool
     max_events_per_team: int
     all_locations: tuple[Location, ...]
     all_timeslots: tuple[TimeSlot, ...]
-    is_interleaved: bool
 
     def __hash__(self) -> int:
         """Return hash of TournamentConfig."""
@@ -371,3 +367,14 @@ class BenchmarkSeedData:
             )
             return False
         return True
+
+
+class GaObserver(ABC):
+    """Abstract base class for observers in the FLL Scheduler GA."""
+
+    @abstractmethod
+    def on_start(self, n_generations: int) -> None: ...
+    @abstractmethod
+    def on_generation_end(self, generation: int, n_generations: int, best_fitness: np.ndarray, npop: int) -> None: ...
+    @abstractmethod
+    def on_finish(self, npop: int, nfront: int) -> None: ...

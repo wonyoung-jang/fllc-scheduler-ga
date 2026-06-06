@@ -27,6 +27,6 @@ def load_pkl(path: Path) -> Any | None:
         logger.debug("Loading data from: %s", path)
         with path.open("rb") as f:
             return pickle.load(f)
-    except OSError, pickle.UnpicklingError, ModuleNotFoundError, EOFError:
+    except AttributeError, OSError, pickle.UnpicklingError, ModuleNotFoundError, EOFError:
         logger.warning("Could not load or parse pickle file at: %s", path)
         return None

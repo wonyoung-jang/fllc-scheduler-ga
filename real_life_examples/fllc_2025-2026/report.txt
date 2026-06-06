@@ -1,7 +1,7 @@
-FLL Scheduler GA Summary Report (ID: 3675027190064 | Hash: 4123345217562912858)
+FLL Scheduler GA Summary Report (ID: 2046415515408 | Hash: 4123345217562912858)
 
 Attributes:
---------------------
+---
 rank: -1
 origin: CSV Importer
 mutations: 0
@@ -10,31 +10,30 @@ _hash: 4123345217562912858
 Length: 318
 
 Fitness:
---------------------------
-BreakTime           : 0.12975203934014623
-LocationConsistency : 0.0
-OpponentVariety     : 0.0
------------------------------------
-Total               : 0.12975203934014623
-Percentage          : 4.33%
+---
+BreakTime           : 0.40630651137230067
+LocationConsistency : 0.34386818627441146
+OpponentVariety     : 0.7702001101929875
+Total               : 1.5203748078396995
+Percentage          : 50.68%
 
 Per-Objective Statistics (Team Distribution):
------------------------------------------------------------------
+---
 Objective                 | Min      | Max      | Avg      | Range   
------------------------------------------------------------------
+---
 BreakTime                 | 0.024144 | 0.892725 | 0.446575 | 0.868581
 LocationConsistency       | 0.041667 | 0.641667 | 0.259277 | 0.600000
 OpponentVariety           | 0.503636 | 1.000000 | 0.892655 | 0.496364
 
 Team fitnesses (sorted by total fitness descending):
-----------------------------------------------------
+---
 Max     : 2.312918
 Min     : 0.826862
 Range   : 1.486057
 Average : 1.598506
 
 Team |BreakTime |LocationConsistency |OpponentVariety |Sum
-------------------------------------------------------------
+---
 38   |0.671252  |0.641667            |1.000000        |2.3129
 25   |0.612387  |0.641667            |1.000000        |2.2541
 46   |0.840520  |0.350000            |1.000000        |2.1905
@@ -89,8 +88,8 @@ Team |BreakTime |LocationConsistency |OpponentVariety |Sum
 7    |0.043907  |0.041667            |0.752717        |0.8383
 36   |0.024144  |0.050000            |0.752717        |0.8269
 
-Team Events (sorted, for dev use, diff check with others to ensure truly different schedules created):
-------------------------------------------------------------
+Team Events (sorted, for devs, check diff with others to ensure schedules different):
+---
 0, 72, 134, 195, 224, 282
 1, 73, 135, 217, 262, 299
 2, 74, 136, 167, 227, 310

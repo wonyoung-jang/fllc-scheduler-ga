@@ -210,7 +210,7 @@ def generate_stable_config_hash(config: TournamentConfig, model: FitnessModel) -
         model.penalties.minbreak_target,
         model.penalties.minbreak,
         model.penalties.zeros,
-        config.num_teams,
+        config.nteam,
     )
     # Using hashlib over built-in hash for stability
     return int(hashlib.sha256(str(representation).encode()).hexdigest(), 16)
@@ -242,7 +242,7 @@ def build_evaluator(
         benchmark_opponents=opponents, single_roundtypes=single_roundtypes
     )
     return FitnessEvaluator(
-        n_team=cfg.tournament.num_teams,
+        n_team=cfg.tournament.nteam,
         n_max_evt_per_team=cfg.tournament.max_events_per_team,
         evt_prop=evt_prop,
         agg_weights=cfg.aggweight,
@@ -265,15 +265,16 @@ class GaContextBuilder:
         evt_repo = build_evt_repo(self.cfg.tournament.rounds)
         evt_prop = build_evt_prop(evt_repo.mapping)
         preflight(evt_prop, evt_repo)
-        Schedule.ctx = ScheduleContext(
+        sched_ctx = ScheduleContext(
             conflict_map=evt_repo.conflict_map,
             roundtype_idx=evt_prop.roundtype_idx,
-            teams_list=np.arange(self.cfg.tournament.num_teams, dtype=int),
+            teams_list=np.arange(self.cfg.tournament.nteam, dtype=int),
             teams_roundreqs_arr=np.tile(
-                A=tuple(self.cfg.tournament.roundreqs.values()), reps=(self.cfg.tournament.num_teams, 1)
+                A=tuple(self.cfg.tournament.roundreqs.values()), reps=(self.cfg.tournament.nteam, 1)
             ),
             empty_schedule=np.full(self.cfg.tournament.n_total_events, -1, dtype=int),
         )
+        Schedule.ctx = sched_ctx
         config_hash = generate_stable_config_hash(self.cfg.tournament, self.cfg.fitness)
         BENCHMARKS_CACHE.mkdir(parents=True, exist_ok=True)
         benchmark_path = BENCHMARKS_CACHE / f"benchmark_cache_{config_hash}.pkl"

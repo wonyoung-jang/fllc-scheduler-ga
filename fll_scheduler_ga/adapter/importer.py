@@ -28,7 +28,6 @@ class CsvImporter:
     config: TournamentConfig
     evt_repo: EventRepository
     evt_prop: EventProperties
-    sched: Schedule = field(default_factory=Schedule)
     rnd_cfg: dict[str, TournamentRound] = field(default_factory=dict)
     rtl_map: dict[tuple[str, tuple[datetime, ...], tuple[str, int, int, int]], int] = field(default_factory=dict)
 
@@ -51,32 +50,38 @@ class CsvImporter:
         if not self.config.rounds:
             logger.warning("Tournament configuration is required.")
             return None
-        self.import_schedule()
-        if not self.sched:
+        sched = Schedule(origin="CSV Importer")
+        if _import := self.import_schedule():
+            for t, e in _import:
+                sched.assign(t, e)
+        if not sched:
             logger.error("Failed to reconstruct schedule from CSV. Aborting.")
             return None
-        return self.sched
+        if sched.any_rounds_needed():
+            logger.warning("Schedule: %s", sched)
+            logger.warning("Some teams are missing required rounds defined in your config.")
+            return None
+        return sched
 
-    def import_schedule(self) -> None:
+    def import_schedule(self) -> Iterator[tuple[int, int]]:
         """Import schedule from the CSV file."""
         try:
             with self.path.open(encoding="utf-8-sig") as f:
-                self._parse_schedule(f)
+                yield from self._parse_schedule(f)
         except FileNotFoundError:
             logger.exception("Schedule file not found at: %s", self.path)
-            return
+            return None
         except Exception:
             logger.exception("An unexpected error occurred while parsing the CSV")
-            return
+            return None
 
-    def _parse_schedule(self, csv_file: TextIO) -> None:
+    def _parse_schedule(self, csv_file: TextIO) -> Iterator[tuple[int, int]]:
         """Reconstruct a Schedule object by parsing a grid-based CSV file.
 
         Args:
             csv_file: An open text file stream for the CSV.
 
         """
-        self.sched = Schedule(origin="CSV Importer")
         current_round_type: str = ""
         header_locations: list[str] = []
         for row in csv.reader(csv_file):
@@ -94,11 +99,7 @@ class CsvImporter:
                 header_locations.extend(h.strip() for h in row[1:])
                 continue
             if header_locations and RE_HHMM.match(first_cell):
-                for t, e in self._parse_row(row, current_round_type, header_locations):
-                    self.sched.assign(t, e)
-        if self.sched.any_rounds_needed():
-            logger.warning("Schedule: %s", self.sched)
-            logger.warning("Some teams are missing required rounds defined in your config.")
+                yield from self._parse_row(row, current_round_type, header_locations)
 
     def _parse_row(self, row: list[str], curr_rt: str, header_locations: list[str]) -> Iterator[tuple[int, int]]:
         """Parse a single data row from the CSV and update the schedule.
@@ -135,8 +136,6 @@ class CsvImporter:
             team = Schedule.ctx.teams_list[team_id - 1]
             if team == -1:
                 logger.error("Team ID %d (%d) from CSV not found.", team_id, team_id - 1)
-                logger.error("%s", Schedule.ctx.teams_list)
-                logger.error("%s", Schedule.ctx.teams_list[team_id - 1])
                 continue
             rtl_event_key = (curr_rt, (start, stop), location_t)
             event = self.rtl_map.get(rtl_event_key)

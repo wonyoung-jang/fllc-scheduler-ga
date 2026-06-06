@@ -6,7 +6,7 @@ import logging
 import math
 from collections import Counter
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -59,7 +59,7 @@ def parse_time_fmt(round_models: Iterable[RoundModel]) -> str:
     if len(format_counts) != 1:
         msg = "Conflicting time formats found in configuration times."
         raise ValueError(msg)
-    return str(format_counts.most_common(1)[0][0])
+    return format_counts.most_common(1)[0][0]
 
 
 def _calc_num_timeslots(n_locs: int, n_teams: int, rounds_per_team: int) -> int:
@@ -128,109 +128,94 @@ def get_rng(seed: int | str | None) -> Generator:
     return np.random.default_rng(s)
 
 
+def _generate_locations(location_model: tuple[LocationModel, ...], locidxiter: Iterator[int]) -> Iterator[Location]:
+    for lm in location_model:
+        for name in range(1, lm.count + 1):
+            for side in range(1, lm.sides + 1):
+                yield Location(next(locidxiter), lm.name, name, -1 if lm.sides == 1 else side, lm.sides)
+
+
 def parse_locations(location_model: tuple[LocationModel, ...]) -> tuple[Location, ...]:
     """Parse location models into Location instances."""
-
-    def _generate_locations(idx_iter: Iterator[int]) -> Iterator[Location]:
-        for lm in location_model:
-            for name in range(1, lm.count + 1):
-                for side in range(1, lm.sides + 1):
-                    yield Location(next(idx_iter), lm.name, name, -1 if lm.sides == 1 else side, lm.sides)
-
-    idx_iter = itertools.count()
-    return tuple(_generate_locations(idx_iter))
-
-
-def _get_all_sorted_attr(objects: Iterable[Any], get_by: str, sort_by: str) -> tuple[Any, ...]:
-    """Get all attributes of the TournamentRound objects."""
-    return tuple(
-        sorted(itertools.chain.from_iterable(getattr(r, get_by) for r in objects), key=lambda x: getattr(x, sort_by))
-    )
-
-
-def _are_rounds_overlapping(rounds: Iterable[TournamentRound]) -> bool:
-    """Check if any rounds are interleaved in time."""
-    start_stops = ((r.start_time, r.stop_time) for r in rounds)
-    timeslots = (TimeSlot(idx=0, start=start, stop_active=stop, stop_cycle=stop) for start, stop in start_stops)
-    return any(a.overlaps(b) for a, b in itertools.combinations(timeslots, 2))
+    locidxiter = itertools.count()
+    return tuple(_generate_locations(location_model, locidxiter))
 
 
 def get_tournament_config(n_teams: int, time_fmt: str, rounds: tuple[TournamentRound, ...]) -> TournamentConfig:
     """Load and return the tournament configuration from the validated model."""
     roundreqs = {r.roundtype: r.rounds_per_team for r in rounds}
+    all_locations = tuple(sorted({loc for r in rounds for loc in r.locations}, key=lambda lo: lo.idx))
+    all_timeslots = tuple(sorted({ts for r in rounds for ts in r.timeslots}, key=lambda t: t.idx))
     return TournamentConfig(
-        num_teams=n_teams,
+        nteam=n_teams,
         time_fmt=time_fmt,
         rounds=rounds,
         roundreqs=roundreqs,
         round_idx_to_tpr={r.roundtype_idx: r.teams_per_round for r in rounds},
         total_slots_required=sum(r.slots_required for r in rounds),
-        unique_opponents_possible=1 <= max(roundreqs.values()) <= n_teams - 1,
         max_events_per_team=sum(roundreqs.values()),
-        all_locations=_get_all_sorted_attr(rounds, get_by="locations", sort_by="idx"),
-        all_timeslots=_get_all_sorted_attr(rounds, get_by="timeslots", sort_by="idx"),
-        is_interleaved=_are_rounds_overlapping(rounds),
+        all_locations=all_locations,
+        all_timeslots=all_timeslots,
     )
 
 
+def _gen_rnd(
+    models: tuple[RoundModel, ...],
+    n_teams: int,
+    time_fmt: str,
+    all_locations: tuple[Location, ...],
+    timeslot_idx_iter: Iterator[int],
+) -> Iterator[TournamentRound]:
+    for roundtype_idx, rm in enumerate(models):
+        locations = tuple(loc for loc in all_locations if loc.locationtype == rm.location)
+        nloc = len(locations)
+        start_dt = _parse_time_str(rm.start_time, time_fmt)
+        stop_dt = _parse_time_str(rm.stop_time, time_fmt)
+        _input_times_dt = tuple(_parse_time_str(t, time_fmt) for t in rm.times) if rm.times else ()
+        n_timeslot = len(_input_times_dt) or _calc_num_timeslots(nloc, n_teams, rm.rounds_per_team)
+        if n_timeslot <= 0:
+            msg = "n_timeslots must be greater than zero to validate duration."
+            raise ValueError(msg)
+        start_stop = (start_dt, stop_dt)
+        dur_tdelta_cycle = _validate_duration(start_stop, _input_times_dt, rm.duration_cycle, n_timeslot)
+        dur_tdelta_active = _validate_duration(start_stop, _input_times_dt, rm.duration_active, n_timeslot)
+        timeslots_iter = _init_timeslots(_input_times_dt, dur_tdelta_cycle, dur_tdelta_active, n_timeslot, start_dt)
+        timeslots = tuple(
+            TimeSlot(next(timeslot_idx_iter), start, stop_active, stop_cycle)
+            for start, stop_active, stop_cycle in timeslots_iter
+        )
+        slots_total = n_timeslot * nloc
+        slots_required = n_teams * rm.rounds_per_team
+        slots_empty = slots_total - slots_required
+        if slots_empty < 0:
+            msg = (
+                "Insufficient capacity for TournamentRound (required > available).\n"
+                "Suggestion: increase number of locations or timeslots."
+            )
+            raise ValueError(msg)
+        yield TournamentRound(
+            rm.roundtype,
+            roundtype_idx,
+            rm.rounds_per_team,
+            rm.teams_per_round,
+            tuple(ts.start for ts in timeslots),
+            timeslots[0].start,
+            timeslots[-1].stop_cycle,
+            dur_tdelta_cycle,
+            locations,
+            timeslots,
+            slots_total,
+            slots_required,
+            slots_empty,
+        )
+
+
 def parse_rounds(
-    models: tuple[RoundModel, ...], n_teams: int, time_fmt: str, all_locations: tuple[Location, ...]
+    models: tuple[RoundModel, ...], n_team: int, time_fmt: str, all_loc: tuple[Location, ...]
 ) -> tuple[TournamentRound, ...]:
     """Parse and return TournamentRound objects from the configuration."""
-
-    def _generate_rounds(timeslot_idx_iter: Iterator[int]) -> Iterator[TournamentRound]:
-        for roundtype_idx, rm in enumerate(models):
-            locations = tuple(loc for loc in all_locations if loc.locationtype == rm.location)
-            nloc = len(locations)
-            start_dt = _parse_time_str(rm.start_time, time_fmt)
-            stop_dt = _parse_time_str(rm.stop_time, time_fmt)
-            _input_times_dt = tuple(_parse_time_str(t, time_fmt) for t in rm.times) if rm.times else ()
-            n_timeslot = len(_input_times_dt) or _calc_num_timeslots(nloc, n_teams, rm.rounds_per_team)
-            if n_timeslot <= 0:
-                msg = "n_timeslots must be greater than zero to validate duration."
-                raise ValueError(msg)
-            start_stop = (start_dt, stop_dt)
-            dur_tdelta_cycle = _validate_duration(start_stop, _input_times_dt, rm.duration_cycle, n_timeslot)
-            dur_tdelta_active = _validate_duration(start_stop, _input_times_dt, rm.duration_active, n_timeslot)
-            timeslots_iter = _init_timeslots(_input_times_dt, dur_tdelta_cycle, dur_tdelta_active, n_timeslot, start_dt)
-            timeslots = tuple(
-                TimeSlot(next(timeslot_idx_iter), start, stop_active, stop_cycle)
-                for start, stop_active, stop_cycle in timeslots_iter
-            )
-            round_start_time = timeslots[0].start
-            round_stop_time = timeslots[-1].stop_cycle
-            times_dt = tuple(ts.start for ts in timeslots)
-            slots_total = n_timeslot * nloc
-            slots_required = n_teams * rm.rounds_per_team
-            slots_empty = slots_total - slots_required
-            if slots_empty < 0:
-                msg = (
-                    "Insufficient capacity for TournamentRound (required > available).\n"
-                    "Suggestion: increase number of locations or timeslots."
-                )
-                raise ValueError(msg)
-            unfilled_allowed = slots_empty > 0
-            yield TournamentRound(
-                rm.roundtype,
-                roundtype_idx,
-                rm.rounds_per_team,
-                rm.teams_per_round,
-                times_dt,
-                round_start_time,
-                round_stop_time,
-                dur_tdelta_cycle,
-                rm.location,
-                locations,
-                n_timeslot,
-                timeslots,
-                slots_total,
-                slots_required,
-                slots_empty,
-                unfilled_allowed,
-            )
-
-    timeslot_idx_iter = itertools.count()
-    return tuple(sorted(_generate_rounds(timeslot_idx_iter), key=lambda r: r.start_time))
+    tsidxiter = itertools.count()
+    return tuple(sorted(_gen_rnd(models, n_team, time_fmt, all_loc, tsidxiter), key=lambda r: r.start_time))
 
 
 @dataclass(slots=True)
@@ -265,3 +250,15 @@ class AppConfigBuilder:
             self.m.fitness.objectives.get_weights_tuple(),
             self.m.fitness.aggregation.get_weights_tuple(),
         )
+
+
+# def _are_rounds_overlapping(rounds: Iterable[TournamentRound]) -> bool:
+#     """Check if any rounds are interleaved in time."""
+#     start_stops = ((r.start_time, r.stop_time) for r in rounds)
+#     timeslots = (TimeSlot(idx=0, start=start, stop_active=stop, stop_cycle=stop) for start, stop in start_stops)
+#     return any(a.overlaps(b) for a, b in itertools.combinations(timeslots, 2))
+
+
+# def _is_unique_opponents_possible(roundreqs: dict[int, int], n_teams: int) -> bool:
+#     """Check if the tournament configuration allows for unique opponents."""
+#     return 1 <= max(roundreqs.values()) <= n_teams - 1

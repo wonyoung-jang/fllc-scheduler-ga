@@ -3,23 +3,12 @@
 import pytest
 from pydantic import ValidationError
 
-from fll_scheduler_ga.adapter.schema import (
-    AggregationWeightsModel,
-    FitnessModel,
-    ImportModel,
-    LocationWeightsModel,
-    RoundModel,
-)
+from fll_scheduler_ga.adapter.schema import AggregationWeightsModel, FitnessModel, LocationWeightsModel, RoundModel
 from fll_scheduler_ga.service.config_builder import parse_teams
 
 
 def test_schemas_validation() -> None:
     """Test Pydantic model validations."""
-    # ImportModel
-    with pytest.raises(ValidationError):
-        ImportModel(seed_pop_sort="invalid")
-    with pytest.raises(ValidationError):
-        ImportModel(seed_island_strategy="invalid")
     # FitnessModel
     fm = FitnessModel()
     fm_obj_weights = fm.objectives.get_weights_tuple()

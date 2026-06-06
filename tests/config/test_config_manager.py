@@ -16,7 +16,7 @@ def test_config_manager_initialization(tmp_path: Path) -> None:
     default_tpl = tmp_path / "default.json"
     default_tpl.touch()
     # Init with empty directory
-    cm = ConfigManager(directory=config_dir, default_template=default_tpl, active_config=tmp_path / "active.txt")
+    cm = ConfigManager(dirpth=config_dir, default=default_tpl, active=tmp_path / "active.txt")
     assert (config_dir / "default.json").exists()
     assert cm.get_active_config().name == "default.json"
 
@@ -26,7 +26,7 @@ def test_config_manager_operations(tmp_path: Path) -> None:
     config_dir = tmp_path / "configs"
     default_tpl = tmp_path / "default.json"
     default_tpl.touch()
-    cm = ConfigManager(directory=config_dir, default_template=default_tpl, active_config=tmp_path / "active.txt")
+    cm = ConfigManager(dirpth=config_dir, default=default_tpl, active=tmp_path / "active.txt")
     # Add config
     new_cfg = tmp_path / "custom.json"
     new_cfg.touch()

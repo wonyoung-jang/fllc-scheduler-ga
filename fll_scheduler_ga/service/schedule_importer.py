@@ -34,11 +34,11 @@ class ScheduleImporter:
             return None
         if not self.ctx.check(sched):
             return None
-        if fits := self.ctx.evaluate(np.array([sched.schedule], dtype=int)):
-            sched_fit, team_fit = fits
-            sched.fitness = sched_fit[0]
-            sched.team_fitnesses = team_fit[0]
-            parent = self.path.parent
-            parent.mkdir(parents=True, exist_ok=True)
-            ScheduleSummaryGenerator(self.team_ids).export(sched, parent / "report.txt")
+        fits = self.ctx.evaluate(np.array([sched.schedule], dtype=int))
+        sched_fit, team_fit = fits
+        sched.fitness = sched_fit[0]
+        sched.team_fitnesses = team_fit[0]
+        parent = self.path.parent
+        parent.mkdir(parents=True, exist_ok=True)
+        ScheduleSummaryGenerator(self.team_ids).export(sched, parent / "report.txt")
         return sched

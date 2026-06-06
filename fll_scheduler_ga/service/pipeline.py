@@ -31,13 +31,13 @@ def run_pipeline(path: Path, progress: Progress | None = None, task_id: TaskID |
     ctx_builder = GaContextBuilder(cfg)
     ctx = ctx_builder.build()
 
-    seed_file = Path(cfg.runtime.seed_file).resolve()
-    if cfg.runtime.flush and path.exists():
-        path.unlink(missing_ok=True)
-        path.touch(exist_ok=True)
-        logger.debug("Flushed seed file at: %s", path)
+    seedpth = Path(cfg.runtime.seed_file).resolve()
+    if cfg.runtime.flush and seedpth.exists():
+        seedpth.unlink(missing_ok=True)
+        seedpth.touch(exist_ok=True)
+        logger.debug("Flushed seed file at: %s", seedpth)
 
-    seed: GASeedData | None = load_pkl(seed_file)
+    seed: GASeedData | None = load_pkl(seedpth)
     if not seed:
         seed_pop = []
     elif seed.config != cfg.tournament:
@@ -63,6 +63,6 @@ def run_pipeline(path: Path, progress: Progress | None = None, task_id: TaskID |
         shutil.rmtree(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
 
-    exporter = ResultExporter(cfg, ctx, seed_file, ga, outdir)
+    exporter = ResultExporter(cfg, ctx, seedpth, ga, outdir)
     exporter.export()
     return ga

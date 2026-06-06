@@ -115,16 +115,16 @@ class RuntimeModel(BaseModel):
 class ImportModel(BaseModel):
     """Configuration for import options."""
 
-    seed_pop_sort: str = SeedPopSort.RANDOM
-    seed_island_strategy: str = SeedIslandStrategy.DISTRIBUTED
+    seed_pop_sort: SeedPopSort = SeedPopSort.RANDOM
+    seed_island_strategy: SeedIslandStrategy = SeedIslandStrategy.DISTRIBUTED
 
     @model_validator(mode="after")
     def validate(self) -> ImportModel:
         """Validate import options."""
-        if self.seed_pop_sort not in tuple(SeedPopSort):
+        if self.seed_pop_sort not in SeedPopSort:
             msg = f"Invalid seed_pop_sort: {self.seed_pop_sort}. Must be one of {[e.value for e in SeedPopSort]}."
             raise ValueError(msg)
-        if self.seed_island_strategy not in tuple(SeedIslandStrategy):
+        if self.seed_island_strategy not in SeedIslandStrategy:
             msg = (
                 f"Invalid seed_island_strategy: {self.seed_island_strategy}. "
                 f"Must be one of {[e.value for e in SeedIslandStrategy]}."

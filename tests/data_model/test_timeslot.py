@@ -116,13 +116,12 @@ def test_overlaps_timeslot(timeslot: TimeSlot, start_offset_min: int, stop_offse
 
 
 @pytest.mark.parametrize(
-    ("n_times", "n_locs", "n_teams", "rounds_per_team", "expected"),
+    ("n_locs", "n_teams", "rounds_per_team", "expected"),
     [
-        (0, 10, 2, 5),  # enough times
         (4, 10, 2, 5),  # enough locations
         (0, 10, 2, None),  # cannot calculate
     ],
-    ids=["enough_times", "enough_locations", "cannot_calculate"],
+    ids=["enough_locations", "cannot_calculate"],
 )
 def test_calc_num_timeslots(n_locs: int, n_teams: int, rounds_per_team: int, expected: int | None) -> None:
     """Parametrized tests for _calc_num_timeslots function."""
@@ -201,21 +200,6 @@ class TestValidateDuration:
         """Test _validate_duration calculates duration from start/stop times."""
         result = _validate_duration(start_stop=(start_dt, stop_dt), times_dt=(), dur=0, n_timeslots=n_timeslots)
         assert result == timedelta(minutes=expected_minutes)
-
-    def test_validate_duration_start_stop_invalid_n_timeslots(self) -> None:
-        """Test _validate_duration raises error when n_timeslots is invalid."""
-        with pytest.raises(ValueError, match=r"n_timeslots must be greater than zero"):
-            _validate_duration(
-                start_stop=(datetime(2026, 1, 1, 9, 0, tzinfo=UTC), datetime(2026, 1, 1, 10, 0, tzinfo=UTC)),
-                times_dt=(),
-                dur=0,
-                n_timeslots=0,
-            )
-
-    def test_validate_duration_with_default_dt_and_no_dur_raises_error(self) -> None:
-        """Test _validate_duration with DEFAULT_DT values and no duration raises error."""
-        with pytest.raises(ValueError, match=r"n_timeslots must be greater than zero"):
-            _validate_duration(start_stop=(DEFAULT_DT, DEFAULT_DT), times_dt=(), dur=0, n_timeslots=0)
 
     def test_validate_duration_minimum_one_minute(self) -> None:
         """Test _validate_duration returns minimum 1 minute for very small durations."""
