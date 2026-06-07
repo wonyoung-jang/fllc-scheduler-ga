@@ -59,6 +59,8 @@ class CrossoverModel(BaseModel):
         if any(k <= 0 for k in self.k_vals):
             msg = "All k_vals must be positive integers."
             raise ValueError(msg)
+        if not self.types:
+            logger.warning("No crossover types specified in configuration, crossover will not occur.")
         return self
 
 
@@ -73,6 +75,8 @@ class MutationModel(BaseModel):
         if any(t not in tuple(MutationOp) for t in self.types):
             msg = f"Invalid mutation type in types: {self.types}. Must be one of {[e.value for e in MutationOp]}."
             raise ValueError(msg)
+        if not self.types:
+            logger.warning("No mutation types specified in configuration, mutation will not occur.")
         return self
 
 

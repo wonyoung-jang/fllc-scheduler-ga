@@ -305,7 +305,7 @@ class HtmlScheduleExporter(ScheduleExporter):
 class ScheduleSummaryGenerator:
     """Exporter for generating summaries of schedules."""
 
-    team_identities: dict[int, str]
+    team_ids: dict[int, str]
 
     def get_text_summary(self, schedule: Schedule) -> Iterator[str]:
         """Get a text summary of the schedule."""
@@ -320,7 +320,7 @@ class ScheduleSummaryGenerator:
         total_fits = team_fits.sum(axis=1)
         min_team_f = total_fits.min()
         max_team_f = total_fits.max()
-        normalized_teams = normalize_teams(schedule.schedule, self.team_identities)
+        normalized_teams = normalize_teams(schedule.schedule, self.team_ids)
         yield f"FLL Scheduler GA Summary Report (ID: {id(schedule)} | Hash: {hash(schedule)})\n"
         yield "\nAttributes:\n---\n"
         yield from (

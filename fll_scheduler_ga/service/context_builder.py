@@ -22,7 +22,7 @@ from fll_scheduler_ga.domain.model import (
     TournamentConfig,
     TournamentRound,
 )
-from fll_scheduler_ga.genetic.context import GaContext, ScheduleBuilderRandom
+from fll_scheduler_ga.genetic.context import GaContext, ScheduleBuilder
 from fll_scheduler_ga.genetic.fitness import (
     BreakTimeFitnessEvaluator,
     FitnessBenchmarkBreaktime,
@@ -303,20 +303,28 @@ class GaContextBuilder:
         return GaContext(
             evt_repo=evt_repo,
             evt_prop=evt_prop,
-            builder=ScheduleBuilderRandom(
-                evt_prop, self.cfg.rng, self.cfg.tournament.round_idx_to_tpr, evt_repo.roundtypes
+            builder=ScheduleBuilder(
+                evt_prop=evt_prop,
+                rng=self.cfg.rng,
+                round_idx_to_tpr=self.cfg.tournament.round_idx_to_tpr,
+                roundtype_events=evt_repo.roundtypes,
             ),
-            repairer=Repairer(self.cfg.tournament, evt_prop, self.cfg.rng),
+            repairer=Repairer(config=self.cfg.tournament, evt_prop=evt_prop, rng=self.cfg.rng),
             evaluator=evaluator,
             checker=checker,
             nsga3=NSGA3(self.cfg.rng, points.shape[0], points, calc_norm_sq_of_refs(points)),
             selection=RandomSelect(self.cfg.rng),
             crossovers=build_crossovers(
-                self.cfg.rng,
-                self.cfg.genetic.operator.crossover.types,
-                self.cfg.genetic.operator.crossover.k_vals,
-                evt_repo,
-                evt_prop,
+                rng=self.cfg.rng,
+                types=self.cfg.genetic.operator.crossover.types,
+                crossover_ks=self.cfg.genetic.operator.crossover.k_vals,
+                evt_repo=evt_repo,
+                evt_prop=evt_prop,
             ),
-            mutations=build_mutations(self.cfg.rng, self.cfg.genetic.operator.mutation.types, evt_repo, evt_prop),
+            mutations=build_mutations(
+                rng=self.cfg.rng,
+                types=self.cfg.genetic.operator.mutation.types,
+                evt_repo=evt_repo,
+                evt_prop=evt_prop,
+            ),
         )

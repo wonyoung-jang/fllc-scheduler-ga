@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 import numpy as np
 
-from fll_scheduler_ga.constants import DATA_MODEL_VERSION, FITNESS_MODEL_VERSION
+from fll_scheduler_ga.constants import ModelVersion
 
 if TYPE_CHECKING:
     from datetime import datetime, timedelta
@@ -335,16 +335,12 @@ class GASeedData:
 
     config: TournamentConfig
     population: list[Schedule]
-    version: int = DATA_MODEL_VERSION
+    version: int = ModelVersion.DATA
 
     def __bool__(self) -> bool:
         """Validate loaded seed data."""
-        if self.version != DATA_MODEL_VERSION:
-            logger.warning(
-                "Seed version mismatch: Expected %d, found %d. Starting with fresh population.",
-                DATA_MODEL_VERSION,
-                self.version,
-            )
+        if self.version != ModelVersion.DATA:
+            logger.warning("Seed version mismatch: Expected %d, found %d.", ModelVersion.DATA, self.version)
             return False
         return True
 
@@ -355,16 +351,12 @@ class BenchmarkSeedData:
 
     opponents: np.ndarray
     best_timeslot_score: float
-    version: int = FITNESS_MODEL_VERSION
+    version: int = ModelVersion.FITNESS
 
     def __bool__(self) -> bool:
         """Validate loaded benchmark data."""
-        if self.version != FITNESS_MODEL_VERSION:
-            logger.warning(
-                "Benchmark version mismatch: Expected %d, found %d. Recalculating benchmarks.",
-                FITNESS_MODEL_VERSION,
-                self.version,
-            )
+        if self.version != ModelVersion.FITNESS:
+            logger.warning("Benchmark version mismatch: Expected %d, found %d.", ModelVersion.FITNESS, self.version)
             return False
         return True
 

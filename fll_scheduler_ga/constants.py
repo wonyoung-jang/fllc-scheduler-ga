@@ -1,6 +1,6 @@
 """Module to hold constants for the scheduler."""
 
-from enum import StrEnum
+from enum import IntEnum, StrEnum
 from pathlib import Path
 
 MAIN_PACKAGE_DIR = Path("fll_scheduler_ga").resolve()
@@ -8,12 +8,17 @@ BENCHMARKS_CACHE = Path(".benchmarks_cache/").resolve()
 CONFIG_FILE_DEFAULT = MAIN_PACKAGE_DIR / "config.json"
 LOGGING_CONFIG_PATH = MAIN_PACKAGE_DIR / "logging.json"
 PICKLE_FILE_SCHEDULES = "fll_scheduler_ga.pkl"
-OUTPUT_DIR_DEFAULT = "fllc_schedule_outputs"
+OUTPUT_DIR_DEFAULT = "fll_schedule_outputs"
 CMAP_NAME_DEFAULT = "viridis"
-DATA_MODEL_VERSION = 3
-FITNESS_MODEL_VERSION = 3
 RANDOM_SEED_RANGE = (1, 2**32 - 1)
 EPSILON = 1e-12
+
+
+class ModelVersion(IntEnum):
+    """Enum for model version keys."""
+
+    DATA = 3
+    FITNESS = 3
 
 
 class SelectionOp(StrEnum):

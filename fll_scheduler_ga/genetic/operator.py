@@ -1,13 +1,12 @@
 """Genetic operators."""
 
 import itertools
+import logging
+import math
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass, field
-from itertools import combinations
-from logging import getLogger
-from math import comb
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -19,7 +18,7 @@ if TYPE_CHECKING:
 
     from fll_scheduler_ga.domain.model import EventProperties, EventRepository, TournamentConfig
 
-logger = getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 ########################################################################
 ###  NSGA-III
@@ -29,11 +28,11 @@ logger = getLogger(__name__)
 def calc_ref_points(n_obj: int, n_pop: int) -> np.ndarray:
     """Generate a set of structured reference points."""
     p = 1
-    while comb(n_obj + p - 1, n_obj - 1) < n_pop:
+    while math.comb(n_obj + p - 1, n_obj - 1) < n_pop:
         p += 1
 
-    def _generate_coordinates() -> Iterator[np.ndarray]:
-        for dividers in combinations(range(n_obj + p - 1), n_obj - 1):
+    def _gen() -> Iterator[np.ndarray]:
+        for dividers in itertools.combinations(range(n_obj + p - 1), n_obj - 1):
             coords = np.zeros(n_obj, dtype=float)
             prev = -1
             for i, divider in enumerate(dividers):
@@ -42,15 +41,14 @@ def calc_ref_points(n_obj: int, n_pop: int) -> np.ndarray:
             coords[-1] = n_obj + p - 1 - dividers[-1] - 1
             yield (coords / p)
 
-    coordinates = tuple(_generate_coordinates())
-    points = np.array(coordinates, dtype=float)
+    points = np.array(list(_gen()), dtype=float)
     logger.debug("Generated %d reference points:\n%s", points.shape[0], points)
     return points
 
 
 def calc_norm_sq_of_refs(points: np.ndarray) -> np.ndarray:
     """Calculate the squared norms of the reference points."""
-    norm_sq = (points**2).sum(axis=1)
+    norm_sq = (points * points).sum(axis=1)
     norm_sq[norm_sq == 0.0] = EPSILON
     logger.debug("Computed squared norms of reference points:\n%s", norm_sq)
     return norm_sq
@@ -71,10 +69,11 @@ class NSGA3:
         if n_fit == 0:
             return []
         # Pairwise comparisons using broadcasting
-        all_ge = (fits[:, None, :] >= fits[None, :, :]).all(axis=2)
-        any_gt = (fits[:, None, :] > fits[None, :, :]).any(axis=2)
         # dom[i,j] = True if i dominates j (>= on all and > on at least one)
-        dom = np.logical_and(all_ge, any_gt)
+        dom = np.logical_and(
+            (fits[:, None, :] >= fits[None, :, :]).all(axis=2),
+            (fits[:, None, :] > fits[None, :, :]).any(axis=2),
+        )
         # Number of individuals that dominate j = sum over i dom[i,j]
         dom_count = dom.sum(axis=0)
         # Adjacency lists: who each i dominates
@@ -88,8 +87,7 @@ class NSGA3:
         # Build subsequent fronts
         while n_ranked < n_pop and current_front.size > 0:
             # Sum of domination relationships from current_front to each j
-            decrement = dom[current_front, :].sum(axis=0)
-            dom_count = dom_count - decrement
+            dom_count = dom_count - dom[current_front, :].sum(axis=0)
             # Next front: those now not dominated by anybody
             next_front: np.ndarray = ((dom_count == 0) & (~assigned)).nonzero()[0]
             if next_front.size == 0:
@@ -115,14 +113,10 @@ class NSGA3:
         last_front_indices = fronts[last_idx]
         n_last_front = last_front_indices.size
         fronts = fronts[:last_idx]
-        selected = selected_indices[:-n_last_front]
-        n_remaining = n_pop - selected.size
-        niche_selected = refs[:-n_last_front]
-        counts = self.count(niche_selected)
         niches = self.niche(
-            counts=counts,
+            counts=self.count(refs[:-n_last_front]),
             n_last_front=n_last_front,
-            n_remaining=n_remaining,
+            n_remaining=n_pop - selected_indices[:-n_last_front].size,
             niche_refs=refs[-n_last_front:],
             niche_dists=distances[-n_last_front:],
         )
@@ -151,19 +145,16 @@ class NSGA3:
             # All reference points associated with individuals still available
             available_refs = np.unique(niche_refs[mask])
             ref_counts = counts[available_refs]
-            # Minimum count among those reference points
-            min_count = ref_counts.min()
             # Number of individuals to select from this niche
-            n_select = n_remaining - n_selected
-            niche_indices = available_refs[(ref_counts == min_count).nonzero()[0]]
-            niche_indices = niche_indices[self.rng.permutation(niche_indices.size)[:n_select]]
-            for niche_idx in niche_indices:
+            niche_idx = available_refs[(ref_counts == ref_counts.min()).nonzero()[0]]
+            niche_idx = niche_idx[self.rng.permutation(niche_idx.size)[: n_remaining - n_selected]]
+            for niche_i in niche_idx:
                 # Indices of individuals in this niche still available
-                next_i = ((niche_refs == niche_idx) & mask).nonzero()[0]
+                next_i = ((niche_refs == niche_i) & mask).nonzero()[0]
                 self.rng.shuffle(next_i)
-                index = next_i[niche_dists[next_i].argmin()] if counts[niche_idx] == 0 else next_i[0]
+                index = next_i[niche_dists[next_i].argmin()] if counts[niche_i] == 0 else next_i[0]
                 mask[index] = False
-                counts[niche_idx] += 1
+                counts[niche_i] += 1
                 n_selected += 1
                 if n_selected >= n_remaining:
                     break
@@ -203,39 +194,28 @@ class NSGA3:
 ########################################################################
 
 
-@dataclass(slots=True)
 class Selection(ABC):
     """Abstract base class for selection operators in genetic algorithms."""
-
-    rng: np.random.Generator = field(default_factory=np.random.default_rng)
 
     @abstractmethod
     def select(self, n: int, k: int) -> np.ndarray: ...
 
 
+@dataclass(slots=True)
 class RandomSelect(Selection):
     """Random selection of individuals from the population."""
+
+    rng: np.random.Generator
 
     def __str__(self) -> str:
         """Return a string representation of the selection operator."""
         return SelectionOp.RANDOM_SELECT
 
     def select(self, n: int, k: int = 2) -> np.ndarray:
-        """Select individuals from the population to form the next generation.
-
-        Args:
-            n (int): The population size to select from.
-            k (int): The number to select.
-
-        Returns:
-            np.ndarray: The indices of the selected individuals.
-
-        """
+        """Select individuals from the population to form the next generation."""
         if k == 2:
-            # Two random indices
             i1 = self.rng.integers(0, n)
             i2 = self.rng.integers(0, n)
-            # Ensure distinct
             while i1 == i2:
                 i2 = self.rng.integers(0, n)
             return np.array((i1, i2), dtype=int)
@@ -255,10 +235,6 @@ def build_crossovers(
     evt_prop: EventProperties,
 ) -> tuple[Crossover, ...]:
     """Build and return a tuple of crossover operators based on the configuration."""
-    if not types:
-        logger.warning("No crossover types enabled in the configuration. Crossover will not occur.")
-        return ()
-    params = {"evt_repo": evt_repo, "evt_prop": evt_prop, "rng": rng}
     factory: dict[str, Callable] = {
         CrossoverOp.K_POINT: KPoint,
         CrossoverOp.SCATTERED: Scattered,
@@ -267,74 +243,32 @@ def build_crossovers(
         CrossoverOp.TIMESLOT_CROSSOVER: TimeSlotCrossover,
         CrossoverOp.LOCATION_CROSSOVER: LocationCrossover,
     }
+    p = {
+        "evt": evt_repo.singles_or_side1_idx,
+        "n_evt": evt_repo.singles_or_side1_idx.shape[0],
+        "evt_prop": evt_prop,
+        "rng": rng,
+    }
+    crossover_ks = tuple(k for k in crossover_ks if 1 <= k < p["n_evt"])
 
-    def _generate_crossovers() -> Iterator[Crossover]:
+    def _gen() -> Iterator[Crossover]:
         for name in types:
             if name == CrossoverOp.K_POINT:
-                yield from (factory[name](**params, k=k) for k in crossover_ks)
+                yield from (factory[name](**p, k=k) for k in crossover_ks)
             else:
-                yield factory[name](**params)
+                yield factory[name](**p)
 
-    return tuple(_generate_crossovers())
+    return tuple(_gen())
 
 
 @dataclass(slots=True)
 class Crossover(ABC):
     """Abstract base class for crossover operators in the FLL Scheduler GA."""
 
-    evt_repo: EventRepository
     evt_prop: EventProperties
     rng: np.random.Generator
-    _evts: np.ndarray = field(init=False)
-    _n_evts: int = field(init=False)
-
-    def __post_init__(self) -> None:
-        """Post-initialization to validate the crossover operator."""
-        self._evts = self.evt_repo.singles_or_side1_idx
-        self._n_evts = self._evts.shape[0]
-
-    @abstractmethod
-    def cross(self, parents: Iterator[Schedule]) -> Iterator[Schedule]: ...
-
-    def _create_child(self, p1: np.ndarray, p2: np.ndarray, p1_genes: np.ndarray, p2_genes: np.ndarray) -> Schedule:
-        """Create a child schedule from two parents."""
-        child = Schedule(origin=f"(C | {self!s})")
-        self.assign_from_p1(child, p1, p1_genes)
-        self.assign_from_p2(child, p2, p2_genes)
-        return child
-
-    def assign_from_p1(self, child: Schedule, p1: np.ndarray, p1_genes: np.ndarray) -> None:
-        """Assign genes."""
-        p1_gene_pairs = self.evt_prop.paired_idx[p1_genes]
-        for e1, e2 in zip(p1_genes, p1_gene_pairs, strict=True):
-            t1 = p1[e1]
-            if e2 == -1:
-                child.assign(t1, e1)
-            else:
-                t2 = p1[e2]
-                child.assign(t1, e1)
-                child.assign(t2, e2)
-
-    def assign_from_p2(self, child: Schedule, p2: np.ndarray, p2_genes: np.ndarray) -> None:
-        """Assign genes."""
-        p2_genes_pairs = self.evt_prop.paired_idx[p2_genes]
-        p2_genes_rt = self.evt_prop.roundtype_idx[p2_genes]
-        for e1, e2, rt in zip(p2_genes, p2_genes_pairs, p2_genes_rt, strict=True):
-            t1 = p2[e1]
-            if t1 == -1 or not child.needs_round(t1, rt) or child.conflicts(t1, e1):
-                continue
-            if e2 == -1:
-                child.assign(t1, e1)
-            else:
-                t2 = p2[e2]
-                if t2 == -1 or not child.needs_round(t2, rt) or child.conflicts(t2, e2):
-                    continue
-                child.assign(t1, e1)
-                child.assign(t2, e2)
-
-
-class EventCrossover(Crossover):
-    """Abstract base class for crossover operators in the FLL Scheduler GA."""
+    evt: np.ndarray
+    n_evt: int
 
     def __str__(self) -> str:
         """Return a string representation of the crossover operator."""
@@ -343,13 +277,51 @@ class EventCrossover(Crossover):
         return f"{self.__class__.__name__}"
 
     @abstractmethod
+    def cross(self, parents: Iterator[Schedule]) -> Iterator[Schedule]: ...
+
+    def _create_child(self, p1: np.ndarray, p2: np.ndarray, p1_genes: np.ndarray, p2_genes: np.ndarray) -> Schedule:
+        """Create a child schedule from two parents."""
+        child = Schedule(origin=f"(C | {self!s})")
+        self._assign_from_p1(child, p1, p1_genes)
+        self._assign_from_p2(child, p2, p2_genes)
+        return child
+
+    def _assign_from_p1(self, child: Schedule, p1: np.ndarray, p1_genes: np.ndarray) -> None:
+        """Assign genes."""
+        for e1, e2 in zip(p1_genes, self.evt_prop.paired_idx[p1_genes], strict=True):
+            if e2 == -1:
+                child.assign(p1[e1], e1)
+            else:
+                child.assign(p1[e1], e1)
+                child.assign(p1[e2], e2)
+
+    def _assign_from_p2(self, child: Schedule, p2: np.ndarray, p2_genes: np.ndarray) -> None:
+        """Assign genes."""
+        for e1, e2, rt in zip(
+            p2_genes, self.evt_prop.paired_idx[p2_genes], self.evt_prop.roundtype_idx[p2_genes], strict=True
+        ):
+            t1 = p2[e1]
+            if t1 != -1 and child.needs_round(t1, rt) and not child.conflicts(t1, e1):
+                if e2 == -1:
+                    child.assign(t1, e1)
+                else:
+                    t2 = p2[e2]
+                    if t2 != -1 and child.needs_round(t2, rt) and not child.conflicts(t2, e2):
+                        child.assign(t1, e1)
+                        child.assign(t2, e2)
+
+
+class EventCrossover(Crossover):
+    """Abstract base class for crossover operators in the FLL Scheduler GA."""
+
+    @abstractmethod
     def get_genes(self) -> Iterable[np.ndarray]: ...
 
     def cross(self, parents: Iterator[Schedule]) -> Iterator[Schedule]:
         """Produce child schedules from two parents."""
-        i, j = parents
-        p1 = i.schedule
-        p2 = j.schedule
+        _p1, _p2 = parents
+        p1 = _p1.schedule
+        p2 = _p2.schedule
         p1_genes, p2_genes = self.get_genes()
         yield self._create_child(p1, p2, p1_genes, p2_genes)
         yield self._create_child(p2, p1, p2_genes, p1_genes)
@@ -361,25 +333,18 @@ class KPoint(EventCrossover):
 
     k: int = 1
 
-    def __post_init__(self) -> None:
-        """Post-initialization to set up the initial state."""
-        super().__post_init__()
-        if not 1 <= self.k < self._n_evts:
-            logger.warning("Invalid k value for KPoint crossover: %d. Setting k to 1.", self.k)
-            self.k = 1
-
     def get_genes(self) -> Iterable[np.ndarray]:
         """Get the genes for KPoint crossover."""
         # Single-point crossover
         if self.k == 1:
-            split = self.rng.integers(1, self._n_evts)
-            return self._evts[:split], self._evts[split:]
+            split = self.rng.integers(1, self.n_evt)
+            return self.evt[:split], self.evt[split:]
         # Multi-point crossover
-        splits = self.rng.choice(self._n_evts - 1, size=self.k, replace=False) + 1
-        mask = np.zeros(self._n_evts, dtype=bool)
+        splits = self.rng.choice(self.n_evt - 1, size=self.k, replace=False) + 1
+        mask = np.zeros(self.n_evt, dtype=bool)
         mask[splits] = True
         np.bitwise_xor.accumulate(mask, out=mask)
-        return self._evts[mask], self._evts[~mask]
+        return self.evt[mask], self.evt[~mask]
 
 
 class Scattered(EventCrossover):
@@ -390,8 +355,7 @@ class Scattered(EventCrossover):
 
     def get_genes(self) -> Iterable[np.ndarray]:
         """Get the genes for Scattered crossover."""
-        permuted_indices = self.rng.permutation(self._evts)
-        return np.array_split(permuted_indices, 2)
+        return np.array_split(self.rng.permutation(self.evt), 2)
 
 
 class Uniform(EventCrossover):
@@ -404,8 +368,8 @@ class Uniform(EventCrossover):
 
     def get_genes(self) -> Iterable[np.ndarray]:
         """Get the genes for Uniform crossover."""
-        mask = self.rng.random(self._n_evts) < 0.5
-        return self._evts[mask], self._evts[~mask]
+        mask = self.rng.random(self.n_evt) < 0.5
+        return self.evt[mask], self.evt[~mask]
 
 
 @dataclass(slots=True)
@@ -420,62 +384,49 @@ class StructureCrossover(EventCrossover):
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
-        super().__post_init__()
-        eventmap = defaultdict(list)
-        for key, e in zip(self._get_group_keys(), self._evts, strict=True):
-            eventmap[key].append(e)
-        unique_ids = np.array(sorted(eventmap.keys()))
-        n_ids = unique_ids.shape[0]
-        max_len = max(len(evts) for evts in eventmap.values())
-        self._lookup = np.full((n_ids, max_len), -1, dtype=int)
-        for i, uid in enumerate(unique_ids):
-            evts = eventmap[uid]
-            self._lookup[i, : len(evts)] = evts
-        self._structure = np.arange(n_ids)
+        emap = defaultdict(list)
+        for key, e in zip(self._groupkey(), self.evt, strict=True):
+            emap[key].append(e)
+
+        max_len = max(len(e) for e in emap.values())
+        self._lookup = np.full((len(emap), max_len), -1, dtype=int)
+        for i, uid in enumerate(emap):
+            evt = emap[uid]
+            self._lookup[i, : len(evt)] = evt
+
+        self._structure = np.arange(len(emap))
+
+    @abstractmethod
+    def _groupkey(self) -> np.ndarray: ...
 
     def get_genes(self) -> Iterable[np.ndarray]:
         """Get the genes for Structure-based crossover."""
         self.rng.shuffle(self._structure)
         p1, p2 = np.array_split(self._structure, indices_or_sections=2, axis=0)
-        p1_indices = self._lookup[p1]
-        p2_indices = self._lookup[p2]
-        return p1_indices[p1_indices >= 0], p2_indices[p2_indices >= 0]
-
-    @abstractmethod
-    def _get_group_keys(self) -> np.ndarray: ...
+        p1_idx = self._lookup[p1]
+        p2_idx = self._lookup[p2]
+        return p1_idx[p1_idx >= 0], p2_idx[p2_idx >= 0]
 
 
 class RoundTypeCrossover(StructureCrossover):
-    """TournamentRound type crossover operator for genetic algorithms.
+    """Roundtype crossover operator for genetic algorithms. Each gene is chosen based on the round type of the event."""
 
-    Each gene is chosen based on the round type of the event.
-    """
-
-    def _get_group_keys(self) -> np.ndarray:
-        """Get all group keys for the events."""
-        return self.evt_prop.roundtype_idx[self._evts]
+    def _groupkey(self) -> np.ndarray:
+        return self.evt_prop.roundtype_idx[self.evt]
 
 
 class TimeSlotCrossover(StructureCrossover):
-    """Time slot crossover operator for genetic algorithms.
+    """Time slot crossover operator for genetic algorithms. Each gene is chosen based on the time slot of the event."""
 
-    Each gene is chosen based on the time slot of the event.
-    """
-
-    def _get_group_keys(self) -> np.ndarray:
-        """Get all group keys for the events."""
-        return self.evt_prop.timeslot_idx[self._evts]
+    def _groupkey(self) -> np.ndarray:
+        return self.evt_prop.timeslot_idx[self.evt]
 
 
 class LocationCrossover(StructureCrossover):
-    """Location crossover operator for genetic algorithms.
+    """Location crossover operator for genetic algorithms. Each gene is chosen based on the location of the event."""
 
-    Each gene is chosen based on the location of the event.
-    """
-
-    def _get_group_keys(self) -> np.ndarray:
-        """Get all group keys for the events."""
-        return self.evt_prop.loc_idx[self._evts]
+    def _groupkey(self) -> np.ndarray:
+        return self.evt_prop.loc_idx[self.evt]
 
 
 ########################################################################
@@ -488,29 +439,18 @@ def build_mutations(
     rng: np.random.Generator, types: tuple[str, ...], evt_repo: EventRepository, evt_prop: EventProperties
 ) -> tuple[Mutation, ...]:
     """Build and return a tuple of mutation operators based on the configuration."""
-    if not types:
-        logger.warning("No mutation types enabled in the configuration. Mutation will not occur.")
-        return ()
-    params = {"rng": rng, "evt_repo": evt_repo, "evt_prop": evt_prop}
     factory: dict[str, Callable[[dict], Mutation]] = {
-        # SwapMatchMutation variants
-        MutationOp.SWAP_MATCH_CROSS_TIME_LOCATION: lambda p: SwapMatchMutation(
-            **p, same_timeslot=False, same_location=False
-        ),
-        MutationOp.SWAP_MATCH_SAME_LOCATION: lambda p: SwapMatchMutation(**p, same_timeslot=False, same_location=True),
-        MutationOp.SWAP_MATCH_SAME_TIME: lambda p: SwapMatchMutation(**p, same_timeslot=True, same_location=False),
-        # SwapTeamMutation variants
-        MutationOp.SWAP_TEAM_CROSS_TIME_LOCATION: lambda p: SwapTeamMutation(
-            **p, same_timeslot=False, same_location=False
-        ),
-        MutationOp.SWAP_TEAM_SAME_LOCATION: lambda p: SwapTeamMutation(**p, same_timeslot=False, same_location=True),
-        MutationOp.SWAP_TEAM_SAME_TIME: lambda p: SwapTeamMutation(**p, same_timeslot=True, same_location=False),
-        # SwapTableSideMutation variant
+        MutationOp.SWAP_MATCH_CROSS_TIME_LOCATION: lambda p: SwapMatchMutation(**p),
+        MutationOp.SWAP_MATCH_SAME_LOCATION: lambda p: SwapMatchMutation(**p, same_location=True),
+        MutationOp.SWAP_MATCH_SAME_TIME: lambda p: SwapMatchMutation(**p, same_timeslot=True),
+        MutationOp.SWAP_TEAM_CROSS_TIME_LOCATION: lambda p: SwapTeamMutation(**p),
+        MutationOp.SWAP_TEAM_SAME_LOCATION: lambda p: SwapTeamMutation(**p, same_location=True),
+        MutationOp.SWAP_TEAM_SAME_TIME: lambda p: SwapTeamMutation(**p, same_timeslot=True),
         MutationOp.SWAP_TABLE_SIDE: lambda p: SwapTableSideMutation(**p, same_timeslot=True, same_location=True),
-        # TimeSlotSequenceMutation variants
         MutationOp.INVERSION: lambda p: InversionMutation(**p),
         MutationOp.SCRAMBLE: lambda p: ScrambleMutation(**p),
     }
+    params = {"rng": rng, "evt_repo": evt_repo, "evt_prop": evt_prop}
     return tuple(factory[name](params) for name in types)
 
 
@@ -523,39 +463,31 @@ class Mutation(ABC):
     evt_prop: EventProperties
 
     @abstractmethod
-    def mutate(self, schedule: Schedule) -> bool: ...
+    def mutate(self, s: Schedule) -> bool: ...
 
 
 @dataclass(slots=True)
 class SwapMutation(Mutation):
     """Abstract base class for mutation operators in the FLL Scheduler GA."""
 
-    same_timeslot: bool
-    same_location: bool
-    swap_candidates: list[tuple[tuple[int, ...], ...]] = field(default_factory=list)
-    n_swap_candidates: int = field(init=False)
+    same_timeslot: bool = False
+    same_location: bool = False
+    _candidates: list[tuple[tuple[int, ...], ...]] = field(default_factory=list)
+    _n_candidates: int = field(init=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
-        self.swap_candidates.extend(self.init_swap_candidates())
-        self.n_swap_candidates = len(self.swap_candidates)
-        logger.debug("Initialized %d swap candidates for %s", self.n_swap_candidates, str(self))
-
-    def init_swap_candidates(self) -> Iterator[tuple[tuple[int, ...], ...]]:
-        """Precompute any necessary data before mutation."""
-        _is_same_ts_and_loc = self.same_timeslot and self.same_location
-        for match_list in self.evt_repo.matches.values():
-            for match1, match2 in itertools.combinations(match_list, 2):
-                e1a, _ = match1
-                e2a, _ = match2
-                _ts_cond = (self.evt_prop.timeslot_idx[e1a] == self.evt_prop.timeslot_idx[e2a]) == self.same_timeslot
-                _loc_cond = (self.evt_prop.loc_idx[e1a] == self.evt_prop.loc_idx[e2a]) == self.same_location
-                _is_swap_valid = _ts_cond and _loc_cond
-                if _is_same_ts_and_loc or _is_swap_valid:
-                    yield (match1, match2)
+        for matches in self.evt_repo.matches.values():
+            for (e1a, e1b), (e2a, e2b) in itertools.combinations(matches, 2):
+                ts_ok = (self.evt_prop.timeslot_idx[e1a] == self.evt_prop.timeslot_idx[e2a]) == self.same_timeslot
+                loc_ok = (self.evt_prop.loc_idx[e1a] == self.evt_prop.loc_idx[e2a]) == self.same_location
+                if (ts_ok and loc_ok) or (self.same_timeslot and self.same_location):
+                    self._candidates.append(((e1a, e1b), (e2a, e2b)))
+        self._n_candidates = len(self._candidates)
+        logger.debug("Initialized %d swap candidates for %s", self._n_candidates, str(self))
 
     @abstractmethod
-    def get_swap_candidates(self, schedule: Schedule) -> tuple[Match, ...] | tuple[None, ...]: ...
+    def get_swap_candidates(self, s: Schedule) -> tuple[Match, ...] | tuple[None, ...]: ...
 
 
 class SwapTeamMutation(SwapMutation):
@@ -569,35 +501,29 @@ class SwapTeamMutation(SwapMutation):
             (False, True): MutationOp.SWAP_TEAM_SAME_TIME,
         }.get((self.same_location, self.same_timeslot), self.__class__.__name__)
 
-    def mutate(self, schedule: Schedule) -> bool:
+    def mutate(self, s: Schedule) -> bool:
         """Swap one team from two different matches."""
-        if self.n_swap_candidates <= 0:
+        if self._n_candidates <= 0:
             return False
-        match1_data, match2_data = self.get_swap_candidates(schedule)
+        match1_data, match2_data = self.get_swap_candidates(s)
         if match1_data is None or match2_data is None:
             return False
         e1a, _, t1a, _ = match1_data
         e2a, _, t2a, _ = match2_data
-        schedule.swap_assignment(t1a, e1a, e2a)
-        schedule.swap_assignment(t2a, e2a, e1a)
+        s.swap_assignment(t1a, e1a, e2a)
+        s.swap_assignment(t2a, e2a, e1a)
         return True
 
-    def get_swap_candidates(self, schedule: Schedule) -> tuple[Match, ...] | tuple[None, ...]:
+    def get_swap_candidates(self, s: Schedule) -> tuple[Match, ...] | tuple[None, ...]:
         """Get two matches to swap in the schedule schedule."""
-        shuffled_idx = self.rng.permutation(self.n_swap_candidates)
-        for idx in shuffled_idx:
-            idx: int
-            match1_data, match2_data = self.swap_candidates[idx]
+        for i in self.rng.permutation(self._n_candidates):
+            match1_data, match2_data = self._candidates[i]
             e1a, e1b = match1_data
             e2a, e2b = match2_data
-            t1a, t1b = schedule.schedule[e1a], schedule.schedule[e1b]
-            t2a, t2b = schedule.schedule[e2a], schedule.schedule[e2b]
+            t1a, t1b = s.schedule[e1a], s.schedule[e1b]
+            t2a, t2b = s.schedule[e2a], s.schedule[e2b]
             match_team_ids = {t1a, t1b, t2a, t2b}
-            if (
-                len(match_team_ids) < 4
-                or schedule.conflicts(t1a, e2a, ignore=e1a)
-                or schedule.conflicts(t2a, e1a, ignore=e2a)
-            ):
+            if len(match_team_ids) < 4 or s.conflicts(t1a, e2a, ignore=e1a) or s.conflicts(t2a, e1a, ignore=e2a):
                 continue
             return (e1a, e1b, t1a, t1b), (e2a, e2b, t2a, t2b)
         return None, None
@@ -614,11 +540,11 @@ class SwapMatchMutation(SwapMutation):
             (False, True): MutationOp.SWAP_MATCH_SAME_TIME,
         }.get((self.same_location, self.same_timeslot), self.__class__.__name__)
 
-    def mutate(self, schedule: Schedule) -> bool:
+    def mutate(self, s: Schedule) -> bool:
         """Swap two entire matches."""
-        if self.n_swap_candidates <= 0:
+        if self._n_candidates <= 0:
             return False
-        match1_data, match2_data = self.get_swap_candidates(schedule)
+        match1_data, match2_data = self.get_swap_candidates(s)
         if match1_data is None or match2_data is None:
             return False
         e1a, e1b, t1a, t1b = match1_data
@@ -626,30 +552,24 @@ class SwapMatchMutation(SwapMutation):
         none_in_m1 = -1 in (t1a, t1b)
         none_in_m2 = -1 in (t2a, t2b)
         if not none_in_m1:
-            schedule.swap_assignment(t1a, e1a, e2a)
-            schedule.swap_assignment(t1b, e1b, e2b)
+            s.swap_assignment(t1a, e1a, e2a)
+            s.swap_assignment(t1b, e1b, e2b)
         if not none_in_m2:
-            schedule.swap_assignment(t2a, e2a, e1a)
-            schedule.swap_assignment(t2b, e2b, e1b)
+            s.swap_assignment(t2a, e2a, e1a)
+            s.swap_assignment(t2b, e2b, e1b)
         return True
 
-    def get_swap_candidates(self, schedule: Schedule) -> tuple[Match, ...] | tuple[None, ...]:
+    def get_swap_candidates(self, s: Schedule) -> tuple[Match, ...] | tuple[None, ...]:
         """Get two matches to swap in the schedule schedule."""
-        shuffled_idx = self.rng.permutation(self.n_swap_candidates)
-        for idx in shuffled_idx:
-            idx: int
-            match1_data, match2_data = self.swap_candidates[idx]
-            e1a, e1b = match1_data
-            e2a, e2b = match2_data
-            t1a, t1b = schedule.schedule[e1a], schedule.schedule[e1b]
-            if -1 not in (t1a, t1b) and (
-                schedule.conflicts(t1a, e2a, ignore=e1a) or schedule.conflicts(t1b, e2b, ignore=e1b)
-            ):
+        for i in self.rng.permutation(self._n_candidates):
+            match1, match2 = self._candidates[i]
+            e1a, e1b = match1
+            e2a, e2b = match2
+            t1a, t1b = s.schedule[e1a], s.schedule[e1b]
+            if -1 not in (t1a, t1b) and (s.conflicts(t1a, e2a, ignore=e1a) or s.conflicts(t1b, e2b, ignore=e1b)):
                 continue
-            t2a, t2b = schedule.schedule[e2a], schedule.schedule[e2b]
-            if -1 not in (t2a, t2b) and (
-                schedule.conflicts(t2a, e1a, ignore=e2a) or schedule.conflicts(t2b, e1b, ignore=e2b)
-            ):
+            t2a, t2b = s.schedule[e2a], s.schedule[e2b]
+            if -1 not in (t2a, t2b) and (s.conflicts(t2a, e1a, ignore=e2a) or s.conflicts(t2b, e1b, ignore=e2b)):
                 continue
             return (e1a, e1b, t1a, t1b), (e2a, e2b, t2a, t2b)
         return None, None
@@ -662,26 +582,25 @@ class SwapTableSideMutation(SwapMutation):
         """Return string representation."""
         return MutationOp.SWAP_TABLE_SIDE
 
-    def mutate(self, schedule: Schedule) -> bool:
+    def mutate(self, s: Schedule) -> bool:
         """Swap the sides of two tables in a match."""
-        if self.n_swap_candidates <= 0:
+        if self._n_candidates <= 0:
             return False
-        match1_data, match2_data = self.get_swap_candidates(schedule)
-        if match1_data is None or match2_data is None:
+        match1_data, _ = self.get_swap_candidates(s)
+        if match1_data is None:
             return False
         e1a, e1b, t1a, t1b = match1_data
-        schedule.swap_assignment(t1a, e1a, e1b)
-        schedule.swap_assignment(t1b, e1b, e1a)
+        s.swap_assignment(t1a, e1a, e1b)
+        s.swap_assignment(t1b, e1b, e1a)
         return True
 
-    def get_swap_candidates(self, schedule: Schedule) -> tuple[Match, ...] | tuple[None, ...]:
+    def get_swap_candidates(self, s: Schedule) -> tuple[Match, ...] | tuple[None, ...]:
         """Get one match to swap sides in the schedule schedule."""
-        idx = self.rng.integers(0, self.n_swap_candidates)
-        match1_data, match2_data = self.swap_candidates[idx]
+        match1_data, match2_data = self._candidates[self.rng.integers(0, self._n_candidates)]
         e1a, e1b = match1_data
         e2a, e2b = match2_data
-        t1a, t1b = schedule.schedule[e1a], schedule.schedule[e1b]
-        t2a, t2b = schedule.schedule[e2a], schedule.schedule[e2b]
+        t1a, t1b = s.schedule[e1a], s.schedule[e1b]
+        t2a, t2b = s.schedule[e2a], s.schedule[e2b]
         return (e1a, e1b, t1a, t1b), (e2a, e2b, t2a, t2b)
 
 
@@ -689,31 +608,25 @@ class SwapTableSideMutation(SwapMutation):
 class TimeSlotSequenceMutation(Mutation):
     """Abstract base class for mutations that permute assignments within a single timeslot."""
 
-    ts_candidate: dict[tuple[int, int], list[tuple[int, ...]]] = field(init=False)
+    ts_candidate: dict[tuple[int, int], list[tuple[int, ...]]] = field(default_factory=dict)
     ts_key: tuple[tuple[int, int], ...] = field(init=False)
     ts_idx: np.ndarray = field(init=False)
-    key_to_tpr: dict[tuple[int, int], int] = field(init=False)
+    key_to_tpr: dict[tuple[int, int], int] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
-        self.ts_candidate, self.key_to_tpr = self.init_candidates()
+        for key, events in self.evt_repo.timeslots.items():
+            candidate = [e for e in events if self.evt_prop.loc_side[e] == 1 or self.evt_prop.paired_idx[e] == -1]
+            self.ts_candidate[key] = [(e, self.evt_prop.paired_idx[e]) for e in candidate]
+            self.key_to_tpr[key] = self.evt_prop.teams_per_round[events[0]]
         self.ts_key = tuple(self.ts_candidate.keys())
         self.ts_idx = np.arange(len(self.ts_key))
 
     @abstractmethod
-    def permute_singles(self, items: list[int]) -> Iterator[int]: ...
-    @abstractmethod
-    def permute_matches(self, items: list[tuple[int, ...]]) -> Iterator[tuple[int, ...]]: ...
+    def _permute_singles(self, items: list[int]) -> Iterator[int]: ...
 
-    def init_candidates(self) -> tuple[dict[tuple[int, int], list[tuple[int, ...]]], dict[tuple[int, int], int]]:
-        """Precompute candidate events for each timeslot."""
-        ts_candidate: dict[tuple[int, int], list[tuple[int, ...]]] = {}
-        key_to_tpr: dict[tuple[int, int], int] = {}
-        for key, events in self.evt_repo.timeslots.items():
-            candidate = [e for e in events if self.evt_prop.loc_side[e] == 1 or self.evt_prop.paired_idx[e] == -1]
-            ts_candidate[key] = [(e, self.evt_prop.paired_idx[e]) for e in candidate]
-            key_to_tpr[key] = self.evt_prop.teams_per_round[events[0]]
-        return ts_candidate, key_to_tpr
+    @abstractmethod
+    def _permute_matches(self, items: list[tuple[int, ...]]) -> Iterator[tuple[int, ...]]: ...
 
     def _get_candidates(self) -> tuple[list[tuple[int, ...]], int]:
         """Get a list of candidate events for mutation within a specific timeslot."""
@@ -721,42 +634,42 @@ class TimeSlotSequenceMutation(Mutation):
         key = self.ts_key[self.ts_idx[0]]
         return self.ts_candidate[key], self.key_to_tpr[key]
 
-    def mutate(self, schedule: Schedule) -> bool:
+    def mutate(self, s: Schedule) -> bool:
         """Find a suitable timeslot and round type, then permute assignments."""
         candidates, tpr = self._get_candidates()
         if tpr == 1:
-            return self.mutate_singles(schedule, candidates)
+            return self.mutate_singles(s, candidates)
         if tpr == 2:
-            return self.mutate_matches(schedule, candidates)
+            return self.mutate_matches(s, candidates)
         return False
 
-    def mutate_singles(self, schedule: Schedule, candidates: list[tuple[int, ...]]) -> bool:
+    def mutate_singles(self, s: Schedule, candidates: list[tuple[int, ...]]) -> bool:
         """Permute team assignments for single-team events."""
-        old_ids = [schedule.schedule[e] for e, _ in candidates]
-        new_ids = self.permute_singles(old_ids)
-        for (event, _), old_team, new_team in zip(candidates, old_ids, new_ids, strict=True):
+        old_ids = [s.schedule[e] for e, _ in candidates]
+        new_ids = self._permute_singles(old_ids)
+        for (e, _), old_team, new_team in zip(candidates, old_ids, new_ids, strict=True):
             if old_team != new_team:
-                schedule.unassign(old_team, event)
-                schedule.assign(new_team, event)
+                s.unassign(old_team, e)
+                s.assign(new_team, e)
         return True
 
-    def mutate_matches(self, schedule: Schedule, candidates: list[tuple[int, ...]]) -> bool:
+    def mutate_matches(self, s: Schedule, candidates: list[tuple[int, ...]]) -> bool:
         """Permute team assignments for match-based events."""
         matches: list[tuple[int, ...]] = []
         old_ids: list[tuple[int, ...]] = []
         for e1, e2 in candidates:
-            t1, t2 = schedule.schedule[e1], schedule.schedule[e2]
+            t1, t2 = s.schedule[e1], s.schedule[e2]
             matches.append((e1, e2))
             old_ids.append((t1, t2))
-        new_ids = self.permute_matches(old_ids)
+        new_ids = self._permute_matches(old_ids)
         for (e1, e2), old_id_pair, new_id_pair in zip(matches, old_ids, new_ids, strict=True):
             if old_id_pair != new_id_pair:
                 old_t1, old_t2 = old_id_pair
-                schedule.unassign(old_t1, e1)
-                schedule.unassign(old_t2, e2)
+                s.unassign(old_t1, e1)
+                s.unassign(old_t2, e2)
                 new_t1, new_t2 = new_id_pair
-                schedule.assign(new_t1, e1)
-                schedule.assign(new_t2, e2)
+                s.assign(new_t1, e1)
+                s.assign(new_t2, e2)
         return True
 
 
@@ -767,16 +680,12 @@ class InversionMutation(TimeSlotSequenceMutation):
         """Return string representation."""
         return MutationOp.INVERSION
 
-    def permute_singles(self, items: list[int]) -> Iterator[int]:
+    def _permute_singles(self, items: list[int]) -> Iterator[int]:
         """Invert a random sub-sequence of the items."""
-        if len(items) <= 1:
-            return iter(items)
         return reversed(items[:])
 
-    def permute_matches(self, items: list[tuple[int, ...]]) -> Iterator[tuple[int, ...]]:
+    def _permute_matches(self, items: list[tuple[int, ...]]) -> Iterator[tuple[int, ...]]:
         """Invert a random sub-sequence of the items."""
-        if len(items) <= 1:
-            return iter(items)
         return reversed([tuple(reversed(pair)) for pair in items])
 
 
@@ -787,16 +696,12 @@ class ScrambleMutation(TimeSlotSequenceMutation):
         """Return string representation."""
         return MutationOp.SCRAMBLE
 
-    def permute_singles(self, items: list[int]) -> Iterator[int]:
+    def _permute_singles(self, items: list[int]) -> Iterator[int]:
         """Scramble a random sub-sequence of the items."""
-        if len(items) <= 1:
-            return iter(items)
         return iter(self.rng.permutation(items))
 
-    def permute_matches(self, items: list[tuple[int, ...]]) -> Iterator[tuple[int, ...]]:
+    def _permute_matches(self, items: list[tuple[int, ...]]) -> Iterator[tuple[int, ...]]:
         """Scramble a random sub-sequence of the items."""
-        if len(items) <= 1:
-            return iter(items)
         return (tuple(self.rng.permutation(pair)) for pair in items)
 
 
@@ -810,14 +715,12 @@ class Repairer:
     """Class to handle the repair of schedules with missing event assignments."""
 
     config: TournamentConfig
-    event_properties: EventProperties
+    evt_prop: EventProperties
     rng: np.random.Generator
-    _repair_map: dict[int, Any] = field(init=False)
     _rt_to_tpr: np.ndarray = field(init=False)
 
     def __post_init__(self) -> None:
         """Post-initialization to set up the initial state."""
-        self._repair_map = {1: self.repair_singles, 2: self.repair_matches}
         max_rt = max(self.config.round_idx_to_tpr.keys())
         self._rt_to_tpr = np.zeros(max_rt + 1, dtype=int)
         for rt, tpr in self.config.round_idx_to_tpr.items():
@@ -852,14 +755,16 @@ class Repairer:
         """
         for key, teams_for_rt in teams.items():
             _, tpr = key
-            if not (events_for_rt := events.get(key)):
+            if not events.get(key):
                 return True
-            if not (repair_fn := self._repair_map.get(tpr)):
-                msg = f"No assignment function for teams per round: {tpr}"
-                raise ValueError(msg)
-            _teams, _events = repair_fn(
-                teams=dict(enumerate(teams_for_rt)), events=dict(enumerate(events_for_rt)), schedule=schedule
-            )
+            if tpr == 1:
+                _teams, _events = self.repair_singles(
+                    dict(enumerate(teams_for_rt)), dict(enumerate(events[key])), schedule
+                )
+            elif tpr == 2:
+                _teams, _events = self.repair_matches(
+                    dict(enumerate(teams_for_rt)), dict(enumerate(events[key])), schedule
+                )
             teams[key] = _teams
             events[key] = _events
             if _teams:
@@ -873,10 +778,10 @@ class Repairer:
         event_indices = schedule.scheduled_events()
         self.rng.shuffle(event_indices)
         primary_event = event_indices[0]
-        e_rt_idx = self.event_properties.roundtype_idx[primary_event]
+        e_rt_idx = self.evt_prop.roundtype_idx[primary_event]
         ek = (e_rt_idx, self.config.round_idx_to_tpr[e_rt_idx])
-        paired_event = self.event_properties.paired_idx[primary_event]
-        loc_side = self.event_properties.loc_side[primary_event]
+        paired_event = self.evt_prop.paired_idx[primary_event]
+        loc_side = self.evt_prop.loc_side[primary_event]
         if paired_event != -1:
             e1, e2 = (paired_event, primary_event) if loc_side == 2 else (primary_event, paired_event)
         else:
@@ -915,13 +820,13 @@ class Repairer:
         unscheduled = schedule.unscheduled_events()
         if unscheduled.size > 0:
             # Filter logic: (paired != -1 and side == 1) OR (paired == -1)
-            paired = self.event_properties.paired_idx[unscheduled]
-            sides = self.event_properties.loc_side[unscheduled]
+            paired = self.evt_prop.paired_idx[unscheduled]
+            sides = self.evt_prop.loc_side[unscheduled]
             # Mask for valid repair candidates (singles or side 1 of matches)
             mask = (paired == -1) | (sides == 1)
             valid_events = unscheduled[mask]
             if valid_events.size > 0:
-                valid_rts = self.event_properties.roundtype_idx[valid_events]
+                valid_rts = self.evt_prop.roundtype_idx[valid_events]
                 valid_tprs = self._rt_to_tpr[valid_rts]
                 for i in range(len(valid_events)):
                     k = (valid_rts[i], valid_tprs[i])
@@ -990,7 +895,7 @@ class Repairer:
         self.rng.shuffle(event_keys)
         for ekey in event_keys:
             e1 = events[ekey]
-            e2 = self.event_properties.paired_idx[e1]
+            e2 = self.evt_prop.paired_idx[e1]
             if not (schedule.conflicts(t1, e1) or schedule.conflicts(t2, e2)):
                 schedule.assign(t1, e1)
                 schedule.assign(t2, e2)

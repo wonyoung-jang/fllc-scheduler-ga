@@ -5,13 +5,16 @@ import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import numpy as np
+
+from fll_scheduler_ga.adapter.exporter import ScheduleSummaryGenerator
+from fll_scheduler_ga.adapter.importer import CsvImporter
 from fll_scheduler_ga.adapter.schema import build_app_config_model
 from fll_scheduler_ga.adapter.seeder import load_pkl
 from fll_scheduler_ga.service.config_builder import AppConfigBuilder
 from fll_scheduler_ga.service.context_builder import GaContextBuilder
 from fll_scheduler_ga.service.ga_builder import GaBuilder
 from fll_scheduler_ga.service.result_exporter import ResultExporter
-from fll_scheduler_ga.service.schedule_importer import ScheduleImporter
 
 if TYPE_CHECKING:
     from rich.progress import Progress, TaskID
@@ -47,11 +50,27 @@ def run_pipeline(path: Path, progress: Progress | None = None, task_id: TaskID |
         seed_pop = seed.population
 
     if cfg.runtime.import_file:
-        importer = ScheduleImporter(cfg.tournament, Path(cfg.runtime.import_file).resolve(), cfg.team_identities, ctx)
-        importsched = importer.import_schedule()
-
-        if importsched is not None and cfg.runtime.add_import_to_population and importsched not in seed_pop:
+        csv_importer = CsvImporter(
+            path=Path(cfg.runtime.import_file).resolve(),
+            config=cfg.tournament,
+            evt_repo=ctx.evt_repo,
+            evt_prop=ctx.evt_prop,
+        )
+        importsched = csv_importer.run()
+        if (
+            importsched is not None
+            and ctx.check(importsched)
+            and cfg.runtime.add_import_to_population
+            and importsched not in seed_pop
+        ):
+            fits = ctx.evaluate(np.array([importsched.schedule], dtype=int))
+            sched_fit, team_fit = fits
+            importsched.fitness = sched_fit[0]
+            importsched.team_fitnesses = team_fit[0]
             seed_pop.append(importsched)
+            parent = csv_importer.path.parent
+            parent.mkdir(parents=True, exist_ok=True)
+            ScheduleSummaryGenerator(team_ids=cfg.team_identities).export(importsched, parent / "report.txt")
 
     ga_builder = GaBuilder(progress, task_id, cfg, ctx, seed_pop)
     ga = ga_builder.build()
