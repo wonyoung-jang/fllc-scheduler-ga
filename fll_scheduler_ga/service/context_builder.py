@@ -260,7 +260,7 @@ class GaContextBuilder:
 
     cfg: AppConfig
 
-    def build(self) -> GaContext:
+    def build(self) -> tuple[GaContext, EventRepository, EventProperties]:
         """Build and return a GA context."""
         evt_repo = build_evt_repo(self.cfg.tournament.rounds)
         evt_prop = build_evt_prop(evt_repo.mapping)
@@ -300,31 +300,33 @@ class GaContextBuilder:
         checker = _hard_constraint_checker(constraints)
         points = calc_ref_points(len(FitnessObjective), self.cfg.genetic.parameters.population_size)
         evaluator = build_evaluator(self.cfg, evt_prop, opponents, best_timeslot_score)
-        return GaContext(
-            evt_repo=evt_repo,
-            evt_prop=evt_prop,
-            builder=ScheduleBuilder(
-                evt_prop=evt_prop,
-                rng=self.cfg.rng,
-                round_idx_to_tpr=self.cfg.tournament.round_idx_to_tpr,
-                roundtype_events=evt_repo.roundtypes,
+        return (
+            GaContext(
+                builder=ScheduleBuilder(
+                    evt_prop=evt_prop,
+                    rng=self.cfg.rng,
+                    round_idx_to_tpr=self.cfg.tournament.round_idx_to_tpr,
+                    roundtype_events=evt_repo.roundtypes,
+                ),
+                repairer=Repairer(config=self.cfg.tournament, evt_prop=evt_prop, rng=self.cfg.rng),
+                evaluator=evaluator,
+                checker=checker,
+                nsga3=NSGA3(self.cfg.rng, points.shape[0], points, calc_norm_sq_of_refs(points)),
+                selection=RandomSelect(self.cfg.rng),
+                crossovers=build_crossovers(
+                    rng=self.cfg.rng,
+                    types=self.cfg.genetic.operator.crossover.types,
+                    crossover_ks=self.cfg.genetic.operator.crossover.k_vals,
+                    evt_repo=evt_repo,
+                    evt_prop=evt_prop,
+                ),
+                mutations=build_mutations(
+                    rng=self.cfg.rng,
+                    types=self.cfg.genetic.operator.mutation.types,
+                    evt_repo=evt_repo,
+                    evt_prop=evt_prop,
+                ),
             ),
-            repairer=Repairer(config=self.cfg.tournament, evt_prop=evt_prop, rng=self.cfg.rng),
-            evaluator=evaluator,
-            checker=checker,
-            nsga3=NSGA3(self.cfg.rng, points.shape[0], points, calc_norm_sq_of_refs(points)),
-            selection=RandomSelect(self.cfg.rng),
-            crossovers=build_crossovers(
-                rng=self.cfg.rng,
-                types=self.cfg.genetic.operator.crossover.types,
-                crossover_ks=self.cfg.genetic.operator.crossover.k_vals,
-                evt_repo=evt_repo,
-                evt_prop=evt_prop,
-            ),
-            mutations=build_mutations(
-                rng=self.cfg.rng,
-                types=self.cfg.genetic.operator.mutation.types,
-                evt_repo=evt_repo,
-                evt_prop=evt_prop,
-            ),
+            evt_repo,
+            evt_prop,
         )

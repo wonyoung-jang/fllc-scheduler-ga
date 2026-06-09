@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
     import numpy as np
 
-    from fll_scheduler_ga.domain.model import EventProperties, EventRepository
+    from fll_scheduler_ga.domain.model import EventProperties
     from fll_scheduler_ga.genetic.fitness import FitnessEvaluator
     from fll_scheduler_ga.genetic.operator import NSGA3, Crossover, Mutation, Repairer, Selection
 
@@ -63,8 +63,6 @@ class ScheduleBuilder:
 class GaContext:
     """Hold static context for the genetic algorithm."""
 
-    evt_repo: EventRepository
-    evt_prop: EventProperties
     evaluator: FitnessEvaluator
     checker: Callable[[Schedule], bool]
     builder: ScheduleBuilder
@@ -90,10 +88,10 @@ class GaContext:
         """Evaluate a schedule using the fitness evaluator."""
         return self.evaluator.evaluate(pop_array)
 
-    def select_parents(self, n: int, k: int = 2) -> np.ndarray:
+    def select_parents(self, n: int) -> np.ndarray:
         """Select parents using the selection operator."""
-        return self.selection.select(n, k)
+        return self.selection.select(n)
 
-    def select_nsga3(self, fits: np.ndarray, n_select: int) -> tuple[tuple[np.ndarray, ...], np.ndarray, np.ndarray]:
+    def select_nsga3(self, fits: np.ndarray, n_select: int) -> tuple[list[np.ndarray], np.ndarray, np.ndarray]:
         """Select individuals using NSGA-III."""
         return self.nsga3.select(fits, n_select)

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from fll_scheduler_ga.adapter.exporter import MatplotlibVisualizer, SummaryManager
 from fll_scheduler_ga.adapter.monitoring import log_ga
 from fll_scheduler_ga.adapter.seeder import save_pkl
-from fll_scheduler_ga.domain.model import GASeedData
+from fll_scheduler_ga.domain.model import EventProperties, GASeedData
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -29,6 +29,7 @@ class ResultExporter:
     seedpth: Path
     ga: GA
     outdir: Path
+    evt_prop: EventProperties
 
     def export(self) -> None:
         """Finalize the GA results by exporting schedules and generating summaries."""
@@ -64,6 +65,6 @@ class ResultExporter:
             roundreqs=self.cfg.tournament.roundreqs,
             time_fmt=self.cfg.tournament.time_fmt,
             team_ids=self.cfg.team_identities,
-            evt_prop=self.ctx.evt_prop,
+            evt_prop=self.evt_prop,
         )
         summarizer.generate()

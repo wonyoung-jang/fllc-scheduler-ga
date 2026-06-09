@@ -32,7 +32,7 @@ def run_pipeline(path: Path, progress: Progress | None = None, task_id: TaskID |
     cfg = cfg_builder.build()
 
     ctx_builder = GaContextBuilder(cfg)
-    ctx = ctx_builder.build()
+    ctx, evt_repo, evt_prop = ctx_builder.build()
 
     seedpth = Path(cfg.runtime.seed_file).resolve()
     if cfg.runtime.flush and seedpth.exists():
@@ -53,8 +53,8 @@ def run_pipeline(path: Path, progress: Progress | None = None, task_id: TaskID |
         csv_importer = CsvImporter(
             path=Path(cfg.runtime.import_file).resolve(),
             config=cfg.tournament,
-            evt_repo=ctx.evt_repo,
-            evt_prop=ctx.evt_prop,
+            evt_repo=evt_repo,
+            evt_prop=evt_prop,
         )
         importsched = csv_importer.run()
         if (
@@ -82,6 +82,6 @@ def run_pipeline(path: Path, progress: Progress | None = None, task_id: TaskID |
         shutil.rmtree(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
 
-    exporter = ResultExporter(cfg, ctx, seedpth, ga, outdir)
+    exporter = ResultExporter(cfg, ctx, seedpth, ga, outdir, evt_prop)
     exporter.export()
     return ga

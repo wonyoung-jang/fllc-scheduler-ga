@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
     from rich.progress import Progress, TaskID
 
-    from fll_scheduler_ga.adapter.schema import AppConfig, GaParameterModel
+    from fll_scheduler_ga.adapter.schema import AppConfig
     from fll_scheduler_ga.domain.model import GaObserver
     from fll_scheduler_ga.genetic.context import GaContext
 
@@ -85,14 +85,6 @@ def _get_tracker(operators: tuple) -> dict[str, Counter]:
     return {"success": Counter(inner), "total": Counter(inner)}
 
 
-def _get_migration_generations(gp: GaParameterModel) -> np.ndarray:
-    """Calculate the generations at which migration should occur."""
-    gen = np.zeros(gp.generations + 1, dtype=int)
-    if gp.num_islands > 1 and gp.migration_size > 0:
-        gen[:: gp.migration_interval] = 1
-    return gen
-
-
 def _get_observers(progress: Progress | None, task_id: TaskID | None) -> tuple[GaObserver, ...]:
     """Get the observers for the GA."""
     observers: list[GaObserver] = [LoggingObserver()]
@@ -141,7 +133,6 @@ class GaBuilder:
                 ctx=self.ctx,
                 n_pop=self.cfg.genetic.parameters.population_size,
                 n_offspring=self.cfg.genetic.parameters.offspring_size,
-                n_migration=self.cfg.genetic.parameters.migration_size,
                 chance_crossover=self.cfg.genetic.parameters.crossover_chance,
                 chance_mutation=self.cfg.genetic.parameters.mutation_chance,
                 rng=self.cfg.rng,
@@ -157,7 +148,6 @@ class GaBuilder:
             opstat=operator_stats,
             fitness_history=fitness_history,
             gen_arr=np.arange(1, self.cfg.genetic.parameters.generations + 1),
-            migrate_gen=_get_migration_generations(self.cfg.genetic.parameters),
             seed_pop=self.seed_pop,
             island_seed_map=seeder.get_island_seed_map(),
             islands=islands,

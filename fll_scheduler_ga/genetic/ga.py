@@ -26,7 +26,6 @@ class GA:
     opstat: OperatorStats
     fitness_history: FitnessHistory
     gen_arr: np.ndarray
-    migrate_gen: np.ndarray
     seed_pop: list[Schedule]
     island_seed_map: dict[int, list[int]]
     islands: list[Island]
@@ -82,27 +81,16 @@ class GA:
     def run_epochs(self) -> None:
         """Perform main evolution loop: generations and migrations."""
         for gen in self.gen_arr:
-            if self.migrate_gen[gen]:
-                self.migrate()
-            # Run the generations
             for island in self.islands:
                 island.run_epoch()
             self.fitness_history.current = self.avg_island_fit
             self.fitness_history.update_fitness_history()
             self.notify_on_generation_end(gen)
 
-    def migrate(self) -> None:
-        """Migrate the best individuals between islands using a ring topology."""
-        n_island = len(self.islands)
-        for i, dest in enumerate(self.islands):
-            src = self.islands[(i + 1) % n_island]
-            migrants = src.give_migrants()
-            dest.receive_migrants(migrants)
-
     def _deduplicate_population(self) -> None:
         """Remove duplicate individuals from the population."""
         unique_pop = [ind for island in self.islands for ind in island.selected]
-        pop_array = np.asarray([s.schedule for island in self.islands for s in island.selected])
+        pop_array = np.asarray([s.schedule for s in unique_pop], dtype=int)
         schedule_fitness, team_fitnesses = self.ctx.evaluate(pop_array)
         _, flat, ranks = self.ctx.select_nsga3(schedule_fitness, len(unique_pop))
         selected = set()
@@ -140,7 +128,6 @@ class Island:
     rng: np.random.Generator
     n_pop: int
     n_offspring: int
-    n_migration: int
     chance_crossover: float
     chance_mutation: float
     opstat: OperatorStats
@@ -171,9 +158,10 @@ class Island:
     def can_add(self, schedule: Schedule) -> bool:
         """Add a schedule to a specific island's population if it's not a duplicate."""
         self.opstat.count_offspring("total")
-        if self.ctx.check(schedule) and schedule not in self.selected:
+        if self.ctx.check(schedule):
             self.opstat.count_offspring("success")
-            return True
+            if schedule not in self.selected:
+                return True
         return False
 
     def _build_n_schedules(self, needed: int) -> None:
@@ -229,8 +217,8 @@ class Island:
             self.opstat.count_crossover("total", c_str)
             if self.ctx.check(child):
                 self.opstat.count_crossover("success", c_str)
-            if self.ctx.repair(child):
-                yield child
+        if self.ctx.repair(child):
+            yield child
 
     def _evolve(self) -> None:
         """Perform main evolution loop: generations and migrations."""
@@ -238,7 +226,7 @@ class Island:
             return
         created_cycle = 0
         while created_cycle < self.n_offspring:
-            parents_indices = self.ctx.select_parents(n=len(pop), k=2)
+            parents_indices = self.ctx.select_parents(n=len(pop))
             parents: Iterator[Schedule] = (pop[i] for i in parents_indices)
             c_roll = self.chance_crossover > self.rng.random()
             if c_roll and len(self.ctx.crossovers) > 0:
@@ -291,19 +279,6 @@ class Island:
             return
         logger.debug("Island %d: Initializing population with %d individuals", self.identity, self.n_needed)
         self._build_n_schedules(self.n_needed)
-
-    def give_migrants(self) -> Iterator[Schedule]:
-        """Randomly yield migrants from population."""
-        for _ in range(self.n_migration):
-            i = self.rng.integers(low=0, high=len(self.selected))
-            self.population = np.delete(self.population, i, axis=0)
-            yield self.selected.pop(i)
-
-    def receive_migrants(self, migrant: Iterator[Schedule]) -> None:
-        """Receive migrants from another island and add them to the current island's population."""
-        for m in migrant:
-            if self.can_add(m):
-                self.add(m)
 
 
 @dataclass(slots=True)
