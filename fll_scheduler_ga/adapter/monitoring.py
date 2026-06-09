@@ -79,8 +79,7 @@ def log_ga(ga: GA) -> None:
     _log_operators(name="crossover", ratios=ga.opstat.crossover, ops=ga.ctx.crossovers)
     _log_operators(name="mutation", ratios=ga.opstat.mutation, ops=ga.ctx.mutations)
     _log_aggregate_stats(ga)
-    for island in ga.islands:
-        logger.debug("Island %d Fitness: %.2f", island.identity, sum(island.fitness_history.get_last_gen_fitness()))
+    logger.debug("Fitness: %.2f", sum(ga.fitness_history.get_last_gen_fitness()))
     logger.debug("Total time taken: %.2f seconds", time.perf_counter() - ga.start_time)
 
 
@@ -100,18 +99,15 @@ def _log_operators(name: str, ratios: dict[str, Counter], ops: tuple[Crossover |
 
 def _log_aggregate_stats(ga: GA) -> None:
     """Log aggregate statistics across all islands."""
-    final_log = f"{'=' * 20}\nFinal statistics"
     crs_suc, crs_tot, crs_rte = ga.opstat.get_crossover_stats()
     mut_suc, mut_tot, mut_rte = ga.opstat.get_mutation_stats()
     off_suc, off_tot, off_rte = ga.opstat.get_offspring_stats()
-    unique_inds = len(ga.total_pop)
-    total_inds = len(ga)
-    unique_rte = f"{unique_inds / total_inds if total_inds > 0 else 0.0:.2%}"
-    final_log += (
-        f"\n  Total islands          : {len(ga.islands)}"
-        f"\n  Unique individuals     : {unique_inds}/{total_inds} ({unique_rte})"
-        f"\n  Crossover success rate : {crs_suc}/{crs_tot} ({crs_rte})"
-        f"\n  Mutation success rate  : {mut_suc}/{mut_tot} ({mut_rte})"
-        f"\n  Offspring success rate : {off_suc}/{off_tot} ({off_rte})"
+    final_log = (
+        f"{'=' * 20}\n"
+        "Final statistics\n"
+        f"  Individuals     : {len(ga)}\n"
+        f"  Crossover success rate : {crs_suc}/{crs_tot} ({crs_rte})\n"
+        f"  Mutation success rate  : {mut_suc}/{mut_tot} ({mut_rte})\n"
+        f"  Offspring success rate : {off_suc}/{off_tot} ({off_rte})\n"
     )
     logger.debug(final_log)

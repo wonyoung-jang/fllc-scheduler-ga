@@ -2,7 +2,7 @@ line-length = 120
 indent-width = 4
 target-version = "py314"
 fix = true
-unsafe-fixes = false
+unsafe-fixes = true
 exclude = [
     ".bzr",
     ".direnv",

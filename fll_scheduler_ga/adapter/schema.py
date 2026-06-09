@@ -13,8 +13,6 @@ from fll_scheduler_ga.constants import (
     PICKLE_FILE_SCHEDULES,
     CrossoverOp,
     MutationOp,
-    SeedIslandStrategy,
-    SeedPopSort,
 )
 
 if TYPE_CHECKING:
@@ -36,9 +34,6 @@ class GaParameterModel(BaseModel):
     offspring_size: int = Field(default=1, ge=1)
     crossover_chance: float = Field(default=0.7, ge=0.0, le=1.0)
     mutation_chance: float = Field(default=0.4, ge=0.0, le=1.0)
-    num_islands: int = Field(default=1, ge=1)
-    migration_interval: int = Field(default=10, ge=1)
-    migration_size: int = Field(default=1, ge=0)
 
 
 class CrossoverModel(BaseModel):
@@ -116,27 +111,6 @@ class RuntimeModel(BaseModel):
 
 
 ### IOModel
-class ImportModel(BaseModel):
-    """Configuration for import options."""
-
-    seed_pop_sort: SeedPopSort = SeedPopSort.RANDOM
-    seed_island_strategy: SeedIslandStrategy = SeedIslandStrategy.DISTRIBUTED
-
-    @model_validator(mode="after")
-    def validate(self) -> ImportModel:
-        """Validate import options."""
-        if self.seed_pop_sort not in SeedPopSort:
-            msg = f"Invalid seed_pop_sort: {self.seed_pop_sort}. Must be one of {[e.value for e in SeedPopSort]}."
-            raise ValueError(msg)
-        if self.seed_island_strategy not in SeedIslandStrategy:
-            msg = (
-                f"Invalid seed_island_strategy: {self.seed_island_strategy}. "
-                f"Must be one of {[e.value for e in SeedIslandStrategy]}."
-            )
-            raise ValueError(msg)
-        return self
-
-
 class ExportModel(BaseModel):
     """Configuration for export options."""
 
@@ -157,7 +131,6 @@ class ExportModel(BaseModel):
 class IOModel(BaseModel):
     """Configuration for input/output options."""
 
-    imports: ImportModel = Field(default_factory=ImportModel)
     exports: ExportModel = Field(default_factory=ExportModel)
 
 
