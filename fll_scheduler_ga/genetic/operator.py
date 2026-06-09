@@ -257,7 +257,16 @@ class Crossover(ABC):
         return f"{self.__class__.__name__}"
 
     @abstractmethod
-    def cross(self, parents: Iterator[Schedule]) -> Iterator[Schedule]: ...
+    def get_genes(self) -> Iterable[np.ndarray]: ...
+
+    def cross(self, parents: Iterator[Schedule]) -> Iterator[Schedule]:
+        """Produce child schedules from two parents."""
+        _p1, _p2 = parents
+        p1 = _p1.schedule
+        p2 = _p2.schedule
+        p1_genes, p2_genes = self.get_genes()
+        yield self._create_child(p1, p2, p1_genes, p2_genes)
+        yield self._create_child(p2, p1, p2_genes, p1_genes)
 
     def _create_child(self, p1: np.ndarray, p2: np.ndarray, p1_genes: np.ndarray, p2_genes: np.ndarray) -> Schedule:
         """Create a child schedule from two parents."""
@@ -291,24 +300,8 @@ class Crossover(ABC):
                         child.assign(t2, e2)
 
 
-class EventCrossover(Crossover):
-    """Abstract base class for crossover operators in the FLL Scheduler GA."""
-
-    @abstractmethod
-    def get_genes(self) -> Iterable[np.ndarray]: ...
-
-    def cross(self, parents: Iterator[Schedule]) -> Iterator[Schedule]:
-        """Produce child schedules from two parents."""
-        _p1, _p2 = parents
-        p1 = _p1.schedule
-        p2 = _p2.schedule
-        p1_genes, p2_genes = self.get_genes()
-        yield self._create_child(p1, p2, p1_genes, p2_genes)
-        yield self._create_child(p2, p1, p2_genes, p1_genes)
-
-
 @dataclass(slots=True)
-class KPoint(EventCrossover):
+class KPoint(Crossover):
     """K-point crossover operator for genetic algorithms."""
 
     k: int = 1
@@ -327,7 +320,7 @@ class KPoint(EventCrossover):
         return self.evt[mask], self.evt[~mask]
 
 
-class Scattered(EventCrossover):
+class Scattered(Crossover):
     """Scattered crossover operator for genetic algorithms.
 
     Shuffled indices split parent 50/50.
@@ -338,7 +331,7 @@ class Scattered(EventCrossover):
         return np.array_split(self.rng.permutation(self.evt), 2)
 
 
-class Uniform(EventCrossover):
+class Uniform(Crossover):
     """Uniform crossover operator for genetic algorithms.
 
     Each gene is chosen from either parent by flipping a coin for each gene.
@@ -353,7 +346,7 @@ class Uniform(EventCrossover):
 
 
 @dataclass(slots=True)
-class StructureCrossover(EventCrossover):
+class StructureCrossover(Crossover):
     """Structure-based crossover operator for genetic algorithms.
 
     Each gene is chosen based on a specific structure of the event.

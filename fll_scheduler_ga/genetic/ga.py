@@ -195,11 +195,7 @@ class GA:
             idx_to_delete = self.rng.choice(np.arange(len(self.population)))
             self.population.pop(idx_to_delete)
             self.pop_arr = np.delete(arr=self.pop_arr, obj=idx_to_delete, axis=0)
-            logger.debug(
-                "Stagnation.  Generation: %d. Schedule Removed: %d.",
-                self.generation + 1,
-                idx_to_delete,
-            )
+            logger.debug("Stagnation: Generation: %d. Schedule Removed: %d.", self.generation + 1, idx_to_delete)
 
     def _get_operator(self, ops: tuple) -> Any:
         """Randomly select an operator from a tuple of operators."""
